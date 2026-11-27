@@ -85,40 +85,44 @@ interface ProjectServices {
   sandboxes: PlatformSandboxes;
 }
 
+/** Credentials and endpoints from options, falling back to the environment. */
+function resolveOptions(options: MastraPlatformOptions) {
+  const accessToken = options.accessToken ?? env('MASTRA_PLATFORM_ACCESS_TOKEN') ?? env('MASTRA_PLATFORM_SECRET_KEY');
+  if (!accessToken) throw new Error('MastraPlatform: accessToken is required');
+  const apiUrl = options.apiUrl ?? env('MASTRA_PLATFORM_API_URL') ?? DEFAULT_API_URL;
+  const organizationId = options.organizationId ?? env('MASTRA_ORG_ID');
+  const api = new PlatformApi({ apiUrl, accessToken, organizationId, fetch: options.fetch });
+  return { accessToken, apiUrl, organizationId, api };
+}
+
 /**
- * Client for the Mastra Platform API.
+ * One Mastra Platform project: its managed agents, services, and provisioning, without passing the
+ * project ID to each call. Get one from `MastraPlatform.getProject(projectId)`.
  *
  * @example
  * ```ts
- * const platform = new MastraPlatform({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
- * const agent = await platform.createAgent({ name: 'Support', instructions: 'Answer billing questions.' });
- * const response = await agent.stream('Where is my invoice?', { memory: { thread: 'thread-1', resource: 'user-1' } });
+ * const project = platform.getProject('proj_123');
+ * const agents = await project.listAgents();
+ * const agent = await project.createAgent({ name: 'Support', instructions: 'Answer billing questions.' });
  * ```
  */
-export class MastraPlatform {
-  /** The organization's projects. */
-  readonly projects: PlatformProjects;
+export class MastraProject {
   readonly #options: MastraPlatformOptions;
   readonly #accessToken: string;
   readonly #apiUrl: string;
+  readonly #organizationId: string | undefined;
   readonly #api: PlatformApi;
   readonly #projectId: string | undefined;
   #project: ProjectServices | undefined;
 
   constructor(options: MastraPlatformOptions = {}) {
-    const accessToken = options.accessToken ?? env('MASTRA_PLATFORM_ACCESS_TOKEN') ?? env('MASTRA_PLATFORM_SECRET_KEY');
-    if (!accessToken) throw new Error('MastraPlatform: accessToken is required');
+    const { accessToken, apiUrl, organizationId, api } = resolveOptions(options);
     this.#options = options;
     this.#accessToken = accessToken;
-    this.#apiUrl = options.apiUrl ?? env('MASTRA_PLATFORM_API_URL') ?? DEFAULT_API_URL;
+    this.#apiUrl = apiUrl;
+    this.#organizationId = organizationId;
+    this.#api = api;
     this.#projectId = options.projectId ?? env('MASTRA_PROJECT_ID') ?? tokenProjectId(accessToken);
-    this.#api = new PlatformApi({
-      apiUrl: this.#apiUrl,
-      accessToken,
-      organizationId: options.organizationId ?? env('MASTRA_ORG_ID'),
-      fetch: options.fetch,
-    });
-    this.projects = new PlatformProjects(this.#api);
   }
 
   /** The project this client works in. Throws when none was given or found. */
@@ -131,19 +135,10 @@ export class MastraPlatform {
     return this.#projectId;
   }
 
-  /**
-   * A client for another project in the organization, with the same credentials. It has everything
-   * this client has (`listAgents()`, `createAgent()`, `getMemory()`, ...), scoped to that project.
-   * Makes no request: a project that doesn't exist fails on first use.
-   */
-  getProject(projectId: string): MastraPlatform {
-    return new MastraPlatform({ ...this.#options, accessToken: this.#accessToken, projectId });
-  }
-
   get #services(): ProjectServices {
     if (this.#project) return this.#project;
     const projectId = this.projectId;
-    const organizationId = this.#options.organizationId ?? env('MASTRA_ORG_ID');
+    const organizationId = this.#organizationId;
     this.#project = {
       client: new MastraClient({
         baseUrl: this.#apiUrl,
@@ -397,4 +392,37 @@ export class MastraPlatform {
 function gatewayModel(provider: string | undefined, modelId: string | undefined) {
   if (!modelId) return undefined;
   return modelId.includes('/') || !provider || provider === 'mastra' ? modelId : `${provider}/${modelId}`;
+}
+
+/**
+ * Client for the Mastra Platform API: the organization's projects, plus everything a
+ * `MastraProject` has for the project the credentials name (`projectId`, `MASTRA_PROJECT_ID`, or a
+ * project access token's project).
+ *
+ * @example
+ * ```ts
+ * const platform = new MastraPlatform({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+ * const agent = await platform.createAgent({ name: 'Support', instructions: 'Answer billing questions.' });
+ * const response = await agent.stream('Where is my invoice?', { memory: { thread: 'thread-1', resource: 'user-1' } });
+ * ```
+ */
+export class MastraPlatform extends MastraProject {
+  /** The organization's projects. */
+  readonly projects: PlatformProjects;
+  readonly #options: MastraPlatformOptions;
+
+  constructor(options: MastraPlatformOptions = {}) {
+    super(options);
+    const { accessToken, api } = resolveOptions(options);
+    this.#options = { ...options, accessToken };
+    this.projects = new PlatformProjects(api);
+  }
+
+  /**
+   * One project in the organization, with the same credentials. Makes no request: a project that
+   * doesn't exist fails on first use.
+   */
+  getProject(projectId: string): MastraProject {
+    return new MastraProject({ ...this.#options, projectId });
+  }
 }

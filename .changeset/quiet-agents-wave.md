@@ -41,7 +41,7 @@ const storage = await platform.getStorage('db_123');
 
 Each is the framework type it stands in for (`MastraMemory`, `Knowledge`, `MastraSandbox`, `MastraFilesystem`, `MastraStorage`), and `connect` is `@mastra/connect`'s `ConnectClient`. `getStorage` needs the store for the database's kind installed: `@mastra/libsql`, `@mastra/pg`, or `@mastra/redis`.
 
-The same client provisions projects for an organization member: create projects and environments, and Memory instances, Knowledge instances, databases, and file systems in them.
+The same client provisions projects for an organization member: create projects and environments, and Memory instances, Knowledge instances, databases, and file systems in them. `getProject(id)` returns a `MastraProject` for one project, so its calls don't take the project ID.
 
 ```ts
 const platform = new MastraPlatform({ accessToken: process.env.MASTRA_API_TOKEN, organizationId: 'org_123' });

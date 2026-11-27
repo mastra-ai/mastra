@@ -31,6 +31,8 @@ const knowledge = new PlatformKnowledge();
 
 `MastraPlatform` creates and runs agents hosted on Mastra Platform. Use a project access token: it names its project, so `projectId` is only needed for other tokens (or set `MASTRA_PROJECT_ID`).
 
+To work in other projects with the same credentials, `platform.getProject(projectId)` returns a `MastraProject`: everything below (`listAgents()`, `createAgent()`, `getMemory()`, ...) without passing the project ID again. `new MastraProject({ accessToken, projectId })` works on its own too.
+
 ```ts
 import { MastraPlatform } from '@mastra/platform';
 

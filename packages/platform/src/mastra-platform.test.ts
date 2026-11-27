@@ -16,7 +16,7 @@ import { Hono } from 'hono';
 import type { Context, Next } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { MastraPlatform, PlatformAgent, PlatformMemory } from './index';
+import { MastraPlatform, MastraProject, PlatformAgent, PlatformMemory } from './index';
 
 const PROJECT_ID = 'proj_123';
 // A project access token is a JWT naming its project; the Platform verifies the signature.
@@ -565,6 +565,14 @@ describe('MastraPlatform credentials', () => {
     expect(Object.keys(await project.listAgents())).toContain(agent.id);
     // The client it came from still works in its own project.
     expect(client.projectId).toBe('proj_other');
+    await agent.delete();
+  });
+
+  it('works in one project on its own, without the organization client', async () => {
+    const project = new MastraProject({ accessToken: ACCESS_TOKEN, projectId: PROJECT_ID, apiUrl: platformApi.apiUrl });
+    const agent = await project.createAgent({ name: 'Standalone', instructions: 'Help with billing.' });
+    expect(Object.keys(await project.listAgents())).toContain(agent.id);
+    expect((await project.getAgent(agent.id)).name).toBe('Standalone');
     await agent.delete();
   });
 

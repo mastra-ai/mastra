@@ -1,4 +1,4 @@
-export { MastraPlatform } from './mastra-platform';
+export { MastraPlatform, MastraProject } from './mastra-platform';
 export type { MastraPlatformOptions, ManagedAgentsSetupStatus, PlatformStorageOptions } from './mastra-platform';
 export {
   MastraPlatformError,
