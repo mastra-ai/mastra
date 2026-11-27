@@ -7,8 +7,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { RefObject } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
+import { useBoardCatalog, useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
 import { toMinute } from '../../factory/stageStays';

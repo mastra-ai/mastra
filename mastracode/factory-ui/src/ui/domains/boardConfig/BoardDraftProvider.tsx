@@ -1,8 +1,8 @@
+import { useBoardWritePending } from '@mastra/react/hooks/factory';
 import { createContext, useContext, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type { StoredBoardInfo } from '../../../api/types';
-import { useBoardWritePending } from '../../../hooks/useBoardEditor';
 import { draftOf } from './boardDraft';
 import type { BoardDraft } from './boardDraft';
 

@@ -4,21 +4,21 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { LoaderFunctionArgs, ShouldRevalidateFunction } from 'react-router';
 
 import type { ApiConfig } from '../api/config';
-import { boardCatalogQueryOptions } from '../hooks/useBoardCatalog';
-import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
 import { providersQueryOptions } from '../hooks/use-providers';
 import { factoriesQueryOptions } from '../hooks/useFactories';
 import {
-  factoryDecisionHistoryQueryOptions,
-  runQueueQueryOptions,
+  boardCatalogQueryOptions,
   boardPhasesQueryOptions,
+  factoryDecisionHistoryQueryOptions,
+  intakeRoutesQueryOptions,
+  runQueueQueryOptions,
+  sessionActivityQueryOptions,
   sessionWorkItemsQueryOptions,
   workItemActivityQueryOptions,
   workItemFilterOptionsQueryOptions,
   workItemQueryOptions,
   workItemStartersQueryOptions,
-  sessionActivityQueryOptions,
 } from '@mastra/react/hooks/factory';
 import { factoryProjectQueryOptions } from '../hooks/useFactoryDefaultModel';
 import { gitLabStatusQueryOptions } from '../hooks/useGitLabData';
@@ -119,9 +119,9 @@ export const prefetchAppLayout: Prefetch = (services, { params, request }) => {
   const { pathname } = new URL(request.url);
   if (isSettingsPath(pathname)) return;
   void queryClient.query(serverFeaturesQueryOptions(api.client)).catch(noop);
-  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
   // Says whether the sidebar offers "New board": only organization admins may change boards.
-  void queryClient.query(intakeRoutesQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(intakeRoutesQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
   const { sort, groupBy, revealChildSessions } = readSessionListView();
   const rows = sessionRowsRequest({
     sort,
@@ -215,7 +215,7 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
   if (!factoryId || !workItemId) return;
   const { queryClient, api } = services;
   void queryClient.query(workItemQueryOptions(api.mastra.getFactory(factoryId), workItemId)).catch(noop);
-  void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
+  void queryClient.query(boardCatalogQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
   void queryClient.query(boardDecisionsQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
 };
 
@@ -243,7 +243,7 @@ export const prefetchSessionFrame: Prefetch = (services, { params, request }) =>
           })
           .catch(noop),
         queryClient
-          .query({ ...boardCatalogQueryOptions(api.client, factoryId), ...CACHED_UNLESS_INVALIDATED })
+          .query({ ...boardCatalogQueryOptions(api.mastra.getFactory(factoryId)), ...CACHED_UNLESS_INVALIDATED })
           .catch(noop),
       ]
     : [];

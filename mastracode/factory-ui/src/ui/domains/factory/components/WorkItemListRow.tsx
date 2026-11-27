@@ -1,8 +1,8 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
 import { ListRowLabels, ListRowLinks, ListRowStatus, ListRowTitle } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
 import { boardOf } from '../boardFlow';
 import type { DragPayload } from '../boardDrag';

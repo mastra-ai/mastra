@@ -1,8 +1,8 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { BoardCardRows } from '@mastra/playground-ui/domains/factory';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { ReactNode } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { BoardCardStatus } from '../boardCardState';
 import { boardLoop, boardOf } from '../boardFlow';
 import type { BoardInfo } from '../boardFlow';

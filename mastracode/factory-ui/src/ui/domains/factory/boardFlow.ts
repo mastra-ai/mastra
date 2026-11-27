@@ -6,35 +6,6 @@ import type { InstalledBoardInfo } from '../../../api/types';
 export type BoardInfo = Pick<InstalledBoardInfo, 'id' | 'title' | 'initialPhase' | 'phases'> &
   Partial<Pick<InstalledBoardInfo, 'name' | 'flow'>>;
 
-type BoardFlowInfo = NonNullable<InstalledBoardInfo['flow']>;
-
-/**
- * The loop parts a server older than the catalog's `flow` ran by fixed keys: Work's, and the retired
- * Review board's. This UI ships with the CLI while `@mastra/factory` versions on its own, so it can
- * meet such a server; it reads those boards the way that server did.
- */
-const LEGACY_FLOWS: Readonly<Record<string, BoardFlowInfo>> = {
-  [DEFAULT_BOARD_ID]: {
-    triage: 'triage',
-    build: 'execute',
-    selfReview: 'review',
-    pullRequestReview: 'pr-review',
-    completed: 'done',
-    canceled: 'canceled',
-  },
-  review: { pullRequestReview: 'review', completed: 'done', canceled: 'canceled' },
-};
-
-/** A catalog entry with its loop parts, backfilled for a board an older server sent without them. */
-export function withLegacyFlow<T extends BoardInfo>(board: T): T {
-  const legacy = board.flow ? undefined : LEGACY_FLOWS[board.id];
-  if (!legacy) return board;
-  const flow = Object.fromEntries(
-    Object.entries(legacy).filter(([, phase]) => board.phases.some(candidate => candidate.id === phase)),
-  ) as BoardFlowInfo;
-  return { ...board, flow };
-}
-
 type BoardPhaseInfo = InstalledBoardInfo['phases'][number];
 
 /** The catalog entry for a card's board, once the catalog has loaded. */

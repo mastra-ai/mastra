@@ -3,7 +3,7 @@ import { skipToken, useMutation, useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { IntakeDryRunBody, IntakeDryRunResponse, IntakeTestBody, IntakeTestResponse } from '../api/types';
-import type { BoardRequestError } from './useBoardEditor';
+import type { FactoryRequestError } from '@mastra/client-js';
 import { sendRouteRequest } from './useIntakeRoutes';
 
 function intakePath(factoryProjectId: string, suffix: string) {
@@ -38,7 +38,7 @@ export function useIntakeDryRunQuery(factoryProjectId: string | undefined) {
 /** Runs unsaved rules or an unsaved intake order over the same items, against the saved ones. Admins only. */
 export function useIntakeDryRunPreview(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
-  return useMutation<IntakeDryRunResponse, BoardRequestError, IntakeDryRunBody>({
+  return useMutation<IntakeDryRunResponse, FactoryRequestError, IntakeDryRunBody>({
     mutationFn: body =>
       sendRouteRequest<IntakeDryRunResponse>(baseUrl, intakePath(factoryProjectId, 'dry-run'), {
         method: 'POST',
@@ -54,7 +54,7 @@ export function useIntakeDryRunPreview(factoryProjectId: string) {
 export function useIntakeTestQuery(factoryProjectId: string | undefined, subject: string | undefined) {
   const { baseUrl } = useApiConfig();
   const trimmed = subject?.trim() || undefined;
-  return useQuery<IntakeTestResponse, BoardRequestError>({
+  return useQuery<IntakeTestResponse, FactoryRequestError>({
     // A skipped query never fetches, so its key only has to be stable.
     queryKey: queryKeys.intakeTest(factoryProjectId, trimmed ?? ''),
     queryFn:
@@ -71,7 +71,7 @@ export function useIntakeTestQuery(factoryProjectId: string | undefined, subject
 /** "Where would this go?": one item by URL or id, with what every rule answered. Nothing is filed. */
 export function useIntakeTest(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
-  return useMutation<IntakeTestResponse, BoardRequestError, IntakeTestBody>({
+  return useMutation<IntakeTestResponse, FactoryRequestError, IntakeTestBody>({
     mutationFn: body =>
       sendRouteRequest<IntakeTestResponse>(baseUrl, intakePath(factoryProjectId, 'test'), { method: 'POST', body }),
   });

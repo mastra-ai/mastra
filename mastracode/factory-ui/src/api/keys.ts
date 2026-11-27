@@ -32,10 +32,9 @@ export const queryKeys = {
   serverStatus: () => ['server-status'] as const,
   factoryAuth: () => ['factory-auth'] as const,
   factories: () => ['factories'] as const,
-  boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
-  /** Under `boardCatalog`, so invalidating the catalog also refreshes the board. */
-  board: (factoryProjectId: string | undefined, boardKey: string) =>
-    ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
+  boardCatalog: factoryKeys.boardCatalog,
+  board: factoryKeys.board,
+  boardWrite: factoryKeys.boardWrite,
   persistedFactories: () => ['factories', 'persisted'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   factoryEnvironment: (factoryProjectId: string | undefined) =>
@@ -85,7 +84,7 @@ export const queryKeys = {
     ['incidentio', 'issue', factoryProjectId ?? null, issueRef ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
-  intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  intakeRoutes: factoryKeys.intakeRoutes,
   // Under the routes' key: a rule or order change refreshes the counts.
   intakeDryRun: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,

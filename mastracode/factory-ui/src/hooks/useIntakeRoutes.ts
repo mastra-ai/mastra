@@ -1,11 +1,11 @@
+import { FactoryRequestError } from '@mastra/client-js';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
-import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { z } from 'zod';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { IntakeRouteInfo, IntakeRouteInput, IntakeRouteListResponse, IntakeRoutePatch } from '../api/types';
-import { BoardRequestError } from './useBoardEditor';
 
 function routesPath(factoryProjectId: string, suffix = '') {
   return `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes${suffix}`;
@@ -29,38 +29,17 @@ export async function sendRouteRequest<T>(
   const body: unknown = await res.json().catch(() => undefined);
   const refusal = body as { error?: string; message?: string } | undefined;
   if (!res.ok || !refusal || refusal.error !== undefined) {
-    throw new BoardRequestError(
+    throw new FactoryRequestError(
       res.status,
-      refusal?.error,
+      res.statusText,
       refusal?.message ?? refusal?.error ?? `Request failed (${res.status})`,
+      body,
     );
   }
   return body as T;
 }
 
 /** The project's intake routes in the order they are tried, and whether the caller may change them. */
-export function useIntakeRoutesQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({ ...intakeRoutesQueryOptions(baseUrl, factoryProjectId ?? ''), enabled: !!factoryProjectId });
-}
-
-/** The read behind `useIntakeRoutesQuery`, also used to load the routes ahead of the page. */
-export function intakeRoutesQueryOptions(baseUrl: string, factoryProjectId: string) {
-  return queryOptions({
-    queryKey: queryKeys.intakeRoutes(factoryProjectId),
-    queryFn: () => sendRouteRequest<IntakeRouteListResponse>(baseUrl, routesPath(factoryProjectId)),
-  });
-}
-
-/**
- * Whether the caller may create, edit and delete this project's boards (an organization admin).
- * Read off the intake routes, which answer for the project whatever boards it has: a project
- * need not have a Work board. The server enforces it on every write.
- */
-export function useCanEditBoards(factoryProjectId: string | undefined): boolean {
-  return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
-}
-
 export type RouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch }
@@ -75,7 +54,7 @@ export type RouteWrite =
 export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<IntakeRouteInfo[], BoardRequestError, RouteWrite[]>({
+  return useMutation<IntakeRouteInfo[], FactoryRequestError, RouteWrite[]>({
     mutationFn: async writes => {
       const project = factoryProjectId!;
       const created: IntakeRouteInfo[] = [];
@@ -127,7 +106,7 @@ export function useReroutePreview(factoryProjectId: string) {
 export function useApplyReroute(factoryProjectId: string) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<RerouteResult, BoardRequestError>({
+  return useMutation<RerouteResult, FactoryRequestError>({
     mutationFn: () =>
       sendRouteRequest<RerouteResult>(baseUrl, routesPath(factoryProjectId, '/reroute'), { method: 'POST' }),
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeReroute(factoryProjectId) }),

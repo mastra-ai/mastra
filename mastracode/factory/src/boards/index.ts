@@ -17,7 +17,7 @@ export {
   UNTRUSTED_PULL_REQUESTS_KEY,
   workingPullRequest,
 } from '@internal/factory-contract';
-export type { BoardPhaseKind } from '@internal/factory-contract';
+export type { BoardPhaseKind, FactoryPhaseTool } from '@internal/factory-contract';
 export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,
@@ -29,7 +29,6 @@ export type {
   BoardPhaseOutcome,
   BoardPhaseGoal,
   BoardPhaseRunner,
-  FactoryPhaseTool,
   BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,

@@ -1,3 +1,4 @@
+import { useBoardCatalog, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import {
   AddRuleRow,
   BoardStatsRow,
@@ -20,9 +21,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import type { IntakeDryRunResponse } from '../../../../../api/types';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useIntakeDryRunQuery } from '../../../../../hooks/useIntakeDryRun';
-import { useIntakeRoutesQuery } from '../../../../../hooks/useIntakeRoutes';
 import { HrefLink } from '../../../../ui/HrefLink';
 import {
   boardConfigPath,

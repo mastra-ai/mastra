@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -15,7 +16,6 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../../api/types';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../../hooks/useFactorySkills';
 import { boardName } from '../../../boardRules/ruleTargets';
 import { orderedBoards } from '../../../factory/boardCatalog';

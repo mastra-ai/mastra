@@ -1,6 +1,6 @@
+import { useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { useIntakeDryRunQuery } from '../../../../../hooks/useIntakeDryRun';
 import { useSkippedRulesQuery } from '../../../../../hooks/useIntakeOrder';
-import { useIntakeRoutesQuery } from '../../../../../hooks/useIntakeRoutes';
 import { isOpenedLane } from '../../../boardRules/ruleLanes';
 import type { RuleEvent } from '../../../boardRules/ruleLanes';
 import { boardRulesOf, ruleLines } from '../../canvasModel';

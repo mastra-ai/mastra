@@ -1,4 +1,5 @@
 import {
+  FACTORY_PHASE_TOOLS,
   cardRuleGroupSchema,
   evaluateRuleGroup,
   FACTORY_GITHUB_EVENTS,
@@ -9,6 +10,7 @@ import {
   IDENTIFIER_RE,
 } from '@internal/factory-contract';
 import type {
+  FactoryPhaseTool,
   BoardPhaseKind,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -138,10 +140,6 @@ export interface BoardPhaseExitTool {
   /** With `autoApprove`, only cards this matches are approved without a person. */
   readonly autoApproveWhen?: RuleGroup;
 }
-
-/** Factory tools a working phase grants the session that works the card there. */
-export const FACTORY_PHASE_TOOLS = ['factory_record_review_verdict', 'factory_review_source'] as const;
-export type FactoryPhaseTool = (typeof FACTORY_PHASE_TOOLS)[number];
 
 type BoardPhaseBase<PhaseId extends string> = {
   readonly name?: string;

@@ -1,7 +1,7 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { useParams } from 'react-router';
 import type { InstalledBoardInfo } from '../../api/types';
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
 import { ConnectRepositoryEmptyState } from '../domains/factory/components/ConnectRepositoryEmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';

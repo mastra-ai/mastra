@@ -1,5 +1,5 @@
+import { useBoardQuery, useSaveBoardMutation } from '@mastra/react/hooks/factory';
 import type { InstalledPhaseInfo } from '../../../../api/types';
-import { useBoardQuery, useSaveBoardMutation } from '../../../../hooks/useBoardEditor';
 import { withAutoStart } from '../../boardConfig/boardDraft';
 import { StartsToggle } from '../../boardConfig/components/StartsToggle';
 

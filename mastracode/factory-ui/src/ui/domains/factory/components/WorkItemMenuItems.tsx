@@ -1,7 +1,7 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardLoop } from '../boardFlow';
 import { itemBoard, itemStageOptions } from '../boardStages';
 import { canMoveTo, canStartRun } from '../boardCardState';

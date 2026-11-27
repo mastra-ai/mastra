@@ -35,3 +35,4 @@ export * from './wire/decisions.js';
 export * from './model-packs.js';
 export * from './rules/identifiers.js';
 export * from './session/session-row-query.js';
+export * from './wire/boards.js';

@@ -1,3 +1,4 @@
+import { useBoardCatalog, useCanEditBoards } from '@mastra/react/hooks/factory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { FactoryBoardsNav } from '@mastra/playground-ui/domains/factory';
@@ -5,8 +6,6 @@ import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useCanEditBoards } from '../../../../hooks/useIntakeRoutes';
 import { boardConfigPath, boardIntakePath, newBoardPath } from '../../boardConfig/boardConfigPaths';
 import { boardPath, orderedBoards } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';

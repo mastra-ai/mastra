@@ -42,6 +42,13 @@ export const factoryKeys = {
     ['factory', 'audit', factoryProjectId ?? null, group, actorKey ?? null] as const,
   sessionActivity: (factoryProjectId: string | undefined) =>
     ['factory', 'session-activity', factoryProjectId ?? null] as const,
+  boardCatalog: (factoryProjectId: string | undefined) => ['factory', 'boards', factoryProjectId ?? null] as const,
+  /** Under `boardCatalog`, so invalidating the catalog also refreshes the board. */
+  board: (factoryProjectId: string | undefined, boardKey: string) =>
+    [...factoryKeys.boardCatalog(factoryProjectId), 'board', boardKey] as const,
+  boardWrite: (factoryProjectId: string | undefined, boardKey: string) =>
+    ['factory', 'board-write', factoryProjectId ?? null, boardKey] as const,
+  intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
   cardWrite: (factoryProjectId: string | undefined) => ['factory', 'write-work-item', factoryProjectId] as const,
   cardMove: (factoryProjectId: string | undefined) =>
     [...factoryKeys.cardWrite(factoryProjectId), 'transition'] as const,

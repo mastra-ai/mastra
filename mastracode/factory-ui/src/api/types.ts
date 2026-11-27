@@ -1,3 +1,12 @@
+export type {
+  BoardCatalogResponse,
+  InstalledBoardInfo,
+  InstalledPhaseInfo,
+  IntakeRouteInfo,
+  IntakeRouteListResponse,
+  ReplaceBoardBody,
+  StoredBoardResponse,
+} from '@internal/factory-contract';
 /**
  * Wire contracts for the web/RN settings API surface.
  *
@@ -12,15 +21,10 @@
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
-export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema>;
-export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
-export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
-export type StoredBoardResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardGet.responseSchema>;
+import type { StoredBoardResponse } from '@internal/factory-contract';
+
 export type StoredBoardInfo = StoredBoardResponse['board'];
 export type StoredPhaseInfo = StoredBoardInfo['phases'][number];
-export type ReplaceBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardReplace.bodySchema>;
-export type IntakeRouteListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeRouteList.responseSchema>;
-export type IntakeRouteInfo = IntakeRouteListResponse['intakeRoutes'][number];
 export type IntakeOrderResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeOrderGet.responseSchema>;
 export type IntakeNotRoutedResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.intakeNotRoutedList.responseSchema>;
 export type IntakeDecisionInfo = IntakeNotRoutedResponse['notRouted'][number];

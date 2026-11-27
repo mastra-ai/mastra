@@ -1,7 +1,6 @@
+import { useBoardCatalog, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { RulePanelMessage, SidePanel } from '@mastra/playground-ui/domains/factory';
 
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
-import { useIntakeRoutesQuery } from '../../../../../hooks/useIntakeRoutes';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
 import { useRuleWrites } from '../../useRuleWrites';
 import { RuleEditor } from './RuleEditor';

@@ -1,5 +1,4 @@
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
+import { useBoardCatalog, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { boardFlow } from '../../boardRules/boardFlow';
 
 /** The board's start phase and, once the rules load, the live rules moving cards into each of its phases. */

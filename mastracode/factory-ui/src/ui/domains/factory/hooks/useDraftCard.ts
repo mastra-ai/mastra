@@ -1,5 +1,4 @@
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useWorkItemQuery } from '@mastra/react/hooks/factory';
+import { useBoardCatalog, useWorkItemQuery } from '@mastra/react/hooks/factory';
 import { boardOf } from '../boardFlow';
 
 export function useDraftCard(factoryId: string | undefined, workItemId: string | undefined) {

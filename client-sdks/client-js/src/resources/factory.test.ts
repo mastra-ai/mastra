@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraClient } from '../client';
+import { FactoryRequestError } from './factory';
 
 function mockFetch(...answers: Array<{ status?: number; body: unknown }>) {
   const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => {
@@ -165,5 +166,36 @@ describe('Factory resource', () => {
       'http://localhost:4111/web/factory/projects/fp-1/audit?actorIds=u1%2Cu2&before=c1&limit=200',
       'http://localhost:4111/web/factory/projects/fp-1/session-activity',
     ]);
+  });
+  it('reads the board catalog, one board and the intake routes, and saves a board', async () => {
+    const fetchMock = mockFetch({ body: {} });
+    const factory = client.getFactory('fp-1');
+    await factory.boardCatalog();
+    await factory.board('my board');
+    await factory.intakeRoutes();
+    await factory.replaceBoard('work', { name: 'Work', phases: [], expectedRevision: 3 });
+    expect(urls(fetchMock)).toEqual([
+      'http://localhost:4111/web/factory/projects/fp-1/boards',
+      'http://localhost:4111/web/factory/projects/fp-1/boards/my%20board',
+      'http://localhost:4111/web/factory/projects/fp-1/intake-routes',
+      'http://localhost:4111/web/factory/projects/fp-1/boards/work',
+    ]);
+    expect(fetchMock.mock.calls[3]![1]).toMatchObject({ method: 'PATCH' });
+  });
+
+  describe('when Factory refuses a save', () => {
+    it('keeps its error code and lists its conflicts as the reasons', async () => {
+      mockFetch({
+        status: 409,
+        body: { error: 'code_behaviour_conflict', message: 'Conflicts', conflicts: ['Build must lead to Review.'] },
+      });
+      const refused = await client
+        .getFactory('fp-1')
+        .replaceBoard('work', { name: 'Work', phases: [], expectedRevision: 3 })
+        .catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(FactoryRequestError);
+      expect(refused).toMatchObject({ status: 409, code: 'code_behaviour_conflict', message: 'Conflicts' });
+      expect((refused as FactoryRequestError).reasons).toBe('Build must lead to Review.');
+    });
   });
 });

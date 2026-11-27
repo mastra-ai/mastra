@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { SESSION_ROW_WINDOW } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -10,7 +11,6 @@ import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';

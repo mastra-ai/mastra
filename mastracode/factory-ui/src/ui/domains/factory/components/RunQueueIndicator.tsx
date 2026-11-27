@@ -1,8 +1,8 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { RunQueueMenu, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
 import type { RunQueueMenuRun } from '@mastra/playground-ui/domains/factory';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import type { RunQueueResponse } from '@internal/factory-contract';
 
 type QueuedRun = RunQueueResponse['queued'][number];

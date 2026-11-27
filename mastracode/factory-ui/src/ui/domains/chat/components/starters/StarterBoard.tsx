@@ -1,7 +1,6 @@
 import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import { useQuery } from '@tanstack/react-query';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
-import { useFactory, workItemStartersQueryOptions } from '@mastra/react/hooks/factory';
+import { useBoardCatalog, useFactory, workItemStartersQueryOptions } from '@mastra/react/hooks/factory';
 import { starterPrompts } from '../../../factory/starterPrompts';
 import { StarterCard } from './StarterCard';
 
