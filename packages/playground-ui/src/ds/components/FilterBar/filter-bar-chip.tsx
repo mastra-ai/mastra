@@ -13,6 +13,7 @@ import type {
   FilterBarItem,
   FilterBarOperator,
   FilterBarOption,
+  FilterBarPlace,
   FilterBarScalar,
   FilterBarSegment,
   FilterBarValue,
@@ -23,6 +24,7 @@ import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconLock } from '@/ds/icons/central/IconLock';
@@ -142,6 +144,8 @@ type ChipContext = {
   leaving: boolean;
   /** The field allows a single operator and does not require its label to stay visible. */
   operatorImplied: boolean;
+  /** Where the item sits (negation, scope): narrows the operators its editors offer. */
+  place: FilterBarPlace;
 };
 
 const ChipContext = createContext<ChipContext | null>(null);
@@ -179,7 +183,7 @@ export function FilterBarChip({
   const ctx = useFilterBarContext();
   const [initial] = useState(() => !ctx.mounted);
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
-  const field = ctx.getField(item.fieldId);
+  const field = ctx.getField(item.fieldId, ctx.groupOfItem(item.id));
   const operator =
     (field && ctx.getFieldOperators(field).find(o => o.id === item.operatorId)) ?? ctx.getOperator(item.operatorId);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -216,12 +220,28 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
-  const validationMessage =
-    !draft && operator?.arity !== 'none' && typeof item.value === 'string'
-      ? field?.validateInput?.(item.value)
+  const groupId = ctx.groupOfItem(item.id);
+  const place = useMemo(() => ctx.placeOf(groupId, item.id), [ctx, groupId, item.id]);
+  // An operator ruled out where the chip sits (say once it is negated) keeps showing, marked invalid.
+  const operatorOutOfPlace =
+    field &&
+    operator &&
+    ctx.getFieldOperators(field).some(o => o.id === operator.id) &&
+    !ctx.getFieldOperators(field, place).some(o => o.id === operator.id)
+      ? `"${operator.label}" is not available here`
       : undefined;
+  const validationMessage = draft
+    ? undefined
+    : ((operator?.arity !== 'none' && typeof item.value === 'string'
+        ? field?.validateInput?.(item.value)
+        : undefined) ??
+      operatorOutOfPlace ??
+      ctx.validateItem?.(item, place));
   const operatorImplied = field ? !field.alwaysShowOperator && ctx.getFieldOperators(field).length === 1 : false;
+  // A negated item always reads as such; the toggle itself is only offered on a negatable bar.
+  const negateShown = !draft && (ctx.negatable || Boolean(item.negated));
   const label = [
+    item.negated ? 'not' : '',
     field?.label ?? item.fieldId,
     operatorImplied ? '' : (operator?.label ?? item.operatorId),
     draft ? '' : formatValue(item.value, field),
@@ -234,15 +254,30 @@ export function FilterBarChip({
   // glints once when it lands as a filter (see filter-bar-chip.css).
   const commit = !draft && ctx.lastCommit?.item.id === item.id ? ctx.lastCommit : null;
   const from = draft ? (ctx.draft?.from ?? 'none') : (commit?.from ?? 'none');
-  const settled = settledSegments(from, operatorImplied);
+  // The negation was not on the draft, but it sits first: count it as settled so the
+  // segments the draft already showed stay put.
+  const settled = settledSegments(from, operatorImplied) + (negateShown && from !== 'none' ? 1 : 0);
   const shine = commit?.glint ?? false;
 
   const chipValue = useMemo<ChipContext>(
-    () => ({ item, index, field, operator, openSegment, setOpenSegment, readOnly, draft, leaving, operatorImplied }),
-    [item, index, field, operator, openSegment, readOnly, draft, leaving, operatorImplied],
+    () => ({
+      item,
+      index,
+      field,
+      operator,
+      openSegment,
+      setOpenSegment,
+      readOnly,
+      draft,
+      leaving,
+      operatorImplied,
+      place,
+    }),
+    [item, index, field, operator, openSegment, readOnly, draft, leaving, operatorImplied, place],
   );
   const content = children ?? (
     <>
+      {negateShown && <FilterBarChipNegate />}
       <FilterBarChipField />
       <FilterBarChipOperator />
       <FilterBarChipValue />
@@ -470,14 +505,22 @@ function FieldEditor() {
   const [query, setQuery] = useState('');
 
   const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
-  const fields = ctx.fields.filter(field => {
+  const groupId = ctx.groupOfItem(chip.item.id);
+  const customOption = ctx.customFieldAt(groupId, query);
+  const fields = [...ctx.fieldsAt(groupId), ...(customOption ? [customOption] : [])].filter(field => {
     if (field.rootOnly && !isRoot) return false;
+    if (ctx.getFieldOperators(field, chip.place).length === 0) return false;
     return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
   });
+  const filter = useCallback(
+    (field: FilterBarField, text: string, itemToString?: (field: FilterBarField) => string) =>
+      field === customOption || matchesQueryFilter(field, text, itemToString),
+    [customOption],
+  );
 
   const onSelect = useCallback(
     (field: FilterBarField) => {
-      const allowed = ctx.getFieldOperators(field);
+      const allowed = ctx.getFieldOperators(field, chip.place);
       const nextOperator = allowed.find(o => o.id === chip.item.operatorId) ?? allowed[0];
       const arityChanged = nextOperator?.arity !== chip.operator?.arity;
       ctx.updateItem(chip.item.id, {
@@ -497,7 +540,7 @@ function FieldEditor() {
       label={chip.field?.label ?? chip.item.fieldId}
       items={fields}
       itemToString={fieldLabel}
-      filter={matchesQueryFilter}
+      filter={filter}
       value={chip.field}
       query={query}
       onQueryChange={setQuery}
@@ -507,7 +550,12 @@ function FieldEditor() {
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
-        renderOption={f => <FilterBarFieldLabel field={f} />}
+        renderOption={f => (
+          <>
+            <FilterBarFieldLabel field={f} />
+            {f === customOption && <span className="min-w-0 truncate text-muted-foreground">Custom field</span>}
+          </>
+        )}
         emptyText="No matching field."
       />
     </SegmentCombobox>
@@ -518,7 +566,10 @@ function OperatorEditor() {
   const ctx = useFilterBarContext();
   const chip = useChip();
   const [query, setQuery] = useState('');
-  const options = useMemo(() => (chip.field ? ctx.getFieldOperators(chip.field) : ctx.operators), [ctx, chip.field]);
+  const options = useMemo(
+    () => (chip.field ? ctx.getFieldOperators(chip.field, chip.place) : ctx.operators),
+    [ctx, chip.field, chip.place],
+  );
 
   const onSelect = useCallback(
     (operator: FilterBarOperator) => {
@@ -713,6 +764,41 @@ export function FilterBarChipValue() {
   return <ValueEditor />;
 }
 
+const negateSegmentClass = cn(editableSegmentClass, 'filter-bar-segment-negate');
+
+/**
+ * The leading "not" of a chip. On a `negatable` bar it toggles the item's negation; otherwise
+ * (or read only) it only shows that the item is negated.
+ */
+export function FilterBarChipNegate() {
+  const ctx = useFilterBarContext();
+  const chip = useChip();
+  const negated = Boolean(chip.item.negated);
+  if (chip.draft) return null;
+  const word = <span className="text-destructive-foreground">not</span>;
+  if (chip.readOnly || chip.leaving || !ctx.negatable) {
+    return negated ? <span className={cn(segmentClass, 'filter-bar-segment-negate')}>{word}</span> : null;
+  }
+  const condition = [chip.field?.label ?? chip.item.fieldId, chip.operator?.label ?? chip.item.operatorId]
+    .concat(chip.operator?.arity === 'none' ? [] : [formatValue(chip.item.value, chip.field)])
+    .join(' ');
+  return (
+    <button
+      type="button"
+      data-filter-bar-segment=""
+      tabIndex={-1}
+      aria-label={`Negate ${condition}`}
+      aria-pressed={negated}
+      title={negated ? 'Turn off negation' : 'Negate'}
+      ref={el => ctx.registerSegment(chip.item.id, 'negate', el)}
+      className={cn(negateSegmentClass, !negated && cn(controlIconOnly, 'px-1.5 text-muted-foreground'))}
+      onClick={() => ctx.setNegated(chip.item.id, !negated)}
+    >
+      {negated ? word : <IconCircleBanSign aria-hidden />}
+    </button>
+  );
+}
+
 /** The trailing × segment of a chip: its own cell, so it keeps an even inset instead of the pill's outer one. */
 export const removeSegmentClass = cn(
   editableSegmentClass,
@@ -752,6 +838,7 @@ export function FilterBarChipRemove() {
   );
 }
 
+FilterBarChip.Negate = FilterBarChipNegate;
 FilterBarChip.Field = FilterBarChipField;
 FilterBarChip.Operator = FilterBarChipOperator;
 FilterBarChip.Value = FilterBarChipValue;

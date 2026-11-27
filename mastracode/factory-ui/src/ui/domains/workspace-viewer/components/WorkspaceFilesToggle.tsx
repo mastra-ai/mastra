@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import { SessionPanelToggle } from '@mastra/playground-ui/domains/factory';
 import { useState } from 'react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
@@ -20,20 +21,7 @@ export function WorkspaceFilesToggle() {
     setOpen(next);
   };
 
-  if (canDock) {
-    return (
-      <Button
-        size="icon-sm"
-        variant={open ? 'default' : 'ghost'}
-        tooltip={open ? 'Hide session panel' : 'Show session panel'}
-        aria-label="Session panel"
-        aria-pressed={open}
-        onClick={() => setOpen(!open)}
-      >
-        <IconSidebarSimpleRightWide />
-      </Button>
-    );
-  }
+  if (canDock) return <SessionPanelToggle open={open} onOpenChange={setOpen} />;
 
   return (
     <Popover open={open} onOpenChange={setPopoverOpen}>

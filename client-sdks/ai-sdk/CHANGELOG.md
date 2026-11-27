@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.12.2-alpha.1
+
+### Patch Changes
+
+- Fixed `toAISdkMessages`, `toAISdkV5Messages` and `toAISdkV4Messages` dropping user messages that mention `<system-reminder`. A message is now hidden only when it carries reminder metadata or its first text is a whole `<system-reminder>` element, so a question like "What does <system-reminder mean in the logs?" stays in the chat history. ([#31446](https://github.com/mastra-ai/mastra/pull/31446))
+
+- Updated dependencies [[`67c1571`](https://github.com/mastra-ai/mastra/commit/67c15714862bbc881bb5191a079abc39ec62c45e)]:
+  - @mastra/core@1.87.0-alpha.2
+
 ## 1.12.2-alpha.0
 
 ### Patch Changes

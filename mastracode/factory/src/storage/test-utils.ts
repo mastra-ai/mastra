@@ -142,7 +142,7 @@ export function createProviderWorkItemForTests(input: {
   };
 }
 
-async function isolatedPostgresSchemaForTests(connectionString: string): Promise<string> {
+export async function isolatedPostgresSchemaForTests(connectionString: string): Promise<string> {
   const { PostgresStore } = await import('@mastra/pg');
   const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
   const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;

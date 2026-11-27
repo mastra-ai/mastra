@@ -14,9 +14,13 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
   const vulnerableRegex = /<working_memory>([^]*?)<\/working_memory>/g;
 
   describe('extractWorkingMemoryTags', () => {
-    it('should extract simple working memory tags', () => {
-      const result = extractWorkingMemoryTags('<working_memory>hello world</working_memory>');
-      expect(result).toEqual(['<working_memory>hello world</working_memory>']);
+    it.each([
+      ['should extract simple working memory tags', '<working_memory>hello world</working_memory>'],
+      ['should handle multiline content', '<working_memory>line1\nline2\nline3</working_memory>'],
+      ['should handle nested angle brackets', '<working_memory>has <nested> tags</working_memory>'],
+    ] as const)('%s', (_title, input) => {
+      const result = extractWorkingMemoryTags(input);
+      expect(result).toEqual([input]);
     });
 
     it('should extract multiple working memory tags', () => {
@@ -26,22 +30,12 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
       expect(result).toEqual(['<working_memory>first</working_memory>', '<working_memory>second</working_memory>']);
     });
 
-    it('should handle multiline content', () => {
-      const result = extractWorkingMemoryTags('<working_memory>line1\nline2\nline3</working_memory>');
-      expect(result).toEqual(['<working_memory>line1\nline2\nline3</working_memory>']);
-    });
-
     it('should return null when no tags found', () => {
       expect(extractWorkingMemoryTags('no tags here')).toBeNull();
     });
 
     it('should return null when only opening tag exists', () => {
       expect(extractWorkingMemoryTags('<working_memory>unclosed')).toBeNull();
-    });
-
-    it('should handle nested angle brackets', () => {
-      const result = extractWorkingMemoryTags('<working_memory>has <nested> tags</working_memory>');
-      expect(result).toEqual(['<working_memory>has <nested> tags</working_memory>']);
     });
 
     it('should match regex behavior for normal inputs', () => {
@@ -61,18 +55,18 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
   });
 
   describe('extractWorkingMemoryContent', () => {
-    it('should extract content without tags', () => {
-      expect(extractWorkingMemoryContent('<working_memory>hello world</working_memory>')).toBe('hello world');
-    });
-
-    it('should return first match content only', () => {
-      expect(
-        extractWorkingMemoryContent('<working_memory>first</working_memory> <working_memory>second</working_memory>'),
-      ).toBe('first');
-    });
-
-    it('should handle multiline content', () => {
-      expect(extractWorkingMemoryContent('<working_memory>line1\nline2</working_memory>')).toBe('line1\nline2');
+    it.each([
+      ['should extract content without tags', '<working_memory>hello world</working_memory>', 'hello world'],
+      [
+        'should return first match content only',
+        '<working_memory>first</working_memory> <working_memory>second</working_memory>',
+        'first',
+      ],
+      ['should handle multiline content', '<working_memory>line1\nline2</working_memory>', 'line1\nline2'],
+      ['should handle empty content', '<working_memory></working_memory>', ''],
+      ['should extract content with prefix text', 'prefix <working_memory>content</working_memory>', 'content'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(extractWorkingMemoryContent(input)).toBe(expected);
     });
 
     it('should return null when no tags found', () => {
@@ -82,37 +76,29 @@ describe('Working Memory Utils - ReDoS Prevention', () => {
     it('should return null when only opening tag exists', () => {
       expect(extractWorkingMemoryContent('<working_memory>unclosed')).toBeNull();
     });
-
-    it('should handle empty content', () => {
-      expect(extractWorkingMemoryContent('<working_memory></working_memory>')).toBe('');
-    });
-
-    it('should extract content with prefix text', () => {
-      expect(extractWorkingMemoryContent('prefix <working_memory>content</working_memory>')).toBe('content');
-    });
   });
 
   describe('removeWorkingMemoryTags', () => {
-    it('should remove working memory tags', () => {
-      expect(removeWorkingMemoryTags('<working_memory>secret</working_memory>')).toBe('');
-    });
-
-    it('should remove tags and preserve surrounding text', () => {
-      expect(removeWorkingMemoryTags('Hello <working_memory>secret</working_memory> world')).toBe('Hello  world');
-    });
-
-    it('should remove multiple tags', () => {
-      expect(
-        removeWorkingMemoryTags('<working_memory>a</working_memory> middle <working_memory>b</working_memory>'),
-      ).toBe(' middle ');
-    });
-
-    it('should handle text with no tags', () => {
-      expect(removeWorkingMemoryTags('no tags here')).toBe('no tags here');
-    });
-
-    it('should handle unclosed tags by preserving them', () => {
-      expect(removeWorkingMemoryTags('before <working_memory>unclosed')).toBe('before <working_memory>unclosed');
+    it.each([
+      ['should remove working memory tags', '<working_memory>secret</working_memory>', ''],
+      [
+        'should remove tags and preserve surrounding text',
+        'Hello <working_memory>secret</working_memory> world',
+        'Hello  world',
+      ],
+      [
+        'should remove multiple tags',
+        '<working_memory>a</working_memory> middle <working_memory>b</working_memory>',
+        ' middle ',
+      ],
+      ['should handle text with no tags', 'no tags here', 'no tags here'],
+      [
+        'should handle unclosed tags by preserving them',
+        'before <working_memory>unclosed',
+        'before <working_memory>unclosed',
+      ],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(removeWorkingMemoryTags(input)).toBe(expected);
     });
 
     it('should match regex behavior for normal inputs', () => {
@@ -252,26 +238,19 @@ describe('removeWorkingMemoryToolInvocationParts', () => {
     ).toEqual(next);
   });
 
-  it('drops a step left with only reasoning and whitespace text', () => {
+  it.each([
+    ['drops a step left with only reasoning and whitespace text', '\n\n'],
+    [
+      'drops a step left with only reasoning and working-memory tags',
+      '<working_memory># User\n- Name: Jim</working_memory>\n',
+    ],
+  ] as const)('%s', (_title, text) => {
     const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
     expect(
       removeWorkingMemoryToolInvocationParts([
         { type: 'step-start' },
         reasoning,
-        { type: 'text', text: '\n\n' },
-        call('wm', 'updateWorkingMemory'),
-        ...next,
-      ]),
-    ).toEqual(next);
-  });
-
-  it('drops a step left with only reasoning and working-memory tags', () => {
-    const next: MastraMessagePart[] = [{ type: 'step-start' }, reasoning, { type: 'text', text: 'Done' }];
-    expect(
-      removeWorkingMemoryToolInvocationParts([
-        { type: 'step-start' },
-        reasoning,
-        { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>\n' },
+        { type: 'text', text },
         call('wm', 'updateWorkingMemory'),
         ...next,
       ]),

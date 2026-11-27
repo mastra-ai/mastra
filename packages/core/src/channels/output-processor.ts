@@ -55,6 +55,23 @@ const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
 
+/**
+ * Whether a `requestContext` entry is a live render context rather than the
+ * method-less husk a JSON snapshot round-trip leaves behind (issue #31310).
+ * `wrapStream` is the first method the session calls, so its presence is the
+ * signal that the object is usable.
+ *
+ * Every reader that treats a stashed render context as a live object (the
+ * output processor, `resolveChannelRenderContext`, `AgentChannels.resolveRunRender`
+ * and the generative-UI processor) guards with this, so a husk on a replica's
+ * restored `requestContext` always falls through to a rebuild from the thread.
+ */
+export function isUsableRenderContext(value: unknown): value is ChatChannelRenderContext {
+  return (
+    typeof value === 'object' && value !== null && typeof (value as ChatChannelRenderContext).wrapStream === 'function'
+  );
+}
+
 interface ChunkQueue {
   iterable: AsyncIterable<AgentChunkType<any>>;
   push: (chunk: AgentChunkType<any>) => void;
@@ -233,7 +250,13 @@ export class ChatChannelOutputProcessor {
     }
 
     const fromRequest = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    if (fromRequest) {
+    // A replica restores `requestContext` from a persisted snapshot, where JSON
+    // has flattened the live render context into a husk: its data fields survive
+    // but every method (`wrapStream`, `getPendingApproval`, ...) is gone. Using it
+    // throws `render.wrapStream is not a function` on the first chunk. Accept the
+    // entry only when it still carries the methods the session calls; otherwise
+    // fall through and rebuild a working context from the run's thread.
+    if (isUsableRenderContext(fromRequest)) {
       state.render = fromRequest;
       return fromRequest;
     }

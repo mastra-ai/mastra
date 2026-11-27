@@ -184,19 +184,12 @@ describe('Mastra ID Generator', () => {
   });
 
   describe('Error Handling and Edge Cases', () => {
-    it('should handle null ID generator gracefully', () => {
+    it.each([
+      ['should handle null ID generator gracefully', null],
+      ['should handle undefined ID generator gracefully', undefined],
+    ] as const)('%s', (_title, value) => {
       const mastra = new Mastra({
-        idGenerator: null as any,
-        logger: false,
-      });
-
-      const id = mastra.generateId();
-      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
-    });
-
-    it('should handle undefined ID generator gracefully', () => {
-      const mastra = new Mastra({
-        idGenerator: undefined as any,
+        idGenerator: value as any,
         logger: false,
       });
 

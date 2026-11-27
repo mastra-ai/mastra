@@ -151,7 +151,7 @@ Each domain specifies its age-prunable tables and the timestamp column that anch
 | `observability` | `feedback` | `timestamp` | Feedback event age (vNext only) |
 | `scores` | `scorers` | `createdAt` | Score record age |
 | `workflows` | `workflowSnapshot` | `updatedAt` | Inactivity, suspended or long-running workflows survive |
-| `workflows` | `runOwnership` | `updatedAt` | Inactivity. A running durable agent execution renews its claim every 10 seconds, so keep `maxAge` well above its 30-second lease |
+| `workflows` | `runOwnership` | `updatedAt` | Inactivity. A running durable agent execution renews its claim every 5 seconds by default, so keep `maxAge` well above its 15-second default lease. Configure these with `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS` and `MASTRA_AGENT_THREAD_LEASE_TTL_MS` |
 | `backgroundTasks` | `backgroundTasks` | `completedAt` | Time since completion, in-flight tasks (`NULL`) are never pruned |
 | `experiments` | `experiments` | `completedAt` | Time since completion, running experiments are never pruned |
 | `notifications` | `notifications` | `createdAt` | Notification age |

@@ -19,7 +19,7 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-5.6-sol": [
+    "openai/gpt-5.6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
@@ -31,19 +31,26 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "openai/gpt-5.6-luna": [
+    "openai/gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
+    "alibaba/qwen3.7-plus": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens"
+      }
+    ],
+    "alibaba/qwen3.7-max": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "deepseek/deepseek-v4-flash": [
@@ -55,20 +62,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "alibaba/qwen3.7-max": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens"
-      }
-    ],
-    "alibaba/qwen3.7-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "moonshotai/kimi-k3": [

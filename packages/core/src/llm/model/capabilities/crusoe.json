@@ -27,21 +27,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
-      {
-        "type": "toggle"
-      }
-    ],
     "google/gemma-4-31b-it": [
       {
         "type": "toggle"
@@ -53,6 +38,21 @@
       }
     ],
     "zai/GLM-5.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/Nemotron-3-Nano-Omni-Reasoning-30B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
       {
         "type": "toggle"
       }

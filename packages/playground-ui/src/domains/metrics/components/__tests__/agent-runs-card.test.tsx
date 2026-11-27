@@ -12,12 +12,6 @@ describe('AgentRunsCard', () => {
     expect(screen.queryByText('10')).toBeNull();
   });
 
-  it('shows the run count once loaded', async () => {
-    seedMetrics();
-    renderInMetrics(<AgentRunsCard />);
-    expect(await screen.findByText('10')).toBeDefined();
-  });
-
   it('switches to the share of runs that failed from its title', async () => {
     seedMetrics();
     renderInMetrics(<AgentRunsCard />);

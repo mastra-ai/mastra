@@ -1,12 +1,12 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 
-import type { FactoryBoardEngine } from '../board-engine/engine.js';
+import type { FactoryBoardEngine, FactoryRunEndedBinding } from '../board-engine/engine.js';
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
-import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FactoryRuleRejectedError } from './dispatch-errors.js';
 
 export interface PhaseOutcomeMoveDeps {
@@ -24,10 +24,7 @@ export interface PhaseOutcomeMoveDeps {
  * Every caller asks under the same ingress for one report, so a run end seen twice (by the
  * dispatcher watching the run and by the session itself) asks once and gets one verdict.
  */
-export async function applyPhaseOutcome(
-  deps: PhaseOutcomeMoveDeps,
-  binding: Pick<FactoryRunBindingRecord, 'id' | 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'>,
-): Promise<boolean> {
+export async function applyPhaseOutcome(deps: PhaseOutcomeMoveDeps, binding: FactoryRunEndedBinding): Promise<boolean> {
   for (let attempt = 1; ; attempt++) {
     const item = await deps.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     if (!item) return false;
@@ -57,29 +54,52 @@ export async function applyPhaseOutcome(
   }
 }
 
+const endedRuns = new WeakMap<object, { session: string; count: number }>();
+
+/**
+ * Names the latest run the session ended in this process, once {@link observeSessionPhaseOutcome}
+ * watches it. Only for a run the open-run ledger doesn't hold: the name means nothing to another
+ * process, where the ledger's kickoff id names the run for every worker.
+ */
+export function latestRunEnd(session: object): string | undefined {
+  const ended = endedRuns.get(session);
+  return ended ? `${ended.session}:${ended.count}` : undefined;
+}
+
 type RunEndSession = {
   subscribe(listener: (event: AgentControllerEvent) => void): () => void;
 };
 
 /**
- * Applies the outcome a bound session reported whenever one of its runs ends, however the run
- * started: a plan approved hours after the dispatcher stopped watching its run still moves the
- * card when the resumed run ends.
+ * Tells the board engine whenever a run of a bound session ends, however the run started: a plan
+ * approved hours after the dispatcher stopped watching its run still ends its phase when the
+ * resumed run ends.
  */
 export function observeSessionPhaseOutcome(
   session: RunEndSession,
   options: {
-    binding: () => Promise<Parameters<typeof applyPhaseOutcome>[1] | null>;
-    deps: () => PhaseOutcomeMoveDeps | undefined;
+    binding: () => Promise<FactoryRunEndedBinding | null>;
+    boardEngine: () => Pick<FactoryBoardEngine, 'requestMove' | 'runEnded'> | undefined;
+    /**
+     * The kickoff id the open-run ledger holds for the run that is ending, which the dispatcher
+     * of any worker names the same run end by. Asked as the run ends, before its row is closed.
+     */
+    openRun?: () => Promise<string | undefined>;
   },
 ): () => void {
   return session.subscribe(event => {
-    if (event.type !== 'agent_end' || event.reason !== 'complete') return;
+    if (event.type !== 'agent_end') return;
+    const ended = endedRuns.get(session) ?? { session: crypto.randomUUID(), count: 0 };
+    endedRuns.set(session, { ...ended, count: ended.count + 1 });
+    if (event.reason !== 'complete') return;
+    const local = latestRunEnd(session);
+    const shared = options.openRun?.().catch(() => undefined);
     void (async () => {
-      const deps = options.deps();
-      if (!deps) return;
+      const runEnd = (await shared) ?? local;
+      const boardEngine = options.boardEngine();
+      if (!boardEngine) return;
       const binding = await options.binding();
-      if (binding) await applyPhaseOutcome(deps, binding);
+      if (binding) await boardEngine.runEnded({ ...binding, runEnd }, boardEngine);
     })().catch(error => {
       console.warn('[Factory] Unable to apply the outcome a session reported.', error);
     });

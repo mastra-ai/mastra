@@ -24,7 +24,7 @@ Remove former global `rules.work` and `rules.review` configuration. There is no 
 
 By default, every integration arrival stays in its routed board's initial phase (Intake for Work) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to Review (`pr-review`). Do not restore default arrival automation on the built-in boards.
 
-`authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. A custom board can add guarded arrival triage on its initial phase by checking both `context.cause === 'linked_item_materialized'` and `context.item.metadata?.autoStartCandidate === true`, then returning an `invokeSkill` decision for `factory-triage`.
+`authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. To triage arrivals automatically, file them into a working triage phase with an intake route and let that phase's `runner` start on its own through `autoStart: true`, optionally narrowed with `autoStartWhen` (for example `item.trusted equals true` to limit it to trusted authors). Do not use a phase `onEnter` handler; it is ignored.
 
 Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
 
@@ -84,11 +84,11 @@ Keep the remaining limits explicit: `factory-ui` still uses built-in stages and 
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. Work declares no tool-result rules; to have a tool's result move a card on your replacement `work` board, declare `tools.<tool>.onResult` there.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace Work's board-owned behavior, write your own board under the `work` key with `factory.upsertBoard(board, { projects: 'all' })` at every startup (see [Preserve the public shape](#preserve-the-public-shape)). A stored board is data: it can't declare handlers, so it can't add tool-result (`tools.<tool>.onResult`) or event rules. It keeps Work's `sourceClosed` moves only while its `done` and `canceled` phases stay terminal; behavior that no longer fits is dropped and listed in the board's `problems`.
 
 Before changing a built-in handler:
 
-1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, Work's tool-result handler in `src/boards/work-tool-rules.ts`, and Work lifecycle/policy defaults in `src/boards/work.ts` and `src/boards/pull-request-review.ts`. Custom handlers live in their installed definitions.
+1. Find and read it: GitHub handlers live in `src/integrations/github/default-rules.ts`, Linear handlers in `src/integrations/linear/default-rules.ts`, and Work's declaration (phases and `sourceClosed`) in `src/boards/work.ts`. Custom handlers live in their installed definitions.
 2. Decide whether the replacement must preserve part of that behavior explicitly.
 3. Use only fields exposed by the typed context. Do not reach into Factory storage or raw webhook payloads.
 4. Return `undefined` to allow the ingress with no decision, or return a typed rejection or bounded structured decision.

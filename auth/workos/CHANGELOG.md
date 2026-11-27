@@ -1,5 +1,11 @@
 # @mastra/auth-workos
 
+## 1.7.1-alpha.0
+
+### Patch Changes
+
+- Fix `handleCallback` failing with "Data is not JSON serializable" when sealing the AuthKit session cookie. The WorkOS SDK returns `Date` objects for the user's `createdAt`, `updatedAt` and `lastSignInAt` fields, which the AuthKit session sealer rejects; these are now normalized to ISO strings before the session is sealed. ([#31652](https://github.com/mastra-ai/mastra/pull/31652))
+
 ## 1.7.0
 
 ### Minor Changes

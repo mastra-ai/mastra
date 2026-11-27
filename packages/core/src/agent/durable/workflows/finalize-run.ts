@@ -1,3 +1,4 @@
+import { isRestoredWorkerControllerContext } from '../../../agent-controller/worker-run-binding';
 import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
@@ -109,7 +110,11 @@ function mergeRequestContextForFinalization(
   const restored = new RequestContext<unknown>(fallback?.entries());
   // The snapshot's token and signed-in user belong to whoever started the run;
   // the live ones in `fallback` are kept.
-  for (const [key, value] of Object.entries(withoutLiveRequestKeys(entries))) restored.set(key, value);
+  const controller = fallback?.get('controller');
+  for (const [key, value] of Object.entries(withoutLiveRequestKeys(entries))) {
+    if (key === 'controller' && isRestoredWorkerControllerContext(controller)) continue;
+    restored.set(key, value);
+  }
   restoreRunAgentScopes(restored);
   return restored;
 }
@@ -172,6 +177,7 @@ export async function runDurableFinishSideEffects({
         agentId: initData.agentId,
         // initData read back from a snapshot may keep saved messages as refs.
         input: { ...initData, messageListState },
+        requestContext,
         logger: effectiveLogger,
       });
       rebuiltSaveQueueManager = resolved.saveQueueManager;

@@ -1,5 +1,86 @@
 # mastracode
 
+## 0.51.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`6af07e7`](https://github.com/mastra-ai/mastra/commit/6af07e76acda2c15c9b85675a428baab774d8606), [`116f675`](https://github.com/mastra-ai/mastra/commit/116f6755907feea0c97d78c0b9d22fe0df436823), [`5af764a`](https://github.com/mastra-ai/mastra/commit/5af764a61c49ccb7587ab45afc82e8c65830f419), [`dbcd013`](https://github.com/mastra-ai/mastra/commit/dbcd013833a593ef3d1f258b48569c12527fc144), [`a414673`](https://github.com/mastra-ai/mastra/commit/a414673fc9f725e40ec24cfc83eb84554ed514a2), [`237add3`](https://github.com/mastra-ai/mastra/commit/237add377a4006b02336800155140ccfb9cd86d3), [`cfa1aea`](https://github.com/mastra-ai/mastra/commit/cfa1aea7e917c810c21705fa197af7c832d0b951), [`adfcbfa`](https://github.com/mastra-ai/mastra/commit/adfcbfadaff43d1b9bf0560b93012936a69ceda6), [`afdf069`](https://github.com/mastra-ai/mastra/commit/afdf069f29d34a2d51b7e458b071c42d23e6b2c4), [`d890f2d`](https://github.com/mastra-ai/mastra/commit/d890f2dacbb5f62fe809ed165e42278810eb66bd), [`58fddd4`](https://github.com/mastra-ai/mastra/commit/58fddd4e45ecc2b38f094310f644638deb5c99c0), [`788bb60`](https://github.com/mastra-ai/mastra/commit/788bb60db6362b4c0ea8e477cd63dd31b496787e), [`5793d03`](https://github.com/mastra-ai/mastra/commit/5793d03b44a6e59a8a63873ed2a0ddc1b9a20a4d), [`29e1c78`](https://github.com/mastra-ai/mastra/commit/29e1c78dae237ca012ae64c468271854022f19c3), [`0c9ea1f`](https://github.com/mastra-ai/mastra/commit/0c9ea1fb5638b7ee47ab6e146dcaf44295a41fa8), [`b5755a5`](https://github.com/mastra-ai/mastra/commit/b5755a5e10386f424c3ec76663ea6a57543c648a)]:
+  - @mastra/core@1.87.0-alpha.4
+  - @mastra/code-sdk@1.22.0-alpha.4
+  - @mastra/memory@1.41.4-alpha.0
+  - @mastra/duckdb@1.19.3-alpha.0
+  - @mastra/observability@1.24.4-alpha.1
+  - @mastra/libsql@1.33.0-alpha.1
+  - @mastra/mcp@2.11.0
+
+## 0.51.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`d2ac0b7`](https://github.com/mastra-ai/mastra/commit/d2ac0b705c184143ae9af79ffad282fbdd90fc6f), [`c5a632e`](https://github.com/mastra-ai/mastra/commit/c5a632e892d70f330de4bc2bf5a9054b91186405), [`9047217`](https://github.com/mastra-ai/mastra/commit/904721797d4576fdd0afaabee7da8fc7e5a72792), [`0d5613a`](https://github.com/mastra-ai/mastra/commit/0d5613a29c62d540370a72c485efff4059e151f8)]:
+  - @mastra/core@1.87.0-alpha.3
+  - @mastra/code-sdk@1.22.0-alpha.3
+
+## 0.51.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`67c1571`](https://github.com/mastra-ai/mastra/commit/67c15714862bbc881bb5191a079abc39ec62c45e)]:
+  - @mastra/core@1.87.0-alpha.2
+  - @mastra/code-sdk@1.22.0-alpha.2
+
+## 0.51.0-alpha.2
+
+### Minor Changes
+
+- Menus now open in place of the prompt instead of as pop-ups over the chat. This includes `/settings`, `/models` and its sub-menus, `/theme`, `/goal`, `/think`, `/threads`, `/login` and the other commands that open a menu. While the full-screen setup is open, menus still appear on top of it. ([#28476](https://github.com/mastra-ai/mastra/pull/28476))
+
+  - **Lists** share the same layout: type to filter, arrow keys wrap around, the list scrolls only when the cursor reaches its edge, labels and descriptions line up in columns, and Backspace on an empty search goes back. Menus with letter shortcuts (such as `/mcp`) and text inputs keep their own keys.
+  - **Height:** a menu fits the terminal it opens in and keeps its height while you filter. Closing it brings back the chat rows it covered. Menus in the prompt's place ignore the `maxHeight` overlay option.
+  - **Breadcrumbs:** settings submenus show where you are ("settings › notifications").
+  - **API keys:** `/api-keys` removes a stored key with Delete only (Fn+Delete on a Mac laptop). Backspace used to remove it too; it now edits the search, and closes the menu when the search is empty.
+  - **Suggestions:** command suggestions no longer scroll the chat or leave blank rows under the status line.
+  - **Loading:** slow menus such as `/models` and `/model` show a loading row right away. Esc cancels only the menu it was waiting for.
+
+  `ModelSelectorComponent` no longer draws its own title, hint line or search field, and `titleColor` has no effect. `getSearchInput()` was removed. If you used it to filter the models, use `setFilter()`:
+
+  ```ts
+  // Before
+  selector.getSearchInput().setValue('gpt');
+
+  // After
+  selector.setFilter('gpt');
+  ```
+
+## 0.51.0-alpha.1
+
+### Minor Changes
+
+- Added a connection test, models from the endpoint, custom headers and an auth scheme choice to `/custom-providers`. Select a provider to find them: ([#31565](https://github.com/mastra-ai/mastra/pull/31565))
+
+  - **Add model** now offers the models the endpoint lists that are not added yet, one at a time or all at once, and still takes a typed ID. If the endpoint does not answer within a few seconds, it asks for the ID as before.
+  - **Test connection** calls the endpoint's model list and shows how many models it lists and how long it took. A failure shows the status, the URL called and the error text the endpoint returned.
+  - **Headers** adds or removes extra headers sent on every call. A secret value is masked while it is typed and shows as `••••`.
+  - **Auth scheme** sends the API key as `Authorization: Bearer <key>` or as `x-api-key: <key>`.
+
+  When an edit moves a provider's base URL to another origin, its secret headers are removed so their values are never sent to the new address. Add them again under **Headers**.
+
+  The choices are saved on the provider in `settings.json`:
+
+  ```json
+  {
+    "name": "Acme Gateway",
+    "authScheme": "x-api-key",
+    "headers": [{ "name": "X-Org-Id", "value": "org-123", "secret": false }]
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`ad3d59f`](https://github.com/mastra-ai/mastra/commit/ad3d59f4a7c3557e3871b047ee48075a84731698), [`f19b0cf`](https://github.com/mastra-ai/mastra/commit/f19b0cf20c347921358943bb70c14051493088de), [`18439ea`](https://github.com/mastra-ai/mastra/commit/18439ea68fd5b009119e80af05cabc5ce5004c2b), [`21aee63`](https://github.com/mastra-ai/mastra/commit/21aee631dbb59e843b265706438865928185d500), [`6ae02c2`](https://github.com/mastra-ai/mastra/commit/6ae02c23a7aff35f229f46cc413c661309016e95)]:
+  - @mastra/core@1.87.0-alpha.1
+  - @mastra/code-sdk@1.22.0-alpha.1
+
 ## 0.50.4-alpha.0
 
 ### Patch Changes

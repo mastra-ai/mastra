@@ -40,10 +40,14 @@ export type {
   FactorySandboxStart,
 } from './factory.js';
 export { DispatcherBoardEngine, createDispatcherBoardEngine } from './board-engine/engine.js';
+export { WorkflowBoardEngine, createWorkflowBoardEngine } from './board-engine/workflow-engine.js';
+export { FACTORY_BOARD_WORKFLOW_ID, FACTORY_CARD_STEP_STATES, boardRunId } from './board-engine/board-workflow.js';
+export type { FactoryCardRunState } from './board-engine/board-workflow.js';
 export type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
   FactoryBoardEngineFactory,
+  FactorySubmittedMove,
 } from './board-engine/engine.js';
 export type { FactoryTransitionRequest } from './rules/transition-service.js';
 export type { FactoryTransitionResult } from './rules/types.js';

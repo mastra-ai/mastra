@@ -184,6 +184,11 @@ export interface FactoryApiRoutesDeps {
   renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
+  /** Tells a project's open boards how a move answered `202` ended. */
+  announceMove?: (
+    scope: { orgId: string; factoryProjectId: string },
+    move: import('../feed-events.js').FeedMove,
+  ) => void;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     boardEngine: FactoryBoardEngine;
@@ -895,7 +900,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       }))
     : undefined;
   const boardEngine = transitionService
-    ? (deps.factoryBoardEngine ?? createDispatcherBoardEngine({ transitionService }))
+    ? (deps.factoryBoardEngine ??
+      createDispatcherBoardEngine({
+        transitionService,
+        workItems: deps.domains.workItems,
+        boards: deps.boardRegistry,
+      }))
     : undefined;
   const startCoordinator = boardEngine
     ? new FactoryStartCoordinator(
@@ -1046,6 +1056,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           boardEngine,
+          announceMove: deps.announceMove,
           startCoordinator,
           ...(sourceControlRegistrations.length > 0
             ? {

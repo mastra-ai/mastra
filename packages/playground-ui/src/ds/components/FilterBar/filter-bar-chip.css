@@ -71,6 +71,10 @@
     --filter-bar-segment-index: 4;
   }
 
+  .filter-bar-chip > .filter-bar-segment:nth-child(6 of .filter-bar-segment) {
+    --filter-bar-segment-index: 5;
+  }
+
   /* Chips already on screen when the bar mounts (a page opening with its filters) skip the
    * entrance: typing them out would slide every control after them across the toolbar. */
   .filter-bar-chip[data-initial] .filter-bar-segment {

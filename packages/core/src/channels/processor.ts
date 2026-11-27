@@ -3,7 +3,7 @@ import type { CoreMessage as CoreMessageV4 } from '@internal/ai-sdk-v4';
 import type { MessageList } from '../agent/message-list/index';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { ProcessInputStepArgs } from '../processors/index';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, isUsableRenderContext } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import type { ChannelContext } from './types';
 
@@ -15,6 +15,9 @@ interface ChannelThreadResolver {
 }
 
 type ResolvedChannel = { channel: ChannelContext; textHidden: boolean };
+
+/** Per-run `state` key caching a thread's display mode recovered without a render context. */
+const RECOVERED_DISPLAY_KEY = 'threadTextHidden';
 
 /**
  * Input processor that injects channel context (platform, bot identity, DM vs.
@@ -61,17 +64,46 @@ export class ChatChannelProcessor {
   ): Promise<ResolvedChannel | undefined> {
     const channel = requestContext?.get('channel') as ChannelContext | undefined;
     if (channel) {
-      const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-      return { channel, textHidden: render?.textDisplay === 'hidden' };
+      const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+      // A live render context carries the display mode the adapter was configured
+      // with. A restored run (a durable step, or another process claiming the run)
+      // gets its request context back from a JSON snapshot, which cannot carry the
+      // render context's live adapters, so the mode is not on the entry: take the
+      // text as shown and a hidden-text thread is told to answer in text it never
+      // posts. Ask the thread instead, once per run (#31310).
+      const textHidden = isUsableRenderContext(render)
+        ? render.textDisplay === 'hidden'
+        : await this.#recoverTextHidden(requestContext, state);
+      return { channel, textHidden };
     }
 
     // Resolved once per run; `null` remembers a thread that isn't channel-backed.
     if (state && 'thread' in state) return (state.thread as ResolvedChannel | null) ?? undefined;
-    const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
-    const found = threadId && this.#channels ? await this.#channels.buildChannelContextForThread(threadId) : null;
-    const resolved = found ? { channel: found.channel, textHidden: found.render.textDisplay === 'hidden' } : null;
+    const resolved = await this.#resolveThread(requestContext);
     if (state) state.thread = resolved;
     return resolved ?? undefined;
+  }
+
+  /** The channel-backed context of the run's memory thread, or `null` when it has none. */
+  async #resolveThread(requestContext: ProcessInputStepArgs['requestContext']): Promise<ResolvedChannel | null> {
+    const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
+    const found = threadId && this.#channels ? await this.#channels.buildChannelContextForThread(threadId) : null;
+    return found ? { channel: found.channel, textHidden: found.render.textDisplay === 'hidden' } : null;
+  }
+
+  /**
+   * Display mode of a channel-backed thread whose render context is no longer on the
+   * restored request context. Cached per run like the thread lookup above, so later
+   * steps of the same run read the thread once.
+   */
+  async #recoverTextHidden(
+    requestContext: ProcessInputStepArgs['requestContext'],
+    state: Record<string, unknown> | undefined,
+  ): Promise<boolean> {
+    if (state && RECOVERED_DISPLAY_KEY in state) return state[RECOVERED_DISPLAY_KEY] === true;
+    const textHidden = (await this.#resolveThread(requestContext))?.textHidden ?? false;
+    if (state) state[RECOVERED_DISPLAY_KEY] = textHidden;
+    return textHidden;
   }
 }
 

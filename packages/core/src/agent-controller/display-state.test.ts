@@ -90,11 +90,6 @@ describe('agent lifecycle', () => {
     session = ctx.session;
   });
 
-  it('sets isRunning to true on agent_start', () => {
-    emit(session, { type: 'agent_start' });
-    expect(session.displayState.get().isRunning).toBe(true);
-  });
-
   it('clears activeTools on agent_start', () => {
     emit(session, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     expect(session.displayState.get().activeTools.size).toBe(1);

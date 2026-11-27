@@ -83,6 +83,7 @@ export async function rawRequest(
     httpMethod = 'POST',
     id = 1,
     capabilities = {},
+    withholdBody = false,
   }: {
     method?: string;
     params?: Record<string, unknown>;
@@ -92,6 +93,12 @@ export async function rawRequest(
     id?: number | null;
     /** The client capabilities the envelope declares. */
     capabilities?: Record<string, unknown>;
+    /**
+     * Declare the body's Content-Length but never send the body, for servers that reject on the
+     * declared length. A server that answers 413 and closes the connection while the client is still
+     * uploading makes the client fail with EPIPE/ECONNRESET, sometimes before it has read the 413.
+     */
+    withholdBody?: boolean;
   },
 ): Promise<RawResponse> {
   const meta = envelope
@@ -120,13 +127,14 @@ export async function rawRequest(
           accept: 'application/json, text/event-stream',
           ...(envelope ? { 'mcp-protocol-version': '2026-07-28' } : {}),
           ...(method && envelope ? { 'mcp-method': method } : {}),
+          ...(withholdBody && body !== undefined ? { 'content-length': String(Buffer.byteLength(body)) } : {}),
           ...headers,
         },
       },
       res => {
         const chunks: Buffer[] = [];
         res.on('data', chunk => chunks.push(Buffer.from(chunk)));
-        res.on('end', () =>
+        res.on('end', () => {
           resolve({
             status: res.statusCode ?? 0,
             headers: new Headers(
@@ -135,12 +143,15 @@ export async function rawRequest(
               ),
             ),
             text: Buffer.concat(chunks).toString('utf8'),
-          }),
-        );
+          });
+          // The withheld body is never coming; drop the half-sent request.
+          if (withholdBody) request.destroy();
+        });
       },
     );
     request.on('error', reject);
-    request.end(body);
+    if (withholdBody) request.flushHeaders();
+    else request.end(body);
   });
   const { text } = response;
   return {

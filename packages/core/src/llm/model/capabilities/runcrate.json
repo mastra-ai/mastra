@@ -49,12 +49,12 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "Qwen/Qwen3.8-Flash": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.8-Flash": [
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }

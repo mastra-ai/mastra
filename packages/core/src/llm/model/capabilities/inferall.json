@@ -23,6 +23,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
     "nvidia/nemotron-3.5-lightning-30b-a3b": [
       {
         "type": "toggle"
@@ -31,12 +37,6 @@
     "nvidia/nemotron-3.5-super-vl-120b-a12b": [
       {
         "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
       }
     ],
     "z-ai/glm-5.3": [

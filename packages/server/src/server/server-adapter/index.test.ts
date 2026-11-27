@@ -1298,22 +1298,16 @@ describe('resource working-memory route FGA metadata', () => {
 describe('validateCustomRoutePaths', () => {
   const mockHandler = vi.fn();
 
-  it('should throw when a custom route collides with the default /api prefix', () => {
+  it.each([
+    ['should throw when a custom route collides with the default /api prefix', '/api/foo'],
+    ['should throw when a custom route exactly matches the prefix', '/api'],
+  ] as const)('%s', (_title, path) => {
     const mastra = new Mastra({ logger: false });
     const adapter = new TestMastraServer({ app: {}, mastra });
 
-    expect(() =>
-      adapter.validateCustomRoutePathsForTest([{ path: '/api/foo', method: 'GET', handler: mockHandler }]),
-    ).toThrow(/must not start with "\/api"/);
-  });
-
-  it('should throw when a custom route exactly matches the prefix', () => {
-    const mastra = new Mastra({ logger: false });
-    const adapter = new TestMastraServer({ app: {}, mastra });
-
-    expect(() =>
-      adapter.validateCustomRoutePathsForTest([{ path: '/api', method: 'GET', handler: mockHandler }]),
-    ).toThrow(/must not start with "\/api"/);
+    expect(() => adapter.validateCustomRoutePathsForTest([{ path, method: 'GET', handler: mockHandler }])).toThrow(
+      /must not start with "\/api"/,
+    );
   });
 
   it('should allow routes outside the default /api prefix', () => {
@@ -1325,12 +1319,15 @@ describe('validateCustomRoutePaths', () => {
     ).not.toThrow();
   });
 
-  it('should allow /api/ routes when a custom prefix is configured', () => {
+  it.each([
+    ['should allow /api/ routes when a custom prefix is configured', '/mastra/api', '/api/my-endpoint'],
+    ['should not throw when prefix is empty', '', '/api/anything'],
+  ] as const)('%s', (_title, prefix, path) => {
     const mastra = new Mastra({ logger: false });
-    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '/mastra/api' });
+    const adapter = new TestMastraServer({ app: {}, mastra, prefix });
 
     expect(() =>
-      adapter.validateCustomRoutePathsForTest([{ path: '/api/my-endpoint', method: 'GET', handler: mockHandler }]),
+      adapter.validateCustomRoutePathsForTest([{ path, method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
   });
 
@@ -1351,15 +1348,6 @@ describe('validateCustomRoutePaths', () => {
       adapter.validateCustomRoutePathsForTest([
         { path: '/api/agents', method: 'GET', handler: mockHandler, _mastraInternal: true },
       ]),
-    ).not.toThrow();
-  });
-
-  it('should not throw when prefix is empty', () => {
-    const mastra = new Mastra({ logger: false });
-    const adapter = new TestMastraServer({ app: {}, mastra, prefix: '' });
-
-    expect(() =>
-      adapter.validateCustomRoutePathsForTest([{ path: '/api/anything', method: 'GET', handler: mockHandler }]),
     ).not.toThrow();
   });
 });

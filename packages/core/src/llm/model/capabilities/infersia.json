@@ -33,16 +33,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "tencent/hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
     "reflection/beam-1.0-501b-a23b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "tencent/hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
       }
     ],
     "xiaomi/mimo-v2.6-pro": [

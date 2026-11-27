@@ -942,7 +942,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
   async function getPubsubOffset(runId: string): Promise<number> {
     const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId));
-    return history.length;
+    // Event indices are cursors, not list positions, so the next one follows the newest.
+    return history.reduce((next, { index = -1 }) => Math.max(next, index + 1), 0);
   }
 
   /**

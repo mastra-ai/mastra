@@ -1,10 +1,14 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { focusManager } from '@tanstack/react-query';
+import { act } from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LINEAR_MIGRATION_POLL_MS } from '../../../../../../hooks/useLinearData';
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
+import type { LinearStatus } from '../../../../factory/services/linear';
 import { linearWorkspaceStatus } from '../fixtures/linearConnections';
 import {
   BINDINGS_URL,
@@ -21,7 +25,65 @@ import {
   closeSourcePicker,
 } from './fixtures';
 
+const authCalls: Array<{ integrationId: string }> = [];
+vi.mock('@nangohq/frontend', () => {
+  class Nango {
+    auth(integrationId: string) {
+      authCalls.push({ integrationId });
+      return Promise.resolve({ connectionId: 'vendor-connection', providerConfigKey: integrationId });
+    }
+  }
+  class AuthError extends Error {
+    type = 'unknown';
+  }
+  return { default: Nango, AuthError };
+});
+
+const LINEAR_CONNECT_ROOT = `${TEST_BASE_URL}/web/integrations/platform/linear`;
+const MIGRATE_URL = `${LINEAR_CONNECT_ROOT}/migrate`;
+
+/** Linear's Mastra Connect sessions. Each connect activates a new connection right away. */
+function linearConnectSessions() {
+  const minted: Array<'connect' | 'reconnect'> = [];
+  server.use(
+    http.get(`${LINEAR_CONNECT_ROOT}/connections`, () =>
+      HttpResponse.json({
+        connections: [{ id: 'linear-new', integrationId: 'linear', status: 'active', accountLabel: 'Linear' }],
+      }),
+    ),
+    http.post(`${LINEAR_CONNECT_ROOT}/connect-session`, () => {
+      minted.push('connect');
+      return HttpResponse.json(
+        {
+          connectionId: 'linear-new',
+          integrationId: 'linear',
+          connectUrl: 'https://example.com/consent',
+          sessionToken: 'session-token',
+          expiresAt: '2099-01-01T00:00:00.000Z',
+        },
+        { status: 201 },
+      );
+    }),
+    http.post(`${LINEAR_CONNECT_ROOT}/connections/:id/reconnect-session`, () => {
+      minted.push('reconnect');
+      return HttpResponse.json({ error: 'imported connections cannot reconnect' }, { status: 409 });
+    }),
+  );
+  return minted;
+}
+
+function orgAdmin(admin: boolean) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [], orgKeyAdmin: admin })),
+  );
+}
+
 describe('IntakeSection linear', () => {
+  beforeEach(() => {
+    authCalls.length = 0;
+  });
+  afterEach(() => vi.useRealTimers());
+
   const sourceId = (workspaceId: string, projectId: string) =>
     `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
   const pausedProject = sourceId('mastra', 'docs-watch');
@@ -55,11 +117,9 @@ describe('IntakeSection linear', () => {
     },
   );
 
-  it.each([
-    ['not_connected', 'This workspace is still disconnected. Choose Mastra when authorizing in Linear.'],
-    ['unavailable', "Couldn't verify this connection. Retry to check its status."],
-  ])('explains a %s reconnect on the paused workspace it targeted', async (outcome, message) => {
+  it("explains when a paused workspace's reconnect connected a different workspace, and clears once it's back", async () => {
     let restored = false;
+    const minted = linearConnectSessions();
     useIntakeHandlers({
       config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
     });
@@ -78,14 +138,60 @@ describe('IntakeSection linear', () => {
       ),
       http.get(LINEAR_TEAMS_URL, () => HttpResponse.json({ teams: [] })),
     );
-    renderIntakeSection(`/factories/fp-1/settings/intake?linear_reconnect=${outcome}&linear_workspace_id=mastra`);
+    renderIntakeSection();
+
+    const message = 'This workspace is still disconnected. Choose Mastra when authorizing in Linear.';
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconnect Mastra' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Continue to Linear' }),
+    );
     expect(await screen.findByText(message)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reconnect Mastra' })).toBeEnabled();
-    if (outcome !== 'unavailable') return;
+
     restored = true;
-    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Reconnect Mastra' }));
+    await userEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', { name: 'Continue to Linear' }),
+    );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Reconnect Mastra' })).not.toBeInTheDocument());
     expect(screen.queryByText(message)).not.toBeInTheDocument();
+    // Imported connections can't be reauthorized in place, so both attempts were fresh connects.
+    expect(minted).toEqual(['connect', 'connect']);
+    expect(authCalls.map(call => call.integrationId)).toEqual(['linear', 'linear']);
+  });
+
+  it("doesn't call a paused workspace's reconnect the wrong workspace while the connection is still activating", async () => {
+    linearConnectSessions();
+    server.use(
+      http.get(`${LINEAR_CONNECT_ROOT}/connections`, () =>
+        // The new connection isn't listed as active yet.
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+    useIntakeHandlers({
+      status: linearWorkspaceStatus,
+      config: { ...baseConfig(), linear: { enabled: true, sourceIds: [pausedProject, liveProject] } },
+    });
+    renderIntakeSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Reconnect Mastra' }));
+    const dialog = await screen.findByRole('dialog');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'Date'], shouldAdvanceTime: true });
+    try {
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Continue to Linear' }));
+      // Poll past the wait for the connection to turn active, until the connect finishes and closes the dialog.
+      for (let elapsed = 0; dialog.hasAttribute('data-open') && elapsed < 70_000; elapsed += 2_000) {
+        await act(() => vi.advanceTimersByTimeAsync(2_000));
+        // Let the poll's request settle on a real tick; only setTimeout and Date are faked.
+        await act(() => new Promise(resolve => setImmediate(resolve)));
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // The connect finished and closed the dialog (jsdom never ends its exit animation).
+    expect(dialog).not.toHaveAttribute('data-open');
+    expect(screen.queryByText(/This workspace is still disconnected/)).not.toBeInTheDocument();
   });
 
   it('shows healthy sources and a retry for a workspace outage without calling it disconnected', async () => {
@@ -495,6 +601,218 @@ describe('IntakeSection linear', () => {
         within(screen.getByRole('region', { name: 'Sources' })).getByRole('button', { name: 'Connect Linear' }),
       ).toBeEnabled();
       expect(screen.queryByRole('button', { name: 'Add Q3 Roadmap' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given a Platform server, where Linear connects through Mastra Connect', () => {
+    const platformStatus = (overrides: Partial<LinearStatus> = {}): LinearStatus => ({
+      enabled: true,
+      connected: false,
+      workspace: null,
+      reason: 'not_connected',
+      mode: 'platform',
+      workspaces: [],
+      migration: { required: false, pending: [], skipped: [] },
+      requiresFreshConnect: [],
+      ...overrides,
+    });
+
+    it('connects in a Mastra Connect popup and shows the workspace once it is active', async () => {
+      let connected = false;
+      const minted = linearConnectSessions();
+      useIntakeHandlers({ status: platformStatus() });
+      server.use(
+        http.get(LINEAR_STATUS_URL, () =>
+          HttpResponse.json(
+            connected
+              ? { ...linearWorkspaceStatus, migration: { required: false, pending: [], skipped: [] } }
+              : platformStatus(),
+          ),
+        ),
+        http.post(`${LINEAR_CONNECT_ROOT}/connect-session`, () => {
+          connected = true;
+          minted.push('connect');
+          return HttpResponse.json(
+            {
+              connectionId: 'linear-new',
+              integrationId: 'linear',
+              connectUrl: 'https://example.com/consent',
+              sessionToken: 'session-token',
+              expiresAt: '2099-01-01T00:00:00.000Z',
+            },
+            { status: 201 },
+          );
+        }),
+      );
+      renderIntakeSection();
+
+      // The loaded section replaces the skeleton's, so find the region again until its button shows.
+      const connect = await waitFor(() =>
+        within(screen.getByRole('region', { name: 'Sources' })).getByRole('button', { name: 'Connect Linear' }),
+      );
+      await userEvent.click(connect);
+
+      expect(await screen.findByRole('group', { name: 'Linear projects and teams' })).toBeInTheDocument();
+      expect(minted).toEqual(['connect']);
+      expect(authCalls.map(call => call.integrationId)).toEqual(['linear']);
+    });
+
+    it('asks for a fresh connect when Linear revoked a moved connection', async () => {
+      const minted = linearConnectSessions();
+      useIntakeHandlers({
+        status: platformStatus({
+          requiresFreshConnect: [{ connectionId: 'conn-1', accountLabel: 'Acme', linearWorkspaceId: 'acme' }],
+        }),
+      });
+      renderIntakeSection();
+
+      expect(
+        await screen.findByText('Linear access was revoked. Reconnect to keep syncing issues.'),
+      ).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Reconnect Linear' }));
+
+      // An imported connection can't be reauthorized in place, so Reconnect starts a fresh connect.
+      await waitFor(() => expect(minted).toEqual(['connect']));
+      expect(authCalls.map(call => call.integrationId)).toEqual(['linear']);
+    });
+
+    it("says when Linear isn't answering for a connection, so paused sources aren't a mystery", async () => {
+      useIntakeHandlers({
+        status: platformStatus({
+          connected: true,
+          reason: 'ready',
+          workspace: { name: 'Acme', urlKey: 'acme' },
+          workspaces: [{ id: 'acme', name: 'Acme', urlKey: 'acme', connected: true }],
+          unidentified: [{ connectionId: 'conn-beta', error: 'Linear returned 503' }],
+        }),
+      });
+      renderIntakeSection();
+
+      expect(await screen.findByText("Linear isn't answering for some connections")).toBeInTheDocument();
+      expect(screen.getByText(/Factory couldn't reach 1 Linear connection and keeps checking/)).toBeInTheDocument();
+    });
+
+    it("keeps the card open to say Linear isn't answering when no workspace or source is known yet", async () => {
+      useIntakeHandlers({
+        status: platformStatus({ unidentified: [{ connectionId: 'conn-beta', error: 'Linear returned 503' }] }),
+        config: { ...baseConfig(), linear: { enabled: true, sourceIds: [] } },
+      });
+      renderIntakeSection();
+
+      expect(await screen.findByText("Linear isn't answering for some connections")).toBeInTheDocument();
+    });
+
+    it('clears the move notice once the server finishes moving the workspaces', async () => {
+      let moved = false;
+      useIntakeHandlers({
+        status: platformStatus({
+          reason: 'migration_required',
+          migration: { required: true, pending: ['acme'], skipped: [] },
+        }),
+      });
+      server.use(
+        http.get(LINEAR_STATUS_URL, () =>
+          HttpResponse.json(
+            moved
+              ? platformStatus()
+              : platformStatus({
+                  reason: 'migration_required',
+                  migration: { required: true, pending: ['acme'], skipped: [] },
+                }),
+          ),
+        ),
+      );
+      // jsdom reports the page hidden, where React Query skips interval refetches; this is a visible tab,
+      // focused before rendering so focusing doesn't refetch on its own.
+      focusManager.setFocused(true);
+      // The poll's interval starts at mount, so the clock is faked before rendering.
+      vi.useFakeTimers({ toFake: ['setInterval', 'Date'], shouldAdvanceTime: true });
+      try {
+        renderIntakeSection();
+        expect(await screen.findByText('Moving Linear to Mastra Connect')).toBeInTheDocument();
+
+        moved = true;
+        await act(() => vi.advanceTimersByTimeAsync(LINEAR_MIGRATION_POLL_MS));
+        vi.useRealTimers();
+        // Asserted before focus resets, since a focus change refetches on its own.
+        await waitFor(() => expect(screen.queryByText('Moving Linear to Mastra Connect')).not.toBeInTheDocument());
+      } finally {
+        vi.useRealTimers();
+        focusManager.setFocused(undefined);
+      }
+    });
+
+    it('shows a move to Mastra Connect in progress without asking anyone to act', async () => {
+      orgAdmin(true);
+      useIntakeHandlers({
+        status: platformStatus({
+          reason: 'migration_required',
+          migration: {
+            required: true,
+            pending: ['acme'],
+            skipped: [],
+          },
+        }),
+      });
+      renderIntakeSection();
+
+      expect(await screen.findByText('Moving Linear to Mastra Connect')).toBeInTheDocument();
+      expect(screen.getByText(/Factory is moving 1 Linear workspace to Mastra Connect/)).toBeInTheDocument();
+      expect(screen.getByText('Linear workspaces are moving to Mastra Connect.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
+    });
+
+    const stalled = platformStatus({
+      reason: 'migration_required',
+      migration: {
+        required: true,
+        pending: ['acme'],
+        skipped: [{ linearWorkspaceId: 'beta', reason: 'disconnected' }],
+        lastError: { message: 'The platform is unavailable.', at: '2026-11-13T12:00:00.000Z' },
+      },
+    });
+
+    it('lets an organization admin retry a stalled move, warning that it is org-wide and one-way', async () => {
+      orgAdmin(true);
+      let moved = false;
+      const migrateCalls: string[] = [];
+      useIntakeHandlers({ status: stalled });
+      server.use(
+        http.get(LINEAR_STATUS_URL, () => HttpResponse.json(moved ? linearWorkspaceStatus : stalled)),
+        http.post(MIGRATE_URL, () => {
+          migrateCalls.push('migrate');
+          moved = true;
+          return HttpResponse.json({
+            requested: ['acme'],
+            connections: [],
+            skipped: [],
+            migration: { required: false, pending: [], skipped: [] },
+          });
+        }),
+      );
+      renderIntakeSection();
+
+      expect(await screen.findByText(/The platform is unavailable\./)).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('list', { name: 'Linear workspaces not moved' })).getByText('beta: disconnected'),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/covers every Factory in this organization and can't be undone/)).toBeInTheDocument();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Retry now' }));
+
+      await waitFor(() => expect(screen.queryByText(/The platform is unavailable/)).not.toBeInTheDocument());
+      expect(migrateCalls).toEqual(['migrate']);
+      expect(await screen.findByRole('group', { name: 'Linear projects and teams' })).toBeInTheDocument();
+    });
+
+    it('shows a stalled move to members without a retry they are not allowed to run', async () => {
+      orgAdmin(false);
+      useIntakeHandlers({ status: stalled });
+      renderIntakeSection();
+
+      expect(await screen.findByText(/The platform is unavailable\./)).toBeInTheDocument();
+      expect(screen.getByText(/Factory keeps retrying on its own/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
     });
   });
 

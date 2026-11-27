@@ -1,0 +1,24 @@
+# Flags images without alt text, or with alt text that is only a placeholder
+# word or a filename. Covers inline and reference-style Markdown images and
+# <img> tags, including tags that span several lines, so it matches against the
+# raw source. An empty alt is allowed when the tag marks the image as decorative
+# with aria-hidden="true" or role="presentation". Whitespace-only alt counts as
+# empty. Both quote styles are checked, a `>` inside a quoted attribute value
+# does not end the tag, and attributes such as data-alt are not mistaken for alt.
+extends: existence
+message: "Describe the image in its alt text: '%s'."
+level: error
+scope: raw
+nonword: true
+ignorecase: true
+tokens:
+  # No alt text
+  - '!\[\s*\]'
+  - '<img\b(?!(?:[^>"'']|"[^"]*"|''[^'']*'')*(?<![\w-])(?:aria-hidden\s*=\s*["'']true["'']|role\s*=\s*["'']presentation["'']))(?:[^>"'']|"[^"]*"|''[^'']*'')*(?<![\w-])alt\s*=\s*(?:"\s*"|''\s*'')(?:[^>"'']|"[^"]*"|''[^'']*'')*>'
+  - '<img\b(?:"[^"]*"|''[^'']*''|(?!(?<![\w-])alt\s*=)[^>"''])*>'
+  # Placeholder word
+  - '!\[\s*(?:image|img|screenshot|diagram|picture|photo|logo)\s*\]'
+  - '(?<![\w-])alt\s*=\s*(?:"\s*(?:image|img|screenshot|diagram|picture|photo|logo)\s*"|''\s*(?:image|img|screenshot|diagram|picture|photo|logo)\s*'')'
+  # Filename only. A description that mentions a filename is fine.
+  - '!\[\s*[^\]\s]*\.(?:png|jpe?g|gif|svg|webp)\s*\]'
+  - '(?<![\w-])alt\s*=\s*(?:"\s*[^"\s]*\.(?:png|jpe?g|gif|svg|webp)\s*"|''\s*[^''\s]*\.(?:png|jpe?g|gif|svg|webp)\s*'')'

@@ -298,7 +298,7 @@ The options documented below are passed directly at the top level of the configu
 ]}
 />
 
-When using the HTML strategy, all general options are ignored. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
+When using the HTML strategy, general options are ignored except `maxSize`, which further splits each chunk by size and also applies `overlap`, `separatorPosition`, `addStartIndex`, and `stripWhitespace`. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
 
 ### Markdown
 

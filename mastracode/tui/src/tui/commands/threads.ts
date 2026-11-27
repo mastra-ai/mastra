@@ -175,7 +175,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
       },
     });
 
-    showModalOverlay(state.ui, selector, { widthPercent: 0.8, maxHeight: '60%' });
+    showModalOverlay(state.ui, selector, { title: 'Select thread' });
     selector.focused = true;
   });
 }

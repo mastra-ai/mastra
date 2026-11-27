@@ -141,6 +141,84 @@ describe('isReconnectableMCPError', () => {
     expect(isReconnectableMCPError('fetch failed')).toBe(false);
     expect(isReconnectableMCPError(undefined)).toBe(false);
   });
+
+  it('treats a structured SDK HTTP 4xx as reconnectable even when the message omits the status', () => {
+    for (const status of [400, 401, 403, 404]) {
+      const error = new SdkHttpError(
+        SdkErrorCode.ClientHttpNotImplemented,
+        'Error POSTing to endpoint: Session not found',
+        { status },
+      );
+      // The real status lives only at `data.status`; the body text never quotes it.
+      expect(error.message).not.toContain(`HTTP ${status}`);
+      expect(isReconnectableMCPError(error), String(status)).toBe(true);
+    }
+  });
+
+  it('lets structured status and numeric codes win over a misleading message', () => {
+    // A structured 500 must not reconnect just because its body text quotes a status we retry.
+    expect(
+      isReconnectableMCPError(
+        new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint (HTTP 404): backend down', {
+          status: 500,
+        }),
+      ),
+    ).toBe(false);
+    expect(
+      isReconnectableMCPError(
+        new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: Connection closed', {
+          status: 500,
+        }),
+      ),
+    ).toBe(false);
+
+    // A JSON-RPC error came from the server's handler, so it never reconnects, whatever it quotes.
+    expect(isReconnectableMCPError(new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): gone'))).toBe(false);
+  });
+
+  it('keeps a numeric JSON-RPC code when a string code and HTTP status sit in error data', () => {
+    // A ProtocolError holds its JSON-RPC code numerically on the error itself, while an upstream
+    // payload can put its own string code and an HTTP status in `data`. The numeric protocol code
+    // must survive extraction so this stays non-reconnectable, instead of the structured 404 in
+    // `data.status` authorizing a reconnect the server's handler already rejected.
+    const protocolError = new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): upstream failed', {
+      code: 'UPSTREAM_HTTP_ERROR',
+      status: 404,
+    });
+
+    expect(getMCPDiscoveryErrorDetails(protocolError)).toMatchObject({ httpStatus: 404, code: -32603 });
+    expect(isReconnectableMCPError(protocolError)).toBe(false);
+  });
+
+  it('classifies structured statuses by status value, not by how the status was attached', () => {
+    const httpError = (status: number) =>
+      new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: rejected', { status });
+
+    // Statuses just outside the retried 4xx set keep their own verdicts.
+    for (const status of [405, 409, 410, 422, 429]) {
+      expect(isReconnectableMCPError(httpError(status)), String(status)).toBe(false);
+    }
+    // 3xx and out-of-band values are neither retried nor mistaken for 4xx.
+    for (const status of [301, 599]) {
+      expect(isReconnectableMCPError(httpError(status)), String(status)).toBe(false);
+    }
+
+    // The walk reaches a wrapped cause, so a cause that contradicts the outer
+    // message decides the verdict: this 500 is not retried even though the
+    // wrapped 404 would have qualified on its own.
+    const wrappedInCause = new Error('Error POSTing to endpoint (HTTP 404): gateway said so');
+    wrappedInCause.cause = httpError(500);
+    expect(isReconnectableMCPError(wrappedInCause)).toBe(false);
+    expect(isReconnectableMCPError(wrappedInCause.cause as Error)).toBe(false);
+
+    // Prototype-less error data still carries the status through the record lookup.
+    const prototypeLess = Object.assign(
+      new Error('Error POSTing to endpoint'),
+      { code: SdkErrorCode.ClientHttpNotImplemented },
+      Object.create(null, { data: { value: { status: 404 }, enumerable: true } }),
+    );
+    expect(isReconnectableMCPError(prototypeLess)).toBe(true);
+  });
 });
 
 describe('isUnsentRequestError', () => {
@@ -157,6 +235,14 @@ describe('isUnsentRequestError', () => {
     ['transport closed', new Error('Connection closed'), false],
     ['not reconnectable', new Error('Validation failed'), false],
     ['JSON-RPC error quoting a refused connection', new ProtocolError(-32603, 'connect ECONNREFUSED 10.0.0.2:5432'), false],
+    [
+      'JSON-RPC error whose data carries a string code and structured 404',
+      new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): gone', {
+        code: 'UPSTREAM_HTTP_ERROR',
+        status: 404,
+      }),
+      false,
+    ],
     [
       'HTTP 500 whose body quotes a refused connection',
       new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: connect ECONNREFUSED 10.0.0.2:5432', {

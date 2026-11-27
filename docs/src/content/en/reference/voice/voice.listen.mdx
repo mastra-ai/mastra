@@ -36,6 +36,7 @@ Returns one of the following:
 
 - `Promise<string>`: A promise that resolves to the transcribed text
 - `Promise<NodeJS.ReadableStream>`: A promise that resolves to a stream of transcribed text (for streaming transcription)
+- `Promise<object>`: For providers that return structured results, such as Deepgram, which resolves to `{ transcript, words, raw }` plus `speakerSegments` when diarization is enabled
 - `Promise<void>`: For real-time providers that emit 'writing' events instead of returning text directly
 
 ## Provider-specific options

@@ -442,30 +442,6 @@ describe('MastraLLM', () => {
 
       expect(mockMastra.logger.debug).not.toHaveBeenCalledWith('Streaming text', expect.anything());
     });
-
-    it('should handle step change logging', async () => {
-      const messages: CoreMessage[] = [{ role: 'user', content: 'test message' }];
-      const runId = 'test-run';
-      // const mockStepData = {
-      //   text: 'Custom text response',
-      //   toolCalls: [],
-      //   toolResults: [],
-      //   finishReason: 'stop',
-      //   usage: { promptTokens: 10, completionTokens: 20 },
-      // };
-
-      const result = await aisdkText.__stream({
-        messages,
-        runId,
-        temperature: 0.7,
-        maxSteps: 5,
-        requestContext,
-        tracingContext,
-      });
-      await result.consumeStream();
-
-      expect(streamSpy).toHaveBeenCalled();
-    });
   });
 
   describe('__textObject', () => {

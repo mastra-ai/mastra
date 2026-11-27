@@ -1,5 +1,5 @@
 import { formatJson } from '../format-json';
-import { WorkspaceJsonCode } from './workspace-json-code';
+import { WorkspaceCode } from './workspace-code';
 import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
 import { Tabs } from '@/ds/components/Tabs/tabs-root';
@@ -7,7 +7,7 @@ import { Tab } from '@/ds/components/Tabs/tabs-tab';
 
 export function WorkspaceJsonPreview({ path, content }: { path: string; content: string }) {
   const formatted = formatJson(content);
-  if (formatted === undefined || formatted === content) return <WorkspaceJsonCode path={path} code={content} />;
+  if (formatted === undefined || formatted === content) return <WorkspaceCode path={path} code={content} lang="json" />;
   return (
     <Tabs defaultTab="formatted">
       <div className="pt-2 pl-2">
@@ -17,10 +17,10 @@ export function WorkspaceJsonPreview({ path, content }: { path: string; content:
         </TabList>
       </div>
       <TabContent value="formatted" flush>
-        <WorkspaceJsonCode path={path} code={formatted} />
+        <WorkspaceCode path={path} code={formatted} lang="json" />
       </TabContent>
       <TabContent value="raw" flush>
-        <WorkspaceJsonCode path={path} code={content} />
+        <WorkspaceCode path={path} code={content} lang="json" />
       </TabContent>
     </Tabs>
   );
