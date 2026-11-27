@@ -129,7 +129,7 @@ overrides:
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.46': 3.0.46
-  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.66
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.67
   '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.38
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.81': 5.0.81
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
@@ -2485,6 +2485,9 @@ importers:
       hono:
         specifier: 4.13.18
         version: 4.13.18
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       posthog-node:
         specifier: ^5.57.1
         version: 5.61.2(@opentelemetry/api@1.10.0)(rxjs@7.8.2)
@@ -2513,6 +2516,9 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis-streams':
+        specifier: workspace:*
+        version: link:../../pubsub/redis-streams
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -4210,7 +4216,7 @@ importers:
         version: 3.0.19
       '@ai-sdk/provider-utils':
         specifier: ^4.0.66
-        version: 4.0.66(zod@4.6.7)
+        version: 4.0.67(zod@4.6.7)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -4667,6 +4673,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
       zod:
         specifier: 'catalog:'
         version: 4.6.7
@@ -11077,6 +11086,12 @@ packages:
 
   '@ai-sdk/provider-utils@4.0.66':
     resolution: {integrity: sha512-tITCIYBJlxD4PmDIAI2VXb67yEbWRepvJBJrv2pIY5vMRUta51AFRxLlxm0IexRGdIBGuQ10+ClClZMXtawkbA==}
+    engines: {node: '>=18.17'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/provider-utils@4.0.67':
+    resolution: {integrity: sha512-0WV1upni0SUAKdsMTOADbPFU0CBji/XjNPcG0J+LWb5DZFtTWRrflj/oY7qi3zbJswvE1aWv/d+h/A8BEWnAWA==}
     engines: {node: '>=18.17'}
     peerDependencies:
       zod: 4.6.7
@@ -32972,13 +32987,13 @@ snapshots:
   '@ai-sdk/anthropic@3.0.137(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/anthropic@3.0.138(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/anthropic@4.0.94(zod@4.6.7)':
@@ -33006,7 +33021,7 @@ snapshots:
       '@ai-sdk/deepseek': 2.0.79(zod@4.6.7)
       '@ai-sdk/openai': 3.0.136(zod@4.6.7)
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/cerebras@1.0.66(zod@4.6.7)':
@@ -33046,7 +33061,7 @@ snapshots:
   '@ai-sdk/deepseek@2.0.79(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/deepseek@3.0.77(zod@4.6.7)':
@@ -33072,7 +33087,7 @@ snapshots:
   '@ai-sdk/gateway@3.0.228(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       '@vercel/oidc': 3.2.0
       zod: 4.6.7
 
@@ -33116,13 +33131,13 @@ snapshots:
   '@ai-sdk/google@3.0.140(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/google@3.0.141(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/google@4.0.109(zod@4.6.7)':
@@ -33166,7 +33181,7 @@ snapshots:
   '@ai-sdk/mistral@3.0.78(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai-compatible@0.2.16(zod@4.6.7)':
@@ -33190,7 +33205,7 @@ snapshots:
   '@ai-sdk/openai-compatible@2.0.88(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai-compatible@3.0.82(zod@4.6.7)':
@@ -33226,13 +33241,13 @@ snapshots:
   '@ai-sdk/openai@3.0.135(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@3.0.136(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@4.0.106(zod@4.6.7)':
@@ -33257,7 +33272,7 @@ snapshots:
   '@ai-sdk/perplexity@3.1.9(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@2.2.8(zod@4.6.7)':
@@ -33276,6 +33291,14 @@ snapshots:
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@4.0.66(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.19
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.1.1
+      undici: 8.12.4
+      zod: 4.6.7
+
+  '@ai-sdk/provider-utils@4.0.67(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
@@ -46838,7 +46861,7 @@ snapshots:
     dependencies:
       '@ai-sdk/gateway': 3.0.228(zod@4.6.7)
       '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       '@opentelemetry/api': 1.10.0
       zod: 4.6.7
 
@@ -53376,7 +53399,7 @@ snapshots:
       oas-kit-common: 1.0.8
       path-browserify: 1.0.1
       reftools: 1.1.9
-      yaml: 1.10.2
+      yaml: 1.10.3
       yargs: 18.2.0
 
   oas-resolver@2.5.6:

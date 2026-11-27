@@ -233,7 +233,7 @@ const glutenCheckerScorer = createScorer({...})
 })
 ```
 
-**Prompt Objects:** See the [`createScorer`](/reference/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
+**Prompt Objects:** See the [`createScorer`](/reference/evals/create-scorer) API reference for details on using prompt objects with generateScore. A prompt object needs a `description` and a `createPrompt` function, and the judge returns the numerical score.
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 

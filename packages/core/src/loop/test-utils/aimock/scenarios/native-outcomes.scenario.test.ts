@@ -464,6 +464,69 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
     expect(ended().at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+    await expect.poll(() => ended(SpanType.MODEL_STEP).length).toBeGreaterThan(0);
+    // On Inngest the returned tool call still reaches the step that ends the model step.
+    if (engine !== 'inngest') {
+      expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
+    }
+  });
+
+  it('ends the spans of a run whose deadline passes before it starts', async () => {
+    const { observability, ended } = capture();
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      modelSettings: { timeout: { totalMs: 1 } },
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'late answer' }, { streamingProfile: { ttft: 2000 } }),
+    });
+    await expect.poll(() => ended()).toMatchObject([{ outcome: 'limit', stopReason: 'timeout' }]);
+  });
+
+  it('ends every span once when the run fails after a tool call', async () => {
+    const { observability, events, ended } = capture();
+    const tool = (id: string, options = {}) =>
+      createTool({
+        id,
+        description: id,
+        inputSchema: z.object({}),
+        execute: async () => ({ status: 'ok' }),
+        ...options,
+      });
+    const call = (name: string) => ({ toolCalls: [{ id: `${name}-1`, name, arguments: {} }] });
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: 'Look up the order',
+      errorProcessors: [],
+      maxRetries: 0,
+      tools: {
+        lookup: tool('lookup'),
+        refund: tool('refund', {
+          toModelOutput: () => {
+            throw new Error('tool output mapping failed');
+          },
+        }),
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, call('lookup'));
+        llm.on({ endpoint: 'chat', hasToolResult: true }, call('refund'));
+      },
+    });
+    const failed = { outcome: 'error', endTime: expect.any(Date) };
+    await expect.poll(() => ended()).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_GENERATION)).toMatchObject([failed]);
+    await expect.poll(() => ended(SpanType.MODEL_STEP)).toMatchObject([{ outcome: 'success' }, failed]);
+    const spansOf = (eventType: TracingEventType) =>
+      events
+        .filter(event => event.type === eventType && !event.exportedSpan.isEvent)
+        .map(event => event.exportedSpan.id)
+        .sort();
+    expect(spansOf(TracingEventType.SPAN_ENDED)).toEqual(spansOf(TracingEventType.SPAN_STARTED));
   });
 
   it('reports a deadline hit during a tool call whose toModelOutput throws as a limit', async () => {

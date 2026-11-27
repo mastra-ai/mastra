@@ -451,6 +451,7 @@ export class ModelSpanTracker {
   #timeToFirstTokenMs?: number;
   #inferenceCompletionStartTime?: Date;
   #inferenceTimeToFirstTokenMs?: number;
+  #inferenceResponseId?: string;
   /**
    * True between a step's `step-start` and `step-finish` chunks, the window in which
    * the provider responds. Chunks outside it, such as a `tool-call` replayed for a
@@ -514,8 +515,9 @@ export class ModelSpanTracker {
   }
 
   /** What the current inference streamed so far, for whichever way it ends. */
-  #inferenceStreamAttributes(): { completionStartTime?: Date; timeToFirstTokenMs?: number } {
+  #inferenceStreamAttributes(): { completionStartTime?: Date; timeToFirstTokenMs?: number; responseId?: string } {
     return {
+      ...(this.#inferenceResponseId ? { responseId: this.#inferenceResponseId } : {}),
       ...(this.#inferenceCompletionStartTime ? { completionStartTime: this.#inferenceCompletionStartTime } : {}),
       ...(this.#inferenceTimeToFirstTokenMs !== undefined
         ? { timeToFirstTokenMs: this.#inferenceTimeToFirstTokenMs }
@@ -610,6 +612,10 @@ export class ModelSpanTracker {
         stopReasonContext: spanOptions.stopReasonContext,
       };
       this.#endChunkSpan();
+      this.#currentInferenceSpan?.end({
+        ...interruptedByRun(termination),
+        attributes: this.#inferenceStreamAttributes(),
+      });
       this.#currentStepSpan?.end({ ...interruptedByRun(termination), endTree: true });
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
@@ -844,7 +850,7 @@ export class ModelSpanTracker {
       this.#endStepSpan(payload, termination);
     } else {
       this.#endChunkSpan();
-      this.#currentInferenceSpan?.end(termination);
+      this.#currentInferenceSpan?.end({ ...termination, attributes: this.#inferenceStreamAttributes() });
       this.#currentStepSpan?.end(termination);
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
@@ -864,6 +870,7 @@ export class ModelSpanTracker {
 
     this.#inferenceCompletionStartTime = undefined;
     this.#inferenceTimeToFirstTokenMs = undefined;
+    this.#inferenceResponseId = undefined;
     this.#inferenceContent = { text: '', toolCalls: [] };
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
@@ -1327,6 +1334,10 @@ export class ModelSpanTracker {
                 servedModelId = chunk.payload.modelId;
               }
               if (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) this.#captureCompletionStartTime();
+              // After the clock: the first provider chunk may open the inference, which resets the id.
+              if (chunk.type === 'response-metadata' && typeof chunk.payload?.id === 'string') {
+                this.#inferenceResponseId = chunk.payload.id;
+              }
               if (chunk.type === 'finish') {
                 const payload =
                   servedModelId && !chunk.payload?.metadata?.modelId

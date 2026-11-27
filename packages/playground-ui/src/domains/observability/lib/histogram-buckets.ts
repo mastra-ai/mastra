@@ -4,6 +4,7 @@
  */
 import { bucketLabels, isMultiDay } from '@/domains/metrics/lib/bucket-labels';
 import type { BucketLabels } from '@/domains/metrics/lib/bucket-labels';
+import { formatClock } from '@/utils/date-format';
 
 type TimeRange = { from: string; to: string };
 
@@ -86,9 +87,8 @@ export const exceedsAggregateWindow = ({ from, to }: TimeRange) =>
  */
 const barStart = (ms: number, stepMs: number) => Math.floor(ms / stepMs) * stepMs;
 
-const fmtDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtClock = (d: Date) =>
-  d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
+const fmtDay = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const fmtClock = (d: Date) => formatClock(d) ?? '';
 
 function barLabels(ts: number, stepMs: number, multiDay: boolean): BucketLabels {
   if (stepMs >= DAY) return bucketLabels(ts, stepMs / HOUR, multiDay);

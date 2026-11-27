@@ -627,26 +627,15 @@ describe('TokenLimiterProcessor', () => {
       expect(state.currentTokens || 0).toBe(0);
     });
 
-    it('should handle single character chunks', async () => {
-      processor = new TokenLimiterProcessor({ limit: 1 });
+    it.each([
+      ['should handle single character chunks', 1, 'a'],
+      ['should handle very large limits', 1000000, 'Hello world'],
+    ] as const)('%s', async (_title, limit, text) => {
+      processor = new TokenLimiterProcessor({ limit });
 
       const part: ChunkType = {
         type: 'text-delta',
-        payload: { text: 'a', id: 'test-id' },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-      const result = await processor.processOutputStream({ part, streamParts: [], state: {}, abort: mockAbort });
-
-      expect(result).toEqual(part);
-    });
-
-    it('should handle very large limits', async () => {
-      processor = new TokenLimiterProcessor({ limit: 1000000 });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: { text: 'Hello world', id: 'test-id' },
+        payload: { text, id: 'test-id' },
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
       };

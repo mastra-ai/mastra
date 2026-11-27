@@ -31,7 +31,13 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { diffResponseMessages } from '../../streams/response-messages';
 import type { ResponseMessagesCursor } from '../../streams/response-messages';
-import { AGENT_STREAM_TOPIC, DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
+import {
+  AGENT_STREAM_TOPIC,
+  DURABLE_STOP_WHEN_ERROR_ID,
+  DurableStepIds,
+  DurableAgentDefaults,
+  MAP_FINAL_OUTPUT_STEP_ID,
+} from '../constants';
 import {
   getExecutionClaim,
   isExecutionFenceError,
@@ -107,7 +113,7 @@ function withParams<T extends object, O extends object>(params: T, overrides: O)
   return Object.defineProperties({}, descriptors) as Omit<T, keyof O> & O;
 }
 
-export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
+export { MAP_FINAL_OUTPUT_STEP_ID };
 
 /**
  * Options for creating a durable agentic workflow

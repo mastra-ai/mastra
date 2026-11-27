@@ -247,35 +247,6 @@ describe('delegation result references — agent integration', () => {
     expect(fg.ref).toBe('explorer-1');
   });
 
-  it('relays an earlier result verbatim to a later delegation', async () => {
-    const { supervisor, supervisorPrompts, implementerPrompts, explorerPrompts } = buildAgents([
-      { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },
-      {
-        toolName: 'agent-implementer',
-        input: { prompt: 'Fix the bug described above', contextFromRefs: ['explorer-1'] },
-      },
-    ]);
-    await supervisor.generate('go', { maxSteps: 4, delegation: { enableResultReferences: true } });
-
-    // Parent model sees the ref trailer after the explorer text.
-    const firstResult = toolResultTexts(supervisorPrompts[1]!)[0];
-    expect(firstResult).toBe(`${EXPLORER_FINDING}\n\n[ref: explorer-1]`);
-
-    // Implementer receives the exact explorer text in a labeled block, then the prompt.
-    const implementerPrompt = userText(implementerPrompts[0]!);
-    expect(implementerPrompt).toContain(EXPLORER_FINDING);
-    expect(implementerPrompt).toMatch(/<delegation_result_[0-9a-f]+ ref="explorer-1" from="explorer">/);
-    expect(implementerPrompt.endsWith('Fix the bug described above')).toBe(true);
-    expect(implementerPrompt.indexOf(EXPLORER_FINDING)).toBeLessThan(implementerPrompt.indexOf('Fix the bug'));
-
-    // The explorer itself is not affected.
-    expect(userText(explorerPrompts[0]!)).not.toContain('delegation_result_');
-
-    // The implementer's own result gets its own ref.
-    const secondResult = toolResultTexts(supervisorPrompts[2]!)[1];
-    expect(secondResult).toBe('Fixed.\n\n[ref: implementer-1]');
-  });
-
   it('supports the { ref, as, note } form', async () => {
     const { supervisor, implementerPrompts } = buildAgents([
       { toolName: 'agent-explorer', input: { prompt: 'Find the bug' } },

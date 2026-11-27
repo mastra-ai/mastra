@@ -91,9 +91,12 @@ function createCtx(options: { failListItemInsert?: boolean } = {}) {
  * models a request that committed but whose response never reached the client.
  */
 function createTransactionalClient(ctx: ReturnType<typeof createCtx>) {
-  const faults = { loseResponse: false };
+  const faults = { loseResponse: false, indexedPushUnsupported: false };
 
   const callCacheRaw = async <T>(request: CacheRequest): Promise<{ result: T; hasMore?: boolean }> => {
+    if (faults.indexedPushUnsupported && request.op === 'listPushIndexed') {
+      throw new Error('Unsupported operation listPushIndexed');
+    }
     const snapshot = new Map([...ctx.tables].map(([table, docs]) => [table, docs.map(doc => ({ ...doc }))]));
     let response;
     try {
@@ -770,6 +773,26 @@ describe('CachingPubSub replay over ConvexServerCache', () => {
     expect(listFromTo.mock.calls).toEqual([
       ['pubsub:workflow.events.v2.run-1', 0, 0],
       ['pubsub:workflow.events.v2.run-1', 4],
+    ]);
+  });
+
+  it('replays successive fallback publishes with an older deployed handler', async () => {
+    const { faults, pubsub, publish, frames, replay } = await setup();
+    faults.indexedPushUnsupported = true;
+
+    // All supported operations execute the real handler. Seeding through
+    // set() would replace its counter with a scalar, making later increment()
+    // calls fail and leaving subsequent frames uncached.
+    for (let n = 0; n < 3; n++) await publish(n);
+
+    expect(frames(await pubsub.getHistory(topic, 0))).toEqual([
+      { index: 0, n: 0 },
+      { index: 1, n: 1 },
+      { index: 2, n: 2 },
+    ]);
+    await expect(replay(1)).resolves.toEqual([
+      { index: 1, n: 1 },
+      { index: 2, n: 2 },
     ]);
   });
 

@@ -161,6 +161,20 @@ Clean up sandbox resources. Called by `workspace.destroy()`.
 await sandbox.destroy()
 ```
 
+### `_reset(options?)`
+
+Replace the sandbox's environment while keeping the instance usable. Use it to recover from an environment that stopped responding. Sandboxes built on `MastraSandbox` have it.
+
+`_reset()` calls the provider's `destroy()`, then leaves the instance `stopped`. The next command starts a fresh environment, and `onStart` runs again. Unlike `_destroy()`, it releases the environment before waiting on an in-flight start. A start hung on the dead environment then fails fast instead of blocking the reset. It also doesn't mark the instance destroyed. An environment that's already gone (a 410, or a 404 with no code or `not_found`) counts as released. Everything in the old environment that isn't saved elsewhere is lost.
+
+```typescript
+await sandbox._reset({ timeoutMs: 30_000 })
+```
+
+`_reset()` rejects if the destroy or a start in flight doesn't settle within `timeoutMs` (default 30 seconds), or if the sandbox is already destroyed. It also rejects if, after those waits, the sandbox is `destroying` or `destroyed`, for example because `_destroy()` ran during the reset.
+
+**Returns:** `Promise<void>`
+
 ### `snapshot()`
 
 Persists the sandbox's current state when the provider supports snapshots. Other providers resolve without doing work.

@@ -150,24 +150,25 @@ describe('MarkdownEditor — formatting', () => {
     expect(saved()).toBeUndefined();
   });
 
-  it('types bold text from a shortcut at the caret, and the same shortcut ends it', async () => {
+  it.each([
+    [
+      'types bold text from a shortcut at the caret, and the same shortcut ends it',
+      '{Control>}b{/Control}loud{Control>}b{/Control} quiet',
+      'Say **loud** quiet',
+    ],
+    [
+      'types bold italic text from both shortcuts at the caret',
+      '{Control>}b{/Control}{Control>}i{/Control}loud',
+      'Say ***loud***',
+    ],
+  ] as const)('%s', async (_title, input, expected) => {
     const { view, saved } = open('Say ');
     const user = userEvent.setup();
 
     placeCaret(view, view.state.doc.length);
-    await user.keyboard('{Control>}b{/Control}loud{Control>}b{/Control} quiet');
+    await user.keyboard(input);
 
-    expect(saved()).toBe('Say **loud** quiet');
-  });
-
-  it('types bold italic text from both shortcuts at the caret', async () => {
-    const { view, saved } = open('Say ');
-    const user = userEvent.setup();
-
-    placeCaret(view, view.state.doc.length);
-    await user.keyboard('{Control>}b{/Control}{Control>}i{/Control}loud');
-
-    expect(saved()).toBe('Say ***loud***');
+    expect(saved()).toBe(expected);
   });
 
   it('leaves code alone when a shortcut is pressed inside a code block', async () => {

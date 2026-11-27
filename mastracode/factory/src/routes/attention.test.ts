@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import { createBoardRegistry } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { ParkedRun } from '../session/live-sessions.js';
 import type { FactoryDeferredDecisionRecord, Card } from '../storage/domains/work-items/base.js';
@@ -39,6 +40,8 @@ function buildApp(user: typeof orgUser | null = orgUser) {
       workItems: seed.workItems,
       queueHealth: seed.queueHealth,
       boardEngine: new DispatcherBoardEngine({
+        workItems: seed.workItems,
+        boards: createBoardRegistry(),
         transitionService: new FactoryTransitionService({
           configVersion: 'factory-config-v1',
           storage: seed.workItems,

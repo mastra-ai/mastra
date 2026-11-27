@@ -58,20 +58,15 @@ afterEach(() => {
 });
 
 describe('useIsClamped', () => {
-  it('reports clamped when content overflows the element', () => {
+  it.each([
+    ['reports clamped when content overflows the element', 60, true],
+    ['reports not clamped when content fits', 40, false],
+  ] as const)('%s', (_title, scrollHeight, expected) => {
     const { result } = renderHook(() => useIsClamped());
 
-    act(() => result.current.ref(createClampableElement({ scrollHeight: 60, clientHeight: 40 })));
+    act(() => result.current.ref(createClampableElement({ scrollHeight, clientHeight: 40 })));
 
-    expect(result.current.isClamped).toBe(true);
-  });
-
-  it('reports not clamped when content fits', () => {
-    const { result } = renderHook(() => useIsClamped());
-
-    act(() => result.current.ref(createClampableElement({ scrollHeight: 40, clientHeight: 40 })));
-
-    expect(result.current.isClamped).toBe(false);
+    expect(result.current.isClamped).toBe(expected);
   });
 
   it('still measures once when ResizeObserver is unsupported', () => {

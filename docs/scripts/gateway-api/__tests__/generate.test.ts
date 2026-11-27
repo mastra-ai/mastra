@@ -1,6 +1,8 @@
+import fs from 'fs/promises'
+import path from 'path'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { API_HOST } from '../constants'
-import { loadSpec, transformSpec } from '../generate'
+import { API_HOST, DOCS_ROOT, PAGES_DIR } from '../constants'
+import { generate, loadSpec, transformSpec } from '../generate'
 import { GATEWAY_API_PAGES } from '../pages'
 
 type Spec = Parameters<typeof transformSpec>[0]
@@ -140,5 +142,50 @@ describe('loadSpec', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('openapi.snapshot.json'))
     expect(spec.openapi).toMatch(/^3\./)
     expect(() => transformSpec(spec)).not.toThrow()
+  })
+})
+
+describe('generate', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+  })
+
+  // A dev server reloads once for every page that is rewritten, so an unchanged spec must leave the pages alone.
+  test('keeps existing pages when nothing changed, and regenerates a missing page', { timeout: 120_000 }, async () => {
+    vi.stubEnv('GATEWAY_OPENAPI_SPEC', path.join(DOCS_ROOT, 'scripts/gateway-api/openapi.snapshot.json'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const page = path.join(DOCS_ROOT, PAGES_DIR, 'list-models.api.mdx')
+
+    await generate()
+    const written = (await fs.stat(page)).mtimeMs
+
+    await generate()
+    expect((await fs.stat(page)).mtimeMs).toBe(written)
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining('are up to date'))
+
+    await fs.rm(page)
+    await generate()
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
+    await expect(fs.stat(page)).resolves.toBeDefined()
+  })
+
+  // `SPEC_URL` in constants.ts only reaches the pages through markdown.ts, so the fingerprint has to cover it.
+  test('regenerates pages when constants.ts changes', { timeout: 120_000 }, async () => {
+    vi.stubEnv('GATEWAY_OPENAPI_SPEC', path.join(DOCS_ROOT, 'scripts/gateway-api/openapi.snapshot.json'))
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const constants = path.join(DOCS_ROOT, 'scripts/gateway-api/constants.ts')
+    const original = await fs.readFile(constants, 'utf-8')
+
+    await generate()
+    try {
+      await fs.writeFile(constants, `${original}// changed\n`)
+      await generate()
+      expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
+    } finally {
+      await fs.writeFile(constants, original)
+    }
+    await generate()
+    expect(log).toHaveBeenLastCalledWith(expect.stringContaining('Generated'))
   })
 })

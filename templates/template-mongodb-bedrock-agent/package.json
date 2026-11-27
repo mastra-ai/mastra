@@ -34,7 +34,7 @@
     "mongodb": "^7.8.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "undici": "^7.30.2",
+    "undici": "7.30.2",
     "vitest": "^5.1.0"
   },
   "overrides": {
@@ -50,6 +50,13 @@
     },
     "readdir-glob": {
       "minimatch": "11.0.9"
+    },
+    "serve-handler": {
+      "minimatch": "11.0.9"
+    },
+    "undici": "7.30.2",
+    "@grpc/proto-loader": {
+      "yargs": "18.2.0"
     }
   }
 }

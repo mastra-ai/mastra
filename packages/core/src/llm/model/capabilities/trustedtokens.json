@@ -31,13 +31,25 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "google/gemma-4-26B-A4B-it": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["none", "medium"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "google/diffusiongemma-26B-A4B-it": [
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B-FP8": [
       {
         "type": "effort",
         "values": ["none", "medium"]
@@ -49,13 +61,13 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.6-35B-A3B-FP8": [
+    "google/diffusiongemma-26B-A4B-it": [
       {
         "type": "effort",
         "values": ["none", "medium"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+    "google/gemma-4-26B-A4B-it": [
       {
         "type": "effort",
         "values": ["none", "medium"]
@@ -73,22 +85,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.2": [
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "medium"]
       }
     ]
   }

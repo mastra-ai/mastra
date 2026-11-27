@@ -58,9 +58,12 @@ describe('CompletenessMetric', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle both empty strings', async () => {
-      const inputMessages = [createTestMessage({ content: '', role: 'user', id: 'test-input' })];
-      const outputMessages = [createTestMessage({ content: '', role: 'assistant', id: 'test-output' })];
+    it.each([
+      ['should handle both empty strings', '', ''],
+      ['should handle whitespace-only strings', '   \n  ', '  \n  '],
+    ] as const)('%s', async (_title, content, contentValue) => {
+      const inputMessages = [createTestMessage({ content, role: 'user', id: 'test-input' })];
+      const outputMessages = [createTestMessage({ content: contentValue, role: 'assistant', id: 'test-output' })];
 
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
@@ -77,18 +80,6 @@ describe('CompletenessMetric', () => {
       const run = createAgentTestRun({ inputMessages, output: outputMessages });
       const result = await scorer.run(run);
       expect(result.score).toBe(0);
-    });
-
-    it('should handle whitespace-only strings', async () => {
-      const inputMessages = [createTestMessage({ content: '   \n  ', role: 'user', id: 'test-input' })];
-      const outputMessages = [createTestMessage({ content: '  \n  ', role: 'assistant', id: 'test-output' })];
-
-      const run = createAgentTestRun({ inputMessages, output: outputMessages });
-      const result = await scorer.run(run);
-      expect(result.score).toBe(1);
-      const { input, output } = result.preprocessStepResult?.elementCounts as { input: number; output: number };
-      expect(input).toBe(0);
-      expect(output).toBe(0);
     });
 
     it('should handle null and undefined inputs', async () => {

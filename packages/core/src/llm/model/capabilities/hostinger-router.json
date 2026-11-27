@@ -30,18 +30,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "claude-sonnet-4.5": [
+    "claude-haiku-4.5": [
       {
         "type": "toggle"
       }
     ],
-    "claude-haiku-4.5": [
+    "claude-sonnet-4.5": [
       {
         "type": "toggle"
       }
@@ -50,6 +44,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "kimi-k3": [

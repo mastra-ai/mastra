@@ -117,20 +117,21 @@ Line 3`;
       expect(results[0]?.metadata?.author).toBe('test');
     });
 
-    it('should throw error when vector mode is requested without config', async () => {
-      await engine.index({ id: 'doc1', content: 'Hello world' });
-
-      await expect(engine.search('hello', { mode: 'vector' })).rejects.toThrow(
+    it.each([
+      [
+        'should throw error when vector mode is requested without config',
+        'vector',
         'Vector search requires vector configuration.',
-      );
-    });
-
-    it('should throw error when hybrid mode is requested without vector config', async () => {
+      ],
+      [
+        'should throw error when hybrid mode is requested without vector config',
+        'hybrid',
+        'Hybrid search requires both vector and BM25 configuration.',
+      ],
+    ] as const)('%s', async (_title, mode, expected) => {
       await engine.index({ id: 'doc1', content: 'Hello world' });
 
-      await expect(engine.search('hello', { mode: 'hybrid' })).rejects.toThrow(
-        'Hybrid search requires both vector and BM25 configuration.',
-      );
+      await expect(engine.search('hello', { mode })).rejects.toThrow(expected);
     });
   });
 

@@ -305,6 +305,30 @@ export const Multiple: Story = {
   },
 };
 
+/**
+ * With `allowCustomValue`, typed text that matches no option is offered as a "Use" option. A picked value that no
+ * option lists, like `my-fine-tune` here, keeps a chip with the bare value and shows checked in the popup.
+ */
+export const MultipleWithCustomValues: Story = {
+  render: function MultipleWithCustomValuesStory() {
+    const [value, setValue] = useState<string[]>(['gpt-4', 'my-fine-tune']);
+
+    return (
+      <Field className="w-90">
+        <FieldLabel>Models</FieldLabel>
+        <Combobox
+          multiple
+          allowCustomValue
+          options={modelOptions}
+          value={value}
+          onValueChange={setValue}
+          placeholder="Pick or type model ids"
+        />
+      </Field>
+    );
+  },
+};
+
 /** Selected, described and multi items side by side, to compare against the menu components. */
 export const KitchenSink: Story = {
   render: () => (

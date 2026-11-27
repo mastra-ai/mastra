@@ -266,23 +266,16 @@ describe('mapInstructionBlocksFromApi', () => {
     expect(instructionBlocks[0].type).toBe('prompt_block');
   });
 
-  it('handles plain string input', () => {
-    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi('Hello');
-    expect(instructionsString).toBe('Hello');
+  it.each([
+    ['handles plain string input', 'Hello', 'Hello'],
+    ['handles undefined input', undefined, ''],
+  ] as const)('%s', (_title, input, expected) => {
+    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(input);
+    expect(instructionsString).toBe(expected);
     expect(instructionBlocks).toHaveLength(1);
     expect(instructionBlocks[0].type).toBe('prompt_block');
     if (instructionBlocks[0].type === 'prompt_block') {
-      expect(instructionBlocks[0].content).toBe('Hello');
-    }
-  });
-
-  it('handles undefined input', () => {
-    const { instructionsString, instructionBlocks } = mapInstructionBlocksFromApi(undefined);
-    expect(instructionsString).toBe('');
-    expect(instructionBlocks).toHaveLength(1);
-    expect(instructionBlocks[0].type).toBe('prompt_block');
-    if (instructionBlocks[0].type === 'prompt_block') {
-      expect(instructionBlocks[0].content).toBe('');
+      expect(instructionBlocks[0].content).toBe(expected);
     }
   });
 

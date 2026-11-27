@@ -597,27 +597,13 @@ describe('api command executor', () => {
     });
   });
 
-  it('wraps raw tool execution input in data before sending the request body', async () => {
+  it.each([
+    ['wraps raw tool execution input in data before sending the request body', '{"location":"Berlin"}'],
+    ['does not double-wrap explicit tool execution data input', '{"data":{"location":"Berlin"}}'],
+  ] as const)('%s', async (_title, input) => {
     fetchMock.mockResolvedValueOnce(jsonResponse({ temperature: 72 }));
 
-    await executeDescriptor(API_COMMANDS.toolExecute, ['get-weather'], '{"location":"Berlin"}', {
-      url: 'https://example.com',
-      header: [],
-      pretty: false,
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/tools/get-weather/execute', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      signal: expect.any(AbortSignal),
-      body: JSON.stringify({ data: { location: 'Berlin' } }),
-    });
-  });
-
-  it('does not double-wrap explicit tool execution data input', async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ temperature: 72 }));
-
-    await executeDescriptor(API_COMMANDS.toolExecute, ['get-weather'], '{"data":{"location":"Berlin"}}', {
+    await executeDescriptor(API_COMMANDS.toolExecute, ['get-weather'], input, {
       url: 'https://example.com',
       header: [],
       pretty: false,

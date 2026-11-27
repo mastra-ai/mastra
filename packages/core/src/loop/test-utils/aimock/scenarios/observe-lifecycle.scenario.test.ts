@@ -91,7 +91,10 @@ describeForAllEngines(
         expect(textOf(replay.chunks)).toBe('Finished reply.');
         expect(replay.types.at(-1)).toBe('finish');
 
-        const beyond = await drain(await agent.observe(run.runId, { offset: 1_000_000 }), CLOSE_WITHIN_MS);
+        // Indices are opaque cursors (epoch-seeded logs): "past the end" is
+        // relative to the run's real indices, not an absolute count.
+        const pastEnd = Math.max(...replay.chunks.map(chunk => (chunk as { index?: number }).index ?? 0)) + 1_000_000;
+        const beyond = await drain(await agent.observe(run.runId, { offset: pastEnd }), CLOSE_WITHIN_MS);
         expect(beyond).toMatchObject({ types: [], timedOut: false });
       } finally {
         run.cleanup?.();
@@ -110,7 +113,8 @@ describeForAllEngines(
         expect(replay.timedOut).toBe(false);
         expect(replay.types).toContain('error');
 
-        const beyond = await drain(await agent.observe(run.runId, { offset: 1_000_000 }), CLOSE_WITHIN_MS);
+        const pastEnd = Math.max(...replay.chunks.map(chunk => (chunk as { index?: number }).index ?? 0)) + 1_000_000;
+        const beyond = await drain(await agent.observe(run.runId, { offset: pastEnd }), CLOSE_WITHIN_MS);
         expect(beyond).toMatchObject({ types: [], timedOut: false });
       } finally {
         run.cleanup?.();

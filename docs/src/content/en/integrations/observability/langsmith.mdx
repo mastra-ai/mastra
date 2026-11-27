@@ -193,6 +193,12 @@ await agent.generate('hi', { memory })
 await agent.generate('and again', { memory })
 ```
 
+## Trajectories
+
+LangSmith builds a Thread's [Trajectory view](https://docs.langchain.com/langsmith/view-traces#trajectory-view), and the `trajectory` variable of [multi-turn online evaluators](https://docs.langchain.com/langsmith/online-evaluations-multi-turn), from `llm` runs. The exporter sends one `llm` run for each call to the model provider, with the conversation up to that call. The trajectory of an agent turn shows the user message, each tool call with its result, and the answer as the model returned it, before output processors change or reject it.
+
+The model call that [generates a thread title](/docs/memory/message-history#thread-title-generation) stays in the trace but is left out of the trajectory, because it isn't part of the conversation.
+
 ## Scores and feedback
 
 Scores sent through `mastra.observability.addScore()` show up in LangSmith as feedback on the matching run. A score with only a `traceId` is attached to the trace's root run. A score with a `spanId` is attached to that span's run.

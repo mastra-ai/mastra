@@ -428,8 +428,18 @@ describe('PlatformGithubEventWorker', () => {
                 event: 'issues',
                 payload: { action },
               })),
-              { id: '3100-0', deliveryId: 'delivery-pr-labeled', event: 'pull_request', payload: { action: 'labeled' } },
-              { id: '3101-0', deliveryId: 'delivery-pr-reopened', event: 'pull_request', payload: { action: 'reopened' } },
+              {
+                id: '3100-0',
+                deliveryId: 'delivery-pr-labeled',
+                event: 'pull_request',
+                payload: { action: 'labeled' },
+              },
+              {
+                id: '3101-0',
+                deliveryId: 'delivery-pr-reopened',
+                event: 'pull_request',
+                payload: { action: 'reopened' },
+              },
               { id: '3102-0', deliveryId: 'delivery-pr-edited', event: 'pull_request', payload: { action: 'edited' } },
             ],
             nextCursor: '3102-0',
@@ -439,7 +449,13 @@ describe('PlatformGithubEventWorker', () => {
       }
       throw new Error(`Unexpected request: ${url}`);
     });
-    const worker = createWorker({ fetchImpl, storage: settings.storage, now: () => 1_000, dispatch, ingestFactoryEvent });
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => 1_000,
+      dispatch,
+      ingestFactoryEvent,
+    });
 
     await worker.init(createDeps());
     await worker.start();

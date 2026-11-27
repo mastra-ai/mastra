@@ -203,6 +203,30 @@ describe('TracePanel, fully composed — header actions', () => {
 
     expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
   });
+
+  it('waits for the trace to load before saving it as a dataset item', () => {
+    const onSaveAsDatasetItem = vi.fn();
+    const { rerender } = render(
+      <FullTracePanel {...baseProps} spans={[]} isLoading onSaveAsDatasetItem={onSaveAsDatasetItem} />,
+    );
+
+    const addToDataset = screen.getByRole('button', { name: 'Add to dataset' });
+    expect(addToDataset).toHaveProperty('disabled', true);
+    fireEvent.click(addToDataset);
+    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
+
+    rerender(
+      <FullTracePanel
+        {...baseProps}
+        spans={rootSpanFixture}
+        isLoading={false}
+        onSaveAsDatasetItem={onSaveAsDatasetItem}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
+  });
 });
 
 describe('TracePanel, fully composed — trace summary description', () => {
@@ -587,41 +611,28 @@ describe('TracePanel, fully composed — span selection', () => {
 });
 
 describe('TracePanel, fully composed — an anchored subtrace', () => {
-  it('treats the anchor span as the root the panel is describing', () => {
+  it.each([
+    ['treats the anchor span as the root the panel is describing', 'child', 'child'],
+    ['still names an anchored root span even when the anchor is the trace root', 'root', 'root'],
+  ] as const)('%s', (_title, value, rootSpanId) => {
     const onSaveAsDatasetItem = vi.fn();
     render(
       <FullTracePanel
         {...baseProps}
         spans={nestedSpanFixture}
-        anchorSpanId="child"
+        anchorSpanId={value}
         onSaveAsDatasetItem={onSaveAsDatasetItem}
       />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'child' });
+    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId });
   });
 
   it('falls back to the span with no parent when there is no anchor', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(<FullTracePanel {...baseProps} spans={nestedSpanFixture} onSaveAsDatasetItem={onSaveAsDatasetItem} />);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
-
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
-  });
-
-  it('still names an anchored root span even when the anchor is the trace root', () => {
-    const onSaveAsDatasetItem = vi.fn();
-    render(
-      <FullTracePanel
-        {...baseProps}
-        spans={nestedSpanFixture}
-        anchorSpanId="root"
-        onSaveAsDatasetItem={onSaveAsDatasetItem}
-      />,
-    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
 
@@ -705,7 +716,7 @@ describe('TracePanel, fully composed — an anchor the trace does not have', () 
     expect(screen.getByText('agent run')).toBeTruthy();
   });
 
-  it('saves a dataset item with no root span rather than failing', () => {
+  it('offers no dataset save without a root span, like Score trace', () => {
     const onSaveAsDatasetItem = vi.fn();
     render(
       <FullTracePanel
@@ -716,9 +727,11 @@ describe('TracePanel, fully composed — an anchor the trace does not have', () 
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add to dataset' }));
+    const addToDataset = screen.getByRole('button', { name: 'Add to dataset' });
+    expect(addToDataset).toHaveProperty('disabled', true);
+    fireEvent.click(addToDataset);
 
-    expect(onSaveAsDatasetItem).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: undefined });
+    expect(onSaveAsDatasetItem).not.toHaveBeenCalled();
   });
 
   it('copes with an anchor while the spans have not arrived', () => {
@@ -1135,18 +1148,16 @@ describe('TracePanel, fully composed — span search', () => {
 
   const weatherBranch = ['agent run', 'llm generation', 'weather tool', 'http fetch'];
 
-  it('keeps the whole ancestor chain when a leaf matches by name', async () => {
+  it.each([
+    ['keeps the whole ancestor chain when a leaf matches by name', 'http fetch'],
+    ['keeps the ancestor chain when a leaf matches on its input preview only', 'api.weather.test'],
+    ['keeps both the ancestors and the subtree of a matching middle span', 'weather tool'],
+    ['expands the subtree of a middle span matched on metadata only', 'Lyon'],
+    ['matches case-insensitively', 'WEATHER TOOL'],
+  ] as const)('%s', async (_title, input) => {
     renderDeep();
 
-    typeSearch('http fetch');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
-  });
-
-  it('keeps the ancestor chain when a leaf matches on its input preview only', async () => {
-    renderDeep();
-
-    typeSearch('api.weather.test');
+    typeSearch(input);
 
     await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
   });
@@ -1167,14 +1178,6 @@ describe('TracePanel, fully composed — span search', () => {
     await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'llm generation', 'memory lookup']));
   });
 
-  it('keeps both the ancestors and the subtree of a matching middle span', async () => {
-    renderDeep();
-
-    typeSearch('weather tool');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
-  });
-
   it('renders the same branch when the trace arrives newest-first', async () => {
     // The trace list API defaults to `direction: 'DESC'`. The hierarchy
     // formatter re-sorts by `startedAt`, so the rows must come out identical.
@@ -1185,18 +1188,13 @@ describe('TracePanel, fully composed — span search', () => {
     await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
   });
 
-  it('expands the subtree of a middle span matched on metadata only', async () => {
+  it.each([
+    ['keeps the entire trace when the root matches', 'agent run'],
+    ['treats a whitespace-only query as empty', '   '],
+  ] as const)('%s', async (_title, input) => {
     renderDeep();
 
-    typeSearch('Lyon');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
-  });
-
-  it('keeps the entire trace when the root matches', async () => {
-    renderDeep();
-
-    typeSearch('agent run');
+    typeSearch(input);
 
     await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
   });
@@ -1233,22 +1231,6 @@ describe('TracePanel, fully composed — span search', () => {
     typeSearch('step-1');
 
     await waitFor(() => expect(visibleSpanNames()).toEqual(['agent run', 'workflow run', 'step normalize']));
-  });
-
-  it('matches case-insensitively', async () => {
-    renderDeep();
-
-    typeSearch('WEATHER TOOL');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual(weatherBranch));
-  });
-
-  it('treats a whitespace-only query as empty', async () => {
-    renderDeep();
-
-    typeSearch('   ');
-
-    await waitFor(() => expect(visibleSpanNames()).toEqual(allNames));
   });
 
   it('keeps the search field mounted when nothing matches', async () => {

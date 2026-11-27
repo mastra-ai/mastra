@@ -4,8 +4,8 @@
  * and other modules can operate on the state without coupling to the
  * MastraTUI class.
  */
-import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
-import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
+import { Container, ProcessTerminal } from '@earendil-works/pi-tui';
+import type { CombinedAutocompleteProvider, Component, Terminal, Text, TUI } from '@earendil-works/pi-tui';
 import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { BackgroundCompletionEvents } from '@mastra/code-sdk/agents/background-completion-events';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
@@ -49,6 +49,7 @@ import type { FooterAnimationRenderer } from './footer-animation-renderer.js';
 import { GoalManager } from './goal-manager.js';
 import { MouseController } from './mouse/controller.js';
 import type { OnboardingInlineComponent } from './onboarding-inline.js';
+import { MastraTUI, PromptSlot } from './prompt-slot.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
@@ -242,6 +243,8 @@ export interface TUIState {
   footerAnimationRenderer?: FooterAnimationRenderer;
   chatContainer: Container;
   editorContainer: Container;
+  /** Menus open here, in place of the prompt. */
+  promptSlot: PromptSlot;
   idleCounter?: IdleCounterComponent;
   lastRenderedMessageAt?: number;
   editor: CustomEditor;
@@ -438,7 +441,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   if (!options.terminal) {
     Object.defineProperty(terminal, 'columns', { get: getTermWidth });
   }
-  const ui = new TUI(terminal);
+  const ui = new MastraTUI(terminal);
   const assistantRenderRegistry = new AssistantRenderRegistry();
   let result: TUIState;
   const renderScheduler = installRenderScheduler(ui, () => {
@@ -456,6 +459,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
   globalBackgroundNoticeContainer.addChild(globalBackgroundNotice);
   const editor = new CustomEditor(ui, getEditorTheme());
   editor.requestRender = () => ui.requestRender();
+  const promptSlot = new PromptSlot(ui, editorContainer, editor);
+  ui.promptSlot = promptSlot;
   const { mouseDialogs, mouseInput } = loadSettings().preferences;
   const mouseController = new MouseController(ui, editor, {
     dialogMouseEnabled: mouseDialogs,
@@ -481,6 +486,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     mouseController,
     chatContainer,
     editorContainer,
+    promptSlot,
     editor,
     footer,
     terminal,

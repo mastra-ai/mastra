@@ -384,7 +384,8 @@
                       "finishReason": "tool-calls",
                       "completionStartTime": "<date>",
                       "timeToFirstTokenMs": "<ms>",
-                      "responseModel": "mock-model-id"
+                      "responseModel": "mock-model-id",
+                      "responseId": "<responseId-2>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
@@ -825,7 +826,8 @@
                       "finishReason": "stop",
                       "completionStartTime": "<date>",
                       "timeToFirstTokenMs": "<ms>",
-                      "responseModel": "mock-model-id"
+                      "responseModel": "mock-model-id",
+                      "responseId": "<responseId-1>"
                     },
                     "metadata": {
                       "runId": "<runId-1>",

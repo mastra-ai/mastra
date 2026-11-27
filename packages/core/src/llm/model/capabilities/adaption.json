@@ -35,16 +35,16 @@
         "type": "toggle"
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "gemma-4-31b-it": [

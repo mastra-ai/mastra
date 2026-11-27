@@ -2320,7 +2320,10 @@ Instructions here.`;
       expect(result[0]?.name).toBe('test-skill');
     });
 
-    it('should discover skills with skills/** glob', async () => {
+    it.each([
+      ['should discover skills with skills/** glob', 'skills/**'],
+      ['should discover skills with trailing slash skills/', 'skills/'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,
         'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
@@ -2328,7 +2331,7 @@ Instructions here.`;
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['skills/**'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2398,22 +2401,6 @@ Instructions here.`;
       const result = await skills.list();
       expect(result).toHaveLength(1);
       expect(result[0]?.name).toBe('test-skill');
-    });
-
-    it('should discover skills with trailing slash skills/', async () => {
-      const filesystem = createMockFilesystem({
-        'skills/test-skill/SKILL.md': VALID_SKILL_MD,
-        'skills/api-skill/SKILL.md': VALID_SKILL_MD_WITH_TOOLS,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['skills/'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(2);
-      expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
     it('should not produce duplicate skills when multiple patterns match the same skill', async () => {
@@ -2735,32 +2722,17 @@ Shadow instructions.`;
   });
 
   describe('direct skill path discovery', () => {
-    it('should discover a skill when path points to a directory containing SKILL.md', async () => {
+    it.each([
+      ['should discover a skill when path points to a directory containing SKILL.md', 'test-skill'],
+      ['should discover a skill when path points directly to SKILL.md', 'test-skill/SKILL.md'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({
         'test-skill/SKILL.md': VALID_SKILL_MD,
       });
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['test-skill'],
-      });
-
-      const result = await skills.list();
-      expect(result).toHaveLength(1);
-      expect(result[0]?.name).toBe('test-skill');
-
-      const skill = await skills.get('test-skill');
-      expect(skill?.path).toBe('test-skill');
-    });
-
-    it('should discover a skill when path points directly to SKILL.md', async () => {
-      const filesystem = createMockFilesystem({
-        'test-skill/SKILL.md': VALID_SKILL_MD,
-      });
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['test-skill/SKILL.md'],
+        skills: [value],
       });
 
       const result = await skills.list();
@@ -2787,24 +2759,15 @@ Shadow instructions.`;
       expect(result.map(s => s.name).sort()).toEqual(['api-skill', 'test-skill']);
     });
 
-    it('should gracefully handle non-existent direct skill path', async () => {
+    it.each([
+      ['should gracefully handle non-existent direct skill path', 'non-existent/SKILL.md'],
+      ['should gracefully handle non-existent direct directory path', 'non-existent-dir'],
+    ] as const)('%s', async (_title, value) => {
       const filesystem = createMockFilesystem({});
 
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
-        skills: ['non-existent/SKILL.md'],
-      });
-
-      const result = await skills.list();
-      expect(result).toEqual([]);
-    });
-
-    it('should gracefully handle non-existent direct directory path', async () => {
-      const filesystem = createMockFilesystem({});
-
-      const skills = new WorkspaceSkillsImpl({
-        source: filesystem,
-        skills: ['non-existent-dir'],
+        skills: [value],
       });
 
       const result = await skills.list();

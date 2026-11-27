@@ -368,6 +368,36 @@ describe('runEnvironmentBuild', () => {
     expect(stored?.lastBuildAttemptedAt?.toISOString()).toBe(clock.toISOString());
   });
 
+  it('builds for a started session only when a head moved, inside the window pushes share', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildPushDebounceMinutes: 60 } });
+    const run = (trigger: 'session' | 'push') =>
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger });
+
+    await expect(run('session')).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { activeTemplateHeads: { 'acme/api': SHA_A } },
+    });
+
+    // A head moved, but the session's build opened the window for sessions and pushes alike.
+    heads.byBranch.set('acme/api@main', SHA_B);
+    clock = new Date(clock.getTime() + 30 * 60_000);
+    await expect(run('session')).resolves.toEqual({ outcome: 'skipped', reason: 'debounced' });
+    await expect(run('push')).resolves.toEqual({ outcome: 'skipped', reason: 'debounced' });
+
+    // Outside the window an unchanged head still builds nothing, and leaves the window open.
+    heads.byBranch.set('acme/api@main', SHA_A);
+    clock = new Date(clock.getTime() + 31 * 60_000);
+    await expect(run('session')).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
+    expect(sandbox.starts).toHaveLength(1);
+
+    heads.byBranch.set('acme/api@main', SHA_B);
+    await expect(run('session')).resolves.toMatchObject({ outcome: 'started', buildId: 'build-2' });
+  });
+
   it('reports a provider failure with credentials redacted and the attempt recorded', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     const sandbox = new BuildingSandbox();

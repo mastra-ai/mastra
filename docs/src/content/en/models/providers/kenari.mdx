@@ -7,7 +7,7 @@ description: "Browse Kenari model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/kenari.svg" alt="Kenari logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kenari
 
-Access 83 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
+Access 82 Kenari models through Mastra's model router. Authentication is handled automatically using the `KENARI_API_KEY` environment variable.
 
 Learn more in the [Kenari documentation](https://kenari.id/docs).
 
@@ -775,19 +775,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 524288,
     "inputCost": 0.1143,
-    "outputCost": 0.5714
-  },
-  {
-    "model": "kenari/muse-glimmer-30b:free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    "outputCost": 0.4571
   },
   {
     "model": "kenari/muse-spark-1-2",
@@ -941,7 +929,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "maxOutput": 131072,
     "inputCost": 0.38285714,
     "outputCost": 1.48571429
   },

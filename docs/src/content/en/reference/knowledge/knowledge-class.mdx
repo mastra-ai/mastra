@@ -428,7 +428,7 @@ See [rename or retire a scope type](/reference/knowledge/scope-declarations#rena
 onChange(listener: (event: KnowledgeChangeEvent) => void): () => void
 ```
 
-Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, and new scopes. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
+Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, importer runs, and new scopes. Writes in a transaction are reported once it commits, and not at all if it rolls back. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
 
 Events carry IDs, not content or access, so anything that relays them to people must re-read each page under that person's read scope from `readScopeFor()`:
 

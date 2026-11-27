@@ -1,13 +1,15 @@
 /**
- * Model selector component for switching between available models.
- * Uses pi-tui overlay pattern with search and fuzzy filtering.
+ * Model selector menu for switching between available models, filtered as you type (fuzzy).
  */
 
-import { Box, fuzzyFilter, getKeybindings, Input, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable, TUI } from '@earendil-works/pi-tui';
+import { decodeKittyPrintable, fuzzyFilter, getKeybindings, matchesKey } from '@earendil-works/pi-tui';
+import type { Component, Focusable, TUI } from '@earendil-works/pi-tui';
 import { parseCodexModelSelection } from '@mastra/code-sdk/providers/model-ids';
-import chalk from 'chalk';
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
 import { theme } from '../theme.js';
+import type { ListWindow } from './list-window.js';
+import type { Filterable, MenuChrome } from './menu-chrome.js';
+import { labelColumnWidth, menuRow } from './menu-list.js';
 import { PickerList } from './picker-list.js';
 
 // =============================================================================
@@ -38,9 +40,9 @@ export interface ModelSelectorOptions {
   models: ModelItem[];
   /** Currently selected model ID */
   currentModelId?: string;
-  /** Optional title for the selector */
+  /** Optional title for the selector (its search placeholder) */
   title?: string;
-  /** Optional hex color for the title background (e.g. mode color) */
+  /** @deprecated Ignored: menus show their title as the search placeholder. */
   titleColor?: string;
   /** Callback when a model is selected */
   onSelect: (model: ModelItem) => void;
@@ -106,36 +108,27 @@ export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
 // ModelSelectorComponent
 // =============================================================================
 
-export class ModelSelectorComponent extends Box implements Focusable {
-  private searchInput!: Input;
-  private list!: PickerList<ModelItem | null>;
-  private allModels: ModelItem[];
+const MAX_VISIBLE = 12;
+
+export class ModelSelectorComponent implements Component, Focusable, Filterable, MenuChrome, MouseAware {
+  focused = false;
+  private readonly allModels: ModelItem[];
   private filteredModels: ModelItem[];
   private selectedIndex = 0;
-  private currentModelId?: string;
-  private onSelectCallback: (model: ModelItem) => void;
-  private onCancelCallback: () => void;
-  private tui: TUI;
-  private title: string;
-  private titleColor?: string;
-
-  // Focusable implementation
-  private _focused = false;
-  get focused(): boolean {
-    return this._focused;
-  }
-  set focused(value: boolean) {
-    this._focused = value;
-    this.searchInput.focused = value;
-  }
+  private query = '';
+  /** Whether the custom "Use: ..." item is showing at the top */
+  private hasCustomItem = false;
+  private readonly list: PickerList<ModelItem | null>;
+  private readonly labelColumn: number;
+  private readonly currentModelId?: string;
+  private readonly onSelectCallback: (model: ModelItem) => void;
+  private readonly onCancelCallback: () => void;
+  private readonly tui: TUI;
+  private readonly title: string;
 
   constructor(options: ModelSelectorOptions) {
-    // Box with padding and background
-    super(4, 2, text => theme.bg('overlayBg', text));
-
     this.tui = options.tui;
-    this.title = options.title ?? 'Select Model';
-    this.titleColor = options.titleColor;
+    this.title = options.title ?? 'Select model';
     const models = toCanonicalModelItems(options.models);
     // A Fast selection marks its own row when the picker offers one, else its standard model's row.
     this.currentModelId =
@@ -146,48 +139,56 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
     this.filteredModels = this.allModels;
-
-    // Build UI
-    this.buildUI();
+    this.labelColumn = labelColumnWidth(this.allModels.map(item => item.displayName ?? item.id));
+    this.list = new PickerList<ModelItem | null>({
+      maxVisible: MAX_VISIBLE,
+      truncate: true,
+      renderItem: (item, selected) => [this.renderRow(item, selected)],
+      onActivate: index => {
+        this.selectedIndex = index;
+        this.updateList();
+        this.handleInput('\r');
+      },
+      emptyText: () => '  no matching models',
+    });
+    this.updateList();
   }
 
-  private buildUI(): void {
-    // Title — optionally with a mode-colored background
-    const titleText = this.titleColor
-      ? chalk.bgHex(this.titleColor).white.bold(` ${this.title} `)
-      : theme.bold(theme.fg('accent', this.title));
-    this.addChild(new Text(titleText, 0, 0));
-    this.addChild(new Spacer(1));
+  menuWindow(): ListWindow {
+    return this.list.menuWindow();
+  }
 
-    // Hint
-    this.addChild(new Text(theme.fg('muted', 'Type to search • ↑↓ navigate • Enter select • Esc cancel'), 0, 0));
-    this.addChild(new Spacer(1));
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    return this.list.mouseTarget(point);
+  }
 
-    // Search input (Input has built-in "> " prompt)
-    this.searchInput = new Input();
-    this.searchInput.onSubmit = () => {
-      if (this.hasCustomItem && this.selectedIndex === 0) {
-        const query = this.searchInput.getValue().trim();
-        if (query) this.handleSelect(this.makeCustomModelItem(query));
-      } else {
-        const modelIndex = this.hasCustomItem ? this.selectedIndex - 1 : this.selectedIndex;
-        const selected = this.filteredModels[modelIndex];
-        if (selected) this.handleSelect(selected);
-      }
-    };
-    this.addChild(this.searchInput);
-    this.addChild(new Spacer(1));
+  menuTitle(): string {
+    return this.title;
+  }
 
-    this.list = new PickerList<ModelItem | null>({
-      maxVisible: 12,
-      renderItem: (item, selected) => [this.renderRow(item, selected)],
-      onActivate: index => this.confirmIndex(index),
-      emptyText: () => 'No matching models',
-    });
-    this.addChild(this.list);
+  menuFilterTarget(): Filterable {
+    return this;
+  }
 
-    // Initial render
+  setFilter(query: string): void {
+    this.query = query;
+    // Apply fuzzy filter if there's a query, otherwise show all
+    // Sorting already puts models with API keys first
+    this.filteredModels = query
+      ? fuzzyFilter(this.allModels, query, m => `${m.displayName ?? ''} ${m.id} ${m.provider} ${m.modelName}`)
+      : this.allModels;
+
+    // Show "Use: query" only for a complete provider/model-shaped ID.
+    // Plain search terms should select the best catalog match on Enter.
+    const trimmed = query.trim();
+    this.hasCustomItem =
+      trimmed.length > 0 &&
+      (trimmed.includes('/') || this.filteredModels.length === 0) &&
+      this.filteredModels[0]?.id !== trimmed;
+
+    this.selectedIndex = 0;
     this.updateList();
+    this.tui.requestRender();
   }
 
   private sortModels(models: ModelItem[], currentModelId?: string): ModelItem[] {
@@ -249,31 +250,12 @@ export class ModelSelectorComponent extends Box implements Focusable {
     return result;
   }
 
-  /** Whether the custom "Use: ..." item is showing at the top */
-  private hasCustomItem = false;
-
-  private filterModels(query: string): void {
-    // Apply fuzzy filter if there's a query, otherwise show all
-    // Sorting already puts models with API keys first
-    this.filteredModels = query
-      ? fuzzyFilter(this.allModels, query, m => `${m.displayName ?? ''} ${m.id} ${m.provider} ${m.modelName}`)
-      : this.allModels;
-
-    // Show "Use: query" only for a complete provider/model-shaped ID.
-    // Plain search terms should select the best catalog match on Enter.
-    const trimmed = query.trim();
-    this.hasCustomItem =
-      trimmed.length > 0 &&
-      (trimmed.includes('/') || this.filteredModels.length === 0) &&
-      this.filteredModels[0]?.id !== trimmed;
-
-    const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, totalItems - 1));
-    this.updateList();
+  invalidate(): void {
+    this.list.invalidate();
   }
 
-  private makeCustomModelItem(id: string): ModelItem {
-    return makeCustomModelItem(id, this.allModels);
+  render(width: number): string[] {
+    return this.list.render(width);
   }
 
   private updateList(): void {
@@ -283,78 +265,47 @@ export class ModelSelectorComponent extends Box implements Focusable {
   }
 
   private renderRow(item: ModelItem | null, isSelected: boolean): string {
-    if (!item) {
-      const query = this.searchInput.getValue().trim();
-      return isSelected
-        ? theme.fg('accent', '→ ') + theme.bold(theme.fg('accent', `Use: ${query}`))
-        : '  ' + theme.fg('muted', `Use: ${query}`);
-    }
-
-    const isCurrent = item.id === this.currentModelId;
+    if (!item) return menuRow(isSelected, `Use: ${this.query.trim()}`);
     const label = item.displayName ?? item.id;
-    const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
-    const noKeyIndicator = !item.hasApiKey
-      ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
-      : '';
-
-    if (isSelected) return theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
-    const modelText = item.hasApiKey ? label : theme.fg('muted', label);
-    return '  ' + modelText + checkmark + noKeyIndicator;
-  }
-
-  private confirmIndex(index: number): void {
-    this.selectedIndex = index;
-    this.updateList();
-    this.handleInput('\r');
+    const status = [
+      item.id === this.currentModelId ? theme.fg('success', '✓') : '',
+      item.hasApiKey ? '' : theme.fg('error', '✗') + theme.fg('muted', ` ${item.apiKeyEnvVar ?? 'no key'}`),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return menuRow(isSelected, item.hasApiKey ? label : theme.fg('muted', label), status, this.labelColumn);
   }
 
   handleInput(keyData: string): void {
     const kb = getKeybindings();
-
     const totalItems = this.filteredModels.length + (this.hasCustomItem ? 1 : 0);
 
-    // Up arrow
     if (kb.matches(keyData, 'tui.select.up')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === 0 ? totalItems - 1 : this.selectedIndex - 1;
       this.updateList();
       this.tui.requestRender();
-    }
-    // Down arrow
-    else if (kb.matches(keyData, 'tui.select.down')) {
+    } else if (kb.matches(keyData, 'tui.select.down')) {
       if (totalItems === 0) return;
       this.selectedIndex = this.selectedIndex === totalItems - 1 ? 0 : this.selectedIndex + 1;
       this.updateList();
       this.tui.requestRender();
-    }
-    // Enter
-    else if (kb.matches(keyData, 'tui.select.confirm')) {
+    } else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.hasCustomItem && this.selectedIndex === 0) {
-        const query = this.searchInput.getValue().trim();
-        if (query) this.handleSelect(this.makeCustomModelItem(query));
+        const query = this.query.trim();
+        if (query) this.onSelectCallback(makeCustomModelItem(query, this.allModels));
       } else {
-        const modelIndex = this.hasCustomItem ? this.selectedIndex - 1 : this.selectedIndex;
-        const selected = this.filteredModels[modelIndex];
-        if (selected) this.handleSelect(selected);
+        const selected = this.filteredModels[this.hasCustomItem ? this.selectedIndex - 1 : this.selectedIndex];
+        if (selected) this.onSelectCallback(selected);
       }
-    }
-    // Escape or Ctrl+C
-    else if (kb.matches(keyData, 'tui.select.cancel')) {
+    } else if (kb.matches(keyData, 'tui.select.cancel')) {
       this.onCancelCallback();
+    } else if (matchesKey(keyData, 'backspace')) {
+      // In the prompt slot the search row handles typing; shown on its own, the selector does.
+      this.setFilter(this.query.slice(0, -1));
+    } else {
+      const typed = keyData.length === 1 && keyData >= ' ' ? keyData : decodeKittyPrintable(keyData);
+      if (typed) this.setFilter(this.query + typed);
     }
-    // Pass everything else to search input
-    else {
-      this.searchInput.handleInput(keyData);
-      this.filterModels(this.searchInput.getValue());
-      this.tui.requestRender();
-    }
-  }
-
-  private handleSelect(model: ModelItem): void {
-    this.onSelectCallback(model);
-  }
-
-  getSearchInput(): Input {
-    return this.searchInput;
   }
 }

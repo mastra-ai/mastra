@@ -143,19 +143,56 @@ function getComboboxShape({
   return 'chips';
 }
 
+/** The value typed text stands for. The custom option and the value match in the filter both read it this way. */
+function typedValue(inputValue: string): string {
+  return inputValue.trim();
+}
+
 /** A "Use “text”" option for typed text that isn't one of the options yet. */
 function getCustomOption(options: ComboboxOption[], inputValue: string): ComboboxOption | undefined {
-  const value = inputValue.trim();
+  const value = typedValue(inputValue);
   if (!value) return undefined;
   // A field shows the selected option's text while it's closed; that isn't a new value.
   if (options.some(option => option.value === value || optionText(option) === value)) return undefined;
   return { label: `Use “${value}”`, value };
 }
 
-/** Matches the label like Base UI's default filter, the text a field shows, and any keywords. */
-function useOptionFilter() {
+/**
+ * Selected values that no option lists (typed ones, or ones the caller's options no longer include), in the
+ * order given. Each shows its bare value, on its chip and in the popup.
+ */
+function getUnlistedOptions(options: ComboboxOption[], values: readonly string[]): ComboboxOption[] {
+  const listedValues = new Set(options.map(option => option.value));
+  return [...new Set(values)].filter(value => !listedValues.has(value)).map(value => ({ label: value, value }));
+}
+
+/**
+ * The selected values as options: listed ones in `options` order, then the unlisted ones. `onValueChange`
+ * reports the values in this order too, with a new pick appended.
+ */
+function getSelectedOptions(
+  options: ComboboxOption[],
+  values: readonly string[],
+  unlistedOptions: ComboboxOption[],
+): ComboboxOption[] {
+  const selectedValues = new Set(values);
+  return [...options.filter(option => selectedValues.has(option.value)), ...unlistedOptions];
+}
+
+/** Matches options by value, because Base UI compares by reference and unlisted selections are rebuilt on every render. */
+function isSameOption(item: ComboboxOption, selected: ComboboxOption): boolean {
+  return item.value === selected.value;
+}
+
+/**
+ * Matches the label like Base UI's default filter, the text a field shows, and any keywords. With
+ * `matchValue`, an option whose value is exactly the typed value matches too: `getCustomOption` holds back
+ * typed text that is an existing value, so without this, typing a value whose label differs shows nothing.
+ */
+function useOptionFilter({ matchValue }: { matchValue: boolean }) {
   const { contains } = BaseCombobox.useFilter();
   return (option: ComboboxOption, query: string) =>
+    (matchValue && option.value === typedValue(query)) ||
     [option.label, optionText(option), ...(option.keywords ?? [])].some(text => contains(text, query));
 }
 
@@ -384,7 +421,7 @@ function SingleCombobox({
 }: ComboboxSingleProps & ShapeProps) {
   // The search text: a field's own text, or the compact trigger's popup search.
   const [inputValue, setInputValue] = React.useState('');
-  const filter = useOptionFilter();
+  const filter = useOptionFilter({ matchValue: allowCustomValue });
   const inField = shape === 'field';
   const selectedOption = options.find(option => option.value === value);
   const customOption = allowCustomValue ? getCustomOption(options, inputValue) : undefined;
@@ -437,6 +474,10 @@ function SingleCombobox({
   );
 }
 
+/**
+ * A multiple select: picks show as chips (or a count on a compact trigger) and stay listed, checked, in the popup.
+ * With `allowCustomValue` the typed text can be picked as a new value.
+ */
 function MultipleCombobox({
   shape,
   controlProps,
@@ -458,10 +499,29 @@ function MultipleCombobox({
   popupWidth,
   showChevron = true,
   iconOnlyValue = false,
+  allowCustomValue = false,
+  onInputValueChange,
 }: ComboboxMultipleProps & ShapeProps) {
-  const filter = useOptionFilter();
-  const selectedValues = new Set(value);
-  const selectedOptions = options.filter(option => selectedValues.has(option.value));
+  // Mirrors the search text, which Base UI owns here, so the typed value can be offered as an option.
+  const [inputValue, setInputValue] = React.useState('');
+  const filter = useOptionFilter({ matchValue: allowCustomValue });
+  const unlistedOptions = getUnlistedOptions(options, value);
+  const selectedOptions = getSelectedOptions(options, value, unlistedOptions);
+  // A typed value that is already picked is listed checked in the popup; offering it again would unpick it.
+  const customOption = allowCustomValue ? getCustomOption([...options, ...unlistedOptions], inputValue) : undefined;
+  // Unlisted picks go after the caller's options, which keep their order. Listing them lets a compact trigger,
+  // which has no chips, untick them. The custom option comes last, unlike the single select: `autoHighlight`
+  // highlights the first item, so someone who types "gpt-4" to narrow the list down to "gpt-4o" and presses
+  // Enter picks "gpt-4o" instead of adding the literal text.
+  const extraItems = customOption ? [...unlistedOptions, customOption] : unlistedOptions;
+  const items = extraItems.length > 0 ? [...options, ...extraItems] : options;
+
+  /** Keeps the mirrored search text in step with Base UI, which also clears it after each pick. */
+  function handleInputValueChange(next: string) {
+    setInputValue(next);
+    onInputValueChange?.(next);
+  }
+
   const footer =
     clearLabel && selectedOptions.length > 0 ? (
       <ComboboxClearFooter label={clearLabel} onClear={() => onValueChange?.([])} />
@@ -471,10 +531,12 @@ function MultipleCombobox({
     <ComboboxRoot
       multiple
       autoHighlight
-      items={options}
+      items={items}
       filter={filter}
       value={selectedOptions}
-      onValueChange={items => onValueChange?.(items.map(item => item.value))}
+      isItemEqualToValue={isSameOption}
+      onInputValueChange={handleInputValueChange}
+      onValueChange={picked => onValueChange?.(picked.map(item => item.value))}
       disabled={disabled}
       open={open}
       onOpenChange={onOpenChange}

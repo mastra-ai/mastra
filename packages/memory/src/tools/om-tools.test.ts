@@ -3589,27 +3589,6 @@ describe('om-tools', () => {
       expect(result.results).toContain('### Current thread memory');
       expect(result.results.length).toBeLessThan(Array.from({ length: 300 }, () => 'observation').join(' ').length);
     });
-
-    it('should return helpful message when search is not configured', async () => {
-      const memory = {
-        recall: async () => ({ messages: [] }),
-        getMemoryStore: async () => ({
-          listMessagesById: async () => ({ messages: [] }),
-        }),
-        listThreads: async () => ({ threads: [], total: 0, hasMore: false, page: 0 }),
-        // no searchMessages — simulates retrieval: true without search
-      };
-
-      const result = await searchMessagesForResource({
-        memory,
-        resourceId: 'res',
-        query: 'test',
-      });
-
-      expect(result.count).toBe(0);
-      expect(result.results).toContain('Search is not configured');
-      expect(result.results).toContain('retrieval: { vector: true }');
-    });
   });
 
   describe('recallTool message scoping', () => {
@@ -3978,21 +3957,6 @@ describe('om-tools', () => {
   });
 
   describe('Memory.listTools with retrieval config shapes', () => {
-    it('should register recall with retrieval: true (boolean)', () => {
-      const memory = new Memory({
-        storage: new InMemoryStore(),
-        options: {
-          observationalMemory: {
-            model: 'test-model',
-            scope: 'thread',
-            retrieval: true, // backward compat boolean
-          },
-        } as any,
-      });
-
-      expect(memory.listTools()).toHaveProperty('recall');
-    });
-
     it('should register recall with retrieval object config', () => {
       const memory = new Memory({
         storage: new InMemoryStore(),

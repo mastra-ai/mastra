@@ -35,8 +35,10 @@ describe('relativeTime', () => {
   });
 
   it('given a timestamp a week or more ago, then it returns a short calendar date', () => {
-    expect(relativeTime(daysAgo(7), NOW)).toBe('Jun 29');
-    expect(relativeTime('2026-01-05T09:00:00.000Z', NOW)).toBe('Jan 5');
+    // In the order the machine's locale writes it: `Jun 29` or `29 Jun`.
+    const shortDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    expect(relativeTime(daysAgo(7), NOW)).toBe(shortDate('2026-06-29T12:00:00.000Z'));
+    expect(relativeTime('2026-01-05T09:00:00.000Z', NOW)).toBe(shortDate('2026-01-05T09:00:00.000Z'));
   });
 
   it('given no explicit reference date, then it compares against the current time', () => {

@@ -23,31 +23,6 @@
     "qwen3.8-max"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -57,10 +32,31 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
     "doubao-seed-2.1-pro": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "doubao-seed-2.0-lite": [
@@ -69,7 +65,22 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -89,21 +100,10 @@
         "max": 262144
       }
     ],
-    "kimi-k3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "kimi-k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.5-pro": [
-      {
-        "type": "toggle"
       }
     ]
   }

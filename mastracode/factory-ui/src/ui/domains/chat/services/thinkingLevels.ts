@@ -1,35 +1,13 @@
-import { THINKING_LEVEL_VALUES, getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
+import { getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
+import { thinkingLevelOptions } from '@mastra/playground-ui/domains/factory';
 
 import type { FactoryModelScope } from '../../workspaces/services/github';
 
-export const THINKING_LEVEL_LABELS: Record<ThinkingLevelSetting, string> = {
-  off: 'Off',
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  xhigh: 'Extra high',
-  max: 'Max',
-};
-
-const THINKING_LEVEL_EMPHASIS: Partial<Record<ThinkingLevelSetting, ThinkingLevelOption['emphasis']>> = {
-  off: 'muted',
-  xhigh: 'warning',
-  max: 'warning',
-};
-
-function thinkingLevelOptions(levels: readonly ThinkingLevelSetting[]): ThinkingLevelOption<ThinkingLevelSetting>[] {
-  return levels.map(level => ({
-    value: level,
-    label: THINKING_LEVEL_LABELS[level],
-    emphasis: THINKING_LEVEL_EMPHASIS[level],
-  }));
-}
-
-export const ALL_THINKING_LEVEL_OPTIONS = thinkingLevelOptions(THINKING_LEVEL_VALUES);
+export { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '@mastra/playground-ui/domains/factory';
 
 export function thinkingLevelOptionsForModel(
   modelId: string,

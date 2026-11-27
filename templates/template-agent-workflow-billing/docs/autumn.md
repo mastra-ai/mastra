@@ -268,7 +268,7 @@ Unknown reservation/finalization acknowledgements remain pending or uncertain. R
 
 ## SDK and verification
 
-The driver pins `autumn-js@1.5.72` (MIT), generated SDK 0.10.18, API version `2.6.0`. The package imports the MIT `fzstd` runtime without declaring it, so the template explicitly pins `fzstd@0.1.1` for clean installs. The client disables fail-open, automatic retries and edge routing, and sets a bounded timeout. An HTTP hook rejects API 202 before the SDK can expose an allowed/success flag.
+The driver pins `autumn-js@1.6.27` (MIT), API version `2.6.0`. That release no longer depends on `rou3` 0.6. The template still pins `fzstd@0.1.1` so the SDK compression import resolves on a clean install. The client disables fail-open, automatic retries and edge routing, and sets a bounded timeout. An HTTP hook rejects API 202 before the SDK can expose an allowed/success flag.
 
 Controlled HTTP tests run the actual SDK, JWT organizations, SQL, gateway and Mastra lifecycle. The live sandbox command requires an explicit opt-in and an already provisioned test customer:
 

@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import { parseISO } from 'date-fns';
 import { describe, expect, it } from 'vitest';
 import {

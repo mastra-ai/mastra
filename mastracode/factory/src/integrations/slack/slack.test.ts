@@ -1,4 +1,4 @@
-import { ChannelSessionRejectedError, AgentChannels } from '@mastra/core/channels';
+import { AgentChannels, ChannelSessionRejectedError, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +10,6 @@ import { factoryProjectSettingsUserId } from '../../storage/domains/projects/bas
 import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
-import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.
@@ -1540,7 +1539,7 @@ describe('new session link', () => {
 
     await createHandlers(deps as any).onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
-    expect(ctx.requestContext.get(NEW_CHANNEL_SESSION_KEY)).toBe(true);
+    expect(ctx.requestContext.get(NEW_CHANNEL_THREAD_KEY)).toBe(true);
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     // Nothing of Factory's own: link and reply are one message.
     expect(thread.post).not.toHaveBeenCalled();
@@ -1554,7 +1553,7 @@ describe('new session link', () => {
 
     await createHandlers(deps as any).onMention!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
-    expect(ctx.requestContext.get(NEW_CHANNEL_SESSION_KEY)).toBeUndefined();
+    expect(ctx.requestContext.get(NEW_CHANNEL_THREAD_KEY)).toBeUndefined();
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(thread.post).not.toHaveBeenCalled();
   });

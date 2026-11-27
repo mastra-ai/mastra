@@ -1,0 +1,154 @@
+{
+  "platform": "linux/arm64",
+  "mitmproxy": {
+    "version": "12.3.1",
+    "image": "mitmproxy/mitmproxy@sha256:145dabd32b26e8e2c6651a75c01bfd455831d162f276443a7b181d0ced2a7120",
+    "source": "https://github.com/mitmproxy/mitmproxy/tree/51c1d6b2d8d3367a773411eb7a3eeccec82b3ea7",
+    "license": "MIT"
+  },
+  "alpine": {
+    "image": "alpine@sha256:3e07a4f627d12468155eb812785e10f2453a447c346872b47788a62437366764",
+    "version": "3.22.7"
+  },
+  "firewall": [
+    {
+      "name": "nftables-1.1.3-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/nftables-1.1.3-r0.apk",
+      "sha256": "e48df72b87580444a6b3094e2292886994c3d9c600435d7a62949e3706ce2c07",
+      "size": 333320,
+      "license": "GPL-2.0-or-later",
+      "sourceRevision": "c9ce7ca52682f0b1f682e456bfd44c60b846fa35"
+    },
+    {
+      "name": "busybox-binsh-1.37.0-r20.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/busybox-binsh-1.37.0-r20.apk",
+      "sha256": "9180dcee3f67ea806fe45361cffab94f8ce7e417d5f373bb0d989e88eb609903",
+      "size": 1544,
+      "license": "GPL-2.0-only",
+      "sourceRevision": "2e97d754a30d558f15524b8e422303c8a96832df"
+    },
+    {
+      "name": "musl-1.2.5-r13.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/musl-1.2.5-r13.apk",
+      "sha256": "d616c430bcbe0bf452b7f6ea2669f2cad14e85644a7599f4f495115d021742ef",
+      "size": 418149,
+      "license": "MIT",
+      "sourceRevision": "ddaf59b84bc6983a37d6e24d2210c2c4791642bb"
+    },
+    {
+      "name": "gmp-6.3.0-r3.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/gmp-6.3.0-r3.apk",
+      "sha256": "0d2eb1079b1b5692e9e6652ff0e269caeb9c812f483e34c88d461c03bcf75460",
+      "size": 223215,
+      "license": "LGPL-3.0-or-later OR GPL-2.0-or-later",
+      "sourceRevision": "187e3f7791d3390e18bc06969a5f34c385fd883e"
+    },
+    {
+      "name": "jansson-2.14.1-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/jansson-2.14.1-r0.apk",
+      "sha256": "f57c3bceb823add72ee0ccbf17aa7fc98596ff9eb0c11d0e5a2c28260ea87dcd",
+      "size": 49781,
+      "license": "MIT",
+      "sourceRevision": "9161ac3604718ebb3c85b5795f0a084d45362571"
+    },
+    {
+      "name": "libmnl-1.0.5-r2.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/libmnl-1.0.5-r2.apk",
+      "sha256": "213a7e87553bed3d9159b2e74d2627885c259883e61714b357949ca806eb1f8d",
+      "size": 9507,
+      "license": "LGPL-2.1-or-later",
+      "sourceRevision": "fc95c59998285564fbcb0bfb2443898c62e10171"
+    },
+    {
+      "name": "libnftnl-1.2.9-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/libnftnl-1.2.9-r0.apk",
+      "sha256": "6912a5d56b31d3365b8dd0d6339bd70a2bfc9e25dab0c387f77174113c43e664",
+      "size": 66995,
+      "license": "GPL-2.0-or-later",
+      "sourceRevision": "454d33629e8f46c9b43d5c0937ac65f93678a2a8"
+    },
+    {
+      "name": "readline-8.2.13-r1.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/readline-8.2.13-r1.apk",
+      "sha256": "334af29dbf6b5a71a87af4d6a58e2967a8f711a51d00093de0e1498daf83ceb2",
+      "size": 123568,
+      "license": "GPL-3.0-or-later",
+      "sourceRevision": "be0833caee3020f089f02c5d7223e971a9a11ffb"
+    },
+    {
+      "name": "busybox-1.37.0-r20.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/busybox-1.37.0-r20.apk",
+      "sha256": "9d25af67564c92a4a4c603462efdbcd23019e90b8785f1ebcad640cbb1551c93",
+      "size": 524951,
+      "license": "GPL-2.0-only",
+      "sourceRevision": "2e97d754a30d558f15524b8e422303c8a96832df"
+    },
+    {
+      "name": "libncursesw-6.5_p20250503-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/libncursesw-6.5_p20250503-r0.apk",
+      "sha256": "419b375e8a4345e7172b1f0f3a3c57db61374f5408cdb875d9e860bd4c243aca",
+      "size": 161279,
+      "license": "X11",
+      "sourceRevision": "3fefbe8dda8b3e85458edb190e2f3a69ad16035c"
+    },
+    {
+      "name": "ncurses-terminfo-base-6.5_p20250503-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.22/main/aarch64/ncurses-terminfo-base-6.5_p20250503-r0.apk",
+      "sha256": "3d37403e0b5ab9eb0c1ce269444e4a385faec9fe6af452c1c6956806b13d2bd6",
+      "size": 21749,
+      "license": "X11",
+      "sourceRevision": "3fefbe8dda8b3e85458edb190e2f3a69ad16035c"
+    }
+  ],
+  "nss": [
+    {
+      "name": "nss-tools-3.124-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/nss-tools-3.124-r0.apk",
+      "sha256": "791d353b111c3954dcc2feb7a64c88ca1421f76dae9c67d42cab4aef791c28bb",
+      "size": 279409,
+      "license": "MPL-2.0",
+      "sourceRevision": "422faa8d3631e64d35b5b210b698a05cac32f2be"
+    },
+    {
+      "name": "musl-1.2.6-r3.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/musl-1.2.6-r3.apk",
+      "sha256": "2e17864102278d9049c3a56f1bceed9e8cf287065617e579325123443daed8a5",
+      "size": 417730,
+      "license": "MIT",
+      "sourceRevision": "8f79d39391b46d6dbf1800fb68b8212a21d5ee2e"
+    },
+    {
+      "name": "nspr-4.38.2-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/nspr-4.38.2-r0.apk",
+      "sha256": "e98abeff25fcbf006ed9081bed87ce2a60c96ea75df7672b3b69350bec840219",
+      "size": 124952,
+      "license": "MPL-2.0",
+      "sourceRevision": "4e10628e0ece580cd8f88bec18b55ddbd0be249a"
+    },
+    {
+      "name": "nss-3.124-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/nss-3.124-r0.apk",
+      "sha256": "9ba9909e523e3add8f148b5d46654d35702fefc9ee20b4082ca96dfbe5256b76",
+      "size": 1601217,
+      "license": "MPL-2.0",
+      "sourceRevision": "422faa8d3631e64d35b5b210b698a05cac32f2be"
+    },
+    {
+      "name": "zlib-1.3.2-r1.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/zlib-1.3.2-r1.apk",
+      "sha256": "1f77a542ac6634761b9fe38d8bdca19b154071dcfa25432e73f2bc8a0740a33f",
+      "size": 54334,
+      "license": "Zlib",
+      "sourceRevision": "0afa2da0e8c8051c6f8f64a7a388e5a259904245"
+    },
+    {
+      "name": "sqlite-libs-3.53.4-r0.apk",
+      "url": "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/aarch64/sqlite-libs-3.53.4-r0.apk",
+      "sha256": "b39d8d73c1208838a436f2d481ba605b52a095f8d6ff781556eafc81cd1a13e9",
+      "size": 852532,
+      "license": "blessing",
+      "sourceRevision": "a9c3ba8b9129ec0f294d0a9bf538c2f1632bb016"
+    }
+  ],
+  "certutilSha256": "3a6a0db722d149d94c38a5ba1161bf786bcf74be4a6ab54115f8e8ad11b54dae"
+}

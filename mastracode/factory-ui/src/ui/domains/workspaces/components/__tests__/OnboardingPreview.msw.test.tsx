@@ -86,7 +86,7 @@ describe('contextual onboarding previews', () => {
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
       ),
     );
     const { client, rerender } = renderWithProviders(

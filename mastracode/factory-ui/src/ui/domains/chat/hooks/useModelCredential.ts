@@ -52,8 +52,10 @@ function resolveHolder(
   }
 }
 
-function describeHolder(holder: CredentialHolder): string {
-  if (holder.kind === 'organization') return 'Shared by the organization';
+function describeHolder(holder: CredentialHolder, cardWork: boolean): string {
+  if (holder.kind === 'organization') {
+    return cardWork ? 'Card work uses the organization’s keys' : 'Shared by the organization';
+  }
   if (holder.kind === 'deployment') return 'Configured on the server';
   if (holder.kind === 'teammate-owner') return holder.name ? `${holder.name} (session owner)` : 'Session owner';
   if (!holder.ownsSession) return holder.name ? `${holder.name} (you)` : 'You';
@@ -69,7 +71,7 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
 export function useModelCredential(modelId: string | undefined): ModelCredential | undefined {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget, modelScope, projectQuery } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
   const model = modelId ? modelsQuery.data?.find(entry => entry.id === modelId) : undefined;
 
@@ -81,7 +83,8 @@ export function useModelCredential(modelId: string | undefined): ModelCredential
     provider: model.provider,
     credential,
     holder,
-    holderDescription: describeHolder(holder),
+    // A hybrid Factory routes card work to the organization's keys and everything else to personal ones.
+    holderDescription: describeHolder(holder, projectQuery.data?.modelScope === 'hybrid' && modelScope === 'factory'),
     warning: teammateWarning(holder, credential),
   };
 }

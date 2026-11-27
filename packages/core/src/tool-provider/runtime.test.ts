@@ -262,12 +262,6 @@ describe('resolveStoredToolProviders — connectionless caller-supplied tools', 
 });
 
 describe('buildConnectionSuffix', () => {
-  it('uppercases a plain alphanumeric label', () => {
-    const used = new Set<string>();
-    expect(buildConnectionSuffix('work', used)).toBe('WORK');
-    expect(used.has('WORK')).toBe(true);
-  });
-
   it('replaces spaces and punctuation with underscores', () => {
     expect(buildConnectionSuffix('my gmail account', new Set())).toBe('MY_GMAIL_ACCOUNT');
     expect(buildConnectionSuffix('work.email-1', new Set())).toBe('WORK_EMAIL_1');

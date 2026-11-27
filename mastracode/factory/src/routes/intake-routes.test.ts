@@ -9,8 +9,9 @@ import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import type { FactoryCardPlacement } from '../board-engine/engine.js';
-import { ProjectBoardCache } from '../boards/project-boards.js';
+import { createBoardRegistry } from '../boards/index.js';
 
+import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
@@ -119,9 +120,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const boardEngine = {
       requestPlacement: (placement: FactoryCardPlacement) => {
         placements.push(placement);
-        return new DispatcherBoardEngine({ transitionService: { transition: async () => never() } }).requestPlacement(
-          placement,
-        );
+        return new DispatcherBoardEngine({
+          transitionService: { transition: async () => never() },
+          workItems: { get: async () => never() },
+          boards: createBoardRegistry(),
+        }).requestPlacement(placement);
       },
     };
     mountApiRoutes(app, [

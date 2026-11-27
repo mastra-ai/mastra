@@ -321,7 +321,7 @@ Only an exact match (the same steps in the same order, with nothing extra or mis
 
 #### Relaxed mode (`ordering: 'relaxed'`, default)
 
-Allows extra steps. Expected steps must appear in the correct relative order. The score is calculated based on how many expected steps were matched, with optional penalties for extra or repeated steps.
+Allows extra steps. Expected steps must appear in the correct relative order. The score reflects how many expected steps were matched, minus an optional penalty for repeated steps, and extra steps don't lower it.
 
 #### Unordered mode (`ordering: 'unordered'`)
 

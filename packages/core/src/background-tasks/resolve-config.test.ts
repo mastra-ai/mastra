@@ -23,16 +23,19 @@ describe('resolveBackgroundConfig', () => {
     expect(resolved.runInBackground).toBe(false);
   });
 
-  it('ignores `llmOverride.enabled: true` when the agent opted in OTHER tools but not this one', () => {
+  it.each([
+    ['ignores `llmOverride.enabled: true` when the agent opted in OTHER tools but not this one', 'calculator', false],
+    ['honors LLM override when the agent opted the tool in', 'research', true],
+  ] as const)('%s', (_title, toolName, expected) => {
     const resolved = resolveBackgroundConfig({
       llmBgOverrides: { enabled: true },
-      toolName: 'calculator',
+      toolName,
       toolConfig: undefined,
       agentConfig: { tools: { research: true } },
       managerConfig: { enabled: true },
     });
 
-    expect(resolved.runInBackground).toBe(false);
+    expect(resolved.runInBackground).toBe(expected);
   });
 
   it('defers an eligible tool by default when the call has no override', () => {
@@ -113,18 +116,6 @@ describe('resolveBackgroundConfig', () => {
       toolName: 'research',
       toolConfig: { enabled: true },
       agentConfig: undefined,
-      managerConfig: { enabled: true },
-    });
-
-    expect(resolved.runInBackground).toBe(true);
-  });
-
-  it('honors LLM override when the agent opted the tool in', () => {
-    const resolved = resolveBackgroundConfig({
-      llmBgOverrides: { enabled: true },
-      toolName: 'research',
-      toolConfig: undefined,
-      agentConfig: { tools: { research: true } },
       managerConfig: { enabled: true },
     });
 

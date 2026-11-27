@@ -47,7 +47,6 @@ export const queryKeys = {
   board: (factoryProjectId: string | undefined, boardKey: string) =>
     ['factory', 'boards', factoryProjectId ?? null, 'board', boardKey] as const,
   persistedFactories: () => ['factories', 'persisted'] as const,
-  factoryCreateFlow: () => ['factories', 'create-flow'] as const,
   factoryProject: (factoryProjectId: string | undefined) => ['factory', 'project', factoryProjectId ?? null] as const,
   factoryEnvironment: (factoryProjectId: string | undefined) =>
     ['factory', 'environment', factoryProjectId ?? null] as const,
@@ -100,10 +99,16 @@ export const queryKeys = {
   // Under the routes' key: a rule or order change refreshes the counts.
   intakeDryRun: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  // Under the routes' key: a rule change re-tests the item.
+  intakeTest: (factoryProjectId: string | undefined, subject: string) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'test', subject] as const,
   intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
   // Under the routes' key: a rule change refreshes its skips.
   intakeSkipped: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  // Under the routes' key: a rule change refreshes which cards would move.
+  intakeReroute: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'reroute'] as const,
   intakeNotRouted: (factoryProjectId: string | undefined) =>
     ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,

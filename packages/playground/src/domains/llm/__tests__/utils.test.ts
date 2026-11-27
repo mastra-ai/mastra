@@ -11,19 +11,13 @@ describe('findProviderById', () => {
   ];
 
   describe('direct match', () => {
-    it('should find provider by exact id', () => {
-      const result = findProviderById(providers, 'openai');
-      expect(result?.id).toBe('openai');
-    });
-
-    it('should find gateway provider by exact id', () => {
-      const result = findProviderById(providers, 'acme/custom');
-      expect(result?.id).toBe('acme/custom');
-    });
-
-    it('should handle .chat suffix in lookup', () => {
-      const result = findProviderById(providers, 'openai.chat');
-      expect(result?.id).toBe('openai');
+    it.each([
+      ['should find provider by exact id', 'openai', 'openai'],
+      ['should find gateway provider by exact id', 'acme/custom', 'acme/custom'],
+      ['should handle .chat suffix in lookup', 'openai.chat', 'openai'],
+    ] as const)('%s', (_title, input, expected) => {
+      const result = findProviderById(providers, input);
+      expect(result?.id).toBe(expected);
     });
   });
 

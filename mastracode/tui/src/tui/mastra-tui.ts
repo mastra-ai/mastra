@@ -7,9 +7,9 @@ import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 import { onEmbedderPackageMissing } from '@mastra/code-sdk/agents/fastembed-subprocess';
-import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/model-fallback';
+import type { PendingModelFallback } from '@mastra/code-sdk/model-fallback';
 import {
   getAvailableModePacks,
   ONBOARDING_VERSION,
@@ -45,7 +45,7 @@ import {
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { withFastEntries } from './codex-fast-entries.js';
-import { dispatchSlashCommand } from './command-dispatch.js';
+import { dispatchSlashCommand, menuCommandName } from './command-dispatch.js';
 import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
 import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -1571,7 +1571,9 @@ export class MastraTUI {
   }
 
   private async handleSlashCommand(input: string): Promise<boolean> {
-    return dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const dispatch = () => dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const menu = menuCommandName(input);
+    return menu ? this.state.promptSlot.runMenuCommand(menu, dispatch) : dispatch();
   }
 
   // ===========================================================================
@@ -1732,7 +1734,6 @@ export class MastraTUI {
               models: availableModels,
               currentModelId: undefined,
               title,
-              titleColor: modeColor,
               onSelect: async (model: ModelItem) => {
                 this.state.ui.hideOverlay();
                 await promptForApiKeyIfNeeded(this.state.ui, model, this.state.authStorage);
@@ -1753,6 +1754,7 @@ export class MastraTUI {
       this.state.activeOnboarding = component;
       // Setup takes over the whole terminal (the component centers itself and fills every row).
       showModalOverlay(this.state.ui, component, {
+        fullscreen: true,
         widthPercent: 1,
         maxWidth: 10_000,
         maxHeight: '100%',

@@ -66,14 +66,14 @@ You can also pass `requestContext` as a `Record<string, any>`.
     description:
       'The initial delay in milliseconds before retrying a failed request. This value is doubled with each retry (exponential backoff).',
     isOptional: true,
-    defaultValue: '300',
+    defaultValue: '100',
   },
   {
     name: 'maxBackoffMs',
     type: 'number',
     description: 'The maximum backoff time in milliseconds. Prevents retries from waiting too long between attempts.',
     isOptional: true,
-    defaultValue: '5000',
+    defaultValue: '1000',
   },
   {
     name: 'headers',

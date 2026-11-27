@@ -362,28 +362,19 @@ describe('Stored Workspaces Handlers', () => {
       expect(mockStore.update).not.toHaveBeenCalled();
     });
 
-    it('allows admin to update any workspace', async () => {
+    it.each([
+      ['allows admin to update any workspace', '*', 'Renamed by admin'],
+      ['allows scoped stored-workspaces:edit:<id> to update', 'stored-workspaces:edit:w1', 'Edited via scoped grant'],
+    ] as const)('%s', async (_title, value, name) => {
       mockData.set('w1', { id: 'w1', name: 'W1', authorId: 'user-a' });
 
       const result = await UPDATE_STORED_WORKSPACE_ROUTE.handler({
-        ...createAuthenticatedContext(mockMastra, 'user-b', ['*']),
+        ...createAuthenticatedContext(mockMastra, 'user-b', [value]),
         storedWorkspaceId: 'w1',
-        name: 'Renamed by admin',
+        name,
       });
 
-      expect(result).toMatchObject({ id: 'w1', name: 'Renamed by admin' });
-    });
-
-    it('allows scoped stored-workspaces:edit:<id> to update', async () => {
-      mockData.set('w1', { id: 'w1', name: 'W1', authorId: 'user-a' });
-
-      const result = await UPDATE_STORED_WORKSPACE_ROUTE.handler({
-        ...createAuthenticatedContext(mockMastra, 'user-b', ['stored-workspaces:edit:w1']),
-        storedWorkspaceId: 'w1',
-        name: 'Edited via scoped grant',
-      });
-
-      expect(result).toMatchObject({ id: 'w1', name: 'Edited via scoped grant' });
+      expect(result).toMatchObject({ id: 'w1', name });
     });
 
     it('allows any authenticated caller to update unowned workspaces', async () => {
@@ -449,22 +440,14 @@ describe('Stored Workspaces Handlers', () => {
       expect(mockData.has('w1')).toBe(true);
     });
 
-    it('allows admin to delete any workspace', async () => {
+    it.each([
+      ['allows admin to delete any workspace', '*'],
+      ['allows scoped stored-workspaces:delete:<id> to delete', 'stored-workspaces:delete:w1'],
+    ] as const)('%s', async (_title, value) => {
       mockData.set('w1', { id: 'w1', name: 'W1', authorId: 'user-a' });
 
       await DELETE_STORED_WORKSPACE_ROUTE.handler({
-        ...createAuthenticatedContext(mockMastra, 'user-b', ['*']),
-        storedWorkspaceId: 'w1',
-      });
-
-      expect(mockData.has('w1')).toBe(false);
-    });
-
-    it('allows scoped stored-workspaces:delete:<id> to delete', async () => {
-      mockData.set('w1', { id: 'w1', name: 'W1', authorId: 'user-a' });
-
-      await DELETE_STORED_WORKSPACE_ROUTE.handler({
-        ...createAuthenticatedContext(mockMastra, 'user-b', ['stored-workspaces:delete:w1']),
+        ...createAuthenticatedContext(mockMastra, 'user-b', [value]),
         storedWorkspaceId: 'w1',
       });
 

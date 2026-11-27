@@ -1,7 +1,8 @@
 import type { AgentControllerThread } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('@earendil-works/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
   class MockNode {
     children: any[] = [];
     addChild(child: any) {
@@ -59,6 +60,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   return {
+    ...actual,
     Box,
     Container,
     Input,
@@ -91,6 +93,8 @@ vi.mock('../../theme.js', () => ({
     bold: (text: string) => text,
     fg: (_token: string, text: string) => text,
   },
+  menuCursor: () => '→ ',
+  menuSelected: (text: string) => text,
 }));
 
 import { ThreadSelectorComponent } from '../thread-selector.js';

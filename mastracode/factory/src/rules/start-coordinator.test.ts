@@ -239,7 +239,7 @@ describe('FactoryStartCoordinator', () => {
     const session = await vi.mocked(controller.createSession).mock.results[0]?.value;
     expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Investigate issue 1', pin: false });
     expect(session.permissions.setForTool).toHaveBeenCalledWith({
-      toolName: 'factory_transition_work_item',
+      toolName: 'factory_report_outcome',
       policy: 'allow',
     });
     expect(session.state.set).toHaveBeenCalledWith(
@@ -475,7 +475,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
       makeSourceControl() as never,
     );
 
@@ -508,7 +508,7 @@ describe('FactoryStartCoordinator', () => {
       const coordinator = new FactoryStartCoordinator(
         makeController().controller as never,
         storage,
-        new DispatcherBoardEngine({ transitionService }),
+        new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
         sourceControl as never,
       );
       const prepared = await coordinator.prepare({
@@ -656,6 +656,8 @@ describe('FactoryStartCoordinator', () => {
         controller as never,
         storage,
         new DispatcherBoardEngine({
+          workItems: storage,
+          boards: createBoardRegistry(),
           transitionService: new FactoryTransitionService({
             storage,
             configVersion: 'rules-v1',
@@ -764,7 +766,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
       makeSourceControl() as never,
     );
 

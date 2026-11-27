@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LogRecord } from '../types';
 import { LogViewList } from './log-view-list';
+import type { LogViewListHandle } from './log-view-list';
 
 const scrollToIndex = vi.fn();
 let visibleCount: number | undefined;
@@ -79,7 +80,7 @@ class TestIntersectionObserver implements IntersectionObserver {
   }
 }
 
-const scrollOlderEdgeIntoView = () => observers.forEach(observer => observer.intersect());
+const scrollPageEdgeIntoView = () => observers.forEach(observer => observer.intersect());
 
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
@@ -173,7 +174,7 @@ describe('LogViewList', () => {
       render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
       expect(onFetchNextPage).not.toHaveBeenCalled();
 
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
@@ -182,7 +183,7 @@ describe('LogViewList', () => {
       const onFetchNextPage = vi.fn();
       render(<LogViewList {...props} logs={[]} onFetchNextPage={onFetchNextPage} />);
 
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
@@ -226,6 +227,35 @@ describe('LogViewList', () => {
     });
   });
 
+  describe('oldest first, paging forward to newer logs', () => {
+    const props = {
+      order: 'oldest-first',
+      nextPage: 'newer',
+      logs: sandboxLines,
+      logIdMap: idMap,
+      onLogClick: vi.fn(),
+      hasNextPage: true,
+    } as const;
+
+    it('loads newer logs once the bottom scrolls into view', () => {
+      const onFetchNextPage = vi.fn();
+      render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
+
+      scrollPageEdgeIntoView();
+
+      expect(onFetchNextPage).toHaveBeenCalledOnce();
+    });
+
+    it('shows that newer logs are loading below the lines', () => {
+      render(<LogViewList {...props} isFetchingNextPage onFetchNextPage={vi.fn()} />);
+
+      const status = screen.getByRole('status');
+      expect(status.textContent).toBe('Loading newer logs');
+      const lastLine = screen.getByRole('button', { name: /Process.Start stream ended/ });
+      expect(status.compareDocumentPosition(lastLine)).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    });
+  });
+
   describe('newest first, like an audit log', () => {
     it('loads older logs once the bottom scrolls into view, but not while a page is loading', () => {
       const onFetchNextPage = vi.fn();
@@ -237,12 +267,12 @@ describe('LogViewList', () => {
         onFetchNextPage,
       } as const;
       const { rerender } = render(<LogViewList {...props} isFetchingNextPage />);
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
       expect(onFetchNextPage).not.toHaveBeenCalled();
       expect(scrollToIndex).not.toHaveBeenCalled();
 
       rerender(<LogViewList {...props} />);
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
@@ -284,6 +314,22 @@ describe('LogViewList', () => {
 
     expect(screen.getByText(/at d \(d\.js:4:4\)/)).toBeTruthy();
     expect(screen.queryByText(/more lines/)).toBeNull();
+  });
+
+  it('scrolls a line into view by its id, so a page can jump to an error', () => {
+    const handle: { current: LogViewListHandle | null } = { current: null };
+    render(<LogViewList ref={handle} logs={sandboxLines} logIdMap={idMap} />);
+
+    handle.current?.scrollToLog('line-1');
+
+    expect(scrollToIndex).toHaveBeenCalledWith(1, { align: 'center' });
+  });
+
+  it('shows lines that have no time or level', () => {
+    const lines = [{ message: 'npm warn deprecated inflight@1.0.6' }];
+    render(<LogViewList logs={lines} logIdMap={new Map(lines.map(log => [log, 'plain']))} />);
+
+    expect(screen.getByText('npm warn deprecated inflight@1.0.6')).toBeTruthy();
   });
 
   it('opens the clicked line', () => {

@@ -10,6 +10,14 @@ export const typescriptFile: WorkspaceFile = {
   content: 'export const agent = {};\n',
 };
 
+export const largeTypescriptFile: WorkspaceFile = {
+  ...typescriptFile,
+  path: 'src/large.ts',
+  name: 'large.ts',
+  size: 100_669,
+  content: Array.from({ length: 2_000 }, (_, i) => `export const value${i} = compute(${i}, "row ${i}");`).join('\n'),
+};
+
 export const unknownLanguageFile: WorkspaceFile = {
   ...typescriptFile,
   path: 'notes.unknown',

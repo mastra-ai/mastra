@@ -35,7 +35,7 @@ import type { StructuredOutputOptions } from '../../types';
 import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
-import { getRunRegistryEntry } from '../run-registry';
+import { getLiveRunRequestContext, getRunRegistryEntry } from '../run-registry';
 import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { AgentFinishEventData, DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -98,10 +98,12 @@ export interface DurableFinishSideEffectsResult {
   };
 }
 
-function restoreRequestContext(
+function mergeRequestContextForFinalization(
   entries: Record<string, unknown> | undefined,
   fallback: RequestContext | undefined,
+  liveRunContext: RequestContext | undefined,
 ): RequestContext {
+  if (liveRunContext) return liveRunContext;
   if (!entries) return fallback ?? new RequestContext();
 
   const restored = new RequestContext<unknown>(fallback?.entries());
@@ -184,7 +186,11 @@ export async function runDurableFinishSideEffects({
     }
   }
 
-  const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  const effectiveRequestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    requestContext,
+    getLiveRunRequestContext(registryEntry, runId, requestContext),
+  );
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
   if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
@@ -617,6 +623,7 @@ export async function runDurableDeadlineOutputPass({
   messageListState,
   cutOffText,
   entry,
+  executionId,
   mastra,
   tracingContext,
   logger,
@@ -629,13 +636,18 @@ export async function runDurableDeadlineOutputPass({
   messageListState: SerializedMessageListState;
   cutOffText?: string;
   entry: RunRegistryEntry;
+  executionId: string;
   mastra?: Mastra;
   /** The run's agent span, so the deadline pass shows in the run's trace as the finish pass does. */
   tracingContext?: TracingContext;
   logger: IMastraLogger;
 }): Promise<void> {
   const durableState = initData.state;
-  const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
+  const requestContext = mergeRequestContextForFinalization(
+    initData.requestContextEntries,
+    undefined,
+    getLiveRunRequestContext(entry, runId, undefined, executionId),
+  );
   if (!requestContext.has('MastraMemory') && durableState?.threadId) {
     requestContext.set('MastraMemory', {
       thread: { id: durableState.threadId },
