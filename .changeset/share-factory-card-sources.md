@@ -9,6 +9,8 @@ import { CardSourceIcon, CardSourceRow, cardSourceOf } from '@mastra/playground-
 
 const source = cardSourceOf(card.externalSource); // e.g. 'github-issue'
 
-<CardSourceIcon source={source} />
-<CardSourceRow reference="#117" url={card.externalSource.url} state="open" />
+<>
+  <CardSourceIcon source={source} />
+  <CardSourceRow reference="#117" url={card.externalSource.url} state="open" />
+</>
 ```
