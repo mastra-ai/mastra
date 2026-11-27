@@ -506,14 +506,14 @@ describe('Pending signals across two processes', () => {
     const pending = await send(thread, { createdAt: new Date(base + 2) });
     const fresh = createSampleMessageV2({ ...scope, createdAt: new Date(base + 3) });
     const savedAt = base + 50_000;
-    // Until the save, both signals sit under the pending-signal thread id, without a resource.
+    // The claim moved its row into the thread; the pending row sits under the pending-signal thread
+    // id, without a resource.
     expect((await rowsOf(thread)).filter(row => row.id !== normal.id)).toEqual(
-      sorted([claimed.id, pending.id]).map(id => ({
-        id,
-        threadId: pendingThreadOf(thread),
-        resourceId: null,
-        claimedBy: id === claimed.id ? runId : null,
-      })),
+      sorted([claimed.id, pending.id]).map(id =>
+        id === claimed.id
+          ? { id, threadId: thread.id, resourceId: thread.resourceId, claimedBy: runId }
+          : { id, threadId: pendingThreadOf(thread), resourceId: null, claimedBy: null },
+      ),
     );
 
     await ctx.peer.saveMessages({
@@ -557,7 +557,7 @@ describe('Pending signals across two processes', () => {
     expect(messages[0]!.content.content).toBe('after');
   });
 
-  it('counts only visible messages in total and hasMore, for every count path', async () => {
+  it('counts messages and taken rows, not pending rows, in total and hasMore, for every count path', async () => {
     const resourceId = `resource-${randomUUID()}`;
     const thread = await newThread(resourceId);
     const sibling = await newThread(resourceId);
@@ -567,11 +567,11 @@ describe('Pending signals across two processes', () => {
     const message = (owner: StorageThreadType, offset: number) =>
       createSampleMessageV2({ threadId: owner.id, resourceId, createdAt: at(offset) });
 
-    // Visible: three messages and a signal saved while claimed. Hidden: a pending and a claimed row.
+    // Visible: three messages, a taken row and a signal saved while claimed. Hidden: a pending row.
     const visible = [message(thread, 0), message(thread, 2), message(thread, 4)];
     await ctx.memory.saveMessages({ messages: visible });
     const savedWhileClaimed = await send(thread, { createdAt: at(1) });
-    await send(thread, { createdAt: at(3) });
+    const taken = await send(thread, { createdAt: at(3) });
     await claim(thread, runId);
     await ctx.memory.saveMessages({ messages: [{ ...savedWhileClaimed, createdAt: at(6) }] });
     await send(thread, { createdAt: at(5) });
@@ -580,7 +580,8 @@ describe('Pending signals across two processes', () => {
     await ctx.memory.saveMessages({ messages: [siblingMessage] });
     await send(sibling, { createdAt: at(8) });
 
-    const threadVisible = [...ids(visible), savedWhileClaimed.id];
+    const [at0, at2, at4] = ids(visible);
+    const threadVisible = [at0!, at2!, taken.id, at4!, savedWhileClaimed.id];
     const resourceVisible = [...threadVisible, siblingMessage.id];
     const fromOffset2 = { dateRange: { start: at(2) } };
     const toOffset4 = { dateRange: { end: at(4) } };
@@ -593,7 +594,7 @@ describe('Pending signals across two processes', () => {
       { args: { perPage: 2, page: 4, resourceId }, expected: threadVisible, page: 4 },
       { args: { perPage: 1, page: 0, filter: fromOffset2 }, expected: threadVisible.slice(1), page: 0 },
       { args: { perPage: 1, page: 9, filter: fromOffset2 }, expected: threadVisible.slice(1), page: 9 },
-      { args: { perPage: 1, page: 0, filter: toOffset4 }, expected: ids(visible), page: 0 },
+      { args: { perPage: 1, page: 0, filter: toOffset4 }, expected: threadVisible.slice(0, 4), page: 0 },
     ];
     for (const { args, expected, page } of cases) {
       const result = await ctx.peer.listMessages({ threadId: thread.id, ...args });
@@ -718,6 +719,7 @@ describe('Pending-signal schema', () => {
 
   const expectedColumns = [
     { table_name: 'mastra_messages', column_name: 'signalClaimedBy', data_type: 'text', is_nullable: 'YES' },
+    { table_name: 'mastra_messages', column_name: 'signalState', data_type: 'text', is_nullable: 'YES' },
     { table_name: 'mastra_threads', column_name: 'signalRunId', data_type: 'text', is_nullable: 'YES' },
   ];
 
@@ -737,15 +739,21 @@ describe('Pending-signal schema', () => {
       await legacyMemory.saveMessages({ messages });
       // The tables as a release without pending signals left them; dropping the columns drops the index.
       await admin.query(`ALTER TABLE "${schemaName}"."mastra_messages" DROP COLUMN "signalClaimedBy"`);
+      await admin.query(`ALTER TABLE "${schemaName}"."mastra_messages" DROP COLUMN "signalState"`);
       await admin.query(`ALTER TABLE "${schemaName}"."mastra_threads" DROP COLUMN "signalRunId"`);
       expect(await signalColumns(schemaName)).toEqual([]);
       expect(await signalIndexes(schemaName)).toEqual([]);
-      // Message reads and writes name no signal column, so they work before the migration runs.
+      // Message reads, updates and deletes name no signal column, so they work before the migration
+      // runs. A save clears the signal state, so it needs the migration.
       const added = createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId });
-      await legacyMemory.saveMessages({ messages: [{ ...messages[0]!, content: { ...messages[0]!.content } }, added] });
-      await legacyMemory.updateMessages({ messages: [{ id: added.id, content: { metadata: { updated: true } } }] });
-      expect(ids((await legacyMemory.listMessagesById({ messageIds: [added.id] })).messages)).toEqual([added.id]);
-      expect((await legacyMemory.listMessages({ threadId: thread.id, perPage: 1 })).total).toBe(3);
+      await expect(legacyMemory.saveMessages({ messages: [added] })).rejects.toThrow();
+      await legacyMemory.updateMessages({
+        messages: [{ id: messages[1]!.id, content: { metadata: { updated: true } } }],
+      });
+      expect(ids((await legacyMemory.listMessagesById({ messageIds: [messages[1]!.id] })).messages)).toEqual([
+        messages[1]!.id,
+      ]);
+      expect((await legacyMemory.listMessages({ threadId: thread.id, perPage: 1 })).total).toBe(2);
       await legacyMemory.deleteMessages([added.id]);
 
       const upgraded = [0, 1].map(
