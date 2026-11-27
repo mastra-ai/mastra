@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 
 import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 
+import type { ExternalWorkItemSource } from '../../../work-items/external-source.js';
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
-import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
+import type { WorkItemDbRow } from './base.js';
 import {
   isLegacyReviewPlacement,
   LEGACY_REVIEW_BOARD,

@@ -1,4 +1,4 @@
-import type { BoardPhaseKind } from './define-board.js';
+import type { BoardPhaseKind } from './phase-kind.js';
 
 /**
  * The one rule for moving a busy card, shared by the server's transition service and the board UI:

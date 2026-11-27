@@ -4,9 +4,10 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { ExternalWorkItemSource } from '../../../work-items/external-source.js';
 import { createIsolatedFactoryPostgresForTests, createLegacyCardTablesForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
-import type { Card, ExternalWorkItemSource } from './base.js';
+import type { Card } from './base.js';
 import { Cards } from './cards.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;

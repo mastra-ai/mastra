@@ -19,13 +19,8 @@ import {
 import type { SourcedItem } from '../work-items/change-requests.js';
 import { DEFAULT_BOARD_ID } from './default-board.js';
 import { REVIEW_CONTEXT } from './define-board.js';
-import type {
-  BoardEventIntegration,
-  BoardEventRules,
-  BoardPhase,
-  BoardPhaseKind,
-  BoardToolResultRuleHandler,
-} from './define-board.js';
+import type { BoardEventIntegration, BoardEventRules, BoardPhase, BoardToolResultRuleHandler } from './define-board.js';
+import type { BoardPhaseKind } from './phase-kind.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';

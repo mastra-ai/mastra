@@ -8,7 +8,7 @@
 
 import { externalSourceForWorkItem } from '@mastra/factory/rules/types';
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
-import type { ExternalWorkItemSource } from '@mastra/factory/storage/domains/work-items/base';
+import type { ExternalWorkItemSource } from '@mastra/factory/work-items/external-source';
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 import { workItemBoardSource } from '@mastra/factory/work-item-branch';
 import type { WorkItemBranchSource } from '@mastra/factory/work-item-branch';

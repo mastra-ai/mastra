@@ -15,7 +15,6 @@ export type {
   BoardPhaseDefinition,
   BoardPhaseExitTool,
   BoardPhaseOutcome,
-  BoardPhaseKind,
   BoardPhaseGoal,
   BoardPhaseRunner,
   FactoryPhaseTool,
@@ -74,3 +73,4 @@ export { boardRegistryOf, createBoardRegistry, defaultBoards } from './registry.
 export type { BoardRegistry, InstalledBoard } from './registry.js';
 export { workBoard } from './work.js';
 export type { WorkBoardPhase } from './work.js';
+export type { BoardPhaseKind } from './phase-kind.js';

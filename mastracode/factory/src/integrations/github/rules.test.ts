@@ -18,7 +18,6 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
-import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import {
   asProjectFromBeforeIntakeEvaluator,
   createFactoryStorageForTests,
@@ -27,6 +26,7 @@ import {
 } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { closingLinksIn } from '../../work-items/closing-pull-requests.js';
+import type { ExternalWorkItemSource } from '../../work-items/external-source.js';
 import { relatedCardsIn } from '../../work-items/list-related-cards.js';
 import { matchesSearch, searchTerms } from '../../work-items/search-terms.js';
 import { KeptCards } from '../kept-cards.js';

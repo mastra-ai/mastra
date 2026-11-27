@@ -4,7 +4,8 @@ import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleGroup } from '../rules/rule-group.js';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
 import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
-import type { Card, ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource } from '../work-items/external-source.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { cardRuleFacts } from './card-facts.js';
 

@@ -30,6 +30,7 @@ import {
   MAX_TOOL_NAME_LENGTH,
   SKILL_NAME_RE,
 } from '../rules/validation.js';
+import type { BoardPhaseKind } from './phase-kind.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 /** Runs when an agent seated on this board completes the named tool. */
@@ -66,14 +67,6 @@ const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[
   jira: FACTORY_JIRA_EVENTS,
   incidentio: FACTORY_INCIDENTIO_EVENTS,
 };
-
-/**
- * What a phase means to the runtime.
- * - `resting`: nobody is seated; a card waits for a person or an event.
- * - `working`: an agent in the phase's context carries the card; a person's move in arms autonomy.
- * - `terminal`: the card is finished; sessions stop and held resources are released.
- */
-export type BoardPhaseKind = 'resting' | 'working' | 'terminal';
 
 /** The agent Factory runs every phase with. */
 export const FACTORY_AGENT_ID = CODE_AGENT_ID;

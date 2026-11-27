@@ -1,10 +1,15 @@
-import type { StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { RuleGroup } from '../rules/rule-group.js';
 import { arrivalKinds } from './board-events.js';
-import type { RouteArrivals } from './board-events.js';
+import type { RouteArrivals, RouteEvent } from './board-events.js';
 
-type OrderRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly'> & {
-  target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'joinClosedIssue'>;
-};
+/** The fields of a stored intake route that decide where its arrivals land. */
+interface OrderRoute {
+  enabled: boolean;
+  when: RuleGroup | null;
+  on: RouteEvent[];
+  pullRequestOpenedMovesOnly?: true;
+  target: { boardKey: string; joinClosedIssue: boolean };
+}
 
 /** Whether the route can place a new card: enabled, handling arrivals, and not joining a closed issue's card. */
 export function placesArrivals(route: OrderRoute): boolean {

@@ -53,7 +53,7 @@ import type {
   ExternalRepositoryProjectTarget,
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
-import type { Card, ExternalWorkItemSource, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
@@ -61,6 +61,7 @@ import {
 import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
 import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
+import type { ExternalWorkItemSource } from '../../work-items/external-source.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { storageCards } from '../kept-cards.js';

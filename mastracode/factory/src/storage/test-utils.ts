@@ -11,6 +11,7 @@ import type { PgFactoryStorage } from '@mastra/pg';
 import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
+import type { ExternalWorkItemSource } from '../work-items/external-source.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { AuditStorage } from './domains/audit/base.js';
 import { StoredBoardsStorage } from './domains/boards/base.js';
@@ -34,7 +35,6 @@ import { SkillOverridesStorage } from './domains/skill-overrides/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
 import { VoiceSettingsStorage } from './domains/voice-settings/base.js';
 import { WorkItemsStorage } from './domains/work-items/base.js';
-import type { ExternalWorkItemSource } from './domains/work-items/base.js';
 import { bumpBoardVersions } from './domains/work-items/board-version.js';
 import { Cards } from './domains/work-items/cards.js';
 import { FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA, WORK_ITEMS_SCHEMA } from './domains/work-items/work-item-schema.js';

@@ -15,6 +15,7 @@ import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mast
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
+import type { ExternalWorkItemSource } from '../../../work-items/external-source.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
 import {
   copyLegacyRows,
@@ -105,19 +106,6 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'detail-finding' ||
     value === 'manual'
   );
-}
-
-export interface ExternalWorkItemSource {
-  integrationId: string;
-  type: string;
-  /**
-   * The tenant on the platform, never ours: a Slack team (`T0ABC…`), a Discord
-   * guild. Scopes the key, because a platform id such as a channel or a message
-   * `ts` is only unique inside the workspace that issued it.
-   */
-  workspaceId?: string;
-  externalId: string;
-  url?: string;
 }
 
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */

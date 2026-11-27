@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/index.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { testCard } from '../routes/test-utils.js';
-import type { Card, ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+import type { ExternalWorkItemSource } from '../work-items/external-source.js';
 import { runningSessionIds, SessionRowIndex } from './session-rows.js';
 import type { RowSession, SessionRowViewer } from './session-rows.js';
 

@@ -13,8 +13,8 @@ import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { workSeedWithSelfReview } from '../boards/work-migrations.js';
 import { createFactoryOutcomeTools } from '../rules/tools.js';
-import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import type { ExternalWorkItemSource } from '../work-items/external-source.js';
 import { FactoryWorkItemStateProcessor } from './work-item-state-processor.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
