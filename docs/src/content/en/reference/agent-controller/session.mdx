@@ -441,6 +441,24 @@ const clone = await session.thread.clone({
 
 Returns: `Promise<AgentControllerThread>`
 
+### `session.thread.cloneToCurrentResource({ threadId, expectedResourceId, expectedProjectPath, metadata?, options?, requestContext? })`
+
+Clone a thread from another resource into the session's resource, then bind the session to the clone. The clone keeps the source thread's title. The call throws `Thread not found` when the source thread is missing, doesn't belong to `expectedResourceId`, has a `projectPath` metadata value other than `expectedProjectPath`, or already belongs to the session's resource.
+
+Pass `metadata` to use it for the clone in place of the source thread's metadata. Pass `options` to choose which messages to copy, with the same `messageFilter`, `messageLimit` and `fullThread` as `session.thread.clone()`.
+
+```typescript
+const clone = await session.thread.cloneToCurrentResource({
+  threadId: 'thread-7',
+  expectedResourceId: 'old-resource',
+  expectedProjectPath: '/projects/app',
+  metadata: { projectPath: '/projects/app-copy' },
+  options: { fullThread: true },
+})
+```
+
+Returns: `Promise<AgentControllerThread>`
+
 ### `session.thread.switch({ threadId, emitEvent?, requestContext? })`
 
 Switch to an owned stored thread and hydrate its mode, model, and observational memory settings. Pass `requestContext` when memory is a function that reads the signed-in user.

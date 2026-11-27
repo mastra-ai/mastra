@@ -344,6 +344,33 @@ describe('AgentController cloneThread', () => {
       expect((await memoryStore.listMessages({ threadId: 'src' })).messages).toHaveLength(2);
     });
 
+    it('clone copies only the messages a partial filter keeps, in order', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      const later = (id: string, at: string) => ({
+        ...message(id, 'src', 'controller-resource'),
+        createdAt: new Date(at),
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          later('m1', '2026-01-01T00:00:00.000Z'),
+          later('m2', '2026-02-01T00:00:00.000Z'),
+          later('m3', '2026-03-01T00:00:00.000Z'),
+        ],
+      });
+
+      const cloned = await session.thread.clone({
+        sourceThreadId: 'src',
+        options: { messageFilter: { startDate: new Date('2026-01-15T00:00:00.000Z') } },
+      });
+
+      const copied = (await memoryStore.listMessages({ threadId: cloned.id })).messages;
+      expect(copied.map(m => (m.content.parts[0] as { text: string }).text)).toEqual(['m2', 'm3']);
+      expect(copied.every(m => m.threadId === cloned.id)).toBe(true);
+    });
+
     it('cloneToCurrentResource uses the given metadata instead of the source thread’s and filters messages', async () => {
       const { memoryStore, session } = await setup();
       await memoryStore.saveThread({
