@@ -8,6 +8,10 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import { AgentExecutionEngine } from '../execution-engine';
+import type { AgentRunLog, AgentRunOwner } from '../execution-engine';
+import type { AgentRunRecord } from '../streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
   AGENT_STREAM_TOPIC,
@@ -34,6 +38,8 @@ import {
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
+import type { ExtendedRunRegistry } from './run-registry';
+import { getRunRegistryEntry } from './run-registry';
 import { openStepsOfCrashedSegment } from './segment-spans';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
@@ -74,20 +80,71 @@ export interface DurableWorkflowOptions {
   guardrailLogger?: IMastraLogger;
 }
 
-export class DefaultAgentExecutionEngine {
+export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
   #workflow: DurableWorkflow | null = null;
   #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
   #warnedPersistencePolicy = false;
   /** Canceled parked runs whose abort terminal this process already published. */
   #canceledRunTerminals = new Set<string>();
 
-  constructor(
-    protected readonly id: string,
-    protected mastra?: Mastra,
-  ) {}
-  registerMastra(mastra: Mastra): void {
-    this.mastra = mastra;
+  get durable(): true {
+    return true;
   }
+
+  usesSharedRunLog(workflowEngine: 'default' | 'evented', logger: IMastraLogger): boolean {
+    return this.resolveWorkflowEngine(workflowEngine, logger) === 'evented';
+  }
+
+  /** Evented runs execute on workers, which may live in another process. */
+  get abortsRemoteExecutors(): true {
+    return true;
+  }
+
+  abortLocalExecution(runId: string, registry: ExtendedRunRegistry, mastra: Mastra | undefined): boolean {
+    const controller = (registry.get(runId) ?? getRunRegistryEntry(runId, mastra))?.abortController;
+    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+    return !!controller;
+  }
+
+  /** An evented caller's controller does not confirm that its executor stopped. */
+  confirmsLocalAbort(workflowEngine: 'default' | 'evented', logger: IMastraLogger): boolean {
+    return this.resolveWorkflowEngine(workflowEngine, logger) === 'default';
+  }
+
+  /** Runs are tracked by the run registry until auto-cleanup clears their replay history. */
+  getRunOwner(runId: string, registry: ExtendedRunRegistry): AgentRunOwner | undefined {
+    if (!registry.has(runId)) return undefined;
+    return { ...registry.getMemoryInfo(runId) };
+  }
+
+  /** The local owner, else the shared record, including legacy records without stream status. */
+  async getReplayOwner(
+    agentId: string,
+    runId: string,
+    localOwner: AgentRunOwner | undefined,
+    { bus, usesSharedRunLog }: AgentRunLog,
+  ): Promise<AgentRunOwner | undefined> {
+    if (localOwner) return localOwner;
+    if (!bus) return undefined;
+    const shared = await readDurableReplayOwner(bus.getRunRecordCache(usesSharedRunLog), agentId, runId);
+    if (!shared) return undefined;
+    return { resourceId: shared.resourceId, threadId: shared.threadId };
+  }
+
+  async getRunRecord(
+    agentId: string,
+    runId: string,
+    { bus, usesSharedRunLog }: AgentRunLog,
+  ): Promise<AgentRunRecord | undefined> {
+    if (!bus) return undefined;
+    return readAgentRunRecord(
+      bus.getRunRecordCache(usesSharedRunLog),
+      agentId,
+      runId,
+      durableReplayOwnerKey(agentId, runId),
+    );
+  }
+
   get workflow(): DurableWorkflow | null {
     return this.#workflow;
   }
