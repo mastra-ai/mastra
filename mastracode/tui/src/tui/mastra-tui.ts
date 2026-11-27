@@ -94,7 +94,7 @@ import type { MastraTUIOptions, TUIState } from './state.js';
 import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
-import { resumeThreadOnStartup } from './thread-startup.js';
+import { resumeThreadOnStartup, startNewThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
 import { offerUpdate } from './update-flow.js';
 
@@ -846,11 +846,9 @@ export class MastraTUI {
     this.state.ui.start();
 
     // Resume the latest unlocked thread for this directory.
-    const startupResumeIssue = await resumeThreadOnStartup(
-      this.state,
-      this.state.options.resumeThreadId,
-      () => !this.stopped,
-    );
+    const startupResumeIssue = this.state.options.startNewThread
+      ? await startNewThreadOnStartup(this.state)
+      : await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId, () => !this.stopped);
     if (this.stopped) return;
     // A --pack startup applies to whatever thread startup selected, including a
     // resumed one — it overrides the thread's sticky pack for this session.

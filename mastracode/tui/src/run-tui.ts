@@ -46,6 +46,7 @@ import {
   parseResumeThreadId,
   shouldRejectResumeWithoutTTY,
   shouldRunHeadless,
+  takeNewThreadFlag,
 } from './resume-command.js';
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -100,7 +101,12 @@ process.on('unhandledRejection', reason => {
 
 type StartupMessage = ReturnType<typeof initialMessageOptions>;
 
-async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: string, startupPackId?: string) {
+async function tuiMain(
+  startupMessage: StartupMessage = {},
+  resumeThreadId?: string,
+  startupPackId?: string,
+  startNewThread = false,
+) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -116,7 +122,11 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   if (settings.factory && settings.factory.active !== false && !isTruthyEnv('MASTRACODE_LOCAL')) {
-    const ignored = [resumeThreadId && 'thread resume', startupPackId && 'model pack'].filter(Boolean);
+    const ignored = [
+      resumeThreadId && 'thread resume',
+      startupPackId && 'model pack',
+      startNewThread && 'new thread',
+    ].filter(Boolean);
     if (ignored.length > 0) console.info(`⚠ Factory mode ignores the requested ${ignored.join(' and ')}.`);
     try {
       return await bootFactory(settings.factory, themeMode, startupMessage);
@@ -128,7 +138,7 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
       );
     }
   }
-  return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId);
+  return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId, startNewThread);
 }
 
 /**
@@ -188,6 +198,7 @@ async function bootLocal(
   startupMessage: StartupMessage,
   resumeThreadId?: string,
   startupPackId?: string,
+  startNewThread = false,
 ) {
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
   const loadBrowser = (chatModelId: string | undefined) => {
@@ -262,6 +273,7 @@ async function bootLocal(
     initialModelOverride: Boolean(initialState?.currentModelId),
     ...(startupPackId ? { initialPackId: startupPackId } : {}),
     ...(resumeThreadId ? { resumeThreadId } : {}),
+    ...(startNewThread ? { startNewThread } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
@@ -583,7 +595,8 @@ async function main() {
     process.exit(1);
   }
   if (initialPrompt.flag) process.argv = initialPrompt.argv;
-  const tuiArgv = initialPrompt.flag ? initialPrompt.argv : packFlag.argv;
+  const newThreadFlag = takeNewThreadFlag(initialPrompt.flag ? initialPrompt.argv : packFlag.argv);
+  const tuiArgv = newThreadFlag.argv;
   // The flag only means something to the interactive TUI. Paths that can't run
   // it reject the flag instead of dropping the prompt; an env var prompt is
   // just ignored there.
@@ -598,6 +611,11 @@ async function main() {
     resumeThreadId = parseResumeThreadId(tuiArgv.slice(2));
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (resumeThreadId && newThreadFlag.startNewThread) {
+    process.stderr.write('mastracode resume cannot be combined with --new.\n');
     process.exitCode = 1;
     return;
   }
@@ -667,7 +685,12 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId, startupPackId);
+  return tuiMain(
+    initialMessageOptions(initialPrompt, pipedInput),
+    resumeThreadId,
+    startupPackId,
+    newThreadFlag.startNewThread,
+  );
 }
 
 export interface RunTuiOptions {

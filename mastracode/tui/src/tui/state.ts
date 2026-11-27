@@ -155,6 +155,9 @@ export interface MastraTUIBaseOptions {
   /** Thread ID requested by `mastracode resume`. */
   resumeThreadId?: string;
 
+  /** `mastracode --new`: start on a new thread instead of resuming the latest one. */
+  startNewThread?: boolean;
+
   /** Preserve an explicitly configured initial model until a thread selects a pack. */
   initialModelOverride?: boolean;
 

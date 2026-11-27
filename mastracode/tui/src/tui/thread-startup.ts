@@ -9,6 +9,12 @@ export type StartupResumeIssue =
   | { kind: 'missing'; threadId: string }
   | { kind: 'locked'; threadId: string; title: string; ownerPid: number };
 
+/** `mastracode --new`: leave the session pending a new thread instead of resuming the latest one. */
+export async function startNewThreadOnStartup(state: TUIState): Promise<void> {
+  if (state.local) await startPendingNewThread(state, state.local);
+  else state.pendingNewThread = true;
+}
+
 /**
  * Selects the thread to open at startup. A requested thread that is missing or
  * locked does not throw; the session is left pending a new thread and the issue

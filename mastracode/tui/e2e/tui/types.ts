@@ -231,6 +231,7 @@ export type ScenarioName =
   | 'task-prompt-context-next-turn'
   | 'resume-locked-thread'
   | 'resume-missing-thread'
+  | 'new-thread-flag'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'

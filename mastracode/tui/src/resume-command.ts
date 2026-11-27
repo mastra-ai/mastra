@@ -8,6 +8,12 @@ export function parseResumeThreadId(args: string[]): string | undefined {
   return threadId;
 }
 
+/** Removes `--new` from argv and reports whether it was passed. */
+export function takeNewThreadFlag(argv: string[]): { argv: string[]; startNewThread: boolean } {
+  const rest = argv.filter(arg => arg !== '--new');
+  return { argv: rest, startNewThread: rest.length < argv.length };
+}
+
 export function shouldRunHeadless(
   argv: string[],
   resumeThreadId: string | undefined,

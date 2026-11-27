@@ -2,7 +2,7 @@ import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import { describe, expect, it, vi } from 'vitest';
 import { askModalQuestion } from './modal-question.js';
 import { showModalOverlay } from './overlay.js';
-import { resumeThreadOnStartup } from './thread-startup.js';
+import { resumeThreadOnStartup, startNewThreadOnStartup } from './thread-startup.js';
 
 vi.mock('./modal-question.js', () => ({ askModalQuestion: vi.fn() }));
 vi.mock('./overlay.js', () => ({ showModalOverlay: vi.fn() }));
@@ -65,6 +65,32 @@ describe('resumeThreadOnStartup', () => {
     expect(setResourceId).toHaveBeenCalledWith(state.session, { resourceId: 'resource-2' });
     expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-requested' });
     expect(state.pendingNewThread).toBe(false);
+  });
+
+  it('starts a new thread for --new and unbinds the auto-selected thread', async () => {
+    const clearAndReleaseLock = vi.fn().mockResolvedValue(undefined);
+    const switchThread = vi.fn();
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => 'thread-latest'),
+          list: vi.fn(),
+          switch: switchThread,
+          cleanupSubscription: vi.fn(),
+          clearAndReleaseLock,
+        },
+      },
+    } as any;
+    state.local = { controller: {}, session: state.session };
+
+    await startNewThreadOnStartup(state);
+
+    expect(state.session.thread.cleanupSubscription).toHaveBeenCalled();
+    expect(clearAndReleaseLock).toHaveBeenCalled();
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(true);
   });
 
   it('reports an unknown requested thread and unbinds the auto-selected thread', async () => {

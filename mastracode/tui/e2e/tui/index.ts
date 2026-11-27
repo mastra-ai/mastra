@@ -137,6 +137,7 @@ import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
 import { mouseInputModeScenario } from './mouse-input-mode.js';
 import { mouseModalAndAutocompleteScenario } from './mouse-modal-and-autocomplete.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
+import { newThreadFlagScenario } from './new-thread-flag.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
@@ -510,6 +511,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'thread-history': threadHistoryScenario,
   'resume-locked-thread': resumeLockedThreadScenario,
   'resume-missing-thread': resumeMissingThreadScenario,
+  'new-thread-flag': newThreadFlagScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'tool-suspension-same-run-resume': toolSuspensionSameRunResumeScenario,
