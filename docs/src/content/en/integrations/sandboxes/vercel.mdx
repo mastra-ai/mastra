@@ -14,7 +14,7 @@ Run commands in isolated Vercel environments with either persistent Sandbox micr
 
 ## Vercel sandbox
 
-Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
+Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM. Sandboxes created from a runtime run Amazon Linux 2023. Sandboxes created from a custom image or a snapshot use the filesystem that image or snapshot contains. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 :::note
 
@@ -126,6 +126,37 @@ await sandbox.executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "line $i"; sl
 
 Both callbacks are optional and can be used independently.
 
+#### Custom images, snapshots and network policy
+
+Start from a Vercel Container Registry image or a filesystem snapshot, and restrict outbound traffic at creation time. The environment selection is mutually exclusive: pass at most one of `runtime`, `image` or `source`.
+
+Sandboxes started from a custom `image` or a snapshot aren't assumed to run Amazon Linux 2023. Their default agent instructions make no operating-system or package-manager claim.
+
+```typescript
+// From a container image (no runtime is sent with the request)
+const fromImage = new VercelSandbox({ image: 'my-repo:v1' })
+
+// From a filesystem snapshot
+const fromSnapshot = new VercelSandbox({
+  source: { type: 'snapshot', snapshotId: 'snap_123' },
+})
+
+// From a runtime with all outbound traffic blocked
+const offline = new VercelSandbox({ runtime: 'node24', networkPolicy: 'deny-all' })
+
+// Allow only specific hosts and subnets
+const restricted = new VercelSandbox({
+  networkPolicy: {
+    allow: ['registry.npmjs.org', '*.githubusercontent.com'],
+    subnets: { allow: ['10.0.0.0/8'] },
+  },
+})
+```
+
+Creation options apply when a new sandbox is created. A `networkPolicy` protects that new sandbox from its first command.
+
+When `sandboxName` matches a sandbox that already exists, starting resumes it unchanged: it keeps the configuration and network policy it was created with, so a stricter policy passed here doesn't restrict it. To change the policy of a running sandbox, update it through the underlying SDK (`await sandbox.sandbox.update({ networkPolicy: 'deny-all' })`). Mastra doesn't manage that.
+
 ### Constructor parameters
 
 <PropertiesTable
@@ -140,7 +171,8 @@ Both callbacks are optional and can be used independently.
   {
     name: 'sandboxName',
     type: 'string',
-    description: 'Optional name passed to the Vercel API. Auto-generated if omitted.',
+    description:
+      'Optional name passed to the Vercel API. Auto-generated if omitted. A name is an identity: starting resumes an existing sandbox with that name without applying creation options, so an existing sandbox keeps the configuration and network policy it was created with.',
     isOptional: true,
   },
   {
@@ -164,9 +196,32 @@ Both callbacks are optional and can be used independently.
   {
     name: 'runtime',
     type: "'node24' | 'node22' | 'node26' | 'python3.13'",
-    description: 'Sandbox runtime.',
+    description:
+      'Sandbox runtime. Ignored and rejected when `image` or `source` is set. The `node24` default applies only when the sandbox starts from a runtime.',
     isOptional: true,
     defaultValue: "'node24'",
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description:
+      'Start from a Vercel Container Registry image (`my-repo`, `my-repo:v1`, or a fully-qualified `vcr.vercel.com/...` reference). Mutually exclusive with `runtime` and `source`. No runtime is sent with the request.',
+    isOptional: true,
+  },
+  {
+    name: 'source',
+    type: "{ type: 'snapshot'; snapshotId: string }",
+    description:
+      'Start from an existing filesystem snapshot. Only the snapshot source is supported; git and tarball sources are not exposed. Mutually exclusive with `runtime` and `image`. No runtime is sent with the request.',
+    isOptional: true,
+  },
+  {
+    name: 'networkPolicy',
+    type: "'allow-all' | 'deny-all' | NetworkPolicy",
+    description:
+      "Outbound network policy applied at creation. Pass 'deny-all' to block all egress, 'allow-all' (the platform default) for full internet access, or an object with `allow` domain rules and `subnets` CIDR lists. A newly created sandbox is protected from its first command; an existing sandbox resumed by `sandboxName` keeps its current policy.",
+    isOptional: true,
+    defaultValue: "'allow-all'",
   },
   {
     name: 'timeout',
