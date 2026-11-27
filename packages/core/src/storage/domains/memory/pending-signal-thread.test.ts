@@ -16,7 +16,7 @@ describe('pending-signal thread ids', () => {
     }
   });
 
-  // SQL stores compare the first characters exactly; ids that LIKE would match must not count.
+  // Ids that differ from the prefix by case or by one character are ordinary thread ids.
   it('matches only the exact prefix', () => {
     for (const threadId of [
       'thread-1',

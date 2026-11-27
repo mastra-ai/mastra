@@ -23,8 +23,8 @@ export function pendingSignalThreadId(threadId: string): string {
 
 /**
  * Whether `threadId` is a pending-signal thread id. SQL stores test the same prefix by exact
- * comparison of its first characters, never with `LIKE`, whose wildcards and case folding would
- * match other ids.
+ * comparison of its first characters, never with `LIKE`: SQLite's `LIKE` ignores ASCII case, and a
+ * pattern built from a caller's thread id would treat its `_` and `%` as wildcards.
  * @experimental
  */
 export function isPendingSignalThreadId(threadId: string | null | undefined): boolean {

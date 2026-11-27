@@ -103,8 +103,8 @@ const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
   signalRunId: { type: 'text', nullable: true },
 };
 /**
- * Reads by message id skip pending-signal rows. The prefix is compared exactly:
- * `LIKE` treats `_` and `%` as wildcards.
+ * Reads by message id skip pending-signal rows. The prefix is compared exactly, as
+ * in the other stores, so no pattern is ever built from a caller's thread id.
  */
 function notPendingSignalRow(threadIdColumn = 'thread_id'): string {
   return `left(${threadIdColumn}, ${PENDING_SIGNAL_THREAD_PREFIX.length}) <> '${PENDING_SIGNAL_THREAD_PREFIX}'`;

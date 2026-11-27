@@ -123,8 +123,8 @@ const SIGNAL_THREAD_COLUMNS = {
  */
 const CLAIMED_ROW_CONDITION = `"signalClaimedBy" IS NOT NULL`;
 /**
- * Reads by message id skip pending-signal rows. The prefix is compared exactly: `LIKE` treats `_`
- * as a wildcard and ignores ASCII case.
+ * Reads by message id skip pending-signal rows. The prefix is compared exactly because SQLite's
+ * `LIKE` ignores ASCII case.
  */
 const NOT_PENDING_SIGNAL_ROW_CONDITION = `substr(thread_id, 1, ${PENDING_SIGNAL_THREAD_PREFIX.length}) <> '${PENDING_SIGNAL_THREAD_PREFIX}'`;
 /** The thread's current resource id, read in the same statement as its signal rows. Binds the thread id. */
