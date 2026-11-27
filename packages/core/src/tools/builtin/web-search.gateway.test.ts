@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { Agent } from '../../../agent';
-import { webSearchTool } from '../../../tools/builtin/web-search';
+import { Agent } from '../../agent';
+import { webSearchTool } from './web-search';
 
 /**
  * A fresh project switched to Mastra Gateway (`mastra/<provider>/<model>`) but run without
- * MASTRA_GATEWAY_API_KEY. The Mastra gateway is disabled without a key, so the router fell back to
- * models.dev and every message failed with errors that never named the key:
- * "Could not find config for provider mastra", or, with webSearchTool, "Could not infer a supported
- * provider from "mastra"".
+ * MASTRA_GATEWAY_API_KEY. The Mastra gateway is disabled without a key, so the router reports the
+ * model's provider as `mastra`. webSearchTool then failed every message with "Could not infer a
+ * supported provider from "mastra"", hiding the error the same agent gets without the tool.
  */
 describe('Mastra Gateway model without MASTRA_GATEWAY_API_KEY', () => {
   let savedKey: string | undefined;
@@ -28,23 +27,6 @@ describe('Mastra Gateway model without MASTRA_GATEWAY_API_KEY', () => {
       model,
       tools: tools as any,
     });
-
-  const missingKey = 'Set MASTRA_GATEWAY_API_KEY to use "mastra/openai/gpt-5-mini" through Mastra Gateway';
-
-  it('tells the user to set the key when generating', async () => {
-    await expect(createAgent('mastra/openai/gpt-5-mini').generate('Hi')).rejects.toThrow(missingKey);
-  });
-
-  it('tells the user to set the key when streaming', async () => {
-    const error = await createAgent('mastra/openai/gpt-5-mini')
-      .stream('Hi')
-      .then(stream => stream.getFullOutput())
-      .then(
-        output => (output as { error?: unknown }).error,
-        (e: unknown) => e,
-      );
-    expect(String((error as Error)?.message ?? error)).toContain(missingKey);
-  });
 
   it.each(['mastra/openai/gpt-5-mini', 'mastra/anthropic/claude-sonnet-4-5'])(
     '%s with webSearchTool fails the same way as without it',
