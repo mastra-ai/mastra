@@ -354,6 +354,88 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // Two restarts read a parallel block with both branches running, and each claims one branch
+    // first: the first restart claims a and is paused before b, the second then claims b. Each
+    // publishes its whole dispatch, the guards refuse the branch it lost, and each branch runs once
+    // under one restart. The block ends once.
+    it('runs each branch once when two restarts split a parallel block', async () => {
+      const steps = holdableSteps();
+      const workflow = createWorkflow({ id: `restart-split-${randomUUID()}`, inputSchema: Num, outputSchema: z.any() })
+        .parallel([steps.step('a'), steps.step('b')])
+        .then(
+          createStep({
+            id: 'c',
+            inputSchema: z.any(),
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              steps.calls.c = (steps.calls.c ?? 0) + 1;
+              return { n: inputData.a.n + inputData.b.n };
+            },
+          }),
+        )
+        .commit();
+      const store = (await storage.getStore('workflows'))!;
+      const method = storageVersion === 1 ? 'updateWorkflowResults' : 'appendWorkflowRunEntries';
+      const write = (store[method] as (args: any) => Promise<any>).bind(store);
+      const firstClaim = deferred();
+      const resumeFirst = deferred();
+      let claims = 0;
+      const pause = vi.spyOn(store, method).mockImplementation(async (args: any) => {
+        const result = await write(args);
+        if (args.startGuard?.takeover && ++claims === 1) {
+          firstClaim.resolve();
+          await resumeFirst.promise;
+        }
+        return result;
+      });
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
+        const restarts = holdPublishes(driver, event => event.type === 'workflow.start' && !!event.data?.restart);
+        try {
+          const run = await workflow.createRun();
+          const oldA = steps.holdAt('a');
+          const oldB = steps.holdAt('b');
+          const started = run.start({ inputData: { n: 0 } });
+          await Promise.all([oldA.entered, oldB.entered]);
+
+          const results = Promise.all([restartRun(workflow, run.runId), restartRun(workflow, run.runId)]);
+          await restarts.count(2);
+          const first = await restarts.release(0);
+          await within(firstClaim.promise, 'the first restart to claim a branch');
+          expect((await storedRun(workflow.id, run.runId))?.context.a?.metadata).toMatchObject({
+            startedBy: first.id,
+          });
+          const second = await restarts.release(1);
+          await settleDeliveries([second]);
+          expect((await storedRun(workflow.id, run.runId))?.context.b?.metadata?.startedBy).not.toBe(first.id);
+          resumeFirst.resolve();
+          await settleDeliveries([first]);
+
+          oldA.release();
+          oldB.release();
+          expect(await results).toMatchObject([
+            { status: 'success', result: { n: 2 } },
+            { status: 'success', result: { n: 2 } },
+          ]);
+          await drainHandlers();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
+          if (storageVersion === 1) {
+            expect(steps.calls).toEqual({ a: 2, b: 2, c: 1 });
+          } else {
+            // Storage v2: a restart's delivery of a branch it lost reads the other restart's claim (or
+            // result) as the occurrence it expects, and can run the branch again (COR-1666). The block
+            // still ends once.
+            expect(steps.calls.c).toBe(1);
+            expect(steps.calls.a).toBeGreaterThanOrEqual(2);
+            expect(steps.calls.b).toBeGreaterThanOrEqual(2);
+          }
+        } finally {
+          resumeFirst.resolve();
+          restarts.restore();
+          pause.mockRestore();
+        }
+      });
+    }, 20_000);
+
     // R3. A restart event delivered again rewrote the run from what its caller read: the steps the
     // run finished since went back to running, and they ran again.
     it('keeps the progress of a restarted run when the restart event is delivered again', async () => {
