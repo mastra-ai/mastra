@@ -15,6 +15,13 @@ import { createEventedAgent } from '../create-evented-agent';
 
 function createTextModel(text: string) {
   return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text }],
+      finishReason: 'stop',
+      usage: { inputTokens: 5, outputTokens: 5, totalTokens: 10 },
+      response: { id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+      warnings: [],
+    }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },

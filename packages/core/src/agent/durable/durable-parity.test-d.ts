@@ -149,7 +149,6 @@ type PhantomSerializedKeys = Exclude<
   | 'structuredOutput' // serialized form of structuredOutput
   | 'toolsetToolNames' // names of call-time toolsets tools (cross-process detection)
   | 'modelCallMode' // pinned provider method, distinct from the public agent API method
-  | 'retainOutcome' // opt-in asynchronous delivery contract
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

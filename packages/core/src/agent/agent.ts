@@ -255,7 +255,6 @@ import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA }
 import { createRunAbortController } from './durable/run-abort';
 import { createRunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
-import { commitDurableRunOutcome, readDurableRunOutcome } from './durable/run-outcome';
 import {
   getRunRegistryEntry,
   ExtendedRunRegistry,
@@ -13921,32 +13920,6 @@ export class Agent<
         await settledOrElapsed(deadlineSave, DEADLINE_SAVE_WAIT_MS);
       }
       // The observable deadline must not wait for snapshot I/O.
-      // A failed acknowledged run must retain its terminal error before the restartable
-      // snapshot is removed. The in-memory input may be unavailable after recovery.
-      let retainedInput = fence ? this.#runInputs.get(fence) : undefined;
-      if (error && !retainedInput) {
-        const store = await this.#mastra?.getStorage()?.getStore('workflows');
-        const row = await store?.getWorkflowRunById({ workflowName: DurableStepIds.AGENTIC_LOOP, runId });
-        const snapshot = typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
-        retainedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-      }
-      if (error && retainedInput?.options.retainOutcome) {
-        try {
-          await commitDurableRunOutcome(this.#mastra, getRunRegistryEntry(runId, this.#mastra)?.requestContext, {
-            version: 1,
-            runId,
-            agentId: retainedInput.agentId,
-            resourceId: retainedInput.state?.resourceId ?? retainedInput.messageListState?.memoryInfo?.resourceId,
-            status: 'failed',
-            error: { name: error.name, message: error.message },
-            completedAt: new Date().toISOString(),
-          });
-        } catch (persistError) {
-          this.logger.error(`Failed to retain terminal outcome for run ${runId}`, { error: persistError });
-          await reportError(error);
-          return;
-        }
-      }
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
       // Final runs no longer need abort listeners; suspended runs keep theirs for resume.
@@ -14099,10 +14072,6 @@ export class Agent<
   ): Promise<DurableAgentStreamResult<TOutput>> {
     if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('recover');
     const workflowsStore = await this.executionEngine.recoveryStore(runId, this.name, this.guardrailLogger);
-    // The outcome is authoritative if a worker crashed after committing it but before removing its restartable snapshot.
-    if ((await readDurableRunOutcome(this.#mastra, runId))?.agentId === this.id) {
-      await this.deleteRunSnapshots(runId);
-    }
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
@@ -14655,10 +14624,6 @@ export class Agent<
       runId,
       resourceId,
       pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
-      ...(workflowInput.options.retainOutcome && {
-        shouldPersistSnapshot: ({ workflowStatus }) =>
-          ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
-      }),
     });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     let result;
@@ -14744,10 +14709,6 @@ export class Agent<
         runId,
         resourceId,
         ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
-        ...(workflowInput.options.retainOutcome && {
-          shouldPersistSnapshot: ({ workflowStatus }) =>
-            ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
-        }),
       });
       // Track completion so an immediate resume waits for suspension persistence.
       await this.executionEngine
@@ -14874,23 +14835,6 @@ export class Agent<
     }
   }
 
-  /** @internal Start an acknowledged generate-mode run without consuming its stream. */
-  async __startDurableGenerateRun(
-    messages: MessageListInput,
-    options: AgentExecutionOptionsBase<any> & { structuredOutput?: PublicStructuredOutputOptions<any> },
-  ): Promise<DurableAgentStreamResult<TOutput>> {
-    this.#extractClientObservability(messages);
-    this.#beginExecutionPolicy();
-    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('startDurableGenerateRun');
-    return this.#streamDurable(messages, {
-      ...options,
-      modelCallMode: 'generate',
-      __methodType: 'generate',
-      retainOutcome: true,
-      closeOnSuspend: true,
-    } as DurableAgentStreamOptions<TOutput>);
-  }
-
   async #streamDurable(
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
@@ -14926,7 +14870,7 @@ export class Agent<
       );
     }
 
-    return this.#startDurableRun(messages, options, options?.__methodType ?? 'stream');
+    return this.#startDurableRun(messages, options, 'stream');
   }
 
   async #startDurableRun(
@@ -15015,8 +14959,6 @@ export class Agent<
           : undefined,
         mastra: this.#mastra,
         methodType,
-        modelCallMode: options.modelCallMode,
-        retainOutcome: options.retainOutcome,
         durableAgentId: this.id,
         durableAgentName: this.name,
       });
@@ -15239,7 +15181,14 @@ export class Agent<
     // background. Tearing down the reader first would drop it, leaving the
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
-      if (methodType === 'generate' || runCleanup.done || output.status !== 'running') return performCleanup();
+      // Generate's caller only gets the result, never this handle, so its run
+      // stays observable until the auto-cleanup timer, like a stream's. Release
+      // now only when no timer will (`cleanupTimeoutMs: 0`, unverified reader).
+      if (methodType === 'generate') {
+        if (!runCleanup.scheduled) performCleanup();
+        return;
+      }
+      if (runCleanup.done || output.status !== 'running') return performCleanup();
       void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub.flush())
         .then(() => waitForEventDelivery())
@@ -15307,7 +15256,7 @@ export class Agent<
       return fullOutput;
     } finally {
       // Keep the registry entry alive on suspend so `resumeGenerate()` can
-      // pick it up. Auto-cleanup is scheduled by FINISH/ERROR/ABORT paths.
+      // pick it up. Otherwise the FINISH/ERROR/ABORT paths armed auto-cleanup.
       if (!suspended) {
         cleanup();
       }

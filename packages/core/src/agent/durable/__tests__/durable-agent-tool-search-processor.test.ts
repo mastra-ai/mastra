@@ -253,15 +253,47 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
       warnings: [],
     });
 
+    const next = (
+      tools: unknown[] | undefined,
+    ): { toolName: string; args: Record<string, unknown> } | { text: string } => {
+      const visible = (tools ?? []).map((t: any) => t.name);
+      visibleToolsByStep.push(visible);
+      step++;
+      if (step === 1) return { toolName: 'search_tools', args: { query: 'echo a message' } };
+      if (step === 2 && visible.includes('echo')) return { toolName: 'echo', args: { message: 'hello' } };
+      return { text: step === 2 ? 'echo was unavailable' : 'done' };
+    };
+
     return new MockLanguageModelV2({
+      doGenerate: async options => {
+        const reply = next(options.tools);
+        const response = { id: `resp-${step}`, modelId: 'mock', timestamp: new Date(0) };
+        return 'text' in reply
+          ? {
+              content: [{ type: 'text', text: reply.text }],
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              response,
+              warnings: [],
+            }
+          : {
+              content: [
+                {
+                  type: 'tool-call',
+                  toolCallId: `tc-${step}`,
+                  toolName: reply.toolName,
+                  input: JSON.stringify(reply.args),
+                },
+              ],
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              response,
+              warnings: [],
+            };
+      },
       doStream: async options => {
-        const visible = (options.tools ?? []).map((t: any) => t.name);
-        visibleToolsByStep.push(visible);
-        step++;
-        if (step === 1) return callTool('search_tools', { query: 'echo a message' });
-        if (step === 2 && visible.includes('echo')) return callTool('echo', { message: 'hello' });
-        if (step === 2) return finishWithText('echo was unavailable');
-        return finishWithText('done');
+        const reply = next(options.tools);
+        return 'text' in reply ? finishWithText(reply.text) : callTool(reply.toolName, reply.args);
       },
     });
   }
@@ -325,14 +357,11 @@ describe('DurableAgent ToolSearchProcessor keeps resolved catalog across steps (
     let echoCalls = 0;
     const agent = makeResolvedCatalogAgent('regular-resolved-catalog', visibleToolsByStep, () => echoCalls++);
 
-    // The regular Agent's generate() calls doGenerate, which the mock does not
-    // implement; stream() exercises the same agentic loop via doStream.
-    const result = await agent.stream('Use the echo tool to say hello.', { maxSteps: 3 });
-    const text = await result.text;
+    const result = await agent.generate('Use the echo tool to say hello.', { maxSteps: 3 });
 
     expect(visibleToolsByStep[0]).toEqual(['search_tools']);
     expect(visibleToolsByStep[1]).toContain('echo');
     expect(echoCalls).toBe(1);
-    expect(text).toBe('done');
+    expect(result.text).toBe('done');
   });
 });

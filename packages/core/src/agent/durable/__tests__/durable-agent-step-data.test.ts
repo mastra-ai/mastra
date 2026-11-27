@@ -36,25 +36,32 @@ function expectStepData(steps: any[], modelId: string) {
 
 function toolThenTextModel(modelId: string) {
   let calls = 0;
+  const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+  const toolCall = {
+    type: 'tool-call',
+    toolCallId: 'call-1',
+    toolName: 'probe',
+    input: '{"q":1}',
+    providerExecuted: false,
+  } as const;
   const model = new MockLanguageModelV2({
     modelId,
+    doGenerate: async () => {
+      calls++;
+      return calls === 1
+        ? { content: [toolCall], finishReason: 'tool-calls', usage, warnings: [] }
+        : { content: [{ type: 'text', text: 'done' }], finishReason: 'stop', usage, warnings: [] };
+    },
     doStream: async () => {
       calls++;
       const parts =
         calls === 1
-          ? [
-              { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{"q":1}', providerExecuted: false },
-              {
-                type: 'finish',
-                finishReason: 'tool-calls',
-                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-              },
-            ]
+          ? [toolCall, { type: 'finish', finishReason: 'tool-calls', usage }]
           : [
               { type: 'text-start', id: 't' },
               { type: 'text-delta', id: 't', delta: 'done' },
               { type: 'text-end', id: 't' },
-              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              { type: 'finish', finishReason: 'stop', usage },
             ];
       return {
         stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any),

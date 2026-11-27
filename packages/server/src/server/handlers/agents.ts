@@ -7,12 +7,7 @@ import type {
   SendAgentSignalOptions,
   SendAgentSignalResult,
 } from '@mastra/core/agent';
-import {
-  AGENT_STREAM_TOPIC,
-  DurableStepIds,
-  readDurableRunOutcome,
-  pruneDurableRunOutcomes,
-} from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import { matchesPermission } from '@mastra/core/auth/ee';
 import type { VersionOverrides } from '@mastra/core/di';
@@ -50,10 +45,6 @@ import { MastraFGAPermissions } from '../fga-permissions';
 
 import { HTTPException } from '../http-exception';
 import {
-  durableAgentRunPathParams,
-  durableAgentStartBodySchema,
-  durableAgentStartResponseSchema,
-  durableAgentRunResponseSchema,
   agentIdPathParams,
   agentRunPathParams,
   agentSkillPathParams,
@@ -1802,157 +1793,6 @@ export const CLONE_AGENT_ROUTE = createRoute({
   },
 });
 
-export const START_DURABLE_AGENT_RUN_ROUTE = createRoute({
-  method: 'POST',
-  path: '/agents/:agentId/runs',
-  responseType: 'json',
-  pathParamSchema: agentIdPathParams,
-  bodySchema: durableAgentStartBodySchema,
-  responseSchema: durableAgentStartResponseSchema,
-  summary: 'Start a reconnectable durable agent run',
-  tags: ['Agents'],
-  requiresAuth: true,
-  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
-  handler: async ({ mastra, agentId, requestContext: serverRequestContext, ...params }) => {
-    try {
-      sanitizeBody(params, ['tools', 'actor', 'scopes']);
-      stripClientCredentialHeaders(params);
-      const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
-      validateBody({ messages });
-      stripClientAuthoredTurnMarks(messages);
-      stripClientAuthoredTurnMarks(rest.context);
-      const versionOptions = extractVersionOptions(
-        serverRequestContext,
-        bodyRequestContext as Record<string, unknown> | undefined,
-      );
-      const agent = await getAgentFromSystem({ mastra, agentId, versionOptions, requestContext: serverRequestContext });
-      if (!hasDurableExecution(agent)) {
-        throw new HTTPException(400, { message: 'This endpoint requires an engine-backed durable agent' });
-      }
-      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      stashVersionOverrides(serverRequestContext, versions);
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
-
-      let authorizedMemoryOption = memoryOption;
-      if (memoryOption) {
-        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
-        const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
-        requireEffectiveResourceId(effectiveResourceId);
-        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
-        if (effectiveThreadId) {
-          const memoryInstance = await agent.getMemory({ requestContext: serverRequestContext });
-          const thread = await memoryInstance?.getThreadById({ threadId: effectiveThreadId });
-          if (thread) {
-            await enforceThreadAccess({
-              mastra,
-              requestContext: serverRequestContext,
-              threadId: effectiveThreadId,
-              thread,
-              effectiveResourceId,
-              permission: MastraFGAPermissions.MEMORY_WRITE,
-            });
-          }
-        }
-        authorizedMemoryOption = {
-          ...memoryOption,
-          resource: effectiveResourceId ?? memoryOption.resource,
-          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
-        };
-      }
-
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      if (!workflowsStore) throw new HTTPException(503, { message: 'Durable runs require workflow storage' });
-      void pruneDurableRunOutcomes(mastra).catch((error: unknown) =>
-        mastra.getLogger()?.warn?.('Failed to prune expired durable run outcomes', { error }),
-      );
-      // Acknowledged runs outlive the request; neither its abort signal nor its runId belongs to the client.
-      const { structuredOutput, runId: _clientRunId, abortSignal: _requestAbortSignal, ...restOptions } = rest;
-      const authenticatedResourceId = getEffectiveResourceId(serverRequestContext, undefined);
-      const runOptions = {
-        ...restOptions,
-        context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
-        requestContext: serverRequestContext,
-        memory:
-          authorizedMemoryOption ??
-          (authenticatedResourceId ? { resource: authenticatedResourceId, thread: crypto.randomUUID() } : undefined),
-      };
-      const started = structuredOutput
-        ? await agent.__startDurableGenerateRun(messages, { ...runOptions, structuredOutput })
-        : await agent.__startDurableGenerateRun(messages, runOptions);
-      void started.output
-        .getFullOutput()
-        .then(output => {
-          if (output.finishReason !== 'suspended') started.cleanup();
-        })
-        .catch((error: unknown) => {
-          started.cleanup();
-          mastra.getLogger()?.warn?.('Detached durable run output failed', { runId: started.runId, error });
-        });
-
-      // Acknowledge only after a recoverable checkpoint or a terminal outcome has been stored.
-      const deadline = Date.now() + DURABLE_SNAPSHOT_WAIT_TIMEOUT_MS;
-      while (Date.now() < deadline) {
-        const row = await workflowsStore.getWorkflowRunById({
-          workflowName: getDurableLoopWorkflowName(agent),
-          runId: started.runId,
-        });
-        const snapshot = typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
-        const nestedActive = snapshot?.activeStepsPath?.[DurableStepIds.AGENTIC_EXECUTION];
-        const nested = nestedActive
-          ? await workflowsStore.getWorkflowRunById({
-              workflowName: DurableStepIds.AGENTIC_EXECUTION,
-              runId: started.runId,
-            })
-          : undefined;
-        if (
-          (snapshot?.status === 'running' && (!nestedActive || nested)) ||
-          snapshot?.status === 'suspended' ||
-          (await readDurableRunOutcome(mastra, started.runId))
-        ) {
-          return { runId: started.runId, status: 'running' as const };
-        }
-        await new Promise(resolve => setTimeout(resolve, DURABLE_SNAPSHOT_WAIT_INTERVAL_MS));
-      }
-      throw new HTTPException(503, { message: 'Durable run did not reach a recoverable checkpoint' });
-    } catch (error) {
-      return handleError(error, 'Error starting durable agent run');
-    }
-  },
-});
-
-export const GET_DURABLE_AGENT_RUN_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agents/:agentId/runs/:runId',
-  responseType: 'json',
-  pathParamSchema: durableAgentRunPathParams,
-  responseSchema: durableAgentRunResponseSchema,
-  summary: 'Get the status or outcome of a durable agent run',
-  tags: ['Agents'],
-  requiresAuth: true,
-  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
-  handler: async ({ mastra, agentId, runId, requestContext }) => {
-    try {
-      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
-      if (!hasDurableExecution(agent)) throw new HTTPException(404, { message: 'Run not found' });
-      const outcome = await readDurableRunOutcome(mastra, runId);
-      if (outcome && outcome.agentId === agent.id) {
-        await validateRunOwnership(outcome, getContextResourceId(requestContext), mastra, requestContext);
-        return { runId, status: outcome.status, outcome };
-      }
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      const row = await workflowsStore?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
-      const snapshot = typeof row?.snapshot === 'string' ? JSON.parse(row.snapshot) : row?.snapshot;
-      if (!snapshot || snapshot.context?.input?.agentId !== agent.id) {
-        throw new HTTPException(404, { message: 'Run not found' });
-      }
-      await validateRunOwnership(row, getContextResourceId(requestContext), mastra, requestContext);
-      return { runId, status: snapshot.status };
-    } catch (error) {
-      return handleError(error, 'Error reading durable agent run');
-    }
-  },
-});
-
 export const GENERATE_AGENT_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/generate',
@@ -2007,14 +1847,14 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       // Propagate draft/published default to sub-agents
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
+      const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
-        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
-
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
         requireEffectiveResourceId(effectiveResourceId);
-        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId) {
@@ -2050,7 +1890,10 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A durable run on a thread outlives a dropped request: the caller finds it
+        // again through the thread and reads the full result with observe(runId).
+        // Without a thread the caller has no way back, so disconnecting still cancels.
+        abortSignal: effectiveThreadId && hasDurableExecution(agent) ? undefined : abortSignal,
       };
 
       const result = structuredOutput
@@ -2691,7 +2534,8 @@ async function handleAgentMessageRoute({
   invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);

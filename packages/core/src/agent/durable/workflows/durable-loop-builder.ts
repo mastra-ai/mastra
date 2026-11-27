@@ -46,7 +46,6 @@ import {
   withExecutionFence,
 } from '../execution-fence';
 import { withExecutionStreamProducer } from '../execution-stream-publisher';
-import { commitDurableRunOutcome } from '../run-outcome';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { liveSegmentSpan, segmentSpanData } from '../segment-spans';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
@@ -1274,33 +1273,6 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             // The state carries the facts across workers; the registry is the fallback for
             // runs whose snapshots predate those fields.
             const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
-
-            if (initData.options?.retainOutcome) {
-              const reason = finalOutput.stepResult.reason;
-              await commitDurableRunOutcome(mastra as Mastra | undefined, requestContext, {
-                version: 1,
-                runId: state.runId,
-                agentId: initData.agentId,
-                resourceId: state.state?.resourceId ?? initData.messageListState?.memoryInfo?.resourceId,
-                status:
-                  reason === 'tripwire'
-                    ? 'tripwire'
-                    : reason === 'abort'
-                      ? 'canceled'
-                      : reason === 'error'
-                        ? 'failed'
-                        : 'success',
-                result: {
-                  text: finalOutput.output.text,
-                  usage: finalOutput.output.usage,
-                  steps,
-                  finishReason: reason,
-                  ...(finishResult.object !== undefined && { object: finishResult.object }),
-                  ...(tripwire && { tripwire }),
-                },
-                completedAt: new Date().toISOString(),
-              });
-            }
 
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {

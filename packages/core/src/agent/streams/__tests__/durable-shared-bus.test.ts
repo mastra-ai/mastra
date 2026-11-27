@@ -15,12 +15,15 @@ import type { PubSub } from '../../../events/pubsub';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { DurableAgent } from '../../durable';
 import { createDurableAgent } from '../../durable/create-durable-agent';
 import { createEventedAgent } from '../../durable/create-evented-agent';
+import { __resetExecutionFencesForTests } from '../../durable/execution-fence';
+import { globalRunRegistry } from '../../durable/run-registry';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 
 describe('DurableAgent default engine on the shared Mastra bus', () => {
@@ -145,6 +148,123 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
           ([topic, event]) => topic === AGENT_STREAM_TOPIC(run.runId) && event.type === AgentStreamEventTypes.FINISH,
         ),
       ).toBe(true);
+    },
+  );
+
+  // Technical: durable generate() used to clear its run log on return, so a
+  // client whose /generate request dropped could not read the answer from
+  // another server instance.
+  it('reads a finished generate() answer from another instance by run ID', { timeout: 15_000 }, async () => {
+    const { a, b, release } = setup();
+    release();
+
+    const result = await a.generate('Look it up then answer.', { maxSteps: 3 });
+    expect(result.text).toBe('The answer is FOUND.');
+
+    const observed = await b.observe(result.runId!);
+    try {
+      const replayed = await observed.output.getFullOutput();
+      expect(replayed.text).toBe(result.text);
+      expect(replayed.finishReason).toBe('stop');
+      expect(replayed.usage).toEqual(result.usage);
+      expect(replayed.toolResults.map(r => r.payload.result)).toEqual([{ value: 'FOUND' }]);
+    } finally {
+      observed.detach();
+    }
+  });
+
+  // Workers share storage, a replay cache and a PubSub transport. Worker A dies
+  // inside a tool, so its generate() caller never gets an answer. Worker B
+  // recovers the run. The caller, reconnecting to a third worker, finds the run
+  // through its thread and reads the full answer by run ID.
+  it(
+    'serves a generate() run that another worker recovered to a caller reconnecting through its thread',
+    { timeout: 20_000 },
+    async () => {
+      getMock().on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_1', name: 'lookup', arguments: { q: 'x' } }] },
+      );
+      getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'The answer is FOUND.' });
+
+      const storage = new InMemoryStore();
+      const pubsub = new EventEmitterPubSub();
+      const cache = new InMemoryServerCache();
+      const worker = (lookup: () => Promise<{ value: string }>) => {
+        const agent = createDurableAgent({
+          agent: new Agent({
+            id: 'durable-shared',
+            name: 'durable-shared',
+            instructions: 'Use the tool.',
+            model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+            memory: new MockMemory({ storage }),
+            tools: {
+              lookup: createTool({
+                id: 'lookup',
+                description: 'Look something up',
+                inputSchema: z.object({ q: z.string() }),
+                outputSchema: z.object({ value: z.string() }),
+                execute: lookup,
+              }),
+            },
+          }),
+        });
+        const mastra = new Mastra({
+          agents: { agent },
+          storage,
+          pubsub,
+          cache,
+          logger: false,
+          recovery: { durableAgents: 'auto' },
+        });
+        return mastra.getAgent('agent') as unknown as DurableAgent;
+      };
+      let aEnteredTool!: () => void;
+      const aInTool = new Promise<void>(resolve => (aEnteredTool = resolve));
+      const a = worker(() => {
+        aEnteredTool();
+        return new Promise(() => {});
+      });
+      const b = worker(async () => ({ value: 'FOUND' }));
+      const c = worker(async () => ({ value: 'FOUND' }));
+      const threadId = 'recovered-thread';
+      const resourceId = 'recovered-resource';
+
+      void a.generate('Look it up then answer.', { maxSteps: 3, memory: { thread: threadId, resource: resourceId } });
+      await aInTool;
+      const { runs } = await b.listActiveRuns({ threadId });
+      expect(runs).toHaveLength(1);
+      const runId = runs[0]!.runId;
+
+      // Worker A's process is gone: nothing of its run is left in memory.
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+
+      const subscription = await c.subscribeToThread({ threadId, resourceId, withRunStatus: true });
+      const recovered = await b.recover(runId, { force: true });
+      try {
+        const status = await (async () => {
+          for await (const chunk of subscription.stream) {
+            if (chunk.type === 'thread-run-status' && chunk.runId === runId) return chunk.payload.status;
+          }
+        })();
+        expect(status).toBe('success');
+
+        const observed = await c.observe(runId);
+        try {
+          const replayed = await observed.output.getFullOutput();
+          const answer = await recovered.output.getFullOutput();
+          expect(replayed.text).toBe('The answer is FOUND.');
+          expect(replayed.finishReason).toBe('stop');
+          expect(replayed.usage).toEqual(answer.usage);
+          expect(replayed.toolResults.map(r => r.payload.result)).toEqual([{ value: 'FOUND' }]);
+        } finally {
+          observed.detach();
+        }
+      } finally {
+        subscription.unsubscribe();
+        recovered.cleanup();
+      }
     },
   );
 

@@ -210,9 +210,6 @@ export interface PreparationOptions<OUTPUT = undefined> {
   mastra?: Mastra;
   /** Method type */
   methodType?: AgentMethodType;
-  /** Provider method, independent of the public API method used for tool conversion. */
-  modelCallMode?: 'generate' | 'stream';
-  retainOutcome?: boolean;
   /**
    * The public-facing agent ID (the DurableAgent wrapper's ID).
    * Used for spans, background tasks, scorers, and all identification visible to Studio.
@@ -258,8 +255,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger,
     mastra,
     methodType = 'stream',
-    modelCallMode,
-    retainOutcome,
     durableAgentId,
     durableAgentName,
   } = options;
@@ -888,8 +883,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     modelList: modelList ?? undefined,
     scorers,
     options: {
-      modelCallMode: modelCallMode ?? (methodType === 'generate' ? 'generate' : 'stream'),
-      retainOutcome,
+      modelCallMode: methodType === 'generate' ? 'generate' : 'stream',
       clientTools: serializeClientTools(execOptions?.clientTools, tools),
       toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,

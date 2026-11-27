@@ -8,6 +8,8 @@ type CleanupTimer = ReturnType<typeof setTimeout>;
 export interface RunCleanup {
   /** Whether the segment's state has been released. */
   readonly done: boolean;
+  /** Whether the auto-cleanup timer is armed. */
+  readonly scheduled: boolean;
   /** Cancel a pending timer and release now, unless already released. */
   run(): void;
   /** Arm the auto-cleanup timer, unless one is armed or already released. */
@@ -48,6 +50,9 @@ export function createRunCleanup({ scheduleTimer, release, releaseOnTimer }: Cre
   return {
     get done() {
       return done;
+    },
+    get scheduled() {
+      return timer !== null;
     },
     run,
     schedule() {
