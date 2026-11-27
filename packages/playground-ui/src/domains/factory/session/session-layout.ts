@@ -7,6 +7,9 @@ export const headerCapsuleClass = cn(
   'pointer-events-auto flex w-fit min-w-0 items-center gap-0.5 rounded-full p-0.5 empty:hidden',
 );
 
+/** One section of a card's overview in the session panel. */
+export const overviewSectionClass = 'flex flex-col gap-3 p-1.5 pb-3';
+
 /** `elapsedLabel` reads under a minute as `<1m`, then minutes, hours and days. */
 export function elapsedLabel(from: number, to: number): string {
   const ms = to - from;
