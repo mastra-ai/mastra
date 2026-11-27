@@ -677,6 +677,13 @@ export const cloneThreadBodySchema = z.object({
         })
         .optional(),
     })
+    .refine(
+      options => !options.fullThread || (options.messageFilter === undefined && options.messageLimit === undefined),
+      {
+        message: 'fullThread copies every message and cannot be combined with messageFilter or messageLimit',
+        path: ['fullThread'],
+      },
+    )
     .optional(),
 });
 

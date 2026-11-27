@@ -381,15 +381,18 @@ describe('AgentController cloneThread', () => {
       });
       await memoryStore.saveMessages({ messages: [message('m1', 'src', 'controller-resource')] });
       const copy = vi.spyOn(memoryStore, 'cloneThread');
+      const threadIds = async () =>
+        (await memoryStore.listThreads({ filter: { resourceId: 'controller-resource' } })).threads
+          .map(t => t.id)
+          .sort();
+      const before = await threadIds();
 
       await expect(
         session.thread.clone({ sourceThreadId: 'src', options: { fullThread: true, ...selection } }),
       ).rejects.toThrow(/fullThread/);
 
       expect(copy).not.toHaveBeenCalled();
-      expect((await memoryStore.listThreads({ filter: { resourceId: 'controller-resource' } })).threads).toHaveLength(
-        1,
-      );
+      expect(await threadIds()).toEqual(before);
     });
 
     it('cloneToCurrentResource refuses fullThread with a filter before anything is copied', async () => {

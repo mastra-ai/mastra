@@ -1333,6 +1333,10 @@ export class AgentController<TState = {}> {
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
+    const { fullThread, ...storageOptions } = options ?? {};
+    if (fullThread && (storageOptions.messageFilter !== undefined || storageOptions.messageLimit !== undefined)) {
+      throw new Error('fullThread copies every message and cannot be combined with messageFilter or messageLimit');
+    }
     const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
     const memory = callerMemory ? callerMemory : storage ? await storage.getStore('memory') : undefined;
     if (!memory) {
@@ -1341,12 +1345,14 @@ export class AgentController<TState = {}> {
       );
     }
 
+    // Memory reads fullThread itself; raw storage copies every message by default and never sees it.
+    const cloneOptions = callerMemory ? options : options && storageOptions;
     const result = await memory.cloneThread({
       sourceThreadId,
       resourceId,
       title,
       metadata,
-      ...(options ? { options } : {}),
+      ...(cloneOptions ? { options: cloneOptions } : {}),
     });
     const cloned: AgentControllerThread = {
       id: result.thread.id,
