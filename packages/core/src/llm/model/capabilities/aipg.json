@@ -3,13 +3,13 @@
   "temperature": ["gpt-oss-120b", "qwen38-flash-next-nvfp4"],
   "structuredOutput": ["gpt-oss-120b", "qwen38-flash-next-nvfp4"],
   "reasoning": {
-    "qwen38-flash-next-nvfp4": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium"]
       }
     ],
-    "gpt-oss-120b": [
+    "qwen38-flash-next-nvfp4": [
       {
         "type": "effort",
         "values": ["low", "medium"]
