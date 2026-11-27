@@ -24,12 +24,6 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "qwen3.8-27b": [
       {
         "type": "effort",
@@ -56,6 +50,12 @@
     "gemma-4-31b-it": [
       {
         "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
