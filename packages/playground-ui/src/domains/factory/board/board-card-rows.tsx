@@ -7,7 +7,7 @@ export interface BoardCardRowsProps {
   /** The top-right group: the card's menu. */
   controls?: ReactNode;
   /** The meta line's parts, first and last kept whole when it truncates. */
-  meta: ReactNode[];
+  meta: readonly ReactNode[];
   /** Links to related cards, after the meta line. */
   related?: ReactNode;
   icon?: ReactNode;
@@ -15,7 +15,7 @@ export interface BoardCardRowsProps {
   /** Upstream links, source state and labels. */
   details?: ReactNode;
   /** The other stages the card sits in. */
-  otherStages?: string[];
+  otherStages?: readonly string[];
   /** Status, session and review badges; left out when absent. */
   status?: ReactNode;
   /** The bottom row: actions and activity. */
