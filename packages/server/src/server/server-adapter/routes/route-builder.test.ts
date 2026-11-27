@@ -84,17 +84,11 @@ describe('jsonQueryParam', () => {
       }
     });
 
-    it('should fail on wrong type in JSON', () => {
-      const result = tagsSchema.safeParse('{"not": "an array"}');
-
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.length).toBeGreaterThan(0);
-      }
-    });
-
-    it('should fail on array with wrong element types', () => {
-      const result = tagsSchema.safeParse('[1, 2, 3]');
+    it.each([
+      ['should fail on wrong type in JSON', '{"not": "an array"}'],
+      ['should fail on array with wrong element types', '[1, 2, 3]'],
+    ] as const)('%s', (_title, input) => {
+      const result = tagsSchema.safeParse(input);
 
       expect(result.success).toBe(false);
       if (!result.success) {

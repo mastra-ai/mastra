@@ -1306,27 +1306,30 @@ export default action;
     ).rejects.toThrow("Local ID 'local' already exists without a generator manifest");
   });
 
-  it('rejects local ID collisions between different template providers', async () => {
-    await addProvider({ providerId: 'first-provider', localId: 'shared', yes: true, expectedTemplateSha: templateSha });
-
-    await expect(
-      addProvider({ providerId: 'second-provider', localId: 'shared', yes: true, expectedTemplateSha: templateSha }),
-    ).rejects.toThrow("Local ID 'shared' is already assigned to template provider 'first-provider'");
-  });
-
-  it('rejects aliases that normalize to an installed provider connection env var', async () => {
-    await addProvider({
-      providerId: 'first-provider',
-      localId: 'foo-bar',
-      yes: true,
-      expectedTemplateSha: templateSha,
-    });
-
-    await expect(
-      addProvider({ providerId: 'second-provider', localId: 'foo_bar', yes: true, expectedTemplateSha: templateSha }),
-    ).rejects.toThrow(
+  it.each([
+    [
+      'rejects local ID collisions between different template providers',
+      'shared',
+      'shared',
+      "Local ID 'shared' is already assigned to template provider 'first-provider'",
+    ],
+    [
+      'rejects aliases that normalize to an installed provider connection env var',
+      'foo-bar',
+      'foo_bar',
       "Local ID 'foo_bar' conflicts with installed provider 'foo-bar' via MASTRA_FOO_BAR_CONNECTION_ID",
-    );
+    ],
+  ] as const)('%s', async (_title, localId, localIdValue, expected) => {
+    await addProvider({ providerId: 'first-provider', localId, yes: true, expectedTemplateSha: templateSha });
+
+    await expect(
+      addProvider({
+        providerId: 'second-provider',
+        localId: localIdValue,
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow(expected);
   });
 
   it('refuses to overwrite an unmanaged provider directory', async () => {

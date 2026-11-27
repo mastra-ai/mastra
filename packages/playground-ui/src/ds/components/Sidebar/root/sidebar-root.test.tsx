@@ -216,12 +216,16 @@ describe('Sidebar resize handle keyboard', () => {
     expect(widthOf(scope)).toBe('280px');
   });
 
-  it('widens the sidebar a step at a time', () => {
+  it.each([
+    ['widens the sidebar a step at a time', 'ArrowRight', '310px'],
+    ['jumps to the narrowest width', 'Home', '200px'],
+    ['jumps to the widest width', 'End', '480px'],
+  ] as const)('%s', (_title, key, expected) => {
     const { scope, separator } = renderSidebar();
 
-    fireEvent.keyDown(separator, { key: 'ArrowRight' });
+    fireEvent.keyDown(separator, { key });
 
-    expect(widthOf(scope)).toBe('310px');
+    expect(widthOf(scope)).toBe(expected);
   });
 
   it('has nothing to narrow while collapsed', () => {
@@ -241,22 +245,6 @@ describe('Sidebar resize handle keyboard', () => {
 
     expect(scope.getAttribute('data-sidebar-state')).toBe('default');
     expect(widthOf(scope)).toBe('300px');
-  });
-
-  it('jumps to the narrowest width', () => {
-    const { scope, separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'Home' });
-
-    expect(widthOf(scope)).toBe('200px');
-  });
-
-  it('jumps to the widest width', () => {
-    const { scope, separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'End' });
-
-    expect(widthOf(scope)).toBe('480px');
   });
 
   it.each(['Home', 'End'])('opens a collapsed sidebar when jumping with %s', key => {
@@ -297,12 +285,15 @@ describe('Sidebar resize handle keyboard', () => {
     },
   );
 
-  it('remembers a width reached with the keyboard', () => {
+  it.each([
+    ['remembers a width reached with the keyboard', 'ArrowLeft', '290'],
+    ['remembers a width the right arrow reached', 'ArrowRight', '310'],
+  ] as const)('%s', (_title, key, expected) => {
     const { separator } = renderSidebar();
 
-    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    fireEvent.keyDown(separator, { key });
 
-    expect(window.localStorage.getItem('sidebar:width')).toBe('290');
+    expect(window.localStorage.getItem('sidebar:width')).toBe(expected);
   });
 
   it('remembers a sidebar opened with the keyboard, width and all', () => {
@@ -312,14 +303,6 @@ describe('Sidebar resize handle keyboard', () => {
 
     expect(window.localStorage.getItem('sidebar:state')).toBe('default');
     expect(window.localStorage.getItem('sidebar:width')).toBe('300');
-  });
-
-  it('remembers a width the right arrow reached', () => {
-    const { separator } = renderSidebar();
-
-    fireEvent.keyDown(separator, { key: 'ArrowRight' });
-
-    expect(window.localStorage.getItem('sidebar:width')).toBe('310');
   });
 
   it('says how wide it is, and what Enter would do', () => {
@@ -479,26 +462,18 @@ describe('Sidebar dragging the resize handle', () => {
     expect(widthOf(scope)).toBe('306px');
   });
 
-  it('is still a click when the pointer never really moved', () => {
+  it.each([
+    ['is still a click when the pointer never really moved', 303, 'collapsed'],
+    ['is not a click once it has been dragged', 350, 'default'],
+  ] as const)('%s', (_title, input, expected) => {
     const { scope, separator } = renderSidebar();
 
     press(separator, 300);
-    move(303);
+    move(input);
     release();
     fireEvent.click(separator);
 
-    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
-  });
-
-  it('is not a click once it has been dragged', () => {
-    const { scope, separator } = renderSidebar();
-
-    press(separator, 300);
-    move(350);
-    release();
-    fireEvent.click(separator);
-
-    expect(scope.getAttribute('data-sidebar-state')).toBe('default');
+    expect(scope.getAttribute('data-sidebar-state')).toBe(expected);
   });
 
   it('goes back to being a click after the drag it swallowed', () => {
