@@ -673,48 +673,64 @@ export function describeResumeOccurrenceCases({
     // Resuming the child run directly leaves the parent's nested step as the suspension stored it.
     // The child's hand-back then completes that step under its stored occurrence, so the record
     // must read as running again or the guard keeps the suspension and the parent never continues.
-    it('continues the parent after its nested child is resumed directly', async () => {
-      const innerAsk = createStep({
-        id: 'inner-ask',
-        inputSchema: Num,
-        outputSchema: Num,
-        resumeSchema: Approval,
-        execute: async ({ inputData, resumeData, suspend }) => (resumeData ? { n: inputData.n + 1 } : suspend({})),
-      });
-      const child = createWorkflow({ id: `direct-child-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
-        .then(innerAsk)
-        .commit();
-      const parent = createWorkflow({ id: `direct-parent-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
-        .then(child)
-        .then(
-          createStep({
-            id: 'outer-after',
-            inputSchema: Num,
-            outputSchema: Num,
-            execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
-          }),
-        )
-        .commit();
-      await withHost({ [child.id]: child, [parent.id]: parent }, async () => {
-        const run = await parent.createRun();
-        const suspended = await run.start({ inputData: { n: 0 } });
-        expect(suspended).toMatchObject({ status: 'suspended' });
-        const childRunId = (await storedSteps(parent.id, run.runId))?.[child.id]?.suspendPayload?.__workflow_meta
-          ?.runId as string;
-        expect(childRunId).toEqual(expect.any(String));
-        const childRun = await child.createRun({ runId: childRunId });
-        expect(await childRun.resume({ step: 'inner-ask', resumeData: { ok: true } })).toMatchObject({
-          status: 'success',
+    // A child that declines running snapshots writes no run of its own on resume; on storage v2 it
+    // always does.
+    it.each([
+      { name: 'stores running snapshots', declinesRunning: false },
+      { name: 'declines running snapshots', declinesRunning: true },
+    ])(
+      'continues the parent after its nested child is resumed directly when the child $name',
+      async ({ declinesRunning }) => {
+        const innerAsk = createStep({
+          id: 'inner-ask',
+          inputSchema: Num,
+          outputSchema: Num,
+          resumeSchema: Approval,
+          execute: async ({ inputData, resumeData, suspend }) => (resumeData ? { n: inputData.n + 1 } : suspend({})),
         });
-        await expect
-          .poll(async () => (await parent.getWorkflowRunById(run.runId))?.status, { timeout: 10_000 })
-          .toBe('success');
-        expect((await storedSteps(parent.id, run.runId))?.['outer-after']).toMatchObject({
-          status: 'success',
-          output: { n: 2 },
+        const child = createWorkflow({
+          id: `direct-child-${randomUUID()}`,
+          inputSchema: Num,
+          outputSchema: Num,
+          options: declinesRunning
+            ? { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' }
+            : {},
+        })
+          .then(innerAsk)
+          .commit();
+        const parent = createWorkflow({ id: `direct-parent-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+          .then(child)
+          .then(
+            createStep({
+              id: 'outer-after',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+            }),
+          )
+          .commit();
+        await withHost({ [child.id]: child, [parent.id]: parent }, async () => {
+          const run = await parent.createRun();
+          const suspended = await run.start({ inputData: { n: 0 } });
+          expect(suspended).toMatchObject({ status: 'suspended' });
+          const childRunId = (await storedSteps(parent.id, run.runId))?.[child.id]?.suspendPayload?.__workflow_meta
+            ?.runId as string;
+          expect(childRunId).toEqual(expect.any(String));
+          const childRun = await child.createRun({ runId: childRunId });
+          expect(await childRun.resume({ step: 'inner-ask', resumeData: { ok: true } })).toMatchObject({
+            status: 'success',
+          });
+          await expect
+            .poll(async () => (await parent.getWorkflowRunById(run.runId))?.status, { timeout: 10_000 })
+            .toBe('success');
+          expect((await storedSteps(parent.id, run.runId))?.['outer-after']).toMatchObject({
+            status: 'success',
+            output: { n: 2 },
+          });
         });
-      });
-    }, 20_000);
+      },
+      20_000,
+    );
 
     // T10. An evented agent resumed after a tool approval. With one step allowed the agent's loop
     // ends in the resumed iteration, so its finishing step still carries the resume. Delivered

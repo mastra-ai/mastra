@@ -1387,11 +1387,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             status: 'running',
             payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
-            // A child resumed directly leaves the parent's step suspended. Its hand-back completes
-            // the step under the stamp kept here, which the guard only accepts on a running record.
-            ...(guardsSteps && !parentIsForeach && resumeSteps?.length && existing?.status === 'suspended'
-              ? { status: 'running' }
-              : {}),
             // A child start does not own queued siblings from this potentially stale snapshot.
             ...(parentIsForeach && Array.isArray(existing?.output)
               ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
@@ -1402,6 +1397,24 @@ export class WorkflowEventProcessor extends EventProcessor {
               ...(parentIsForeach ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } } : {}),
             },
           },
+          requestContext: withoutAuthToken(requestContext),
+        });
+      }
+    }
+
+    // A child resumed directly leaves the parent's step suspended. Its hand-back completes the
+    // step under the stamp kept there, which the guard only accepts on a running record. This is a
+    // write to the parent's run, so it does not depend on whether this run stores its own.
+    if (!alreadyApplied && guardsSteps && parentWorkflow && resumeSteps?.length && !restart) {
+      const parentIsForeach =
+        this.#resolveLiveParentWorkflow(parentWorkflow)?.stepGraph[parentWorkflow.executionPath[0]!]?.type ===
+        'foreach';
+      const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
+      const existing = parentIsForeach ? undefined : (await parentStorage.loadStep(workflowId))?.context?.[workflowId];
+      if (existing?.status === 'suspended') {
+        await parentStorage.writeStepResult({
+          stepId: workflowId,
+          result: { ...existing, status: 'running' },
           requestContext: withoutAuthToken(requestContext),
         });
       }
