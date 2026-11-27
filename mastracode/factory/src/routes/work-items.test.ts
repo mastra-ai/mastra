@@ -29,6 +29,8 @@ let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: stri
 /** Every input the routes hand the board engine, in order. */
 let engineInputs: FactoryTransitionRequest[] = [];
 const deletedCards: string[] = [];
+/** When set, the board engine's cardDeleted is a plain function that throws synchronously. */
+let cardDeletedFailure: Error | undefined;
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -107,7 +109,11 @@ function buildApp(
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
       boardEngine: {
-        cardDeleted: async card => void deletedCards.push(card.workItemId),
+        // Cast: a plain (non-async) function, so a custom engine's synchronous throw is exercised.
+        cardDeleted: (card => {
+          if (cardDeletedFailure) throw cardDeletedFailure;
+          deletedCards.push(card.workItemId);
+        }) as NonNullable<WorkItemRoutesDeps['boardEngine']>['cardDeleted'],
         requestMove: input => {
           engineInputs.push(input);
           return new DispatcherBoardEngine({
@@ -179,6 +185,7 @@ beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   auditRecorded = [];
   auditFailure = undefined;
+  cardDeletedFailure = undefined;
   acceptedHook = [];
   committedHook = [];
   await seedProject();
@@ -1527,6 +1534,22 @@ describe('DELETE /web/factory/work-items/:id', () => {
     deletedCards.length = 0;
     expect((await json('DELETE', `/web/factory/work-items/00000000-0000-4000-8000-000000000099`)).status).toBe(404);
     expect(deletedCards).toEqual([]);
+  });
+
+  it('still deletes, audits, and succeeds when the engine cleanup throws synchronously', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    cardDeletedFailure = new Error('sync cleanup failure');
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    auditRecorded = [];
+
+    const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+    expect(await listItems()).toHaveLength(0);
+    expect(auditRecorded.map(e => e.action)).toEqual(['factory.work_item.deleted']);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 
