@@ -3196,7 +3196,12 @@ export class WorkflowEventProcessor extends EventProcessor {
             isResumeTarget && nestedRunId
               ? (await this.#runStorage(leafId, nestedRunId).loadHeader())?.suspendedPaths
               : undefined;
-          const base = suspended ? storedResult : omitPriorCompletionFields(storedResult ?? {});
+          // A live record (suspended, or running under a same-ID redelivery) keeps its resume
+          // artifacts; only a finished attempt's completion fields are dropped.
+          const base =
+            suspended || storedResult?.status === 'running'
+              ? storedResult
+              : omitPriorCompletionFields(storedResult ?? {});
           const claimed = {
             ...base,
             status: 'running' as const,

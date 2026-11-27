@@ -142,13 +142,14 @@ export function describeResumeOccurrenceCases({
      * gate -> after -> next. `gate` suspends until it is resumed (or time travelled into with
      * resume data). Each step can be held inside its body on its first execution after `arm()`.
      */
-    function linearWorkflow() {
+    function linearWorkflow(onExecute?: (id: 'gate' | 'after' | 'next', call: number, runId: string) => Promise<void>) {
       const calls = { gate: 0, after: 0, next: 0 };
       const held = { gate: deferred(), after: deferred(), next: deferred() };
       const entered = { gate: deferred(), after: deferred(), next: deferred() };
       const armed = { gate: false, after: false, next: false };
-      const hold = async (id: keyof typeof calls) => {
+      const hold = async (id: keyof typeof calls, runId: string) => {
         calls[id]++;
+        await onExecute?.(id, calls[id], runId);
         if (!armed[id]) return;
         armed[id] = false;
         entered[id].resolve();
@@ -159,9 +160,9 @@ export function describeResumeOccurrenceCases({
         inputSchema: Num,
         outputSchema: Num,
         resumeSchema: Approval,
-        execute: async ({ inputData, resumeData, suspend }) => {
-          if (!resumeData) return suspend({});
-          await hold('gate');
+        execute: async ({ inputData, resumeData, suspend, runId }) => {
+          if (!resumeData) return suspend({ reason: 'approval' });
+          await hold('gate', runId);
           return inputData;
         },
       });
@@ -169,8 +170,8 @@ export function describeResumeOccurrenceCases({
         id: 'after',
         inputSchema: Num,
         outputSchema: Num,
-        execute: async ({ inputData }) => {
-          await hold('after');
+        execute: async ({ inputData, runId }) => {
+          await hold('after', runId);
           return { n: inputData.n + 1 };
         },
       });
@@ -178,8 +179,8 @@ export function describeResumeOccurrenceCases({
         id: 'next',
         inputSchema: Num,
         outputSchema: Num,
-        execute: async ({ inputData }) => {
-          await hold('next');
+        execute: async ({ inputData, runId }) => {
+          await hold('next', runId);
           return { n: inputData.n + 1 };
         },
       });
@@ -259,7 +260,11 @@ export function describeResumeOccurrenceCases({
     // T2. The resumed step's own event delivered twice while it runs: without the guards both
     // copies continued the run, so the step after it ran twice.
     it('runs the step after a resume once when the resumed step is delivered twice', async () => {
-      const wf = linearWorkflow();
+      // What the duplicate's claim left stored, read inside its body.
+      let claimedByDuplicate: unknown;
+      const wf = linearWorkflow(async (id, call, runId) => {
+        if (id === 'gate' && call === 2) claimedByDuplicate = (await storedSteps(wf.workflow.id, runId))?.gate;
+      });
       await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
         try {
           const run = await wf.workflow.createRun();
@@ -271,6 +276,12 @@ export function describeResumeOccurrenceCases({
           const gateRun = stepRunsSince(driver, from, run.runId, '0')[0]!;
           await redeliverInBody(driver, gateRun);
           await wf.entered.after.promise;
+          // The duplicate claimed the running step again; the resume artifacts stay with it.
+          expect(claimedByDuplicate).toMatchObject({
+            status: 'running',
+            suspendPayload: { reason: 'approval' },
+            resumePayload: { ok: true },
+          });
           wf.held.gate.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [0]);
           wf.held.after.resolve();
