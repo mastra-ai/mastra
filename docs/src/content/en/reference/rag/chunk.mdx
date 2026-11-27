@@ -298,7 +298,7 @@ The options documented below are passed directly at the top level of the configu
 ]}
 />
 
-When using the HTML strategy, all general options are ignored. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
+When using the HTML strategy, general options are ignored except `maxSize`, which further splits each chunk by size and also applies `overlap`, `separatorPosition`, `addStartIndex`, and `stripWhitespace`. Use `headers` for header-based splitting or `sections` for section-based splitting. If used together, `sections` will be ignored.
 
 ### Markdown
 
@@ -327,7 +327,7 @@ When using the HTML strategy, all general options are ignored. Use `headers` for
 
 When using the `headers` option, the markdown strategy ignores all general options and content is split based on the markdown header structure. To use size-based chunking with markdown, omit the `headers` parameter.
 
-### Semantic Markdown
+### Semantic markdown
 
 <PropertiesTable
   content={[
@@ -407,7 +407,8 @@ When using the `headers` option, the markdown strategy ignores all general optio
   {
     name: 'maxSize',
     type: 'number',
-    description: 'Maximum size of each chunk',
+    description:
+      'Target maximum size of each JSON chunk. Must be at least 21. Long string values are split so chunks stay within this limit, and no content is discarded. A chunk can exceed the limit when a field path leaves no room for a single character, when `ensureAscii` escaping expands a value (the default), or when a long value is nested in an object.',
   },
   {
     name: 'minSize',

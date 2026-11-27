@@ -85,7 +85,7 @@ export const mcpOauthCancelScenario = {
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
-    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ needs auth \[http\]/i, terminal, 8_000);
 
     // Open the sub-menu and start authentication (Authenticate is the first action).
     terminal.write('\r');
@@ -95,7 +95,7 @@ export const mcpOauthCancelScenario = {
     // The authorize endpoint is held open, so the flow parks. The selector
     // surfaces the cancel affordance in the row state and auto-opens the
     // "Cancel authentication" sub-menu, pre-selected, so Enter backs out.
-    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ authenticating — Enter to cancel \[http\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
 
     // Hold long enough to span several 500ms selector poll cycles. The
@@ -103,7 +103,7 @@ export const mcpOauthCancelScenario = {
     // polled `connecting` flag, so it must survive status refreshes from the
     // manager without reverting the row to needs-auth or dropping the sub-menu.
     await new Promise(resolve => setTimeout(resolve, 1_600));
-    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ authenticating — Enter to cancel \[http\]/i, terminal, 8_000);
     await runtime.waitForScreenText(/Cancel authentication/i, terminal, 8_000);
 
     // Close the selector entirely (Esc closes the sub-menu, Esc closes the
@@ -116,7 +116,7 @@ export const mcpOauthCancelScenario = {
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
-    await runtime.waitForScreenText(/oauth_server \[http\] authenticating — Enter to cancel/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ authenticating — Enter to cancel \[http\]/i, terminal, 8_000);
 
     // Open the sub-menu on the still-authenticating server and cancel.
     terminal.write('\r');
@@ -128,7 +128,7 @@ export const mcpOauthCancelScenario = {
     await runtime.waitForScreenText(/Cancelled authentication for "oauth_server"/i, terminal, 8_000);
 
     // Cancelling aborts the pending flow and returns the server to needs-auth.
-    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 10_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ needs auth \[http\]/i, terminal, 10_000);
 
     // The "Failed to authenticate" toast decision is made when the auth promise
     // settles — which has already happened now that the row reads needs-auth

@@ -29,7 +29,15 @@ export async function getInputOptions(
     },
     analysisEntries = [entryFile],
     outputDir: outputDirOption,
-  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[]; outputDir?: string } = {},
+    configEntryFile,
+  }: {
+    sourcemap?: boolean;
+    bundlerOptions?: BundlerOptions;
+    analysisEntries?: string[];
+    outputDir?: string;
+    /** File holding `new Mastra({...})`, when `entryFile` is a generated wrapper that imports it */
+    configEntryFile?: string;
+  } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
@@ -47,6 +55,7 @@ export async function getInputOptions(
       isDev: true,
       bundlerOptions,
       env,
+      configEntryFile,
     },
     noopLogger,
   );
@@ -68,7 +77,14 @@ export async function getInputOptions(
     },
     platform,
     env,
-    { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
+    {
+      sourcemap,
+      isDev: true,
+      workspaceRoot,
+      projectRoot,
+      externalsPreset: bundlerOptions?.externals === true,
+      configEntryFile,
+    },
   );
 
   if (Array.isArray(inputOptions.plugins)) {

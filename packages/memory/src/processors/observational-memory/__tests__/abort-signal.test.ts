@@ -11,6 +11,8 @@ import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
+import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
@@ -369,6 +371,98 @@ describe('Cancellation of in-flight Observational Memory (#27792)', () => {
       await engine!.waitForBuffering(threadId, resourceId);
     }
   });
+});
+
+describe('Cancellation of an observation chained after another input-step processor (#29208)', () => {
+  // Observational Memory listed after a processor that runs its own input step (workspace
+  // instructions, skills, a user processor) is reached through the chain's passThrough.
+  it.each(['agent', 'durable'] as const)('cancels a sync observation in a %s run', async engine => {
+    const controller = new AbortController();
+    const observer = createLatchedModel('<observations>\n- Late observation\n</observations>', true);
+    const actor = createLatchedModel('Actor finished', false);
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          scope: 'thread',
+          observation: { model: observer.model, messageTokens: 1, bufferTokens: false, bufferOnIdle: false },
+          reflection: { model: observer.model, observationTokens: 100_000 },
+        },
+      },
+    });
+    const omEngine = await memory.omEngine;
+    const agent = new Agent({
+      id: `om-chained-${engine}`,
+      name: `om-chained-${engine}`,
+      instructions: 'Help the user.',
+      model: actor.model,
+      memory,
+      inputProcessors: [
+        { id: 'step-passthrough', processInputStep: async ({ messageList }) => messageList },
+        new ObservationalMemoryProcessor(omEngine!, memory),
+      ],
+    });
+    const runningAgent = engine === 'durable' ? createDurableAgent({ agent }) : agent;
+    const mastra = new Mastra({ agents: { agent: runningAgent }, storage: store, logger: false });
+    const run = runningAgent
+      .stream('Remember the accepted user request. '.repeat(20), {
+        abortSignal: controller.signal,
+        memory: { thread: `om-chained-${engine}`, resource: `om-chained-${engine}` },
+      })
+      .then(result => result.consumeStream())
+      .catch(() => undefined);
+    try {
+      const providerSignal = await observer.started;
+      controller.abort();
+      expect(providerSignal?.aborted).toBe(true);
+      expect(observer.cancelled).toBe(true);
+    } finally {
+      controller.abort();
+      observer.release();
+      actor.release();
+      await run;
+      await mastra.stopWorkers();
+    }
+  });
+});
+
+it("names the abort's reason when a sync observation is cancelled", async () => {
+  const observer = createLatchedModel('<observations>\n- Observed later\n</observations>');
+  const actor = createLatchedModel('Actor', false);
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: observer.model, messageTokens: 1, bufferTokens: false, bufferOnIdle: false },
+        reflection: { model: observer.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const threadId = 'lease-lost-sync-observation';
+  const controller = new AbortController();
+  const agent = new Agent({ id: threadId, name: threadId, instructions: 'Help.', model: actor.model, memory });
+  const result = await agent.stream('Remember the cancelled request. '.repeat(20), {
+    abortSignal: controller.signal,
+    memory: { thread: threadId, resource: 'lease-lost-resource' },
+  });
+  const consumed = result.consumeStream().catch(() => undefined);
+  try {
+    await observer.started;
+    controller.abort(new Error('Thread run run-1 lost its lease before publishing a terminal event'));
+    await consumed;
+    expect(result.tripwire?.reason).toBe(
+      'Agent execution was aborted: Thread run run-1 lost its lease before publishing a terminal event',
+    );
+  } finally {
+    controller.abort();
+    observer.release();
+    await consumed;
+  }
 });
 
 it("leaves a cancelled sync observation's messages for a later cycle (#27792)", async () => {

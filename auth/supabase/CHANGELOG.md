@@ -1,5 +1,63 @@
 # @mastra/auth-supabase
 
+## 1.2.2
+
+### Patch Changes
+
+- dependencies updates: ([#30531](https://github.com/mastra-ai/mastra/pull/30531))
+  - Updated dependency [`@supabase/supabase-js@^2.119.0` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.119.0) (from `^2.118.0`, in `dependencies`)
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.2.2-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#30531](https://github.com/mastra-ai/mastra/pull/30531))
+  - Updated dependency [`@supabase/supabase-js@^2.119.0` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.119.0) (from `^2.118.0`, in `dependencies`)
+
+## 1.2.2-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.2.1
+
+### Patch Changes
+
+- Fixed slow handling of Gateway base URLs and Supabase URLs that contain very long runs of `/`. The resulting URLs are unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
+## 1.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed slow handling of Gateway base URLs and Supabase URLs that contain very long runs of `/`. The resulting URLs are unchanged. ([#30577](https://github.com/mastra-ai/mastra/pull/30577))
+
+## 1.2.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
 ## 1.1.6
 
 ### Patch Changes

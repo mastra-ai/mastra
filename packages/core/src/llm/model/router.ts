@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI } from '@ai-sdk/openai-v7';
 import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
 import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
@@ -19,6 +19,7 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { gatewayServesObservationalMemory } from './gateways/mastra.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -299,6 +300,30 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Whether the Mastra gateway serves Observational Memory for this model's resolved credential.
+   *
+   * Gateway models do not all get memory from the gateway: only a Gateway project key routes
+   * through the memory-aware gateway, while organization keys (`msk-gateway-…`, `mskv2_…`) are
+   * served by a gateway without the memory API. Callers that would otherwise skip local memory
+   * processing for gateway models (the Observational Memory processor) use this to tell the two
+   * apart.
+   *
+   * Returns `false` for a model that isn't on the Mastra gateway. A credential that cannot be
+   * resolved is thrown rather than reported as local memory: the model call resolves its
+   * credential through this same path, so answering "local" when the lookup failed is how the
+   * gateway and the local store both end up saving the same conversation. That includes a missing
+   * credential (`MASTRA_GATEWAY_NO_API_KEY`, an unset environment variable) — the gateway may
+   * serve memory as soon as the credential resolves, so the ownership check stops the run instead
+   * of guessing.
+   */
+  async isGatewayMemoryManaged(): Promise<boolean> {
+    if (this.gatewayId !== 'mastra') return false;
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    return gatewayServesObservationalMemory(auth.apiKey);
   }
 
   /** @internal */

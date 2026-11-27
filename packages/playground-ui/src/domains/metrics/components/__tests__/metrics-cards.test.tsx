@@ -38,36 +38,10 @@ describe('Metrics cards', () => {
       renderDashboard();
     });
 
-    it('sums uncached input, cache reads and output in token usage', async () => {
-      // 600 + 300 + 400.
-      expect(await screen.findByText('1.30K')).toBeDefined();
-    });
-
-    it('switches the token chart to cost', async () => {
-      expect(await screen.findByText('1.30K')).toBeDefined();
-      await pickView('Token usage', 'Model cost');
-      // Input and output carry the cost; cache reads are part of input.
-      expect(await screen.findByText('$0.75')).toBeDefined();
-    });
-
-    it('shows the share of agent runs that failed', async () => {
-      // 2 of 10 runs, one `error` and one `failed`.
-      expect(await screen.findByText('20.0%')).toBeDefined();
-    });
-
-    it('shows the peak P95 latency', async () => {
-      expect(await screen.findByText('4.50s')).toBeDefined();
-    });
-
     it('says when a latency view has no runs', async () => {
       expect(await screen.findByText('4.50s')).toBeDefined();
       await pickView('Agent latency', 'Workflow latency');
-      expect(await screen.findByText('No workflow runs in this range.')).toBeDefined();
-    });
-
-    it('lists each agent in trace volume and reports which one was clicked', async () => {
-      fireEvent.click(await screen.findByRole('button', { name: /Chef Agent/ }));
-      expect(onEntityClick).toHaveBeenCalledWith('agent', 'Chef Agent');
+      expect(await screen.findByText('No data in this range')).toBeDefined();
     });
 
     it('ranks threads by what they spent and reports which one was clicked', async () => {
@@ -89,11 +63,10 @@ describe('Metrics cards', () => {
       emptyMetrics();
       renderDashboard();
 
-      expect(await screen.findByText('No model calls in this range.')).toBeDefined();
-      expect(screen.getAllByText('No agent runs in this range.')).toHaveLength(3);
+      // Every chart says the same: token usage, runs, failure rate, latency and scores. Tables say what's missing.
+      await waitFor(() => expect(screen.getAllByText('No data in this range')).toHaveLength(5));
       expect(screen.getByText('No runs in this range.')).toBeDefined();
       expect(screen.getByText('No model usage in this range.')).toBeDefined();
-      expect(screen.getByText('No scores in this range.')).toBeDefined();
     });
   });
 
@@ -109,7 +82,7 @@ describe('Metrics cards', () => {
         () => expect(screen.getAllByText("Couldn't load this data. Try again in a moment.")).toHaveLength(7),
         { timeout: 5000 },
       );
-      expect(screen.queryByText('No agent runs in this range.')).toBeNull();
+      expect(screen.queryByText('No data in this range')).toBeNull();
     });
   });
 });

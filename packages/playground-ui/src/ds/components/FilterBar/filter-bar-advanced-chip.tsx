@@ -1,15 +1,17 @@
-import { BracesIcon, XIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { chipClass, editableSegmentClass, removeSegmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
-import { FilterBarGroupEditor } from './filter-bar-group-editor';
+import { FilterBarGroupEditor, FilterBarQuantifierSwitch } from './filter-bar-group-editor';
 import { countLeaves } from './filter-bar-tree';
 import type { FilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
@@ -68,12 +70,18 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
     ctx.focusAfterRemove(index);
   };
 
+  // A root related clause reads as its sentence ("Has spans") instead of "Advanced filter".
+  const scopeLabel = group.scope ? ctx.describeScope(group.scope) : undefined;
+  const title = scopeLabel ?? 'Advanced filter';
+  const Icon = scopeLabel ? IconChainLink3 : IconCodeBrackets;
+  const removeLabel = scopeLabel ? `Remove ${scopeLabel}` : 'Remove advanced filter';
+
   return (
     <Popover open={open} onOpenChange={next => ctx.setOpenGroup(next ? group.id : null)}>
       <div
         ref={rootRef}
         role="group"
-        aria-label={`Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`}
+        aria-label={`${title}, ${group.negated ? 'not, ' : ''}${count} ${count === 1 ? 'condition' : 'conditions'}`}
         aria-hidden={leaving || undefined}
         data-slot="filter-bar-advanced"
         data-initial={initial || undefined}
@@ -89,10 +97,11 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           render={<button type="button" />}
           data-filter-bar-segment="field"
           className={editableSegmentClass}
-          title="Edit advanced filter"
+          title={`Edit ${scopeLabel ?? 'advanced filter'}`}
         >
-          <BracesIcon aria-hidden />
-          <span className="truncate">Advanced filter</span>
+          <Icon aria-hidden />
+          {group.negated && <span className="text-destructive-foreground">not</span>}
+          <span className="truncate">{title}</span>
           {count > 0 && (
             <Txt as="span" variant="column" tone="muted" aria-hidden>
               {count}
@@ -101,19 +110,19 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         </PopoverTrigger>
         {leaving ? (
           <span aria-hidden className={removeSegmentClass}>
-            <XIcon />
+            <IconCrossMedium />
           </span>
         ) : (
           <button
             type="button"
             ref={el => ctx.registerSegment(group.id, 'remove', el)}
             data-filter-bar-segment="remove"
-            aria-label="Remove advanced filter"
-            title="Remove advanced filter"
+            aria-label={removeLabel}
+            title={removeLabel}
             className={removeSegmentClass}
             onClick={remove}
           >
-            <XIcon />
+            <IconCrossMedium />
           </button>
         )}
       </div>
@@ -124,10 +133,14 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         finalFocus={triggerRef}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <BracesIcon className="size-3.5 text-muted-foreground" />
-          <Txt as="span" variant="label" tone="ink">
-            Advanced filter
-          </Txt>
+          <Icon className="size-icon-sm text-muted-foreground" />
+          {scopeLabel ? (
+            <FilterBarQuantifierSwitch group={group} />
+          ) : (
+            <Txt as="span" variant="label" tone="ink">
+              Advanced filter
+            </Txt>
+          )}
           <Txt as="span" variant="column" tone="muted" className="rounded-md bg-fill-subtle px-1.5">
             {count}
           </Txt>
@@ -138,13 +151,13 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
             tooltip="Close"
             onClick={() => ctx.setOpenGroup(null)}
           >
-            <XIcon />
+            <IconCrossMedium />
           </Button>
         </div>
         <FilterBarGroupEditor
           group={group}
           depth={1}
-          removeLabel="Remove advanced filter"
+          removeLabel={removeLabel}
           onRemove={() => {
             ctx.setOpenGroup(null);
             remove();

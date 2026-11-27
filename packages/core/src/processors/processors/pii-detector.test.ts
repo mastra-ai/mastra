@@ -80,10 +80,13 @@ describe('PIIDetector', () => {
   });
 
   describe('basic functionality', () => {
-    it('should return messages unchanged when no PII is detected', async () => {
+    it.each([
+      ['should return messages unchanged when no PII is detected', 'Hello world'],
+      ['should handle messages with empty text content', ''],
+    ] as const)('%s', async (_title, input) => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model });
-      const messages = [createTestMessage('Hello world')];
+      const messages = [createTestMessage(input)];
 
       const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
@@ -111,17 +114,6 @@ describe('PIIDetector', () => {
           createdAt: new Date(),
         },
       ];
-
-      const result = await detector.processInput({ messages, abort: vi.fn() as any });
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toBe(messages[0]);
-    });
-
-    it('should handle messages with empty text content', async () => {
-      const model = setupMockModel(createMockPIIResult());
-      const detector = new PIIDetector({ model });
-      const messages = [createTestMessage('')];
 
       const result = await detector.processInput({ messages, abort: vi.fn() as any });
 
@@ -1040,7 +1032,11 @@ describe('PIIDetector', () => {
       expect(llmCallCount).toBe(0);
     });
 
-    it('should detect phone numbers via regex during streaming', async () => {
+    it.each([
+      ['should detect phone numbers via regex during streaming', 'Call me at 555-123-4567'],
+      ['should detect SSN via regex during streaming', 'SSN: 123-45-6789'],
+      ['should detect credit card numbers via regex during streaming', 'Card: 4111-1111-1111-1111'],
+    ] as const)('%s', async (_title, text) => {
       const model = setupMockModel(createMockPIIResult());
       const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
 
@@ -1048,55 +1044,7 @@ describe('PIIDetector', () => {
         type: 'text-delta',
         payload: {
           id: 'test-id',
-          text: 'Call me at 555-123-4567',
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
-        abort: vi.fn() as any,
-      });
-
-      expect(result).toBeNull();
-    });
-
-    it('should detect SSN via regex during streaming', async () => {
-      const model = setupMockModel(createMockPIIResult());
-      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'SSN: 123-45-6789',
-        },
-        runId: 'test-run-id',
-        from: ChunkFrom.AGENT,
-      };
-
-      const result = await detector.processOutputStream({
-        part,
-        streamParts: [],
-        state: {},
-        abort: vi.fn() as any,
-      });
-
-      expect(result).toBeNull();
-    });
-
-    it('should detect credit card numbers via regex during streaming', async () => {
-      const model = setupMockModel(createMockPIIResult());
-      const detector = new PIIDetector({ model, strategy: 'filter', detectionTypes: REGEX_ONLY_TYPES });
-
-      const part: ChunkType = {
-        type: 'text-delta',
-        payload: {
-          id: 'test-id',
-          text: 'Card: 4111-1111-1111-1111',
+          text,
         },
         runId: 'test-run-id',
         from: ChunkFrom.AGENT,
@@ -2184,6 +2132,86 @@ describe('PIIDetector', () => {
       if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
 
       expect(emitted.join('')).toBe(`${prefix} [EMAIL] trailing`);
+    });
+
+    it('streams a long unbroken word followed by a short one in linear time, unchanged', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      // '#' is non-whitespace but outside the email pattern, so this times only the held-word
+      // lookup; the short trailing word is what made a /\S*$/ search backtrack over the long run.
+      const text = `${'#'.repeat(200_000)} #`;
+      const emitted: string[] = [];
+
+      const started = performance.now();
+      const result = await detector.processOutputStream({
+        part: { type: 'text-delta', payload: { id: 'long', text }, runId: 'long', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      const flushed = await detector.processOutputStream({
+        part: { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+        streamParts: [],
+        state,
+        abort: vi.fn() as any,
+      });
+      if (flushed?.type === 'text-delta') emitted.push(flushed.payload.text);
+
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(emitted.join('')).toBe(text);
+    });
+
+    it('scans a long run of email local-part characters in linear time', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+      const state: Record<string, any> = {};
+      const text = 'a'.repeat(200_000);
+      const emitted: string[] = [];
+
+      const started = performance.now();
+      for (const part of [
+        { type: 'text-delta', payload: { id: 'long', text }, runId: 'long', from: ChunkFrom.AGENT },
+        { type: 'step-finish' as any, payload: {}, runId: 'finish', from: ChunkFrom.AGENT },
+      ]) {
+        const result = await detector.processOutputStream({
+          part: part as any,
+          streamParts: [],
+          state,
+          abort: vi.fn() as any,
+        });
+        if (result?.type === 'text-delta') emitted.push(result.payload.text);
+      }
+
+      expect(performance.now() - started).toBeLessThan(1_000);
+      expect(emitted.join('')).toBe(text);
+    });
+
+    it('still finds an email address that starts right where another one ends', async () => {
+      const detector = new PIIDetector({
+        model: new MockLanguageModelV1(),
+        strategy: 'redact',
+        redactionMethod: 'placeholder',
+        detectionTypes: ['email'],
+      });
+
+      const result = await (detector as any).detectPIILocal('mail a@b.cc.d@e.ff and x@y.org+z@w.io now');
+
+      expect(result.detections.map((d: { value: string }) => d.value)).toEqual([
+        'a@b.cc',
+        '.d@e.ff',
+        'x@y.org',
+        '+z@w.io',
+      ]);
     });
 
     it('pulls emission back when PII straddles the carryover boundary', async () => {

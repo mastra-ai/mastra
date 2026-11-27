@@ -429,8 +429,11 @@ export function createPlatformProxy(context: CreatePlatformProxyOptions): Platfo
     getConnection,
     getConnectionWithCredentials,
     getMetadata: async <T = Record<string, ProviderResponseData>>() => {
-      const metadata = (await loadConnection()).metadata;
-      return { ...(metadata ?? {}), ...metadataOverlay } as T;
+      // Metadata stored on the connection was set deliberately, so it outranks
+      // what templates derived and cached in the overlay; the overlay only
+      // fills keys the connection leaves unset.
+      const stored = Object.entries((await loadConnection()).metadata ?? {}).filter(([, value]) => value != null);
+      return { ...metadataOverlay, ...Object.fromEntries(stored) } as T;
     },
     updateMetadata: async update => {
       Object.assign(metadataOverlay, update);

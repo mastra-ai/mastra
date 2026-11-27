@@ -16,36 +16,43 @@ function renderChevron(ui: React.ReactElement) {
 }
 
 describe('DisclosureChevron', () => {
-  it('points down and flips 180° while its trigger is expanded by default', () => {
+  it('points down and bends up while its trigger or details element is open by default', () => {
     const svg = renderChevron(<DisclosureChevron />);
 
-    expect(svg.classList.contains('lucide-chevron-down')).toBe(true);
-    expect(svg.classList.contains('in-aria-expanded:rotate-180')).toBe(true);
+    expect(svg.classList.contains('[--disclosure-chevron-bend:1]')).toBe(true);
+    expect(svg.classList.contains('in-aria-expanded:[--disclosure-chevron-bend:-1]')).toBe(true);
+    expect(svg.classList.contains('in-[details[open]>summary]:[--disclosure-chevron-bend:-1]')).toBe(true);
   });
 
-  it('points up and flips 180° while its trigger is expanded', () => {
+  it('points up and bends down while its trigger or details element is open', () => {
     const svg = renderChevron(<DisclosureChevron direction="up" />);
 
-    expect(svg.classList.contains('lucide-chevron-up')).toBe(true);
-    expect(svg.classList.contains('in-aria-expanded:rotate-180')).toBe(true);
+    expect(svg.classList.contains('[--disclosure-chevron-bend:-1]')).toBe(true);
+    expect(svg.classList.contains('in-aria-expanded:[--disclosure-chevron-bend:1]')).toBe(true);
+    expect(svg.classList.contains('in-[details[open]>summary]:[--disclosure-chevron-bend:1]')).toBe(true);
   });
 
   it('points right and turns 90° while its trigger is expanded', () => {
     const svg = renderChevron(<DisclosureChevron direction="right" />);
 
-    expect(svg.classList.contains('lucide-chevron-right')).toBe(true);
+    expect(svg.dataset.centralIcon).toBe('IconChevronRightMedium');
     expect(svg.classList.contains('in-aria-expanded:rotate-90')).toBe(true);
   });
 
-  it('follows an explicit open state instead of the trigger when given one', () => {
-    const closed = renderChevron(<DisclosureChevron open={false} />);
-    expect(closed.classList.contains('rotate-180')).toBe(false);
-    expect(closed.classList.contains('in-aria-expanded:rotate-180')).toBe(false);
-    cleanup();
+  it.each([
+    { direction: 'down', closed: '[--disclosure-chevron-bend:1]', opened: '[--disclosure-chevron-bend:-1]' },
+    { direction: 'up', closed: '[--disclosure-chevron-bend:-1]', opened: '[--disclosure-chevron-bend:1]' },
+  ] as const)(
+    'follows an explicit open state instead of the trigger when pointing $direction',
+    ({ direction, closed, opened }) => {
+      const bends = (ui: React.ReactElement) =>
+        [...renderChevron(ui).classList].filter(name => name.includes('--disclosure-chevron-bend:'));
 
-    const open = renderChevron(<DisclosureChevron open />);
-    expect(open.classList.contains('rotate-180')).toBe(true);
-  });
+      expect(bends(<DisclosureChevron direction={direction} open={false} />)).toEqual([closed]);
+      cleanup();
+      expect(bends(<DisclosureChevron direction={direction} open />)).toEqual([opened]);
+    },
+  );
 
   it('is hidden from assistive technology', () => {
     const svg = renderChevron(<DisclosureChevron />);

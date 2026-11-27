@@ -5,6 +5,7 @@ import { z } from 'zod/v4';
 import { defaultDeltaLimit } from '../shared';
 import {
   compareTraceQueryStrings,
+  hasTraceQueryTokenPredicate,
   isTraceQuerySortValueFor,
   normalizeTraceQueryTenantScope,
   planPredicate,
@@ -25,6 +26,7 @@ import type {
   TrustedTraceQueryDeltaTracesPlan,
   TrustedTraceQueryPaginatedTracesPlan,
   TrustedTraceQueryPlan,
+  TrustedTraceQueryPredicate,
 } from './trace-query';
 
 /**
@@ -38,6 +40,14 @@ export function planTraceQuery(
   options: TraceQueryPlanOptions = {},
 ): TrustedTraceQueryPlan {
   const issues: TraceQueryIssue[] = [];
+  const rootSource = request.rootSource === 'aggregated' ? 'aggregated' : undefined;
+  if (rootSource && !options.allowAggregatedRoots) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['rootSource'],
+      message: 'Aggregated roots are not supported by this reader',
+    });
+  }
   const from = new Date(request.timeRange.from);
   const to = new Date(request.timeRange.to);
   if (from >= to) {
@@ -51,8 +61,24 @@ export function planTraceQuery(
       message: 'Grouped trace queries use fixed threadId ordering',
     });
   }
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = {
+    nodes: 0,
+    relatedClauses: 0,
+    literalUnits: 0,
+    issues,
+    allowTokenSearch: options.allowTokenSearch,
+  };
   const where = request.where ? planPredicate(request.where, 'trace', ['where'], 1, state) : undefined;
+  if (rootSource && where && hasMetadataPredicate(where)) {
+    issues.push({
+      code: 'field_not_allowed',
+      path: ['where'],
+      message: 'Aggregated roots do not support metadata predicates',
+    });
+  }
+  if (request.mode === 'delta' && hasTraceQueryTokenPredicate(where)) {
+    issues.push({ code: 'invalid_request', path: ['where'], message: 'Token search is not supported in delta mode' });
+  }
   if (issues.length > 0) throw new TraceQueryValidationError(issues);
 
   const timeRange = { from: from.toISOString(), to: to.toISOString() };
@@ -62,6 +88,7 @@ export function planTraceQuery(
     const result = 'groups' as const;
     const orderBy = { field: 'threadId', direction: 'asc' } as const;
     const binding = digestBinding({
+      rootSource,
       timeRange,
       where,
       result,
@@ -73,6 +100,7 @@ export function planTraceQuery(
     const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
     return {
       result,
+      rootSource,
       timeRange,
       where,
       scope,
@@ -87,6 +115,7 @@ export function planTraceQuery(
   const result = 'traces' as const;
   const orderBy = request.orderBy?.[0] ?? ({ field: 'startedAt', direction: 'desc' } as const);
   const deltaBinding = digestBinding({
+    rootSource,
     timeRange,
     where,
     result: 'trace-delta',
@@ -96,6 +125,7 @@ export function planTraceQuery(
   if (request.mode === 'delta') {
     return {
       result,
+      rootSource,
       timeRange,
       where,
       scope,
@@ -109,6 +139,7 @@ export function planTraceQuery(
   if (request.pagination) {
     return {
       result,
+      rootSource,
       timeRange,
       where,
       scope,
@@ -122,6 +153,7 @@ export function planTraceQuery(
 
   const page = request.page ?? { limit: 100 };
   const binding = digestBinding({
+    rootSource,
     timeRange,
     where,
     result,
@@ -135,6 +167,7 @@ export function planTraceQuery(
   }
   return {
     result,
+    rootSource,
     timeRange,
     where,
     scope,
@@ -167,7 +200,7 @@ export function planThreadQuery(
     });
   }
 
-  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues, isThreadQuery: true };
   const traceWhere = request.traces.where
     ? planPredicate(request.traces.where, 'trace', ['traces', 'where'], 1, state)
     : undefined;
@@ -304,4 +337,12 @@ function stableStringify(value: unknown): string {
       .join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+function hasMetadataPredicate(predicate: TrustedTraceQueryPredicate): boolean {
+  if (predicate.type === 'tokens') return false;
+  if (predicate.type === 'boolean') return predicate.args.some(hasMetadataPredicate);
+  if (predicate.type === 'not') return hasMetadataPredicate(predicate.arg);
+  if (predicate.type === 'relation') return hasMetadataPredicate(predicate.predicate);
+  return predicate.field.startsWith('metadata.');
 }

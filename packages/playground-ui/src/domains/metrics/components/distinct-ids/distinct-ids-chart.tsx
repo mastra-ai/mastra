@@ -67,11 +67,24 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   const step = intervalHours(scope.interval === '1d' ? '1d' : '1h');
   const error = series.error ?? totals.error;
   const isLoading = series.isLoading || totals.isLoading;
+  // One request failing says nothing about the other, which may still be running: report the
+  // failure only once both have settled. A card that failed while a request it waits on is still
+  // in flight cannot be recovered by Retry, which only re-sends the requests that failed. A new
+  // scope keeps the previous answer on screen, so `isLoading` is false there while `isFetching`
+  // is not.
+  const isFetching = series.isFetching || totals.isFetching;
+  const hasFailed = Boolean(error) && !isFetching;
 
   const layout = {
     title: DISTINCT_IDS_TITLE,
     // Each id's range total, marked like its line: they count different things, so no one sum.
-    total: shown.map(id => ({ label: id.label, value: formatCount(count(total, id)), color: id.color })),
+    // With no ids set, one plain 0, like any other empty card. None while a request failed, so no
+    // total sits beside the error.
+    total: error
+      ? undefined
+      : shown.length
+        ? shown.map(id => ({ label: id.label, value: formatCount(count(total, id)), color: id.color }))
+        : formatCount(0),
     isLoading: totals.isLoading,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
@@ -80,7 +93,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
     ),
   };
 
-  if (error) {
+  if (hasFailed) {
     return (
       <ChartCard {...layout}>
         <ChartCardError
@@ -96,10 +109,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
 
   return (
     <ChartCard {...layout} isUpdating={series.isPlaceholderData || totals.isPlaceholderData}>
-      <ChartArea
-        isEmpty={!isLoading && shown.length === 0}
-        emptyMessage="No traces in this range set a resource, thread, user or session id."
-      >
+      <ChartArea isEmpty={!isLoading && !error && shown.length === 0}>
         <MetricsLineChart
           lineStyle="thin"
           data={chart}

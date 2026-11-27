@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt } from '../../services/transcript';
 import type { MessagePart } from '../transcript-parts';
+import { drawsModelFallback } from '../ModelFallbackActivity';
 import { planTurnActivity, sameEntryActivity } from './activity-plan';
 import type { EntryActivity } from './activity-plan';
 
@@ -56,6 +57,26 @@ describe('planTurnActivity', () => {
 
   it('splits stretches at visible prose', () => {
     const plan = planTurnActivity([assistant('s1', [tool('a'), text('Found it.'), tool('b')])], NO_SUSPENSIONS, false);
+    expect(stretches(plan)).toEqual([['a'], ['b']]);
+  });
+
+  it('splits stretches at a saved model hop', () => {
+    const hop: MessagePart = {
+      type: 'data-mastracode-model-fallback',
+      data: {
+        from: { entryId: 'anthropic/claude-opus-5.5', label: 'anthropic/claude-opus-5.5' },
+        to: { entryId: 'openai/gpt-5.6-sol', label: 'openai/gpt-5.6-sol' },
+        reason: 'pool-exhausted',
+        at: '2026-11-23T10:00:00.000Z',
+        failure: { kind: 'rate_limited' },
+      },
+    };
+    const plan = planTurnActivity(
+      [assistant('s1', [tool('a'), hop, tool('b')])],
+      NO_SUSPENSIONS,
+      false,
+      drawsModelFallback,
+    );
     expect(stretches(plan)).toEqual([['a'], ['b']]);
   });
 

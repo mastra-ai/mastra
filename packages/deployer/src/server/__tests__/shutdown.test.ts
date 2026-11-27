@@ -259,10 +259,13 @@ describe('createNodeServer graceful shutdown', () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(exitSpy).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(3499);
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
     await flushMicrotasks();
 
-    expect(logger.warn).toHaveBeenCalledWith('Mastra shutdown timed out; forcing exit', { timeoutMs: 7000 });
+    expect(logger.warn).toHaveBeenCalledWith('Mastra shutdown timed out; forcing exit', { timeoutMs: 8500 });
     expect(fakeServer.closeAllConnections).not.toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });

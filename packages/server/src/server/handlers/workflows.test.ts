@@ -38,6 +38,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
   EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
@@ -673,24 +674,17 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
     });
 
-    it('should throw error when workflow is not found', async () => {
+    it.each([
+      ['should throw error when workflow is not found', 'non-existent', 'test-run', 'Workflow not found'],
+      ['should throw error when workflow run is not found', 'test-workflow', 'non-existent', 'Workflow run not found'],
+    ] as const)('%s', async (_title, workflowId, runId, message) => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'non-existent',
-          runId: 'test-run',
+          workflowId,
+          runId,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should throw error when workflow run is not found', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'test-workflow',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message }));
     });
 
     it('should get workflow run successfully', async () => {
@@ -1148,6 +1142,84 @@ describe('vNext Workflow Handlers', () => {
         process.off('unhandledRejection', onUnhandled);
         createRunSpy.mockRestore();
       }
+    });
+  });
+
+  describe('TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE', () => {
+    it('returns the completed time-travel result and persists it without rerunning earlier steps (#25423)', async () => {
+      const schema = z.object({ value: z.number() });
+      let firstStepExecutions = 0;
+      const secondStepInputs: number[] = [];
+      const firstStep = createStep({
+        id: 'double',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          firstStepExecutions++;
+          return { value: inputData.value * 2 };
+        },
+      });
+      const secondStep = createStep({
+        id: 'increment',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          secondStepInputs.push(inputData.value);
+          return { value: inputData.value + 1 };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'async-time-travel',
+        inputSchema: schema,
+        outputSchema: schema,
+      })
+        .then(firstStep)
+        .then(secondStep)
+        .commit();
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'async-time-travel': workflow },
+        storage,
+      });
+      const run = await workflow.createRun();
+      const initialResult = await run.start({ inputData: { value: 3 } });
+      expect(initialResult).toMatchObject({ status: 'success', result: { value: 7 } });
+      expect(firstStepExecutions).toBe(1);
+      expect(secondStepInputs).toEqual([6]);
+
+      const result = await TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'async-time-travel',
+        runId: run.runId,
+        step: 'increment',
+        inputData: { value: 20 },
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: { value: 21 },
+        steps: {
+          double: { status: 'success' },
+          increment: { status: 'success', payload: { value: 20 }, output: { value: 21 } },
+        },
+      });
+      expect(firstStepExecutions).toBe(1);
+      expect(secondStepInputs).toEqual([6, 20]);
+
+      const workflowsStore = await storage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(snapshot).toMatchObject({
+        status: 'success',
+        result: { value: 21 },
+        context: {
+          double: { status: 'success' },
+          increment: { status: 'success', payload: { value: 20 }, output: { value: 21 } },
+        },
+      });
     });
   });
 
@@ -1700,6 +1772,39 @@ describe('vNext Workflow Handlers', () => {
         parse({ workflowId: 'inner', runId: 'run-1', executionPath: [0], parentWorkflow: { workflowId: 'outer' } }),
       ).toBe(false);
     });
+
+    it("runs the step under the run's storage version", async () => {
+      const read = createStep({
+        id: 'read',
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        execute: async ({ getStepResult }) => getStepResult('earlier'),
+      });
+      const workflow = createWorkflow({ id: 'reads', inputSchema: z.object({}), outputSchema: z.any() })
+        .then(read)
+        .commit();
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { reads: workflow } });
+      const execute = (storageVersion?: 1 | 2) =>
+        EXECUTE_WORKFLOW_STEP_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'reads',
+          runId: 'run-1',
+          ...EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.parse({
+            stepId: 'read',
+            executionPath: [0],
+            stepResults: { earlier: { status: 'success', output: { n: 1 } } },
+            state: {},
+            requestContext: {},
+            input: {},
+            storageVersion,
+          }),
+        } as any);
+
+      await expect(execute()).resolves.toMatchObject({ status: 'success', output: { n: 1 } });
+      const v2 = (await execute(2)) as { status: string; error: Error };
+      expect(v2.status).toBe('failed');
+      expect(v2.error.message).toMatch(/Use `await getStepResultAsync\("earlier"\)` instead/);
+    });
   });
 });
 
@@ -1765,4 +1870,111 @@ describe('hidden internal workflows', () => {
     } as any);
     expect(result).toEqual({ runId: 'run-1' });
   });
+});
+
+// A process that stalls while it drives a run can lose the run to another instance. Its saves are
+// then refused, which is the other instance's run going on, not a failure of this server.
+describe('workflow routes when another instance takes the run over', () => {
+  const OTHER_OWNER = 'other-instance-owner';
+
+  async function setup() {
+    let open!: () => void;
+    const stalled = new Promise<void>(resolve => (open = resolve));
+    const reached = Promise.withResolvers<void>();
+    const step = createStep({
+      id: 'slow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => {
+        reached.resolve();
+        await stalled;
+        return {};
+      },
+    });
+    const workflow = createWorkflow({ id: 'stalls', inputSchema: z.object({}), outputSchema: z.object({}) })
+      .then(step)
+      .commit();
+    const storage = new MockStore();
+    const mastra = new Mastra({ logger: false, storage, workflows: { stalls: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const logger = mastra.getLogger();
+    const errors = vi.spyOn(logger, 'error');
+    const debugs = vi.spyOn(logger, 'debug');
+
+    /** Lets the stalled step finish once the run is lost: taken over, or its store failing. */
+    async function lose(runId: string, how: 'takeover' | 'store failure') {
+      await reached.promise;
+      if (how === 'takeover') {
+        await store.claimRunOwnership({ runId, ownerId: OTHER_OWNER, leaseMs: 60_000, force: true });
+      } else {
+        vi.spyOn(store, 'persistWorkflowSnapshot').mockRejectedValue(new Error('connection terminated'));
+      }
+      open();
+    }
+    return { mastra, store, errors, debugs, lose };
+  }
+
+  it.each([
+    ['takeover', 409],
+    ['store failure', 500],
+  ] as const)('answers an awaited start whose run had a %s with %i', async (how, status) => {
+    const { mastra, errors, lose } = await setup();
+    const runId = `run-${how.replace(' ', '-')}`;
+
+    const request = START_ASYNC_WORKFLOW_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      workflowId: 'stalls',
+      runId,
+      inputData: {},
+    } as any).catch((error: unknown) => error);
+    await lose(runId, how);
+    const error = (await request) as HTTPException;
+
+    expect(error).toBeInstanceOf(HTTPException);
+    expect(error.status).toBe(status);
+    if (how === 'takeover') {
+      const body = await error.getResponse().json();
+      expect(body).toEqual({
+        error: `Workflow run "${runId}" is now driven by another instance. Read the run for its current state.`,
+        code: 'STORAGE_RUN_FENCE_CONFLICT',
+      });
+      expect(JSON.stringify(body)).not.toContain(OTHER_OWNER);
+      expect(errors).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each(['takeover', 'store failure'] as const)(
+    'logs a background start whose run had a %s at the right level, with no unhandled rejection',
+    async how => {
+      const { mastra, errors, debugs, lose } = await setup();
+      const runId = `run-bg-${how.replace(' ', '-')}`;
+      await (mastra.getWorkflow('stalls') as Workflow).createRun({ runId });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const result = await START_WORKFLOW_RUN_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workflowId: 'stalls',
+          runId,
+          inputData: {},
+        } as any);
+        expect(result).toEqual({ message: 'Workflow run started' });
+        await lose(runId, how);
+
+        const logged = how === 'takeover' ? debugs : errors;
+        await vi.waitFor(() =>
+          expect(logged).toHaveBeenCalledWith(
+            expect.stringContaining('Failed to start workflow run'),
+            expect.anything(),
+          ),
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        if (how === 'takeover') expect(errors).not.toHaveBeenCalled();
+        expect(unhandled).toEqual([]);
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    },
+  );
 });

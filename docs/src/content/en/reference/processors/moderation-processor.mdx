@@ -146,14 +146,16 @@ const processor = new ModerationProcessor({
   },
   {
     name: 'processInput',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
-    description: 'Processes input messages to moderate content before sending to LLM',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
+    description:
+      'Processes input messages to moderate content before sending to LLM. `requestContext` is passed to the moderation agent, including when it resolves a dynamic model.',
     isOptional: false,
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
-    description: 'Processes streaming output parts to moderate content during streaming',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; writer?: unknown; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null | undefined>',
+    description:
+      'Processes streaming output parts to moderate content during streaming. When `bufferSize` is greater than 0 and a `writer` is passed, text deltas are buffered and checked together. The method returns `null` while text is buffered and returns the flushed text once a sentence ends or the buffer fills. With `strategy: "filter"`, it also returns `null` when flushed text is flagged, and that text is dropped. When a non-text part such as `finish` arrives, the method flushes the buffer. If the flush returns text, the method returns that text and holds the non-text part so the processor runner can reprocess it next. If the buffer is empty or the filter drops the flushed text, the non-text part is returned directly. The runner also flushes any text still buffered when the stream ends. Agents handle this for you. If you call the method directly, reprocess held parts the same way, or leave `bufferSize` at `0`. Without a `writer`, each text delta is checked separately. `requestContext` is passed to the moderation agent.',
     isOptional: false,
   },
 ]}

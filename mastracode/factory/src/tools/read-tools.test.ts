@@ -1,8 +1,15 @@
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { boardRegistryOf } from '../boards/registry.js';
+import { compileStoredBoard } from '../boards/stored-board.js';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { workSeedWithTriage } from '../boards/work-seeds.js';
+import { workBoard } from '../boards/work.js';
 
-import { createBoardRegistry } from '../boards/index.js';
+import { LiveSessions } from '../session/live-sessions.js';
+import type { LiveSession } from '../session/live-sessions.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
@@ -44,7 +51,6 @@ function item(overrides: Partial<Card> & { id: string }): Card {
     triageType: null,
     autonomyArmedAt: null,
     acceptedAt: null,
-    commentCount: 0,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
@@ -90,8 +96,6 @@ function decision(overrides: Partial<FactoryDeferredDecisionRecord> & { id: stri
     evaluationId: `evaluation-${overrides.id}`,
     workItemId: null,
     idempotencyKey: overrides.id,
-    effectOrdinal: 0,
-    effectHash: 'hash',
     causalChain: [],
     actor: null,
     decision: { type: 'invokeSkill', role: 'work' },
@@ -118,15 +122,17 @@ function setup({
   bindings = [],
   decisions = [],
   audit = [],
-  comments = [],
   subscriptions = [],
+  sessions,
+  boards = createTriageWorkRegistry(),
 }: {
   items?: Card[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
-  comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
+  sessions?: FactoryReadToolDependencies['sessions'];
+  boards?: FactoryReadToolDependencies['boards'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -154,9 +160,9 @@ function setup({
         subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
       ),
     },
-    comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createBoardRegistry(),
+    boards,
+    ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
     string,
@@ -170,6 +176,7 @@ type ListResult = {
   counts: { total: number; byStage: Record<string, number> };
   items: Array<{ id: string; number: number | null; activeWorker: { role: string; sessionId: string } | null }>;
   truncated: boolean;
+  boards: Array<{ id: string; name: string }>;
 };
 
 function follow(workItemId: string, sessionId: string, reason: WorkItemSubscription['reason']): WorkItemSubscription {
@@ -195,7 +202,7 @@ describe('factory_list_work_items', () => {
       id: 'c',
       title: 'Review: dark mode',
       stages: ['review'],
-      board: 'review',
+      board: 'release',
       sessions: { review: { sessionId: 's-c', branch: 'b', threadId: 't-c', startedBy: 'x' } },
     }),
     item({ id: 'd', title: 'Other factory', factoryProjectId: 'project-2' }),
@@ -214,12 +221,39 @@ describe('factory_list_work_items', () => {
     expect(await ids({ query: 'LOGIN' })).toEqual(['a']);
     expect(await ids({ query: '#12' })).toEqual(['a']);
     expect(await ids({ stage: 'execute' })).toEqual(['b']);
-    expect(await ids({ board: 'review' })).toEqual(['c']);
+    expect(await ids({ board: 'release' })).toEqual(['c']);
     expect(await ids({ board: 'work' })).toEqual(['b', 'a']);
     expect(await ids({ role: 'review' })).toEqual(['c']);
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('finds a renamed board by its displayed name and lists each board with its name', async () => {
+    const openSource = compileStoredBoard({ ...workSeedWithTriage(), name: 'Open source' }, workBoard);
+    const { run } = setup({ items: rows, boards: boardRegistryOf([openSource]) });
+    const result = await run<ListResult>('factory_list_work_items', { board: 'open SOURCE' });
+    expect(result.items.map(row => row.id)).toEqual(['b', 'a']);
+    expect(result.boards).toEqual([{ id: 'work', name: 'Open source' }]);
+  });
+
+  it('refuses a displayed name that more than one board shares', async () => {
+    const seed = workSeedWithTriage();
+    const boards = boardRegistryOf([
+      compileStoredBoard({ ...seed, name: 'Open source' }, workBoard),
+      compileStoredBoard({ ...seed, key: 'oss', name: 'Open source' }, workBoard),
+    ]);
+    const { run } = setup({ items: rows, boards });
+    await expect(run('factory_list_work_items', { board: 'Open source' })).rejects.toThrow(
+      'Board "Open source" matches more than one board; use its id instead: work (Open source), oss (Open source).',
+    );
+  });
+
+  it('numbers a card filed by hand and finds it by that #number', async () => {
+    const manual = item({ id: 'm', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const { run } = setup({ items: [...rows, manual] });
+    const result = await run<ListResult>('factory_list_work_items', { query: '#3' });
+    expect(result.items).toMatchObject([{ id: 'm', number: 3 }]);
   });
 
   it('filters by what this session follows', async () => {
@@ -239,16 +273,16 @@ describe('factory_list_work_items', () => {
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
   });
 
-  it('links each card on its board when a public URL is configured', async () => {
+  it('links each card to the page that opens its session when a public URL is configured', async () => {
     vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
     try {
       const { run } = setup({ items: rows });
       const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
       expect(result.items.find(row => row.id === 'a')?.url).toBe(
-        'https://factory.example.com/factories/project-1/work?item=a',
+        'https://factory.example.com/factories/project-1/cards/a',
       );
       expect(result.items.find(row => row.id === 'c')?.url).toBe(
-        'https://factory.example.com/factories/project-1/review?item=c',
+        'https://factory.example.com/factories/project-1/cards/c',
       );
     } finally {
       vi.unstubAllEnvs();
@@ -303,7 +337,6 @@ describe('factory_inspect_work_item', () => {
       decisions: [
         decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
-      comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
         {
           id: 'a1',
@@ -330,7 +363,6 @@ describe('factory_inspect_work_item', () => {
     });
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
-    expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
   it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {
@@ -368,6 +400,20 @@ describe('factory_inspect_work_item', () => {
       `No work item ${FOREIGN} was found in this Factory.`,
     );
     await expect(run('factory_inspect_work_item', { workItem: '#8' })).rejects.toThrow('in this Factory');
+  });
+
+  it('refuses a #number that a card filed by hand shares with an issue card', async () => {
+    const manual = item({ id: 'manual', title: 'Filed by hand', externalSource: null, metadata: { cardNumber: 3 } });
+    const issue = item({ id: 'issue', title: 'From GitHub', metadata: { number: 3 } });
+    for (const items of [
+      [manual, issue],
+      [issue, manual],
+    ]) {
+      const { run } = setup({ items });
+      await expect(run('factory_inspect_work_item', { workItem: '#3' })).rejects.toThrow(
+        '#3 matches more than one work item; use its id instead: ',
+      );
+    }
   });
 
   it('rejects a ref that is neither a UUID nor a number before it reaches storage', async () => {
@@ -435,6 +481,49 @@ describe('factory_list_attention', () => {
     expect(result.held.map(row => row.workItemId)).toEqual(['held', 'labeled']);
     expect(result.held[0]).not.toHaveProperty('triageType');
     expect(result.truncated).toBe(false);
+  });
+
+  it('lists a run parked on a tool prompt while it is still in flight', async () => {
+    let created: (session: LiveSession) => void = () => {};
+    const liveSessions = new LiveSessions({
+      onSessionCreated: listener => {
+        created = listener;
+        return () => {};
+      },
+      onSessionDeleted: () => () => {},
+    });
+    let emit: (event: AgentControllerEvent) => void = () => {};
+    const pendingSuspensions = new Map<string, { toolName: string }>();
+    created({
+      identity: { getId: () => 'session-builder' },
+      thread: { getId: () => 'session-builder' },
+      run: { isRunning: () => true },
+      state: { get: () => ({ factoryOrgId: 'org-1', factoryProjectId: 'project-1' }) },
+      displayState: { get: () => ({ pendingSuspensions }) },
+      subscribe: listener => {
+        emit = listener;
+        return () => {};
+      },
+    });
+    const { deps, run } = setup({ items: [item({ id: 'x' })] });
+    deps.liveSessions = () => liveSessions;
+    type Waiting = { waiting: Array<{ sessionId: string; toolName: string; label: string; waitingSince: string }> };
+
+    await expect(run<Waiting>('factory_list_attention', {})).resolves.toMatchObject({ waiting: [] });
+
+    // The run never ends: submit_plan parks it mid-stream, and it must show without waiting for agent_end.
+    pendingSuspensions.set('call-1', { toolName: 'submit_plan' });
+    emit({ type: 'tool_suspended', toolCallId: 'call-1', toolName: 'submit_plan', args: {}, suspendPayload: {} });
+
+    const result = await run<Waiting>('factory_list_attention', {});
+    expect(result.waiting).toEqual([
+      {
+        sessionId: 'session-builder',
+        toolName: 'submit_plan',
+        label: 'Plan waiting for review',
+        waitingSince: expect.any(String),
+      },
+    ]);
   });
 
   it('flags truncation when incidents are cut by the limit', async () => {

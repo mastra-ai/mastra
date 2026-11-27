@@ -21,11 +21,13 @@ import {
   createWorkItemBodySchema,
   decisionQuerySchema,
   FACTORY_ROUTE_CONTRACTS,
+  sessionRowsQuerySchema,
   transitionBodySchema,
   updateProjectBodySchema,
 } from './contracts.js';
 import { IntakeRouteRoutes } from './intake-routes.js';
 import { ProjectRoutes } from './projects.js';
+import { SandboxEnvRoutes } from './sandbox-envs.js';
 import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -47,13 +49,13 @@ function registeredFactoryRoutes() {
     audit: {},
     projects: {},
     workItems,
-    comments: {},
     queueHealth: {},
     liveSessions: {},
+    projectSessions: async () => [],
+    activeRuns: () => [],
   } as never).routes();
   const attention = buildAttentionRoutes({
     workItems: workItems as never,
-    comments: {} as never,
     liveSessions: {} as never,
     resolveProject: async () => ({}) as never,
   });
@@ -80,7 +82,13 @@ function registeredFactoryRoutes() {
     storage: {},
     boards: {},
   } as never).routes();
-  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes];
+  const sandboxEnvs = new SandboxEnvRoutes({
+    auth: {},
+    projects: {},
+    sandboxEnvs: {},
+    writable: true,
+  } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills, ...intakeRoutes, ...sandboxEnvs];
 }
 
 describe('Factory route contracts', () => {
@@ -96,10 +104,82 @@ describe('Factory route contracts', () => {
       name: 'Factory',
       description: null,
     });
+    expect(
+      createProjectBodySchema.parse({ name: 'Factory', defaultModelId: ' anthropic/claude-opus-5.5 ' }),
+    ).toMatchObject({ defaultModelId: 'anthropic/claude-opus-5.5' });
+    expect(createProjectBodySchema.safeParse({ name: 'Factory', defaultModelId: 'sonnet 5.5' }).success).toBe(false);
     expect(updateProjectBodySchema.safeParse({}).success).toBe(false);
-    expect(updateProjectBodySchema.parse({ defaultModelId: '  ', autoRunEnabled: true })).toEqual({
-      defaultModelId: null,
-      autoRunEnabled: true,
+    for (const cleared of ['  ', null]) {
+      expect(updateProjectBodySchema.safeParse({ defaultModelId: cleared }).success).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ reviewTestChecksEnabled: true })).toEqual({ reviewTestChecksEnabled: true });
+    expect(updateProjectBodySchema.parse({ defaultModelId: ' anthropic/claude-opus-5.5 ' })).toEqual({
+      defaultModelId: 'anthropic/claude-opus-5.5',
+    });
+    const tooLong = `openai/${'x'.repeat(250)}`;
+    expect(updateProjectBodySchema.safeParse({ defaultModelId: tooLong }).success).toBe(false);
+    for (const notAnId of ['sonnet 5.5', 'claude-opus-5.5', '/claude-opus-5.5', 'anthropic/']) {
+      expect(updateProjectBodySchema.safeParse({ defaultModelId: notAnId }).success, notAnId).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ defaultModelId: 'acme/Llama 3 70B' })).toEqual({
+      defaultModelId: 'acme/Llama 3 70B',
+    });
+    const pack = (models: string[], name = ' Build ', id = 'build') => ({
+      id,
+      name,
+      models: models.map(modelId => ({ modelId, thinkingLevel: 'medium' })),
+    });
+    expect(
+      updateProjectBodySchema.parse({
+        modelPacks: [pack([' anthropic/claude-opus-5.5 ', 'openrouter/anthropic/claude-opus-5.5'])],
+        defaultModelPackId: 'build',
+      }),
+    ).toEqual({
+      modelPackSet: {
+        modelPacks: [
+          {
+            id: 'build',
+            name: 'Build',
+            models: [
+              { modelId: 'anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+              { modelId: 'openrouter/anthropic/claude-opus-5.5', thinkingLevel: 'medium' },
+            ],
+          },
+        ],
+        defaultModelPackId: 'build',
+      },
+    });
+    const rejectedPackSets = {
+      'a pack without a default id': { modelPacks: [pack(['openai/gpt-5.6-sol'])] },
+      'a default id without packs': { defaultModelPackId: 'build' },
+      'a default id that is not a pack': { modelPacks: [pack(['openai/gpt-5.6-sol'])], defaultModelPackId: 'other' },
+      'a default id with no packs': { modelPacks: [], defaultModelPackId: 'build' },
+      'a model listed twice': {
+        modelPacks: [pack(['openai/gpt-5.6-sol', ' openai/gpt-5.6-sol'])],
+        defaultModelPackId: 'build',
+      },
+      'a model that is not provider/model': { modelPacks: [pack(['claude-opus-5.5'])], defaultModelPackId: 'build' },
+      'an empty pack': { modelPacks: [pack([])], defaultModelPackId: 'build' },
+      'five models': {
+        modelPacks: [pack(['openai/m1', 'openai/m2', 'openai/m3', 'openai/m4', 'openai/m5'])],
+        defaultModelPackId: 'build',
+      },
+      'a blank name': { modelPacks: [pack(['openai/gpt-5.6-sol'], '  ')], defaultModelPackId: 'build' },
+      'a bad id': { modelPacks: [pack(['openai/gpt-5.6-sol'], 'Build', 'has space')], defaultModelPackId: 'has space' },
+      'two packs with one name': {
+        modelPacks: [pack(['openai/gpt-5.6-sol'], 'Build', 'a'), pack(['openai/gpt-5.6-sol'], 'build', 'b')],
+        defaultModelPackId: 'a',
+      },
+      'nine packs': {
+        modelPacks: Array.from({ length: 9 }, (_, index) => pack(['openai/gpt-5.6-sol'], `P${index}`, `p${index}`)),
+        defaultModelPackId: 'p0',
+      },
+    };
+    for (const [label, body] of Object.entries(rejectedPackSets)) {
+      expect(updateProjectBodySchema.safeParse(body).success, label).toBe(false);
+    }
+    expect(updateProjectBodySchema.parse({ modelPacks: [], defaultModelPackId: null })).toEqual({
+      modelPackSet: { modelPacks: [], defaultModelPackId: null },
     });
     expect(updateProjectBodySchema.parse({ modelScope: 'factory' })).toEqual({ modelScope: 'factory' });
     expect(updateProjectBodySchema.safeParse({ modelScope: 'org' }).success).toBe(false);
@@ -124,7 +204,7 @@ describe('Factory route contracts', () => {
     };
     const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
     const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
-    const listed = { workItems: [legacy], runningSessionIds: [], parkedSessionIds: [] };
+    const listed = { workItems: [legacy] };
     expect(list.parse(listed)).toEqual(listed);
     expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
     expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
@@ -167,19 +247,24 @@ describe('Factory route contracts', () => {
     });
     expect(decisionQuerySchema.safeParse({ before: 'invalid' }).success).toBe(false);
 
-    const attentionCursor = Buffer.from(JSON.stringify({ mention: ['2030-01-02T00:00:00.000Z', decisionId] })).toString(
-      'base64url',
-    );
+    const attentionCursor = Buffer.from(
+      JSON.stringify({ 'automation-proposed': ['2030-01-02T00:00:00.000Z', decisionId] }),
+    ).toString('base64url');
     const attention = attentionQuerySchema.parse({
       before: attentionCursor,
       limit: '0',
       search: '  FIND ME  ',
-      kind: ['mention', 'agent-waiting'],
+      kind: ['automation-proposed', 'agent-waiting'],
     });
-    expect(attention).toMatchObject({ view: 'open', limit: 1, search: 'find me', kind: ['mention', 'agent-waiting'] });
+    expect(attention).toMatchObject({
+      view: 'open',
+      limit: 1,
+      search: 'find me',
+      kind: ['automation-proposed', 'agent-waiting'],
+    });
     expect(attentionQuerySchema.parse({}).kind).toBeUndefined();
     expect(attentionQuerySchema.safeParse({ kind: ['bogus'] }).success).toBe(false);
-    expect(attention.before?.get('mention')).toEqual({
+    expect(attention.before?.get('automation-proposed')).toEqual({
       occurredAt: new Date('2030-01-02T00:00:00.000Z'),
       id: decisionId,
     });
@@ -188,7 +273,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.parse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: String(Number.MAX_SAFE_INTEGER),
       }).occurrence,
@@ -196,7 +281,7 @@ describe('Factory route contracts', () => {
     expect(
       FACTORY_ROUTE_CONTRACTS.attentionRead.pathSchema.safeParse({
         id: projectId,
-        kind: 'mention',
+        kind: 'automation-proposed',
         sourceId: decisionId,
         occurrence: '9007199254740992',
       }).success,
@@ -224,8 +309,41 @@ describe('Factory route contracts', () => {
     );
   });
 
+  it('parses a sidebar session-rows view, reading repeated pins and windows', () => {
+    expect(sessionRowsQuerySchema.parse({})).toEqual({
+      sort: 'activity',
+      groupBy: 'none',
+      owner: 'all',
+      pin: new Set(),
+      window: new Map(),
+    });
+    const view = sessionRowsQuerySchema.parse({
+      owner: 'owner:user-2',
+      children: 'true',
+      pin: ['session-1', 'session-2', 'session-1'],
+      window: ['board:work:25', 'user:500'],
+    });
+    expect(view.pin).toEqual(new Set(['session-1', 'session-2']));
+    expect(view.window).toEqual(
+      new Map([
+        ['board:work', 25],
+        ['user', 500],
+      ]),
+    );
+    expect(view.owner).toBe('owner:user-2');
+    for (const window of ['user:0', 'user:501', 'user:01', 'user:', ':5', 'user']) {
+      expect(sessionRowsQuerySchema.safeParse({ window: [window] }).success, window).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ window: ['user:1'] }).success).toBe(true);
+    expect(sessionRowsQuerySchema.safeParse({ window: ['board:work:5', 'board:work:10'] }).success).toBe(false);
+    for (const owner of ['someone', 'owner:', 'mine ']) {
+      expect(sessionRowsQuerySchema.safeParse({ owner }).success, owner).toBe(false);
+    }
+    expect(sessionRowsQuerySchema.safeParse({ children: 'false' }).success).toBe(false);
+  });
+
   it('accepts representative successful response envelopes', () => {
-    const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'mention', 'activity', 'agent-waiting'];
+    const ATTENTION_KINDS = ['automation-failed', 'automation-proposed', 'agent-waiting'];
     expect(
       FACTORY_ROUTE_CONTRACTS.projectList.responseSchema.safeParse({ projects: [{ id: projectId, repositories: [] }] })
         .success,
@@ -247,8 +365,6 @@ describe('Factory route contracts', () => {
             },
           },
         ],
-        runningSessionIds: ['session-1'],
-        parkedSessionIds: ['session-2'],
       }).success,
     ).toBe(true);
     expect(

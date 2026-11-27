@@ -115,8 +115,6 @@ function projectRepositoryRow(row: Record<string, any>) {
     connectionId,
     repositoryId,
     branch: 'main',
-    sandboxProvider: 'railway',
-    sandboxWorkdir: '/workspace/hello',
     setupCommand: null,
     teardownCommand: null,
     createdAt: now,
@@ -409,10 +407,7 @@ describe('same repo connected by two orgs stays isolated', () => {
     expect(projectRepositoryA.id).not.toBe(projectRepositoryB.id);
     expect(tables.projectRepositories).toHaveLength(2);
 
-    // Org A cannot create sessions in / push against Org B's project-repository id.
-    expect(
-      (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/sessions`, { branch: 'feat/x' })).status,
-    ).toBe(404);
+    // Org A cannot push against Org B's project-repository id.
     expect(
       (await postJson(appA, `/web/github/projects/${projectRepositoryB.id}/push`, { branch: 'feat/x' })).status,
     ).toBe(404);
@@ -425,7 +420,7 @@ describe('two users in one org each get their own sandbox + session workspace', 
     tables.projectRepositories.push(projectRepositoryRow({ id: 'p1', orgId: 'orgA', userId: 'a1', installationId: 7 }));
   }
 
-  it('hides sessions across users while sharing the org-owned project', async () => {
+  it("rejects one user's git operations against another user's session in the shared project", async () => {
     seedOrgProject();
     const user1 = buildApp({ workosId: 'a1', organizationId: 'orgA' });
     const user2 = buildApp({ workosId: 'a2', organizationId: 'orgA' });
@@ -434,12 +429,14 @@ describe('two users in one org each get their own sandbox + session workspace', 
     // before a session is created — sessions are the only sandbox-bearing unit.
     expect(tables.sandboxes).toHaveLength(0);
 
-    // User 1 creates a session identity; materialization happens in the workspace factory.
-    const created = await postJson(user1, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
-    expect(created.status).toBe(200);
-    const session = (await created.json()).session;
-    expect(tables.sessions).toHaveLength(1);
-    expect(tables.sessions[0]).toMatchObject({ userId: 'a1', projectRepositoryId: 'p1' });
+    const session = await sourceControlStorage.sessions.create({
+      sessionId: 'session-a1',
+      projectRepositoryId: 'p1',
+      orgId: 'orgA',
+      userId: 'a1',
+      branch: 'feat/x',
+      baseBranch: 'main',
+    });
     await sourceControlStorage.sessions.setSandbox({
       id: session.id,
       sandboxId: 'sb-a1-session',
@@ -578,9 +575,6 @@ describe('install flow binds the installation to the org', () => {
           fullName: 'octo/hello',
           installationId: 7,
           installationStorageId: tables.installations[0]!.id,
-          sandboxProvider: 'custom',
-          // Display-only listing guess: repos clone into the VM's home.
-          sandboxWorkdir: '~/hello',
         },
       ],
     });

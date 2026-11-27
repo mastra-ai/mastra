@@ -7,7 +7,7 @@ description: "Browse Cloudflare Workers AI model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/cloudflare-workers-ai.svg" alt="Cloudflare Workers AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Cloudflare Workers AI
 
-Access 28 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_KEY` environment variable. Configure `CLOUDFLARE_ACCOUNT_ID` as well.
+Access 18 Cloudflare Workers AI models through Mastra's model router. Authentication is handled automatically using the `CLOUDFLARE_API_KEY` environment variable. Configure `CLOUDFLARE_ACCOUNT_ID` as well.
 
 Learn more in the [Cloudflare Workers AI documentation](https://developers.cloudflare.com/workers-ai/models/).
 
@@ -59,40 +59,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.555
   },
   {
-    "model": "cloudflare-workers-ai/@cf/deepseek-ai/deepseek-r1-distill-qwen-32b",
-    "imageInput": false,
+    "model": "cloudflare-workers-ai/@cf/cloudflare/clairic-flash",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 80000,
-    "maxOutput": 80000,
-    "inputCost": 0.497,
-    "outputCost": 4.881
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.1,
+    "outputCost": null
   },
   {
-    "model": "cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4-flash-0731",
+    "model": "cloudflare-workers-ai/@cf/daily-co/phonellm-mini-alpha-2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 0.44,
-    "outputCost": 1.32
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4-pro-0813",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 1.32,
-    "outputCost": 3.96
+    "reasoning": false,
+    "contextWindow": 262140,
+    "maxOutput": 262140,
+    "inputCost": 0.06,
+    "outputCost": 0.24
   },
   {
     "model": "cloudflare-workers-ai/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
@@ -131,18 +119,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.112
   },
   {
-    "model": "cloudflare-workers-ai/@cf/meta/llama-3.1-8b-instruct-fp8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
-    "inputCost": 0.152,
-    "outputCost": 0.287
-  },
-  {
     "model": "cloudflare-workers-ai/@cf/meta/llama-3.2-11b-vision-instruct",
     "imageInput": true,
     "audioInput": false,
@@ -153,30 +129,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 0.0485,
     "outputCost": 0.676
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/meta/llama-3.2-1b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 60000,
-    "maxOutput": 60000,
-    "inputCost": 0.027,
-    "outputCost": 0.201
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/meta/llama-3.2-3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 80000,
-    "maxOutput": 80000,
-    "inputCost": 0.0509,
-    "outputCost": 0.335
   },
   {
     "model": "cloudflare-workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast",
@@ -227,42 +179,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.555
   },
   {
-    "model": "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 256000,
-    "inputCost": 0.95,
-    "outputCost": 4
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/moonshotai/kimi-k2.7-code",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 262144,
-    "inputCost": 0.95,
-    "outputCost": 4
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/nvidia/nemotron-3-120b-a12b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 256000,
-    "inputCost": 0.5,
-    "outputCost": 1.5
-  },
-  {
     "model": "cloudflare-workers-ai/@cf/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -299,18 +215,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1
   },
   {
-    "model": "cloudflare-workers-ai/@cf/qwen/qwen3-30b-a3b-fp8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.0509,
-    "outputCost": 0.335
-  },
-  {
     "model": "cloudflare-workers-ai/@cf/qwen/qwen3.8-27b",
     "imageInput": true,
     "audioInput": false,
@@ -323,15 +227,15 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.2
   },
   {
-    "model": "cloudflare-workers-ai/@cf/qwen/qwq-32b",
-    "imageInput": false,
+    "model": "cloudflare-workers-ai/@cf/thinkingmachines/inkling-2-small",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
-    "toolUsage": false,
+    "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 24000,
-    "maxOutput": 24000,
-    "inputCost": 0.66,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
     "outputCost": 1
   },
   {
@@ -347,18 +251,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 256000,
-    "inputCost": 1.4,
-    "outputCost": 4.4
-  },
-  {
     "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
     "imageInput": false,
     "audioInput": false,
@@ -369,18 +261,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 1.4,
     "outputCost": 4.4
-  },
-  {
-    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 0.15,
-    "outputCost": 0.5
   }
 ]}
 />
@@ -419,7 +299,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+      ? "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
       : "cloudflare-workers-ai/@cf/aisingapore/gemma-sea-lion-v4-27b-it";
   }
 });

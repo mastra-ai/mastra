@@ -3,8 +3,8 @@
  *
  * A peer process starts a foreach that charges five customers. Customers 0 and 1 are
  * charged, the later charges hang, and the peer is SIGKILLed shortly after customer 1's
- * charge returns. This process then boots as the next replica and runs the recovery
- * sweep. Every customer must be charged exactly once across both processes.
+ * charge returns. This process then boots as the next replica, with workers and their recovery
+ * loop. Every customer must be charged exactly once across both processes.
  *
  * The kill lands 200ms after the charge: long enough for one snapshot write to a local
  * file, and well inside the gap a timed checkpoint would leave.
@@ -66,11 +66,20 @@ describe('restarting a foreach after its process was SIGKILLed mid-billing (#262
       const workflow = createBillingWorkflow(concurrency, async customer => {
         writeFileSync(logPath, `B ${customer}\n`, { flag: 'a' });
       });
-      replicaB = new Mastra({ logger: false, storage, workflows: { workflow } });
+      // The killed peer's lease is still live when B boots, so B's recovery loop restarts the run once it
+      // lapsed; a short scan interval keeps that within the test.
+      replicaB = new Mastra({
+        logger: false,
+        storage,
+        workflows: { workflow },
+        recovery: { workflowScanIntervalMs: 500 },
+      });
       const { runs } = await replicaB.listActiveWorkflowRuns();
       expect(runs, env.describe()).toHaveLength(1);
       const { runId, workflowName } = runs[0]!;
 
+      // B boots like a server: its workers start the loop, and the boot call joins its first pass.
+      await replicaB.startWorkers();
       await replicaB.restartAllActiveWorkflowRuns();
       const workflows = (await storage.getStore('workflows'))!;
       await expect

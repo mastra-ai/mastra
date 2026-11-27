@@ -95,6 +95,70 @@ describe('BackgroundTaskManager with UnixSocketPubSub', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
+  // A producer doesn't consume its own process topic and no worker can run its
+  // closures, so a task bound to them would sit unclaimed. (#31089)
+  it('refuses invocation-bound work on a producer-only manager without leaving a task behind', async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'mastra-bg-bound-'));
+    const socketPath = join(tempDir, 'events.sock');
+    const storage = new MockStore();
+    const producerMastra = new Mastra({ logger: false, storage });
+    const workerMastra = new Mastra({ logger: false, storage });
+    const producerPubsub = new UnixSocketPubSub(socketPath);
+    const workerPubsub = new UnixSocketPubSub(socketPath);
+    const producer = new BackgroundTaskManager({
+      enabled: true,
+      mode: 'producer',
+      recoverStaleTasksOnStart: false,
+      globalConcurrency: 1,
+    });
+    const worker = new BackgroundTaskManager({ enabled: true, mode: 'worker', recoverStaleTasksOnStart: false });
+    managers.push(producer, worker);
+    mastras.push(producerMastra, workerMastra);
+    pubsubs.push(producerPubsub, workerPubsub);
+    producer.__registerMastra(producerMastra);
+    worker.__registerMastra(workerMastra);
+    await Promise.all([producerMastra.startWorkers(), workerMastra.startWorkers()]);
+    await Promise.all([producer.init(producerPubsub), worker.init(workerPubsub)]);
+    const boundExecute = vi.fn().mockResolvedValue('bound-result');
+    const staticExecute = vi.fn().mockResolvedValue('remote-result');
+    worker.registerStaticExecutor('tool', { execute: staticExecute });
+    const payload = { toolName: 'tool', args: {}, agentId: 'agent', runId: 'run' };
+
+    await expect(
+      producer.enqueue({ ...payload, toolCallId: 'bound' }, { executor: { execute: boundExecute } }),
+    ).rejects.toThrow("this process doesn't run background tasks");
+    expect((await producer.listTasks({})).total).toBe(0);
+
+    // Seeded rows a producer might be asked to restart or resume with its own executor stay untouched.
+    const store = (await storage.getStore('backgroundTasks'))!;
+    const row = { toolName: 'tool', args: {}, agentId: 'agent', runId: 'run', retryCount: 0, maxRetries: 0 };
+    await store.createTask({ ...row, id: 'pending-row', toolCallId: 'p', status: 'pending', createdAt: new Date() });
+    await store.createTask({
+      ...row,
+      id: 'suspended-row',
+      toolCallId: 's',
+      status: 'suspended',
+      createdAt: new Date(),
+    });
+    await expect(producer.restart('pending-row', { executor: { execute: boundExecute } })).rejects.toThrow(
+      'Cannot restart',
+    );
+    producer.registerTaskContext('suspended-row', { executor: { execute: boundExecute } });
+    await expect(producer.resume('suspended-row', { ok: true })).rejects.toThrow('Cannot resume');
+    expect(await producer.getTask('pending-row')).toMatchObject({ status: 'pending' });
+    expect(await producer.getTask('suspended-row')).toMatchObject({ status: 'suspended' });
+
+    // Portable work still reaches the worker.
+    const { task } = await producer.enqueue({ ...payload, toolCallId: 'portable' });
+    await vi.waitFor(
+      async () => {
+        expect(await producer.getTask(task.id)).toMatchObject({ status: 'completed', result: 'remote-result' });
+      },
+      { timeout: WAIT_TIMEOUT_MS },
+    );
+    expect(boundExecute).not.toHaveBeenCalled();
+  });
+
   it('keeps invocation-bound executors on their originating manager', async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'mastra-background-task-affinity-'));
     const socketPath = join(tempDir, 'events.sock');

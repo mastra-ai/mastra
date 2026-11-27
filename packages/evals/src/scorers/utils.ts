@@ -1254,46 +1254,36 @@ function compareRelaxedOrder(
   const actualNames: string[] = actual.steps.map((s: TrajectoryStep) => s.name);
   const expectedNames: string[] = expected.steps.map((s: ExpectedStep) => s.name);
 
-  // Relaxed: expected steps must appear in order but extra steps are allowed
-  let matchedSteps = 0;
-  let lastMatchedIndex = -1;
-  const outOfOrderSteps: string[] = [];
-  const matchedExpectedIndices = new Set<number>();
-
-  for (let i = 0; i < expectedNames.length; i++) {
-    const expectedName = expectedNames[i];
-    let found = false;
-
-    for (let j = lastMatchedIndex + 1; j < actualNames.length; j++) {
-      if (actualNames[j] === expectedName) {
-        if (actual.steps[j] && expected.steps[i]) {
-          if (expectedStepMatches(actual.steps[j]!, expected.steps[i]!)) {
-            matchedSteps++;
-            lastMatchedIndex = j;
-            matchedExpectedIndices.add(i);
-            found = true;
-            break;
-          }
-        } else {
-          matchedSteps++;
-          lastMatchedIndex = j;
-          matchedExpectedIndices.add(i);
-          found = true;
-          break;
-        }
-      }
-    }
-
-    if (!found) {
-      // Check if the step exists but is out of order
-      if (actualNames.includes(expectedName!)) {
-        outOfOrderSteps.push(expectedName!);
-      }
+  // Relaxed: the most expected steps that appear in order (longest common subsequence), extra steps are allowed
+  const n = expected.steps.length;
+  const m = actual.steps.length;
+  const matches = (i: number, j: number) => expectedStepMatches(actual.steps[j]!, expected.steps[i]!);
+  const best: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      best[i]![j] = matches(i, j) ? best[i + 1]![j + 1]! + 1 : Math.max(best[i + 1]![j]!, best[i]![j + 1]!);
     }
   }
 
+  // Earlier expected steps win ties
+  const matchedExpectedIndices = new Set<number>();
+  for (let i = 0, j = 0; i < n && j < m;) {
+    if (matches(i, j)) {
+      matchedExpectedIndices.add(i);
+      i++;
+      j++;
+    } else if (best[i]![j] === best[i]![j + 1]) {
+      j++;
+    } else {
+      i++;
+    }
+  }
+  const matchedSteps = matchedExpectedIndices.size;
+
   // Missing steps = expected steps that were not matched (by name + stepType + data, not just name)
   const missingSteps = expectedNames.filter((_, i) => !matchedExpectedIndices.has(i));
+  // Out-of-order steps = missing steps that the actual trajectory has by name
+  const outOfOrderSteps = missingSteps.filter(name => actualNames.includes(name));
   const expectedSet = new Set(expectedNames);
   const extraSteps = actualNames.filter(name => !expectedSet.has(name));
 
@@ -1336,6 +1326,28 @@ const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   processor_run: ['processorId'],
 };
 
+const BOXED_PRIMITIVE_TAGS = new Set(['[object Number]', '[object String]', '[object Boolean]', '[object BigInt]']);
+
+/**
+ * `JSON.stringify` with object keys sorted at every depth. Arrays keep their order.
+ * Boxed primitives such as `new Number(1)` stay as they are, because `JSON.stringify`
+ * unboxes them only after the replacer runs.
+ */
+function stableStringify(value: unknown): string | undefined {
+  return JSON.stringify(value, (_key, val) =>
+    val &&
+    typeof val === 'object' &&
+    !Array.isArray(val) &&
+    !BOXED_PRIMITIVE_TAGS.has(Object.prototype.toString.call(val))
+      ? Object.fromEntries(
+          Object.keys(val)
+            .sort()
+            .map(key => [key, val[key]]),
+        )
+      : val,
+  );
+}
+
 /**
  * Check if an actual TrajectoryStep matches an ExpectedStep.
  * Matches by name, optionally by stepType, and auto-compares any variant-specific
@@ -1353,7 +1365,7 @@ function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep): bo
       const actualVal = (actual as any)[field];
       if (actualVal === undefined) return false;
       try {
-        if (JSON.stringify(actualVal) !== JSON.stringify(expectedVal)) return false;
+        if (stableStringify(actualVal) !== stableStringify(expectedVal)) return false;
       } catch {
         return false;
       }
@@ -1521,7 +1533,7 @@ export function checkTrajectoryEfficiency(
         const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         try {
-          if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
+          if (stableStringify(prevArgs) === stableStringify(currArgs)) {
             redundantCalls.push({ name: curr.name, index: i });
           }
         } catch {

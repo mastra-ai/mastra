@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import '@/test/english-locale';
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -6,9 +7,9 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TracesExplorer } from '../index';
+import type { TracesExplorerFeatures } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSort } from '../traces-explorer-actions';
-import type { TracesExplorerFeatures } from '../traces-explorer-context';
 import {
   emptyDatasets,
   emptyEntityNames,
@@ -18,12 +19,14 @@ import {
   emptyTracesPage,
   idleDeltaBatch,
   traceAggregateCapabilities,
+  traceTokenSearchCapabilities,
   traceAggregateError,
   traceCountsAggregate,
   traceQueryCapabilities,
   twoTracesPage,
   weatherTraceUsage,
 } from './fixtures/traces-explorer';
+import { StudioFilterBar, StudioHistogram, StudioList, StudioTracesExplorer } from './studio-traces-explorer';
 import { useFixedChartSize } from '@/test/chart-size';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -71,7 +74,7 @@ const setHandlers = ({
       const parsed = traceAggregateRequestSchema.safeParse(body);
       if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
       try {
-        planTraceAggregate(parsed.data);
+        planTraceAggregate(parsed.data, { allowTokenSearch: capabilities.capabilities.traceAggregateTokenSearch });
       } catch (error) {
         return HttpResponse.json({ error: String(error) }, { status: 400 });
       }
@@ -93,9 +96,11 @@ const METRICS_SUPPORTED = { supported: true, isLoading: false };
 function Harness({
   initialFilters = DEFAULT_TRACES_FILTERS,
   features,
+  rootSource,
 }: {
   initialFilters?: TracesFilters;
   features?: TracesExplorerFeatures;
+  rootSource?: 'legacy' | 'aggregated';
 }) {
   const [selection, setSelection] = useState(EMPTY_TRACES_SELECTION);
   const [filters, setFilters] = useState(initialFilters);
@@ -105,7 +110,7 @@ function Harness({
       <button type="button" onClick={() => setFilters(current => ({ ...current, tokens: FAILED_ONLY }))}>
         Only failed traces
       </button>
-      <TracesExplorer
+      <StudioTracesExplorer
         selection={selection}
         filters={filters}
         onChange={next => {
@@ -116,12 +121,13 @@ function Harness({
         onSortChange={setSort}
         metricsSupport={METRICS_SUPPORTED}
         features={features}
+        rootSource={rootSource}
       >
-        <TracesExplorer.FilterBar />
-        <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
-          <TracesExplorer.List />
+        <StudioFilterBar />
+        <TracesExplorer.Body chart={<StudioHistogram />}>
+          <StudioList />
         </TracesExplorer.Body>
-      </TracesExplorer>
+      </StudioTracesExplorer>
     </>
   );
 }
@@ -184,6 +190,14 @@ beforeEach(() => {
 
 describe('TracesExplorer.Histogram', () => {
   useFixedChartSize(1200, 800);
+
+  it('does not show legacy histogram counts for aggregated roots', async () => {
+    setHandlers();
+    await renderExplorer({ rootSource: 'aggregated' });
+    expect(screen.getByText('What is the weather in Paris?')).toBeTruthy();
+    expect(chart()).toBeNull();
+    expect(onAggregate).not.toHaveBeenCalled();
+  });
 
   describe('when the server cannot aggregate traces', () => {
     it('does not render the chart', async () => {
@@ -487,4 +501,142 @@ describe('TracesExplorer.Histogram', () => {
       expect(chart()).toBeNull();
     });
   });
+  describe('indexed content filters', () => {
+    it.each(['traceQueryTokenSearch', 'traceAggregateTokenSearch'] as const)(
+      'disables search for the whole page without %s',
+      async capability => {
+        setHandlers({
+          capabilities: {
+            ...traceTokenSearchCapabilities,
+            capabilities: { ...traceTokenSearchCapabilities.capabilities, [capability]: false },
+          },
+        });
+        await renderExplorer({
+          initialFilters: {
+            ...DEFAULT_TRACES_FILTERS,
+            tokens: [{ fieldId: 'spans.all', operatorId: 'hasAllTokens', value: 'needle' }],
+          },
+        });
+        expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(tokenTerms(onAggregate.mock.calls.at(-1)?.[0])).toEqual([]);
+        expect(chart()).not.toBeNull();
+        const input = screen.getByRole('combobox', { name: 'Add filter' });
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: 'Any span content' } });
+        expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
+      },
+    );
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('uses the same %s search for lists and histograms', async (field, label) => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'id' }],
+        },
+      });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [{ spans: { some: { op: 'hasAllTokens', left: { path: field }, right: { literal: 'id' } } } }],
+      });
+      expect(screen.getByRole('button', { name: `Remove ${label} filter` })).toBeTruthy();
+      expect(screen.getByText('contains words')).toBeTruthy();
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
+    });
+    it('requires input and output conditions on the same span', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [
+            { fieldId: 'spans.input', operatorId: 'hasAllTokens', value: 'payment' },
+            { fieldId: 'spans.output', operatorId: 'hasAllTokens', value: 'declined' },
+          ],
+        },
+      });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toEqual({
+        op: 'and',
+        args: [
+          {
+            spans: {
+              some: {
+                op: 'and',
+                args: [
+                  { op: 'hasAllTokens', left: { path: 'input' }, right: { literal: 'payment' } },
+                  { op: 'hasAllTokens', left: { path: 'output' }, right: { literal: 'declined' } },
+                ],
+              },
+            },
+          },
+        ],
+      });
+    });
+    it('keeps Any Content search and histogram filters in sync through removal', async () => {
+      setHandlers({ capabilities: traceTokenSearchCapabilities });
+      const result = await renderExplorer();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Any span content' }));
+      onAggregate.mockClear();
+      fireEvent.change(input, { target: { value: 'ok' } });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual(['ok']));
+      fireEvent.keyDown(input, { key: 'Escape' });
+      await settle(result.queryClient);
+      await waitFor(() => expect(chart()).not.toBeNull());
+      expect(onAggregate.mock.calls.at(-1)?.[0].where).toEqual(onTraceQuery.mock.calls.at(-1)?.[0].where);
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Any span content filter' }));
+      await waitFor(() => expect(chart()).not.toBeNull());
+    });
+    it.each([
+      ['all', 'Any span content'],
+      ['input', 'Span input'],
+      ['output', 'Span output'],
+      ['error', 'Span error'],
+      ['inputPreview', 'Span input preview'],
+      ['outputPreview', 'Span output preview'],
+      ['errorPreview', 'Span error preview'],
+    ] as const)('does not send %s token predicates without the trace capability', async field => {
+      setHandlers({
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, spanQueryTokenSearch: true },
+        },
+      });
+      await renderExplorer({
+        initialFilters: {
+          ...DEFAULT_TRACES_FILTERS,
+          tokens: [{ fieldId: `spans.${field}`, operatorId: 'hasAllTokens', value: 'needle' }],
+        },
+      });
+      expect(tokenTerms(onTraceQuery.mock.calls.at(-1)?.[0])).toEqual([]);
+      expect(chart()).not.toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Any span content' } });
+      expect(screen.queryByRole('option', { name: 'Any span content' })).toBeNull();
+    });
+  });
 });
+
+function tokenTerms(value: unknown): unknown[] {
+  if (!value || typeof value !== 'object') return [];
+  if (
+    'op' in value &&
+    value.op === 'hasAllTokens' &&
+    'right' in value &&
+    value.right &&
+    typeof value.right === 'object' &&
+    'literal' in value.right
+  )
+    return [value.right.literal];
+  return Object.values(value).flatMap(child => (Array.isArray(child) ? child.flatMap(tokenTerms) : tokenTerms(child)));
+}

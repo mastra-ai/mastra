@@ -1,20 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { SettingsContainer, SettingsItem, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { Fragment } from 'react';
+import { Link, useParams } from 'react-router';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
-import {
-  useIntakeBindingsQuery,
-  useIntakeConfigQuery,
-  useSaveIntakeConfigMutation,
-} from '../../../../hooks/useIntakeConfig';
+import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
-import type { IntakeConfig } from '../../factory/services/intake';
+import { boardIntakePath } from '../../boardConfig/boardConfigPaths';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
@@ -22,6 +20,8 @@ import { IncidentioIntakeSection, isIncidentioDirectConfigured } from './Inciden
 import { JiraIntakeSection } from './JiraIntakeSection';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
+import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -31,9 +31,32 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
+const SOURCES_DESCRIPTION =
+  "The services that bring work into your organization's boards, and what each one brings in. A service with nothing selected brings in nothing.";
+
+function IntakeSkeleton() {
+  return (
+    <SettingsSubsection scope="org" title="Sources" description={SOURCES_DESCRIPTION}>
+      <SkeletonRows label="Loading intake sources" rows={4} className="gap-3">
+        <SettingsContainer aria-hidden>
+          <SettingsItem
+            media={<Skeleton className="size-avatar-md shrink-0 rounded-lg motion-reduce:before:animate-none" />}
+            title={<SkeletonText line="text-label" className="w-24 motion-reduce:before:animate-none" />}
+            description={
+              <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
+            }
+          >
+            <Skeleton className="h-control-sm w-24 rounded-full motion-reduce:before:animate-none" />
+          </SettingsItem>
+        </SettingsContainer>
+      </SkeletonRows>
+    </SettingsSubsection>
+  );
+}
+
 export function IntakeSection() {
+  const { factoryId } = useParams<{ factoryId: string }>();
   const configQuery = useIntakeConfigQuery();
-  const saveMutation = useSaveIntakeConfigMutation();
   useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
   const gitlab = useGitLabStatusQuery();
@@ -41,15 +64,24 @@ export function IntakeSection() {
   const jira = useJiraStatusQuery();
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
+  const vanta = useVantaStatusQuery();
+  const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
 
-  if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
-  if (configQuery.isError || !configQuery.data) {
+  if (configQuery.isPending) return <IntakeSkeleton />;
+  if (!configQuery.data) {
     return (
-      <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void configQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
@@ -61,18 +93,10 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
+    return <IntakeSkeleton />;
   }
 
-  const update = async (next: IntakeConfig) => {
-    try {
-      await saveMutation.mutateAsync(next);
-      toast.success('Intake sources updated');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save intake sources');
-    }
-  };
-  const props = { config: configQuery.data, busy: saveMutation.isPending, update };
+  const props = { config: configQuery.data };
   const incidentioDirect = isIncidentioDirectConfigured(incidentio.data);
   const incidentioPlatformUnavailable =
     incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);
@@ -87,7 +111,12 @@ export function IntakeSection() {
   const linearListing = sourceListing(
     Boolean(
       linear.data?.enabled &&
-      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+      (linear.data.connected ||
+        linear.data.workspaces?.length ||
+        props.config.linear.sourceIds?.length ||
+        linear.data.migration?.required ||
+        linear.data.requiresFreshConnect?.length ||
+        linear.data.unidentified?.length),
     ),
     linear.isError || linear.data?.reason === 'unavailable',
   );
@@ -100,6 +129,10 @@ export function IntakeSection() {
           incidentioDirect || Boolean(incidentioConnections.data?.length),
           incidentio.isError || incidentioConnections.isError,
         );
+  const vantaListing = sourceListing(
+    Boolean(vantaConnections.data?.length),
+    vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
+  );
   // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
   const sources = [
     {
@@ -134,45 +167,48 @@ export function IntakeSection() {
         />
       ),
     },
+    ...(vanta.data
+      ? [
+          {
+            id: 'vanta',
+            listing: vantaListing,
+            content: (
+              <VantaIntakeSection
+                {...props}
+                listed={vantaListing !== 'available'}
+                statusQuery={vanta}
+                connectionsQuery={vantaConnections}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
-  const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
-  const connectedSources = sourcesListed('connected');
-  const unavailableSources = sourcesListed('unavailable');
-  const availableSources = sourcesListed('available');
 
   return (
-    <div className="flex flex-col gap-8">
-      {connectedSources.length > 0 && (
-        <SettingsSubsection
-          scope="org"
-          title="Connected sources"
-          description="Choose which services bring work into your organization's boards."
-        >
-          <div className="flex flex-col gap-6">
-            {connectedSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-          </div>
-        </SettingsSubsection>
+    <SettingsSubsection scope="org" title="Sources" description={SOURCES_DESCRIPTION}>
+      <div className="flex flex-col gap-3">
+        {sources.flatMap(source =>
+          source.listing === undefined
+            ? []
+            : [
+                source.listing === 'available' ? (
+                  <SettingsContainer key={source.id}>{source.content}</SettingsContainer>
+                ) : (
+                  <Fragment key={source.id}>{source.content}</Fragment>
+                ),
+              ],
+        )}
+      </div>
+      {factoryId && (
+        <Txt as="p" variant="caption" tone="muted">
+          Which board takes each item is set in each board's Rules, in the{' '}
+          <Link to={boardIntakePath(factoryId, 'work')} className="underline">
+            intake order
+          </Link>
+          .
+        </Txt>
       )}
-      {unavailableSources.length > 0 && (
-        <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-6">
-            {unavailableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-          </div>
-        </SettingsSubsection>
-      )}
-      {availableSources.length > 0 && (
-        <SettingsSubsection title="Add a source">
-          <SettingsContainer>
-            {availableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
-            ))}
-          </SettingsContainer>
-        </SettingsSubsection>
-      )}
-    </div>
+    </SettingsSubsection>
   );
 }

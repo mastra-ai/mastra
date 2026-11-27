@@ -367,6 +367,122 @@ describe('Agent client-side tools', () => {
     expect(JSON.stringify(secondCallBody.messages)).toContain('tool-result');
   });
 
+  for (const legacy of [false, true]) {
+    it(`${legacy ? 'generateLegacy' : 'generate'}: runs every parallel client tool call before continuing`, async () => {
+      const calls = [
+        { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } },
+        { toolCallId: 'call_2', toolName: 'timeTool', args: { zone: 'UTC' } },
+      ];
+      const firstResponse = {
+        finishReason: 'tool-calls',
+        toolCalls: legacy ? calls : calls.map(payload => ({ payload })),
+        response: {
+          messages: [{ role: 'assistant', content: calls.map(c => ({ type: 'tool-call', ...c })) }],
+        },
+        usage: { totalTokens: 2 },
+      };
+      const secondResponse = {
+        finishReason: 'stop',
+        response: { messages: [{ role: 'assistant', content: 'done' }] },
+        usage: { totalTokens: 3 },
+      };
+      (global.fetch as any)
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(secondResponse), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+
+      const executeWeather = vi.fn(async () => ({ sunny: true }));
+      const executeTime = vi.fn(async () => ({ time: '12:00' }));
+      const clientTools = {
+        weatherTool: createTool({
+          id: 'weatherTool',
+          description: 'Weather',
+          inputSchema: z.object({ location: z.string() }),
+          execute: executeWeather,
+        }),
+        timeTool: createTool({
+          id: 'timeTool',
+          description: 'Time',
+          inputSchema: z.object({ zone: z.string() }),
+          execute: executeTime,
+        }),
+      };
+
+      const result = legacy
+        ? await agent.generateLegacy({ messages: [{ role: 'user', content: 'hi' }], clientTools })
+        : await agent.generate('hi', { clientTools });
+
+      expect(result.finishReason).toBe('stop');
+      expect(executeWeather).toHaveBeenCalledTimes(1);
+      expect(executeTime).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+      const toolMessage = secondCallBody.messages.find((m: any) => m.role === 'tool');
+      expect(toolMessage.content.map((c: any) => ({ toolCallId: c.toolCallId, result: c.result }))).toEqual([
+        { toolCallId: 'call_1', result: { sunny: true } },
+        { toolCallId: 'call_2', result: { time: '12:00' } },
+      ]);
+    });
+  }
+
+  for (const legacy of [false, true]) {
+    it(`${legacy ? 'generateLegacy' : 'generate'}: stops running parallel client tools once aborted`, async () => {
+      const controller = new AbortController();
+      const calls = [
+        { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } },
+        { toolCallId: 'call_2', toolName: 'timeTool', args: { zone: 'UTC' } },
+      ];
+      const firstResponse = {
+        finishReason: 'tool-calls',
+        toolCalls: legacy ? calls : calls.map(payload => ({ payload })),
+        response: { messages: [{ role: 'assistant', content: [] }] },
+        usage: { totalTokens: 2 },
+      };
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify(firstResponse), { status: 200, headers: { 'content-type': 'application/json' } }),
+      );
+
+      const executeWeather = vi.fn(async () => {
+        controller.abort();
+        return { sunny: true };
+      });
+      const executeTime = vi.fn(async () => ({ time: '12:00' }));
+      const clientTools = {
+        weatherTool: createTool({
+          id: 'weatherTool',
+          description: 'Weather',
+          inputSchema: z.object({ location: z.string() }),
+          execute: executeWeather,
+        }),
+        timeTool: createTool({
+          id: 'timeTool',
+          description: 'Time',
+          inputSchema: z.object({ zone: z.string() }),
+          execute: executeTime,
+        }),
+      };
+
+      const run = legacy
+        ? agent.generateLegacy({
+            messages: [{ role: 'user', content: 'hi' }],
+            clientTools,
+            abortSignal: controller.signal,
+          })
+        : agent.generate('hi', { clientTools, abortSignal: controller.signal });
+
+      await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+      expect(executeWeather).toHaveBeenCalledTimes(1);
+      expect(executeTime).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  }
+
   it('generate: forwards abortSignal to fetch and stops client-tool continuations once aborted', async () => {
     const controller = new AbortController();
     const firstResponse = {
@@ -1163,18 +1279,9 @@ describe('Agent client-side tools', () => {
       { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
     ];
 
-    // Second cycle: emit normal completion after tool result handling
-    const secondCycle = [
-      { type: 'step-start', payload: { messageId: 'm2' } },
-      { type: 'text-delta', payload: { text: 'Tool handled' } },
-      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
-      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
-    ];
-
-    // Mock two sequential fetch calls (initial and recursive)
-    (global.fetch as any)
-      .mockResolvedValueOnce(sseResponse(firstCycle))
-      .mockResolvedValueOnce(sseResponse(secondCycle));
+    // Only one request is made here: the client tool has no execute function, so
+    // the client does not issue a recursive call. Mock exactly that one request.
+    (global.fetch as any).mockResolvedValueOnce(sseResponse(firstCycle));
 
     const weatherTool = createTool({
       id: 'weatherTool',
@@ -2243,15 +2350,17 @@ describe('Agent client-side tools', () => {
 
     const resp = await agent.stream('hi');
 
-    // Capture error chunks
+    // Capture error chunks; the error is still delivered to onChunk before processing rejects
     let errorChunk: any = null;
-    await resp.processDataStream({
-      onChunk: async chunk => {
-        if (chunk.type === 'error') {
-          errorChunk = chunk;
-        }
-      },
-    });
+    await expect(
+      resp.processDataStream({
+        onChunk: async chunk => {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        },
+      }),
+    ).rejects.toThrow('API Error');
 
     // Verify error chunk was received
     expect(errorChunk).not.toBeNull();
@@ -2504,6 +2613,60 @@ describe('Agent stream cancellation', () => {
     expect(secondSpy).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(vi.mocked(global.fetch).mock.calls[1]![0]).toContain('/abort');
+  });
+
+  it('streamLegacy: processDataStream rejects after partial text when the connection drops', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (global.fetch as any).mockImplementationOnce(async () => {
+      let sentHead = false;
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (!sentHead) {
+            sentHead = true;
+            controller.enqueue(encoder.encode(formatDataStreamPart('start_step', { messageId: 'm1' })));
+            controller.enqueue(encoder.encode(formatDataStreamPart('text', 'Here is the first half of')));
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 10));
+          controller.error(new Error('connection reset'));
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, { status: 200 });
+    });
+
+    const resp = await agent.streamLegacy({ messages: 'hi' });
+    const text: string[] = [];
+    await expect(resp.processDataStream({ onTextPart: value => void text.push(value) })).rejects.toThrow(
+      'connection reset',
+    );
+    expect(text.join('')).toBe('Here is the first half of');
+  });
+
+  it('streamLegacy: processDataStream rejects after partial text when the server sends an error part', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(formatDataStreamPart('start_step', { messageId: 'm1' })));
+          controller.enqueue(encoder.encode(formatDataStreamPart('text', 'Here is the first half of')));
+          controller.enqueue(encoder.encode(formatDataStreamPart('error', 'upstream 529 overloaded')));
+          controller.close();
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, { status: 200 });
+    });
+
+    const resp = await agent.streamLegacy({ messages: 'hi' });
+    const text: string[] = [];
+    const errors: string[] = [];
+    await expect(
+      resp.processDataStream({
+        onTextPart: value => void text.push(value),
+        onErrorPart: value => void errors.push(value),
+      }),
+    ).rejects.toThrow('upstream 529 overloaded');
+    expect(text.join('')).toBe('Here is the first half of');
+    expect(errors).toEqual(['upstream 529 overloaded']);
   });
 
   it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {

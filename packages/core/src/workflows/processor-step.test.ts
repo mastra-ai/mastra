@@ -9,8 +9,8 @@ import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
 import { createWorkflow } from './create';
-import { createStep as createEventedStep } from './evented/workflow';
-import { createStep, isProcessor } from './workflow';
+import { cloneStep as cloneEventedStep, createStep as createEventedStep } from './evented/workflow';
+import { cloneStep, createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
@@ -395,6 +395,20 @@ describe('createStep with Processor', () => {
     const step = createStep(processor);
 
     expect(step.id).toBe('processor:my-processor');
+  });
+
+  it('keeps the processor id on the step so it survives a step id rewrite', () => {
+    const processor: Processor = {
+      id: 'my-processor',
+      processInput: async ({ messages }) => messages,
+    };
+
+    for (const step of [createStep(processor), createEventedStep(processor)]) {
+      const renamed = { ...step, id: 'processor:graph-step-1' };
+      expect(renamed.processorId).toBe('my-processor');
+    }
+    expect(cloneStep(createStep(processor), { id: 'cloned' }).processorId).toBe('my-processor');
+    expect(cloneEventedStep(createEventedStep(processor), { id: 'cloned' }).processorId).toBe('my-processor');
   });
 
   it('should use processor name as description if available', () => {
@@ -1250,6 +1264,79 @@ describe('createStep with Processor', () => {
 
       await expect(step.execute({ inputData } as any)).rejects.toThrow('Unexpected error');
     });
+  });
+});
+
+describe('Processor workflow with ProcessorStepOutputSchema', () => {
+  it('passes providerMetadata to processOutputStep in the outputStep phase', async () => {
+    let receivedProviderMetadata: Record<string, unknown> | undefined;
+    const processor: Processor = {
+      id: 'provider-metadata-reader',
+      processOutputStep: async ({ messages, providerMetadata }) => {
+        receivedProviderMetadata = providerMetadata;
+        return messages;
+      },
+    };
+
+    const workflow = createWorkflow({
+      id: 'processor-output-schema-workflow',
+      inputSchema: ProcessorStepOutputSchema,
+      outputSchema: ProcessorStepOutputSchema,
+    })
+      .then(createStep(processor))
+      .commit();
+
+    const providerMetadata = { bedrock: { trace: { guardrail: { action: 'BLOCKED' } } } };
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'outputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        providerMetadata,
+      },
+    });
+
+    expect(result.status).toBe('success');
+    expect(receivedProviderMetadata).toEqual(providerMetadata);
+  });
+});
+
+describe('Processor Step in Workflow - abort signal', () => {
+  it('passes the abort signal to every processor in a chain (#29208)', async () => {
+    const received: Array<AbortSignal | undefined> = [];
+    const recorder = (id: string): Processor => ({
+      id,
+      processInputStep: async ({ messageList, abortSignal }) => {
+        received.push(abortSignal);
+        return messageList;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'processor-abort-signal-chain',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepOutputSchema,
+      options: { validateInputs: false },
+    })
+      .then(createStep(recorder('first')))
+      .then(createStep(recorder('second')))
+      .commit();
+
+    const controller = new AbortController();
+    const run = await workflow.createRun();
+    const result = await run.start({
+      inputData: {
+        phase: 'inputStep',
+        messages: [],
+        messageList: createMockMessageList(),
+        stepNumber: 0,
+        abortSignal: controller.signal,
+      } as any,
+    });
+
+    expect(result.status).toBe('success');
+    expect(received).toEqual([controller.signal, controller.signal]);
   });
 });
 

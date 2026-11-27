@@ -13,11 +13,14 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     'githubIssueNumber',
     'githubPullRequestNumber',
     'githubAssigneesUpdatedAt',
+    'githubLabelsUpdatedAt',
     'draft',
     'merged',
     'headBranch',
     'baseBranch',
     'requestedReviewers',
+    // A pull request closing several issues: the cards linked to it besides the one holding it.
+    'closesWorkItemIds',
   ],
   key: (source, metadata) => {
     const match = source.url ? GITHUB_URL.exec(source.url) : null;
@@ -26,4 +29,6 @@ export const githubWorkItemAdapter = externalAdapter('github', {
     return typeof number === 'number' ? `#${number}` : null;
   },
   state: mergedState,
+  // The key carries the repository whenever the item's URL did: `acme/app#12`.
+  repository: ({ key }) => (key ? (/^([^/#]+\/[^/#]+)#\d+$/.exec(key)?.[1] ?? null) : null),
 });

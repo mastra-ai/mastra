@@ -2,12 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { it, expect } from 'vitest';
 import type { LLMock } from '@copilotkit/aimock';
 import { MockMemory } from '../../../../memory/mock';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -43,7 +38,7 @@ describeForAllEngines('AIMock loop scenario: image inputs', engine => {
     const llm = getMock();
     const { agent } = await createSharedAgent(llm, { engine, memory, model: chatModel(llm) });
     const result: any = await agent.stream(messages, { memory: { thread, resource: 'image-user' } });
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     const text = await output.text;
     result.cleanup?.();
     return text;

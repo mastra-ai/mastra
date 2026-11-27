@@ -8,11 +8,12 @@ import { ChunkFrom } from '@mastra/core/stream';
 
 type ObservedAgentFrame =
   | AgentChunkEventData
-  | { type: 'error'; payload: { error: AgentErrorEventData['error'] } }
+  | { type: 'error'; index?: number; payload: { error: AgentErrorEventData['error'] } }
   | {
       type: 'finish';
       runId: string;
       from: ChunkFrom;
+      index?: number;
       payload: {
         output: unknown;
         stepResult: Pick<AgentFinishEventData['stepResult'], 'reason'> & {
@@ -20,20 +21,29 @@ type ObservedAgentFrame =
           isContinued?: boolean;
         };
         messages?: AgentFinishEventData['messages'];
+        stopCause?: AgentFinishEventData['stopCause'];
       };
     };
 
 // Keep the HTTP wire shape aligned with core's createDurableAgentStream without
-// subscribing again or rerunning output processors. Offsets still count raw events.
+// subscribing again or rerunning output processors. Each frame carries its event's
+// run-log index, which is what observe offsets count.
 export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame[] {
   const { runId } = event;
+  const logIndex = typeof event.index === 'number' ? { index: event.index } : undefined;
+  // The abort frame is synthesized beside the finish frame of the same log entry, so only finish carries the index.
   const abort = { type: 'abort' as const, runId, from: ChunkFrom.AGENT, payload: {} };
   switch (event.type) {
-    case 'chunk':
-      return [event.data as AgentChunkEventData];
+    case 'chunk': {
+      // The envelope index is authoritative: drop any index a forwarded sub-agent chunk carried.
+      const { index: _nestedIndex, ...data } = event.data as AgentChunkEventData;
+      return [{ ...data, ...logIndex } as AgentChunkEventData];
+    }
     case 'step-start': {
       const chunk = event.data as AgentChunkEventData;
-      return chunk && 'type' in chunk ? [chunk] : [];
+      if (!chunk || !('type' in chunk)) return [];
+      const { index: _nestedIndex, ...data } = chunk;
+      return [{ ...data, ...logIndex } as AgentChunkEventData];
     }
     case 'finish': {
       const data = event.data as AgentFinishEventData;
@@ -50,10 +60,12 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
         type: 'finish' as const,
         runId,
         from: ChunkFrom.AGENT,
+        ...logIndex,
         payload: {
           output: raw === undefined ? data.output : { ...data.output, usage: { ...data.output.usage, raw } },
           stepResult: data.stepResult,
           ...(data.messages ? { messages: data.messages } : {}),
+          ...(data.stopCause ? { stopCause: data.stopCause } : {}),
         },
       };
       return data.stepResult?.reason === 'abort' ? [abort, finish] : [finish];
@@ -66,6 +78,7 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
           type: 'finish' as const,
           runId,
           from: ChunkFrom.AGENT,
+          ...logIndex,
           payload: {
             output: {
               text: data.text,
@@ -79,7 +92,7 @@ export function toAgentStreamChunks(event: AgentStreamEvent): ObservedAgentFrame
     }
     case 'error': {
       const data = event.data as AgentErrorEventData;
-      return [{ type: 'error', payload: { error: { ...data.error } } }];
+      return [{ type: 'error', ...logIndex, payload: { error: { ...data.error } } }];
     }
     default:
       return [];

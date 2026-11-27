@@ -61,12 +61,12 @@ await agent.network(`
   },
   {
     name: 'options',
-    type: 'MultiPrimitiveExecutionOptions',
+    type: 'NetworkOptions',
     isOptional: true,
     description: 'Optional configuration for the network process.',
     properties: [
       {
-        type: 'MultiPrimitiveExecutionOptions',
+        type: 'NetworkOptions',
         parameters: [
           {
             name: 'maxSteps',
@@ -387,7 +387,7 @@ console.log(result?.summary)
 console.log(result?.recommendations)
 ```
 
-### Streaming Partial Objects
+### Streaming partial objects
 
 You can also stream partial objects as they're being generated:
 
@@ -405,7 +405,7 @@ for await (const partial of stream.objectStream) {
 const final = await stream.object
 ```
 
-### Chunk Types
+### Chunk types
 
 When using structured output, additional chunk types are emitted:
 

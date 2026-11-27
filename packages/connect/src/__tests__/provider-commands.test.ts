@@ -1,8 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+import { resolveConfig as resolvePrettierConfig } from 'prettier';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TEMPLATE_REPO } from '../../scripts/templates-config.js';
@@ -53,10 +56,37 @@ const action = createAction({
 export default action;
 `;
 
+const deleteWorkbookActionTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ driveId: z.string(), itemId: z.string() });
+const OutputSchema = z.object({ success: z.boolean() });
+
+const action = createAction({
+  description: 'Delete a workbook file.',
+  version: '1.0.0',
+  input: InputSchema,
+  output: OutputSchema,
+  scopes: [],
+  exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+    await nango.delete({
+      endpoint: \`/v1.0/drives/\${encodeURIComponent(input.driveId)}/items/\${encodeURIComponent(input.itemId)}\`,
+      retries: 3,
+    });
+    return { success: true };
+  },
+});
+
+export default action;
+`;
+
 const imageActionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
-const InputSchema = z.object({ prompt: z.string() });
+const InputSchema = z.object({
+  prompt: z.string(),
+  model: z.string().optional().describe('A supported GPT Image model ID. Defaults to "gpt-image-1".'),
+});
 const OutputSchema = z.object({
   data: z.array(z.object({
     url: z.string().optional(),
@@ -72,9 +102,170 @@ const action = createAction({
   output: OutputSchema,
   scopes: [],
   exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
-    const response = await nango.post({ endpoint: '/images', data: input });
+    const response = await nango.post({ endpoint: '/images', data: { model: input.model ?? 'gpt-image-1', prompt: input.prompt } });
     return OutputSchema.parse(response.data);
   },
+});
+
+export default action;
+`;
+
+// The parts of NangoHQ/integration-templates' fireflies get-transcript (pinned
+// in templates-config.ts) that the #29401 generator override rewrites.
+const firefliesGetTranscriptTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+
+const InputSchema = z.object({ id: z.string() });
+
+const SummarySchema = z.object({
+    action_items: z.string().nullish(),
+    keywords: z.string().nullish()
+});
+
+const ProviderSummarySchema = SummarySchema.extend({
+    action_items: z.union([z.string(), z.array(z.string())]).nullish()
+});
+
+const SpeakerSchema = z.object({
+    id: z.string().nullish(),
+    name: z.string().nullish()
+});
+
+const TranscriptSchema = z.object({
+    summary: ProviderSummarySchema.nullable().optional(),
+    speakers: z.array(SpeakerSchema).nullish()
+});
+
+const OutputSchema = z.object({
+    summary: SummarySchema.optional(),
+    speakers: z.array(SpeakerSchema).optional()
+});
+
+function normalizeActionItems(actionItems: string | string[]): string {
+    return Array.isArray(actionItems) ? actionItems.join('\\n') : actionItems;
+}
+
+const action = createAction({
+    description: 'Retrieve a transcript.',
+    version: '1.0.0',
+    input: InputSchema,
+    output: OutputSchema,
+    scopes: [],
+    exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+        const response = await nango.post({ endpoint: '/graphql', data: { variables: { id: input.id } } });
+        const transcript = TranscriptSchema.parse(response.data);
+        return {
+            summary: transcript.summary
+                ? {
+                      ...transcript.summary,
+                      action_items:
+                          transcript.summary.action_items != null ? normalizeActionItems(transcript.summary.action_items) : transcript.summary.action_items
+                  }
+                : undefined,
+            speakers: transcript.speakers ?? undefined
+        };
+    }
+});
+
+export default action;
+`;
+
+// The posthog run-query template, rebuilt from the tool generated at the
+// pinned commit (templates-config.ts); upstream no longer serves that commit.
+// Everything the generator emits is reconstructed: the three schemas, the
+// description, and the exec body with its comment, guard and blank lines.
+// `version` and `scopes` are never emitted, so their values are placeholders.
+// Formatting follows the upstream repository (4-space indent, no trailing
+// commas); the generator reformats it with the package's prettier config.
+// The byte-for-byte checks below prove this fixture generates main's tool, not
+// that it equals the upstream source. Replace it with the real template once
+// the pinned commit can be fetched again.
+const posthogRunQueryTemplate = `import { z } from 'zod';
+import { createAction } from 'nango';
+import type { ProxyConfiguration } from 'nango';
+
+const InputSchema = z.object({
+    project_id: z.number().describe('PostHog project ID. Example: 309484'),
+    query: z
+        .string()
+        .describe(
+            'HogQL query to execute. Example: "select event, count() from events where timestamp > now() - interval 7 day group by event order by count() desc limit 10"'
+        ),
+    name: z.string().optional().describe('Optional client-provided name for the query, used for tracking.')
+});
+
+const OutputSchema = z.object({
+    results: z.array(z.array(z.unknown())).describe('Result rows. Each row is an array of column values.'),
+    columns: z.array(z.string()).nullish().describe('Column names for the result rows.'),
+    types: z.array(z.string()).nullish().describe('Column types for the result rows.'),
+    hogql: z.string().nullish().describe('The HogQL that was executed after normalization.'),
+    clickhouse: z.string().nullish().describe('The ClickHouse SQL the query was compiled to.'),
+    hasMore: z.boolean().nullish().describe('Whether more rows are available beyond the returned set.'),
+    limit: z.number().nullish().describe('Row limit applied to the query.'),
+    offset: z.number().nullish().describe('Row offset applied to the query.'),
+    error: z.string().nullish().describe('Error message when the query failed.')
+});
+
+const ProviderResponseSchema = z
+    .object({
+        results: z.array(z.array(z.unknown())),
+        columns: z.array(z.string()).nullish(),
+        types: z.array(z.string()).nullish(),
+        hogql: z.string().nullish(),
+        clickhouse: z.string().nullish(),
+        hasMore: z.boolean().nullish(),
+        limit: z.number().nullish(),
+        offset: z.number().nullish(),
+        error: z.string().nullish()
+    })
+    .passthrough();
+
+const action = createAction({
+    description: 'Execute a HogQL (SQL) query against PostHog and return the result rows.',
+    version: '1.0.0',
+    input: InputSchema,
+    output: OutputSchema,
+    scopes: [],
+    exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
+        const parsedInput = await nango.zodValidateInput({ zodSchema: InputSchema, input });
+
+        const config: ProxyConfiguration = {
+            // https://posthog.com/docs/api/query
+            endpoint: \`/api/projects/\${encodeURIComponent(parsedInput.data.project_id)}/query/\`,
+            data: {
+                query: {
+                    kind: 'HogQLQuery',
+                    query: parsedInput.data.query
+                },
+                ...(parsedInput.data.name !== undefined && { client_query_id: parsedInput.data.name })
+            },
+            retries: 3
+        };
+
+        const response = await nango.post(config);
+
+        if (!response.data) {
+            throw new nango.ActionError({
+                type: 'query_failed',
+                message: 'Query returned no data',
+                project_id: parsedInput.data.project_id
+            });
+        }
+
+        const providerResponse = ProviderResponseSchema.parse(response.data);
+
+        return {
+            results: providerResponse.results,
+            columns: providerResponse.columns,
+            types: providerResponse.types,
+            hogql: providerResponse.hogql,
+            clickhouse: providerResponse.clickhouse,
+            hasMore: providerResponse.hasMore,
+            limit: providerResponse.limit,
+            offset: providerResponse.offset,
+            error: providerResponse.error
+        };
+    }
 });
 
 export default action;
@@ -467,11 +658,16 @@ describe('maintainer provider commands', () => {
     mkdirSync(microsoftExcelActionDir, { recursive: true });
     writeFileSync(resolve(microsoftExcelActionDir, 'get-user-drive.ts'), getUserDriveActionTemplate);
     writeFileSync(resolve(microsoftExcelActionDir, 'list-users.ts'), graphCursorTemplate);
+    writeFileSync(resolve(microsoftExcelActionDir, 'delete-workbook.ts'), deleteWorkbookActionTemplate);
     symlinkSync('microsoft-excel-oauth2-cc', resolve(integrationsDir, 'microsoft-excel'), 'dir');
 
     const openaiActionDir = resolve(integrationsDir, 'openai', 'actions');
     mkdirSync(openaiActionDir, { recursive: true });
     writeFileSync(resolve(openaiActionDir, 'create-image.ts'), imageActionTemplate);
+
+    const firefliesActionDir = resolve(integrationsDir, 'fireflies', 'actions');
+    mkdirSync(firefliesActionDir, { recursive: true });
+    writeFileSync(resolve(firefliesActionDir, 'get-transcript.ts'), firefliesGetTranscriptTemplate);
 
     execFileSync('git', ['init', '-q'], { cwd: resolve(packageRoot, '.templates') });
     execFileSync('git', ['add', '.'], { cwd: resolve(packageRoot, '.templates') });
@@ -717,6 +913,116 @@ export default action;
     expect(generatedTool).toContain('toModelOutput: toImageGenerationModelOutput,');
   });
 
+  // OpenAI retired gpt-image-1 on 2026-10-23; regeneration must not restore it as the default.
+  it('defaults the OpenAI image generation tool to a model OpenAI still serves', async () => {
+    await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/openai/tools/create-image.ts'), 'utf8');
+    expect(generatedTool).toMatch(/input\.model \?\? ["']gpt-image-2\.5-sunburst["']/);
+    expect(generatedTool).toMatch(/Defaults to \\?"gpt-image-2\.5-sunburst\\?"/);
+    expect(generatedTool).not.toContain('gpt-image-1');
+  });
+
+  // #29401: Fireflies sends summary.keywords as a list and speakers[].id as a
+  // number; the template accepts only strings, so the generator widens both.
+  it('regenerates fireflies get-transcript so live keyword lists and numeric speaker ids are accepted', async () => {
+    await addProvider({ providerId: 'fireflies', localId: 'fireflies', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/fireflies/tools/get-transcript.ts'), 'utf8');
+    expect(generatedTool).toMatch(
+      /const ProviderSummarySchema = SummarySchema\.extend\(\{[^}]*keywords: z\.union\(\[z\.string\(\), z\.array\(z\.string\(\)\)\]\)\.nullish\(\)/,
+    );
+    expect(generatedTool).toMatch(
+      /const ProviderSpeakerSchema = SpeakerSchema\.extend\(\{\s*id: z\.union\(\[z\.string\(\), z\.number\(\)\]\)\.nullish\(\)/,
+    );
+    expect(generatedTool).toMatch(
+      /const TranscriptSchema = z\.object\(\{[^}]*speakers: z\.array\(ProviderSpeakerSchema\)/,
+    );
+    // The tool's output contract stays string-typed.
+    expect(generatedTool).toMatch(
+      /export const getTranscriptOutputSchema = z\.object\(\{[^}]*speakers: z\.array\(SpeakerSchema\)/,
+    );
+    expect(generatedTool).toMatch(/keywords:\s*transcript\.summary\.keywords != null\s*\?\s*normalizeKeywords\(/);
+    expect(generatedTool).toMatch(
+      /speakers:\s*transcript\.speakers\s*\?\s*transcript\.speakers\.map\(normalizeSpeaker\)\s*:\s*undefined/,
+    );
+  });
+
+  // Each case changes one piece of the template the override rewrites; any of
+  // them must stop generation rather than ship a tool that still rejects
+  // live transcripts.
+  it.each([
+    {
+      what: 'ProviderSummarySchema declaration',
+      drift: (template: string) => template.replaceAll('ProviderSummarySchema', 'SummaryResponseSchema'),
+    },
+    {
+      what: 'summary keywords schema',
+      drift: (template: string) =>
+        template.replace(
+          'action_items: z.union([z.string(), z.array(z.string())]).nullish()',
+          'action_items: z.array(z.string()).nullish()',
+        ),
+    },
+    {
+      what: 'SpeakerSchema declaration',
+      drift: (template: string) => template.replace('const SpeakerSchema = ', 'const SpeakerFields = '),
+    },
+    {
+      what: 'provider speakers schema',
+      drift: (template: string) =>
+        template.replace('speakers: z.array(SpeakerSchema).nullish()', 'speakers: z.array(SpeakerSchema).optional()'),
+    },
+    {
+      what: 'normalizeActionItems declaration',
+      drift: (template: string) => template.replaceAll('normalizeActionItems', 'toActionItemText'),
+    },
+    {
+      what: 'summary keywords normalization',
+      drift: (template: string) =>
+        template.replace(
+          'transcript.summary.action_items != null ? normalizeActionItems(transcript.summary.action_items) : transcript.summary.action_items',
+          'normalizeActionItems(transcript.summary.action_items ?? [])',
+        ),
+    },
+    {
+      what: 'speaker normalization',
+      drift: (template: string) =>
+        template.replace(
+          'speakers: transcript.speakers ?? undefined',
+          'speakers: transcript.speakers?.map(speaker => speaker) ?? undefined',
+        ),
+    },
+  ])(
+    'refuses to regenerate fireflies get-transcript when the template drifts at the $what',
+    async ({ what, drift }) => {
+      const templatesDir = resolve(packageRoot, '.templates');
+      const templatePath = resolve(templatesDir, 'integrations', 'fireflies', 'actions', 'get-transcript.ts');
+      const git = (...args: string[]) =>
+        execFileSync('git', ['-c', 'user.name=Mastra Tests', '-c', 'user.email=tests@mastra.ai', ...args], {
+          cwd: templatesDir,
+          encoding: 'utf8',
+        }).trim();
+      const drifted = drift(firefliesGetTranscriptTemplate);
+      expect(drifted).not.toBe(firefliesGetTranscriptTemplate);
+      writeFileSync(templatePath, drifted);
+      git('commit', '-qam', `drift fireflies template: ${what}`);
+      try {
+        await expect(
+          addProvider({
+            providerId: 'fireflies',
+            localId: 'fireflies',
+            yes: true,
+            expectedTemplateSha: git('rev-parse', 'HEAD'),
+          }),
+        ).rejects.toThrow(`Unable to adapt fireflies/get-transcript (${what})`);
+        expect(existsSync(resolve(packageRoot, 'src/providers/fireflies'))).toBe(false);
+      } finally {
+        git('reset', '-q', '--hard', templateSha);
+      }
+    },
+  );
+
   it('lists available providers and searches by installed alias', async () => {
     await addProvider({ providerId: 'first-provider', localId: 'custom', yes: true, expectedTemplateSha: templateSha });
 
@@ -812,6 +1118,19 @@ export default action;
     );
     expect(clientCredentialsTool).toContain('endpoint: `/v1.0/users/${encodeURIComponent(input.userId)}/drive`');
     expect(clientCredentialsTool).not.toContain("'/v1.0/me/drive'");
+
+    const delegatedDelete = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel/tools/delete-workbook.ts'),
+      'utf8',
+    );
+    expect(delegatedDelete).toMatch(
+      /await platformProxy\.delete\(\{\s*endpoint: [^\n]+\n\s*headers: \{ Prefer: ["']bypass-shared-lock["'] \},\s*retries: 3,/,
+    );
+    const clientCredentialsDelete = readFileSync(
+      resolve(packageRoot, 'src/providers/microsoft-excel-oauth2-cc/tools/delete-workbook.ts'),
+      'utf8',
+    );
+    expect(clientCredentialsDelete).not.toContain('bypass-shared-lock');
   });
 
   it('rewrites proxy request types and skips actions the platform proxy cannot execute', async () => {
@@ -987,27 +1306,30 @@ export default action;
     ).rejects.toThrow("Local ID 'local' already exists without a generator manifest");
   });
 
-  it('rejects local ID collisions between different template providers', async () => {
-    await addProvider({ providerId: 'first-provider', localId: 'shared', yes: true, expectedTemplateSha: templateSha });
-
-    await expect(
-      addProvider({ providerId: 'second-provider', localId: 'shared', yes: true, expectedTemplateSha: templateSha }),
-    ).rejects.toThrow("Local ID 'shared' is already assigned to template provider 'first-provider'");
-  });
-
-  it('rejects aliases that normalize to an installed provider connection env var', async () => {
-    await addProvider({
-      providerId: 'first-provider',
-      localId: 'foo-bar',
-      yes: true,
-      expectedTemplateSha: templateSha,
-    });
-
-    await expect(
-      addProvider({ providerId: 'second-provider', localId: 'foo_bar', yes: true, expectedTemplateSha: templateSha }),
-    ).rejects.toThrow(
+  it.each([
+    [
+      'rejects local ID collisions between different template providers',
+      'shared',
+      'shared',
+      "Local ID 'shared' is already assigned to template provider 'first-provider'",
+    ],
+    [
+      'rejects aliases that normalize to an installed provider connection env var',
+      'foo-bar',
+      'foo_bar',
       "Local ID 'foo_bar' conflicts with installed provider 'foo-bar' via MASTRA_FOO_BAR_CONNECTION_ID",
-    );
+    ],
+  ] as const)('%s', async (_title, localId, localIdValue, expected) => {
+    await addProvider({ providerId: 'first-provider', localId, yes: true, expectedTemplateSha: templateSha });
+
+    await expect(
+      addProvider({
+        providerId: 'second-provider',
+        localId: localIdValue,
+        yes: true,
+        expectedTemplateSha: templateSha,
+      }),
+    ).rejects.toThrow(expected);
   });
 
   it('refuses to overwrite an unmanaged provider directory', async () => {
@@ -1051,5 +1373,157 @@ export default action;
     await expect(removeProvider({ localId: 'local', yes: true })).resolves.toBe(true);
     expect(existsSync(resolve(packageRoot, 'src/providers/local'))).toBe(false);
     expect(readFileSync(resolve(packageRoot, 'src/providers/index.ts'), 'utf8')).not.toContain('local/index');
+  });
+});
+
+// #30528: PostHog sends `types` as [columnName, clickhouseType] pairs; the
+// template declares string[], so the generator widens it to pairs. These tests
+// generate with the repository's prettier config so the output can be compared
+// byte for byte with the shipped tool.
+describe('posthog run-query generator override', () => {
+  /**
+   * SHA-256 of `tools/run-query.ts` as the generator wrote it at the pinned
+   * template commit, before #30528: the entry in main's
+   * `src/providers/posthog/.manifest.json`, equal to
+   * `git show d9297364354:packages/connect/src/providers/posthog/tools/run-query.ts | sha256sum`.
+   */
+  const PRE_OVERRIDE_RUN_QUERY_SHA256 = 'c1957437e66352b83150e3640bcdbb11bcefd3723270199125091e57f1984769';
+  /** Template provider ID that resolves to PostHog's pin but skips the PostHog override. */
+  const WITHOUT_OVERRIDE = 'posthog-without-override';
+  const shippedProviderDir = fileURLToPath(new URL('../providers/posthog/', import.meta.url));
+
+  let packageRoot: string;
+  let templatesDir: string;
+  let templateSha: string;
+  let addProvider: typeof import('../../scripts/add-provider.js').addProvider;
+  const git = (...args: string[]) =>
+    execFileSync('git', ['-c', 'user.name=Mastra Tests', '-c', 'user.email=tests@mastra.ai', ...args], {
+      cwd: templatesDir,
+      encoding: 'utf8',
+    }).trim();
+  const generatedRunQuery = () => readFileSync(resolve(packageRoot, 'src/providers/posthog/tools/run-query.ts'));
+  const sha256 = (contents: Buffer) => createHash('sha256').update(contents).digest('hex');
+
+  beforeAll(async () => {
+    packageRoot = mkdtempSync(resolve(tmpdir(), 'mastra-connect-posthog-run-query-'));
+    // The generator formats with the prettier config that applies to its
+    // output directory; give the scratch package the one the shipped tools use.
+    const prettierConfig = await resolvePrettierConfig(resolve(shippedProviderDir, 'tools', 'run-query.ts'));
+    expect(prettierConfig).not.toBeNull();
+    writeFileSync(resolve(packageRoot, '.prettierrc'), JSON.stringify(prettierConfig));
+
+    templatesDir = resolve(packageRoot, '.templates');
+    for (const providerId of ['posthog', WITHOUT_OVERRIDE]) {
+      const actionDir = resolve(templatesDir, 'integrations', providerId, 'actions');
+      mkdirSync(actionDir, { recursive: true });
+      writeFileSync(resolve(actionDir, 'run-query.ts'), posthogRunQueryTemplate);
+    }
+    execFileSync('git', ['init', '-q'], { cwd: templatesDir });
+    git('add', '.');
+    git('commit', '-qm', 'fixtures');
+    templateSha = git('rev-parse', 'HEAD');
+
+    process.env.MASTRA_CONNECT_PACKAGE_ROOT = packageRoot;
+    vi.resetModules();
+    // Only the pin lookup is redirected, so the header names PostHog's pinned
+    // commit; the override still keys on the real provider ID and stays off.
+    vi.doMock('../../scripts/templates-config.js', async importOriginal => {
+      const actual = await importOriginal<typeof import('../../scripts/templates-config.js')>();
+      return {
+        ...actual,
+        templatePinFor: (providerId?: string) =>
+          actual.templatePinFor(providerId === WITHOUT_OVERRIDE ? 'posthog' : providerId),
+      };
+    });
+    ({ addProvider } = await import('../../scripts/add-provider.js'));
+  });
+
+  beforeEach(() => {
+    rmSync(resolve(packageRoot, 'src'), { recursive: true, force: true });
+    mkdirSync(resolve(packageRoot, 'src', 'providers'), { recursive: true });
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterAll(() => {
+    vi.doUnmock('../../scripts/templates-config.js');
+    delete process.env.MASTRA_CONNECT_PACKAGE_ROOT;
+    rmSync(packageRoot, { recursive: true, force: true });
+  });
+
+  it('reproduces the pre-override run-query tool byte for byte from the fixture when the override is off', async () => {
+    await addProvider({
+      providerId: WITHOUT_OVERRIDE,
+      localId: 'posthog',
+      yes: true,
+      expectedTemplateSha: templateSha,
+    });
+
+    const generated = generatedRunQuery();
+    expect(generated.toString('utf8')).toContain('types: z.array(z.string()).nullish(),');
+    expect(sha256(generated)).toBe(PRE_OVERRIDE_RUN_QUERY_SHA256);
+  });
+
+  it('reproduces the shipped run-query tool and its manifest checksum byte for byte when the override is on', async () => {
+    await addProvider({ providerId: 'posthog', localId: 'posthog', yes: true, expectedTemplateSha: templateSha });
+
+    const generated = generatedRunQuery();
+    expect(generated.toString('utf8')).toBe(readFileSync(resolve(shippedProviderDir, 'tools', 'run-query.ts'), 'utf8'));
+    const shippedManifest = JSON.parse(readFileSync(resolve(shippedProviderDir, '.manifest.json'), 'utf8'));
+    expect(sha256(generated)).toBe(shippedManifest.files['tools/run-query.ts']);
+  });
+
+  // Each case changes one piece of the template the override rewrites; any of
+  // them must stop generation rather than ship a tool that still rejects every
+  // query result.
+  it.each([
+    {
+      what: 'ProviderResponseSchema declaration',
+      drift: (template: string) => template.replaceAll('ProviderResponseSchema', 'QueryResponseSchema'),
+    },
+    {
+      what: 'provider types schema',
+      drift: (template: string) =>
+        template.replace(
+          'types: z.array(z.string()).nullish(),\n        hogql',
+          'types: z.array(z.array(z.string())).nullish(),\n        hogql',
+        ),
+    },
+    {
+      what: 'output types schema',
+      drift: (template: string) =>
+        template.replace(
+          "types: z.array(z.string()).nullish().describe('Column types for the result rows.')",
+          "types: z.array(z.unknown()).nullish().describe('Column types for the result rows.')",
+        ),
+    },
+    {
+      what: 'output types description',
+      drift: (template: string) =>
+        template.replace('Column types for the result rows.', 'ClickHouse types for each column.'),
+    },
+    {
+      what: 'output types pass-through',
+      drift: (template: string) =>
+        template.replace('types: providerResponse.types,', 'types: providerResponse.columns,'),
+    },
+  ])('refuses to regenerate posthog run-query when the template drifts at the $what', async ({ what, drift }) => {
+    const templatePath = resolve(templatesDir, 'integrations', 'posthog', 'actions', 'run-query.ts');
+    const drifted = drift(posthogRunQueryTemplate);
+    expect(drifted).not.toBe(posthogRunQueryTemplate);
+    writeFileSync(templatePath, drifted);
+    git('commit', '-qam', `drift posthog template: ${what}`);
+    try {
+      await expect(
+        addProvider({
+          providerId: 'posthog',
+          localId: 'posthog',
+          yes: true,
+          expectedTemplateSha: git('rev-parse', 'HEAD'),
+        }),
+      ).rejects.toThrow(`Unable to adapt posthog/run-query (${what})`);
+      expect(existsSync(resolve(packageRoot, 'src/providers/posthog'))).toBe(false);
+    } finally {
+      git('reset', '-q', '--hard', templateSha);
+    }
   });
 });

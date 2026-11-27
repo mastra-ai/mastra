@@ -77,13 +77,9 @@ export {
 } from './create-durable-agent';
 
 // DurableAgent class (base class for durable agents)
-export {
-  DurableAgent,
-  applyReservedMemoryContextKeys,
-  type DurableAgentConfig,
-  type DurableAgentStreamOptions,
-  type DurableAgentStreamResult,
-} from './durable-agent';
+export { DurableAgent } from './durable-agent';
+export type { DurableAgentConfig, DurableAgentStreamOptions, DurableAgentStreamResult } from './types';
+export { applyReservedMemoryContextKeys } from '../helpers';
 
 // EventedAgent class (extends DurableAgent with fire-and-forget execution)
 export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './evented-agent';
@@ -97,7 +93,11 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
-export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
+export {
+  getRunStreamSlot,
+  getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
+} from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
@@ -120,11 +120,21 @@ export {
 export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 
 // Lets shared test suites simulate a process crash
+export { DURABLE_CONTEXT_SEGMENT_KEY } from './run-registry';
 export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';
+
+// Per-segment abort controller, shared with durable-agent integrations outside core
+export { createRunAbortController, type RunAbortController } from './run-abort';
+
+// Run bus + replay cache resolution, shared with durable-agent integrations outside core
+export { AgentStreamBus } from '../streams/bus';
+
+// Step-finish response message diffs, shared with durable-agent integrations outside core
+export { diffResponseMessages, type ResponseMessagesCursor } from '../streams/response-messages';
 
 // Stream adapter for pubsub-based streaming
 export {
@@ -136,9 +146,13 @@ export {
   emitErrorEvent,
   emitAbortEvent,
   emitSuspendedEvent,
-  type DurableAgentStreamOptions as StreamAdapterOptions,
-  type DurableAgentStreamResult as StreamAdapterResult,
+  type DurableStreamAdapterOptions as StreamAdapterOptions,
+  type DurableStreamAdapterResult as StreamAdapterResult,
 } from './stream-adapter';
+
+// Detach an observer's fullStream subscription when its consumer stops reading,
+// shared with durable-agent integrations outside core
+export { detachFullStreamOnEnd } from './observe-full-stream';
 
 // Constants
 export {
@@ -155,7 +169,10 @@ export {
   requestAcknowledgedAbort,
   subscribeToAbortRequests,
   ensureRemoteAbortListener,
+  readRunDeadline,
+  RUN_DEADLINE_KEY,
 } from './abort-transport';
+export type { RunDeadline } from './abort-transport';
 
 // Types
 export type {
@@ -260,5 +277,14 @@ export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
 
 // Shared runtime outcome classification for external durable engines.
 export { endRunSpansWithError } from './run-registry';
+/** @internal The span pair a resumed or recovered execution reports under, shared with external durable engines. */
+export {
+  carrySegmentSpans,
+  endFailedSegmentSpans,
+  liveSegmentSpan,
+  segmentEndedBySuspension,
+  segmentSpanData,
+  type SegmentSpanData,
+} from './segment-spans';
 /** @internal Runtime instrumentation helpers. */
 export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

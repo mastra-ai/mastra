@@ -66,6 +66,8 @@ export type FilterBarField = {
   type?: FilterBarFieldType;
   /** Operator ids allowed for this field. Defaults to every root operator. */
   operators?: string[];
+  /** Keep the operator label visible even when this field allows only one operator. */
+  alwaysShowOperator?: boolean;
   /** Field-specific labels for operators, keyed by operator id (e.g. `notExists` → `is not recorded`). */
   operatorLabels?: Record<string, string>;
   /**
@@ -80,6 +82,12 @@ export type FilterBarField = {
   strict?: boolean;
   /** Never offered in the input's field step; existing chips for it still render with the field label. */
   hidden?: boolean;
+  /** Only offered at the root, for query options that cannot be nested in boolean groups. */
+  rootOnly?: boolean;
+  /** Cannot replace another chip's field when this field already has a chip. */
+  singleton?: boolean;
+  /** A validation message prevents committing free text until the input is valid. */
+  validateInput?: (value: string) => string | undefined;
   /**
    * Free-text entry point. The field stays offered in the input's field step whatever the
    * query, so typed text never dead-ends on "No matching field"; picking it with text typed
@@ -94,6 +102,8 @@ export type FilterBarItem = {
   fieldId: string;
   operatorId: string;
   value: FilterBarValue;
+  /** Matches what the condition does not. Only offered when the bar is `negatable`. */
+  negated?: boolean;
 };
 
 export type FilterBarLogic = 'and' | 'or';
@@ -108,13 +118,67 @@ export type FilterBarGroup = {
   kind: 'group';
   logic: FilterBarLogic;
   nodes: FilterBarNode[];
+  /** Matches what the group as a whole does not. Only offered when the bar is `negatable`. */
+  negated?: boolean;
+  /**
+   * Conditions about related records rather than the filtered one ("has spans where…"): the
+   * group's conditions use the scope's fields, joined to the record by the quantifier.
+   */
+  scope?: FilterBarGroupScope;
+};
+
+/** Which of the bar's `scopes` a group reads, and how it relates to the record. */
+export type FilterBarGroupScope = {
+  id: string;
+  quantifierId: string;
+};
+
+export type FilterBarQuantifier = {
+  id: string;
+  /** Leads the group's header, e.g. `Has` / `Has no`. */
+  label: string;
+};
+
+/**
+ * A set of related records conditions can be about (spans of a trace, its scores…). Groups
+ * reading it offer its own fields instead of the bar's.
+ */
+export type FilterBarScope = {
+  id: string;
+  /** Plural noun read after the quantifier: `Has` **spans** `where…`. */
+  label: string;
+  fields: FilterBarField[];
+  /** The first one is the default for a new group. */
+  quantifiers: FilterBarQuantifier[];
+  /** Free-text field names offered inside the scope (see `FilterBarCustomField`). */
+  customField?: FilterBarCustomField;
+};
+
+/**
+ * Lets the field step take a name that is not in the list, under a fixed prefix (e.g.
+ * `metadata.` + whatever is typed). The field's id and label are the full name; the rest
+ * comes from `field`.
+ */
+export type FilterBarCustomField = {
+  prefix: string;
+  field?: Omit<FilterBarField, 'id' | 'label'>;
+};
+
+/** Where a condition sits: the facts operators and validation may depend on. */
+export type FilterBarPlace = {
+  /** Group holding it; `undefined` = root. */
+  groupId?: string;
+  /** It, or a group above it, is negated. */
+  negated: boolean;
+  /** Nearest scoped group above it. */
+  scope?: FilterBarGroupScope;
 };
 
 export type FilterBarNode = FilterBarItem | FilterBarGroup;
 
 /**
- * Tree-shaped value: root nodes joined by `logic`, groups nest their own. The bar itself
- * always joins root nodes with `'and'`; `logic` is kept on the type for symmetry with groups.
+ * Tree-shaped value: root nodes joined by `logic`, groups nest their own. The bar joins root
+ * nodes with `'and'` unless it offers a `rootLogicToggle`.
  */
 export type FilterBarExpression = {
   logic: FilterBarLogic;
@@ -153,4 +217,4 @@ export type FilterBarCommit = {
   groupId?: string;
 };
 
-export type FilterBarSegment = 'field' | 'operator' | 'value' | 'remove';
+export type FilterBarSegment = 'negate' | 'field' | 'operator' | 'value' | 'remove';

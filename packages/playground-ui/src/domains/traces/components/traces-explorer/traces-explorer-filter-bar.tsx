@@ -3,6 +3,7 @@ import { TRACE_FILTER_BAR_OPERATORS } from '../../trace-filters';
 import type { TraceDatePreset } from '../../types';
 import { DEFAULT_TRACES_FILTERS } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
+import type { TracesExplorerFilterSuggestions } from './traces-explorer-data';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
@@ -23,6 +24,8 @@ const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
 const createItemId = (fieldId: string) => fieldId;
 
 export type TracesExplorerFilterBarProps = {
+  /** The values the fields suggest (Studio: `useTracesFilterSuggestionsQuery`). Without them, the fields take free text. */
+  suggestions?: TracesExplorerFilterSuggestions;
   /** Replaces the default chips and input, e.g. to pass a configured `TracesExplorer.TimeRangeChip`. */
   children?: ReactNode;
 };
@@ -32,9 +35,9 @@ export type TracesExplorerFilterBarProps = {
  * fields or items (e.g. their own scope pickers) can render the design-system `FilterBar`
  * themselves from `useTracesFilterBarFields()` / `useTracesFilterBar()` and reuse `FilterChips`.
  */
-export function TracesExplorerFilterBar({ children }: TracesExplorerFilterBarProps) {
+export function TracesExplorerFilterBar({ suggestions, children }: TracesExplorerFilterBarProps) {
   const { withQueryTrace } = useTracesConfig();
-  const filterBarFields = useTracesFilterBarFields();
+  const filterBarFields = useTracesFilterBarFields(suggestions);
   const { filterBarValue, flatFilterBarValue, onFilterBarChange, onFlatFilterBarChange } = useTracesFilterBar();
 
   return (

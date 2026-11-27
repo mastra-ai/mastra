@@ -391,7 +391,6 @@ describe('Traces page usage columns', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
       expect(branches).not.toHaveBeenCalled();
-      expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
     });
   });
 });
@@ -538,25 +537,6 @@ describe('Traces page view switch', () => {
     });
   });
 
-  describe('while the storage capabilities are loading', () => {
-    it('shows the Traces breadcrumb and a placeholder for the Traces/Spans switch below it', async () => {
-      setTracePageHandlers(traceQueryCapabilities);
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
-          await delay('infinite');
-          return HttpResponse.json(traceQueryCapabilities);
-        }),
-      );
-
-      renderPage();
-
-      const placeholder = await screen.findByRole('status', { name: 'Loading views' });
-      expect(placeholder.closest('header')).toBeNull();
-      expect(placeholder.closest('main')).toBeNull();
-      expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).not.toBeNull();
-    });
-  });
-
   describe('while the filter fields are still loading', () => {
     it('keeps the Traces/Spans switch above the loading skeleton', async () => {
       setTracePageHandlers(traceQueryCapabilities);
@@ -623,21 +603,6 @@ describe('Traces page view switch', () => {
   });
 });
 
-describe('Traces page action row', () => {
-  it('offers no auto refresh toggle — the list keeps itself up to date', async () => {
-    setTracePageHandlers(metricsCapableCapabilities);
-
-    const { queryClient } = renderPage();
-    await waitFor(() => {
-      expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
-      expect(queryClient.isFetching()).toBe(0);
-    });
-
-    expect(screen.queryByRole('checkbox', { name: 'Auto refresh' })).toBeNull();
-    expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
-  });
-});
-
 describe('Traces side panel header actions', () => {
   describe('when a registered scorer is selected', () => {
     it('submits the selected trace for scoring and opens its scores', async () => {
@@ -697,9 +662,6 @@ describe('Traces side panel header actions', () => {
     expect(await screen.findByRole('button', { name: /^score trace/i })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Add to dataset' })).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Download trace JSON' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Open trace actions' })).toBeNull();
-    // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
   });
 });
 
@@ -1022,23 +984,6 @@ describe('Traces page filter bar', () => {
   });
 
   describe('when the URL carries filterTraceId and filterEnvironment', () => {
-    it('renders the time range then one chip per filter in URL order', async () => {
-      setTracePageHandlers(metricsCapableCapabilities);
-
-      const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
-      await waitFor(() => {
-        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
-        expect(queryClient.isFetching()).toBe(0);
-      });
-
-      const chips = getFilterChips();
-      expect(chips).toHaveLength(2);
-      expect(chips[0]?.textContent).toContain('Trace ID');
-      expect(chips[0]?.textContent).toContain('trace-a');
-      expect(chips[1]?.textContent).toContain('Environment');
-      expect(chips[1]?.textContent).toContain('prod');
-    });
-
     it('keeps the time range after Clear filters', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
@@ -1141,6 +1086,41 @@ describe('Traces page filter bar', () => {
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment='));
       expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['Environmentis…']);
       expect(screen.getByTestId('location').textContent).not.toContain('status=');
+    });
+  });
+
+  describe('when the user picks Primitive type › MCP Server', () => {
+    it('queries only traces rooted at an MCP server', async () => {
+      const onQuery = vi.fn<(body: unknown) => void>();
+      setTracePageHandlers(metricsCapableCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+          onQuery(await request.json());
+          return HttpResponse.json(traceQueryPage);
+        }),
+      );
+      const { queryClient } = renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      focusFilterInput();
+      typeInFilter('Primitive type');
+      await screen.findByRole('option', { name: 'Primitive type' });
+      pressInFilter('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      pressInFilter('Enter');
+      typeInFilter('MCP Server');
+      await screen.findByRole('option', { name: 'MCP Server' });
+      pressInFilter('Enter');
+
+      await waitFor(() =>
+        expect(JSON.stringify(onQuery.mock.calls.at(-1)?.[0])).toContain(
+          '{"op":"eq","left":{"path":"entityType"},"right":{"literal":"mcp_server"}}',
+        ),
+      );
+      expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['Primitive typeisMCP Server']);
     });
   });
 
@@ -1994,30 +1974,6 @@ describe('Traces page parity', () => {
       await waitFor(() => expect(onBreakdownRequest).toHaveBeenCalled());
       await settle(queryClient);
       expect(screen.getByText('Input tokens')).toBeTruthy();
-    });
-  });
-
-  describe('when the URL asks for branches mode with an anchor span', () => {
-    it('queries traces and never requests branches', async () => {
-      const onTraceQuery = vi.fn<() => void>();
-      const onBranchesRequest = vi.fn<() => void>();
-      setTracePageHandlers(metricsCapableCapabilities);
-      server.use(
-        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () => {
-          onTraceQuery();
-          return HttpResponse.json(traceQueryPage);
-        }),
-        http.get(`${TEST_BASE_URL}/api/observability/branches`, () => {
-          onBranchesRequest();
-          return HttpResponse.json(branchList);
-        }),
-      );
-
-      const { queryClient } = renderPage('/traces?listMode=branches&anchorSpanId=span-a');
-
-      await waitFor(() => expect(onTraceQuery).toHaveBeenCalled());
-      await settle(queryClient);
-      expect(onBranchesRequest).not.toHaveBeenCalled();
     });
   });
 

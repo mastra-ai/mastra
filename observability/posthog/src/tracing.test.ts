@@ -379,35 +379,49 @@ describe('PosthogExporter', () => {
         offered: string[];
         text?: string;
         toolCalls?: ToolCallFixture[];
+        /**
+         * The step a run stopped in, replayed when it resumes: no provider call was made,
+         * so it has no inference. `without-step` is the same step with MODEL_STEP spans excluded.
+         */
+        replayed?: 'with-step' | 'without-step';
+        /** Older core or observability packages still export an inference for the replayed step. */
+        replayedInference?: boolean;
+        /** The end of the inference is exported after the end of its step. */
+        inferenceExportedLast?: boolean;
       }
 
       /**
        * Exports generation → step → inference (+ tools) per call in the order the
        * loop emits them: the inference ends, then its tools run, then the step ends.
        */
-      async function exportGeneration(calls: CallFixture[]) {
+      async function exportGeneration(calls: CallFixture[], metadata: Record<string, unknown> = {}) {
         const { output: _output, endTime: _endTime, ...startedGeneration } = generation;
         await exporter.exportTracingEvent({
           type: TracingEventType.SPAN_STARTED,
-          exportedSpan: startedGeneration as AnyExportedSpan,
+          exportedSpan: { ...startedGeneration, metadata } as AnyExportedSpan,
         });
         for (const [step, call] of calls.entries()) {
+          const output = {
+            text: call.text ?? '',
+            toolCalls: (call.toolCalls ?? []).map(tc => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
+          };
+          // A replayed step is over before the next call starts.
+          const ended = call.replayed ? { endTime: new Date() } : {};
           const stepSpan = createSpan({
             id: `step-${step}`,
             traceId,
             parentSpanId: generation.id,
             type: SpanType.MODEL_STEP,
+            output,
+            ...ended,
           });
-          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: stepSpan });
           const inferenceSpan = createSpan({
             id: `inference-${step}`,
             traceId,
-            parentSpanId: stepSpan.id,
+            parentSpanId: call.replayed === 'without-step' ? generation.id : stepSpan.id,
             type: SpanType.MODEL_INFERENCE,
-            output: {
-              text: call.text ?? '',
-              toolCalls: (call.toolCalls ?? []).map(tc => ({ toolCallId: tc.id, toolName: tc.name, args: tc.args })),
-            },
+            output,
+            ...(call.replayed ? { startTime: new Date() } : {}),
             attributes: {
               model: 'gpt-4o',
               provider: 'openai',
@@ -415,16 +429,25 @@ describe('PosthogExporter', () => {
               tools: call.offered.map(name => ({ type: 'function', name })),
             },
           });
-          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
-          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: inferenceSpan });
+          const exportsStep = call.replayed !== 'without-step';
+          const endInference = () =>
+            exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: inferenceSpan });
+          if (exportsStep) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: stepSpan });
+          }
+          if (!call.replayed) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
+            if (!call.inferenceExportedLast) await endInference();
+          }
           // Tools run in parallel; they end in array order but started at `startedAfter`.
           const toolSpans = (call.toolCalls ?? []).map(tc =>
             createSpan({
               id: `tool-${tc.id}`,
               traceId,
-              parentSpanId: stepSpan.id,
+              parentSpanId: exportsStep ? stepSpan.id : generation.id,
               type: tc.provider ? SpanType.PROVIDER_TOOL_CALL : SpanType.TOOL_CALL,
               name: `tool: '${tc.name}'`,
+              entityName: tc.name,
               startTime: new Date(stepSpan.startTime.getTime() + tc.startedAfter),
               input: tc.args,
               output: tc.result,
@@ -433,6 +456,7 @@ describe('PosthogExporter', () => {
                 toolCallId: tc.id,
                 ...(tc.provider?.success !== undefined ? { success: tc.provider.success } : {}),
               },
+              ...ended,
             }),
           );
           for (const toolSpan of toolSpans) {
@@ -441,7 +465,14 @@ describe('PosthogExporter', () => {
           for (const toolSpan of toolSpans) {
             await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: toolSpan });
           }
-          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: stepSpan });
+          if (call.replayedInference) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: inferenceSpan });
+            await endInference();
+          }
+          if (exportsStep) {
+            await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: stepSpan });
+          }
+          if (call.inferenceExportedLast) await endInference();
         }
         await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: generation });
       }
@@ -521,6 +552,81 @@ describe('PosthogExporter', () => {
           [...systemAndUser, ...firstCallTurns],
           [...systemAndUser, ...firstCallTurns, ...secondCallTurns],
         ]);
+      });
+
+      it.each(['with-step', 'without-step'] as const)(
+        'should give a call made after a tool approval the tool call and result it received (%s)',
+        async replayed => {
+          await exportGeneration(
+            [
+              {
+                offered: [],
+                replayed,
+                text: 'Checking.',
+                toolCalls: [
+                  { id: 'call-1', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 0 },
+                ],
+              },
+              { offered: ['weather'], text: 'Paris is 21C.' },
+            ],
+            { resumed: true },
+          );
+
+          const generations = captured('$ai_generation');
+          expect(generations).toHaveLength(1);
+          expect(generations[0].properties.$ai_input).toEqual([
+            ...systemAndUser,
+            {
+              role: 'assistant',
+              content: [
+                // Only the step carries the text the model wrote before the tool call.
+                ...(replayed === 'with-step' ? [{ type: 'text', text: 'Checking.' }] : []),
+                { type: 'tool-call', id: 'call-1', function: { name: 'weather', arguments: { city: 'Paris' } } },
+              ],
+            },
+            {
+              role: 'tool',
+              content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'weather', output: { tempC: 21 } }],
+            },
+          ]);
+        },
+      );
+
+      it.each(['with-step', 'without-step'] as const)(
+        'should give the tool call and result once when an older package also exports the replayed inference (%s)',
+        async replayed => {
+          await exportGeneration(
+            [
+              {
+                offered: ['weather'],
+                replayed,
+                replayedInference: true,
+                toolCalls: [
+                  { id: 'call-1', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 0 },
+                ],
+              },
+              { offered: ['weather'], text: 'Paris is 21C.' },
+            ],
+            { resumed: true },
+          );
+
+          expect(captured('$ai_generation').map(message => message.properties.$ai_input.length)).toEqual([2, 4]);
+        },
+      );
+
+      it('should keep a response out of its own prompt when the span of the call is exported after its step', async () => {
+        await exportGeneration([
+          {
+            offered: ['weather'],
+            toolCalls: [
+              { id: 'call-1', name: 'weather', args: { city: 'Paris' }, result: { tempC: 21 }, startedAfter: 0 },
+            ],
+            inferenceExportedLast: true,
+          },
+          { offered: ['weather'], text: 'Paris is 21C.', inferenceExportedLast: true },
+        ]);
+
+        expect(captured('$ai_generation').map(message => message.properties.$ai_input.length)).toEqual([2, 4]);
       });
 
       it('should order the results of parallel tool calls by when each tool started', async () => {
@@ -1651,6 +1757,11 @@ describe('PosthogExporter', () => {
 
       await exporter.onFeedbackEvent(createFeedbackEvent({ metadata: { userId: 'meta' } }));
       expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'meta' }));
+
+      await exporter.onFeedbackEvent(
+        createFeedbackEvent({ feedbackUserId: null, userId: 'legacy', metadata: { userId: 'meta' } }),
+      );
+      expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'anonymous' }));
 
       await exporter.onFeedbackEvent(createFeedbackEvent());
       expect(mockCapture).toHaveBeenLastCalledWith(expect.objectContaining({ distinctId: 'anonymous' }));

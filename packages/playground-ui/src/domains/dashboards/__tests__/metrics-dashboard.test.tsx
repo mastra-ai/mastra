@@ -31,10 +31,10 @@ import {
   SCOPES,
   TEST_NOW,
   expectSame,
+  expectSameMarkup,
   expectSameView,
   expectSameViewFromCache,
   find,
-  normalise,
   recordRequests,
   serveBreakdown,
   settle,
@@ -250,8 +250,8 @@ describe('METRICS_DASHBOARD', () => {
 
 /** Views with no data in the fixtures, and the message both pages show there (see `expectSameView`). */
 const EMPTY: Record<string, string> = {
-  'latency/Workflow latency': 'No workflow runs in this range.',
-  'latency/Tool latency': 'No tool calls in this range.',
+  'latency/Workflow latency': 'No data in this range',
+  'latency/Tool latency': 'No data in this range',
 };
 
 /** Opens a card's view on both pages and compares them. */
@@ -280,7 +280,7 @@ describe.each(Object.entries(SCOPES))('the Metrics page from METRICS_DASHBOARD a
     expect(pages.defined.sent.toSorted()).toEqual(pages.composed.sent.toSorted());
     for (const id of pages.composed.ids) {
       const [card, widget] = pair(pages, id);
-      expect(normalise(widget.root.innerHTML), id).toBe(normalise(card.root.innerHTML));
+      expectSameMarkup(card.root, widget.root, id);
     }
   });
 

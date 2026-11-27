@@ -3,8 +3,13 @@ import { renderTemplate } from './template-engine';
 
 describe('renderTemplate', () => {
   describe('simple variable substitution', () => {
-    it('should replace a simple variable', () => {
-      expect(renderTemplate('Hello {{name}}!', { name: 'World' })).toBe('Hello World!');
+    it.each([
+      ['should replace a simple variable', 'Hello {{name}}!', 'World', 'Hello World!'],
+      ['should handle whitespace inside braces', '{{ name }}', 'Alice', 'Alice'],
+      ['should handle null values as unresolved', 'Hello {{name}}!', null, 'Hello {{name}}!'],
+      ['should handle undefined values as unresolved', 'Hello {{name}}!', undefined, 'Hello {{name}}!'],
+    ] as const)('%s', (_title, input, name, expected) => {
+      expect(renderTemplate(input, { name })).toBe(expected);
     });
 
     it('should replace multiple variables', () => {
@@ -26,18 +31,6 @@ describe('renderTemplate', () => {
 
     it('should handle variables with underscores', () => {
       expect(renderTemplate('{{user_name}}', { user_name: 'Alice' })).toBe('Alice');
-    });
-
-    it('should handle whitespace inside braces', () => {
-      expect(renderTemplate('{{ name }}', { name: 'Alice' })).toBe('Alice');
-    });
-
-    it('should handle null values as unresolved', () => {
-      expect(renderTemplate('Hello {{name}}!', { name: null })).toBe('Hello {{name}}!');
-    });
-
-    it('should handle undefined values as unresolved', () => {
-      expect(renderTemplate('Hello {{name}}!', { name: undefined })).toBe('Hello {{name}}!');
     });
   });
 
@@ -101,12 +94,14 @@ describe('renderTemplate', () => {
   });
 
   describe('fallback values', () => {
-    it('should use single-quoted fallback when variable is missing', () => {
-      expect(renderTemplate("Hello {{name || 'Guest'}}!", {})).toBe('Hello Guest!');
-    });
-
-    it('should use double-quoted fallback when variable is missing', () => {
-      expect(renderTemplate('Hello {{name || "Guest"}}!', {})).toBe('Hello Guest!');
+    it.each([
+      ['should use single-quoted fallback when variable is missing', "Hello {{name || 'Guest'}}!", 'Hello Guest!'],
+      ['should use double-quoted fallback when variable is missing', 'Hello {{name || "Guest"}}!', 'Hello Guest!'],
+      ['should handle empty string fallback', "{{val || ''}}", ''],
+      ['should handle fallback with spaces', "{{val || 'hello world'}}", 'hello world'],
+      ['should handle nested path with fallback', "{{user.role || 'viewer'}}", 'viewer'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(renderTemplate(input, {})).toBe(expected);
     });
 
     it('should prefer resolved value over fallback', () => {
@@ -116,39 +111,17 @@ describe('renderTemplate', () => {
     it('should use fallback for null values', () => {
       expect(renderTemplate("{{val || 'default'}}", { val: null })).toBe('default');
     });
-
-    it('should handle empty string fallback', () => {
-      expect(renderTemplate("{{val || ''}}", {})).toBe('');
-    });
-
-    it('should handle fallback with spaces', () => {
-      expect(renderTemplate("{{val || 'hello world'}}", {})).toBe('hello world');
-    });
-
-    it('should handle nested path with fallback', () => {
-      expect(renderTemplate("{{user.role || 'viewer'}}", {})).toBe('viewer');
-    });
   });
 
   describe('inherited properties', () => {
-    it('should leave an inherited member unresolved', () => {
-      expect(renderTemplate('{{constructor}}', { name: 'Alice' })).toBe('{{constructor}}');
-    });
-
-    it('should leave toString unresolved', () => {
-      expect(renderTemplate('{{toString}}', { name: 'Alice' })).toBe('{{toString}}');
-    });
-
-    it('should leave valueOf unresolved', () => {
-      expect(renderTemplate('{{valueOf}}', { name: 'Alice' })).toBe('{{valueOf}}');
-    });
-
-    it('should use the fallback for an inherited member', () => {
-      expect(renderTemplate("{{constructor || 'none'}}", { name: 'Alice' })).toBe('none');
-    });
-
-    it('should use the fallback for inherited toString', () => {
-      expect(renderTemplate("{{toString || 'none'}}", { name: 'Alice' })).toBe('none');
+    it.each([
+      ['should leave an inherited member unresolved', '{{constructor}}', '{{constructor}}'],
+      ['should leave toString unresolved', '{{toString}}', '{{toString}}'],
+      ['should leave valueOf unresolved', '{{valueOf}}', '{{valueOf}}'],
+      ['should use the fallback for an inherited member', "{{constructor || 'none'}}", 'none'],
+      ['should use the fallback for inherited toString', "{{toString || 'none'}}", 'none'],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(renderTemplate(input, { name: 'Alice' })).toBe(expected);
     });
 
     it('should resolve an own key that shadows a built-in name', () => {

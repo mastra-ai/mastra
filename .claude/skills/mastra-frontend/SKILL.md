@@ -42,10 +42,31 @@ Pick the highest rung that fits; each step down needs a reason:
 - Build conditional or merged class strings with `cn()` — exported from `@mastra/playground-ui` for consumers, `src/lib/utils.ts` inside the package. Its `twMerge` is extended with the DS scales (`src/lib/tw-merge-config.ts`), so DS utilities like `text-body-sm` merge correctly; importing `twMerge` from `tailwind-merge` directly mis-merges them.
 - Code inside `packages/playground-ui` outside `ds/` (for example `src/domains/`) is itself a consumer of the `ds/` primitives — all of these rules apply there too.
 
+## Page frames: PageLayout variant
+
+Every page renders inside one `PageLayout`, and its `variant` sets the width, gutter, scrolling and way back. Pick the variant by what the page is for:
+
+- **`variant="form"`**: a create or edit form. A 640px column under a title and optional back link (`backHref` + `backLabel`), with no breadcrumbs. `aside` adds a live preview.
+- **`variant="settings"`**: a settings page someone browses to and changes in place. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
+- **`variant="page"`**: everything else (lists, dashboards, detail pages, explorers). Full width, up to 1536px. Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph, dataset panels).
+
+Each variant accepts only its own props, so a wrong combination doesn't compile. Never center a `max-w-*` column on a page yourself: the `playground-ui/no-page-width` lint rule flags it.
+
+## Settings pages: SettingsRow vs SettingsItem
+
+Settings cards (`@mastra/playground-ui/new/settings`) hold two kinds of rows. Pick by what the row is, not by how it looks:
+
+- **`SettingsRow`** (or `SettingsFieldsetRow` for a group of controls): a setting the person changes. Label, optional one-line description, and the control that changes it (input, select, switch, segmented control). It is a form field: the label names the control. A setting someone may not change keeps `SettingsRow` with `viewOnly`.
+- **`SettingsItem`**: one thing in a list (an account, member, session, API key, connection, repository, a package version). Title, optional media and one-line description, and its status or per-item actions (Remove, Revoke, Copy) on the right. Lists usually come from a `.map` and start with a `SettingsListHeader`; an empty list is one `SettingsEmptyRow`.
+
+A row that only shows a value, status or per-item actions is a `SettingsItem`, and so is each record of a list (accounts, keys, versions) even when it comes from a `.map`. A `.map` over settings (one switch per tool) still renders `SettingsRow`s: what matters is whether the row's control changes a setting.
+
 ## Review smells
 
 - Look overrides on DS components: `bg-*`, text color or size, border color, `rounded-*`, `shadow-*`, or padding via `className`
 - A new component that duplicates an existing `ds/` or `domains/` component
+- A hand-centered full-page loader, or a `Spinner` as one: a page that hasn't shown yet loads with `<BrandLoader fill />`, the window with `fill="screen"`. Dialogs, panels, cards and anything else inside a page that already shows keep `Spinner` or a skeleton
+- A `SettingsRow` per list entry or read-only value (versions, members, keys), or a `SettingsItem` wrapping a control that changes a setting: see "Settings pages" above
 - `bg-[#hex]`, `text-[15px]`, `p-[13px]` — a token or scale value exists
 - Token names that don't exist in `theme.css` (guessed from memory)
 - `bg-[var(--x)]` — use `bg-(--x)`

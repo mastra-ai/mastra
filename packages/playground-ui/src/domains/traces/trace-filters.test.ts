@@ -24,19 +24,21 @@ const KEY = 'test:traces:saved-filters';
 describe('saveTraceFiltersToStorage', () => {
   beforeEach(() => localStorage.clear());
 
-  it('persists filters together with a relative date preset', () => {
-    saveTraceFiltersToStorage(new URLSearchParams('status=error&datePreset=last-7d'), KEY);
+  it.each([
+    [
+      'persists filters together with a relative date preset',
+      'status=error&datePreset=last-7d',
+      'status=error&datePreset=last-7d',
+    ],
+    [
+      'never persists a custom date range, since absolute dates go stale',
+      'status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02',
+      'status=error',
+    ],
+  ] as const)('%s', (_title, input, expected) => {
+    saveTraceFiltersToStorage(new URLSearchParams(input), KEY);
 
-    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error&datePreset=last-7d');
-  });
-
-  it('never persists a custom date range, since absolute dates go stale', () => {
-    saveTraceFiltersToStorage(
-      new URLSearchParams('status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02'),
-      KEY,
-    );
-
-    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error');
+    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe(expected);
   });
 
   it('clears the saved set when no filter is left', () => {
@@ -87,6 +89,7 @@ describe('TRACE_FILTER_BAR_OPERATORS', () => {
       lte: 'at most',
       matches: 'matches',
       notMatches: 'does not match',
+      hasAllTokens: 'contains words',
     });
   });
 });
@@ -1047,5 +1050,18 @@ describe('filterBarExpressionToTraceFilters', () => {
         }),
       ).toEqual({ tokens: [], groups: [{ id: 'g1', logic: 'or', nodes: [] }] });
     });
+  });
+});
+
+describe('content search URL state', () => {
+  it('preserves the error word operator through a shared URL', () => {
+    const tokens = getTracePropertyFilterTokens(
+      new URLSearchParams('filterSpanError=timeout&filterSpanError.op=hasAllTokens'),
+    );
+    expect(tokens).toEqual([{ fieldId: 'spans.error', operatorId: 'hasAllTokens', value: 'timeout' }]);
+    const params = new URLSearchParams();
+    applyTracePropertyFilterTokens(params, tokens);
+    expect(params.get('filterSpanError')).toBe('timeout');
+    expect(params.get('filterSpanError.op')).toBe('hasAllTokens');
   });
 });

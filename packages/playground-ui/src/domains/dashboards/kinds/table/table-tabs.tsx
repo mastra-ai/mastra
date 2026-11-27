@@ -2,7 +2,6 @@ import { viewMenu } from '../../hooks/use-widget-views';
 import { alertAction, withAction } from '../../lib/alert-actions';
 import { unsupportedMessage } from '../../lib/chrome';
 import type { BlockedFields } from '../../lib/gate';
-import { pinActions } from '../../lib/pin-actions';
 import type { DashboardPageContext } from '../../lib/requests';
 import { isValueColumn, parseColumns } from '../../lib/table';
 import type { TableOptions } from '../../lib/table';
@@ -27,9 +26,8 @@ const FILTER_NAMES: Record<string, string> = {
 export function TableTabs({ page, blocked, ...props }: Props & { page: DashboardPageContext; blocked: BlockedFields }) {
   const { views, state, discovered, onStateChange } = props;
   // Picking a tab starts it on its own default sort.
-  const menu = viewMenu(props.widget, views, openTab(views, blocked, state, discovered), i =>
-    onStateChange({ view: i }),
-  );
+  const choose = (i: number) => onStateChange({ view: i });
+  const menu = viewMenu(props.widget, views, openTab(views, blocked, state, discovered), choose);
   const { view, index } = menu;
   const unsupported = blocked(view.queries);
   const alert = alertAction(
@@ -45,7 +43,15 @@ export function TableTabs({ page, blocked, ...props }: Props & { page: Dashboard
             .map(c => ({ label: c.label, value: c.options.value })),
         },
   );
-  const heading = withAction({ ...menu.heading, dragHandle: props.dragHandle, ...pinActions(props.pin) }, alert);
+  const heading = withAction(
+    {
+      ...menu.heading,
+      dragHandle: props.dragHandle,
+      onTitleChange: props.onTitleChange,
+      actions: props.actions,
+    },
+    alert,
+  );
 
   if (unsupported) {
     return (

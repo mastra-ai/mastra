@@ -1,7 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { controlHeight } from '@/ds/primitives/control-size';
-import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -46,34 +45,41 @@ const nestedExpandedItemClasses = (level: number) => {
   return `gap-2 py-1 pr-3 pl-12 ${controlHeight.md}`;
 };
 
+// A row whose label carries a `description` grows to hold the second line at every depth,
+// and its direct icons take the first line's height (`1lh`) so their glyphs centre on the
+// label, not the middle of the box. Keyed off the description itself, so a collapsed
+// sidebar, which renders none, keeps the single-line row with no size prop to pair.
+const withDescriptionClasses =
+  'has-[[data-slot=sidebar-nav-description]]:h-auto has-[[data-slot=sidebar-nav-description]]:min-h-control-lg has-[[data-slot=sidebar-nav-description]]:items-start has-[[data-slot=sidebar-nav-description]]:py-1.5 has-[[data-slot=sidebar-nav-description]]:[&>svg]:h-lh';
+
 // Two neutral tones, never more: a row is either quiet (`muted-foreground`) or
-// current (`foreground`). Icons inherit that colour — lucide strokes with
-// `currentColor` — so there is nothing to restate per state.
-// Rows in a list switch instantly, like menu rows: neither the fill nor the label fades.
-// This sits on the surface because that is the element carrying `state-layer` — the
-// outer wrapper on rows with a trailing action, the link itself otherwise.
-const idleSurface = cn(
-  'rounded-lg text-muted-foreground transition-none before:transition-none hover:text-foreground',
-  surfaceStateLayerStyle,
-);
+// current (`foreground`). Its icon is one step quieter than the label.
+// One fill per row, painted on the row's own box: hover and current never stack or differ
+// in size, and there is no pressed state to flash before the row becomes current. This sits
+// on the surface: the outer wrapper on rows with a trailing action, the link itself otherwise.
+const idleSurface =
+  'rounded-lg text-muted-foreground hover:bg-fill-subtle hover:text-foreground [&>svg]:text-muted-icon hover:[&>svg]:text-icon';
 
-const activeSurface = 'bg-fill text-foreground';
+const activeSurface = 'rounded-lg bg-fill text-foreground [&>svg]:text-icon';
 
-const featuredSurface = cn(
-  'my-2 border border-transparent bg-brand-green text-black hover:text-black hover:brightness-95',
-);
+const featuredSurface = 'my-2 rounded-lg border border-transparent bg-brand-green text-black hover:brightness-95';
 
-export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) =>
-  cn(idleSurface, isActive && activeSurface, isFeatured && featuredSurface);
+export const navRowSurfaceClasses = ({ isActive, isFeatured }: NavRowSurfaceOptions) => {
+  if (isFeatured) return featuredSurface;
+  if (isActive) return activeSurface;
+  return idleSurface;
+};
 
 export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLayoutOptions) =>
   cn(
     navItemVariants({ size }),
     'w-full justify-start',
-    '[&_svg]:size-4 [&_svg]:shrink-0',
+    '[&_svg]:size-icon-md [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
-    isCollapsed && 'gap-0 px-[13.5px] py-0',
+    !isCollapsed && withDescriptionClasses,
+    // The rail's 40px rows keep the expanded rows' 12px padding, so icons don't move between the two states.
+    isCollapsed && 'gap-0 px-3 py-0',
   );
 
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level, size }: ItemStyleOptions = {}) =>

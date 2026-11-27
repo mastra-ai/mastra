@@ -131,7 +131,7 @@ await voice.connect()
 - This method is only implemented by real-time voice providers that support speech-to-speech capabilities
 - Providers that inherit the base `connect()` implementation log a debug message and resolve without establishing a connection
 - The connection must be established before using other real-time methods like `send()` or `answer()`
-- When you're done with the voice instance, call `close()` to properly clean up resources
+- When you're done with the voice instance, call `close()` to clean up resources
 - Some providers may automatically reconnect on connection loss, depending on their implementation
 - Connection errors will typically be thrown as exceptions that should be caught and handled
 

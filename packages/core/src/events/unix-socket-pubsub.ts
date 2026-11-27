@@ -322,6 +322,20 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void, maxFrameB
   });
 }
 
+/**
+ * Delivers events between processes on one host over a Unix domain socket. One
+ * process is elected broker and the others connect to it; when the broker
+ * exits, the rest elect a new one. Leases are files next to the socket.
+ *
+ * It carries streams, signals and thread leases between local processes, such
+ * as several Mastra Code sessions on one machine.
+ *
+ * It is not a transport for evented workflows or evented agents spread over
+ * several processes. The broker is one of those processes and keeps no list of
+ * the events each consumer holds, so the step a stopped process was running is
+ * never handed to another one. Use a pubsub that redelivers unacknowledged
+ * events for that.
+ */
 export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   readonly socketPath: string;
   readonly #leaseDirectory: string;
@@ -394,6 +408,14 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['push'];
+  }
+
+  /**
+   * A nack redelivers only to the subscriber that nacked. The broker keeps no
+   * pending list across processes, so a message a dead process held is lost.
+   */
+  override get redeliversUnacked(): boolean {
+    return false;
   }
 
   get isBroker(): boolean {
@@ -631,8 +653,24 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
   }
 
-  /** Creates the shared lease directories and records this process incarnation. */
+  /**
+   * Creates the shared lease directories and records this process incarnation.
+   * The marker is rewritten whenever it has gone missing: temp-directory cleaners
+   * (macOS deletes `/tmp` files left unmodified for days) remove it under a
+   * long-lived process, and without it every process, this one included, reads
+   * this process's leases and mutation locks as abandoned.
+   */
   async #ensureLeaseDirectories(): Promise<void> {
+    await this.#ensureLeaseDirectoriesOnce();
+    const marker = await this.#readJson<FileLeaseProcessMarker>(
+      join(this.#leaseProcessDirectory, `${process.pid}.json`),
+    );
+    if (marker?.processNonce === PROCESS_NONCE) return;
+    this.#leaseDirectoriesReady = undefined;
+    await this.#ensureLeaseDirectoriesOnce();
+  }
+
+  async #ensureLeaseDirectoriesOnce(): Promise<void> {
     if (!this.#leaseDirectoriesReady) {
       this.#leaseDirectoriesReady = (async () => {
         await Promise.all([

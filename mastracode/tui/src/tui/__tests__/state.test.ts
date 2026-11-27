@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { requestUIRender } = vi.hoisted(() => ({ requestUIRender: vi.fn() }));
 
-vi.mock('@earendil-works/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
   class MockContainer {
     children: unknown[] = [];
 
@@ -28,12 +29,19 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   return {
+    ...actual,
     Container: MockContainer,
     ProcessTerminal: MockProcessTerminal,
     TUI: MockTUI,
     Spacer: MockSpacer,
   };
 });
+
+vi.mock('../mouse/controller.js', () => ({
+  MouseController: class {
+    dispose() {}
+  },
+}));
 
 vi.mock('../components/custom-editor.js', () => ({
   CustomEditor: class {
@@ -51,7 +59,7 @@ vi.mock('@mastra/code-sdk/onboarding/settings', async importOriginal => {
   return {
     ...actual,
     // Keep state initialization hermetic: don't read the host's real settings.
-    loadSettings: vi.fn(() => ({ voice: { enabled: false } })),
+    loadSettings: vi.fn(() => ({ voice: { enabled: false }, preferences: { mouseDialogs: false, mouseInput: false } })),
   };
 });
 

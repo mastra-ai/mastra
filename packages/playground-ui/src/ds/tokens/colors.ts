@@ -259,6 +259,9 @@ export const Colors = {
   background: 'var(--background)',
   sidebar: 'var(--sidebar)',
   card: 'var(--card)',
+  'canvas-link': 'var(--canvas-link)',
+  nested: 'var(--nested)',
+  row: 'var(--row)',
   field: 'var(--field)',
   dialog: 'var(--dialog)',
   'field-disabled': 'var(--field-disabled)',
@@ -284,7 +287,10 @@ export const Colors = {
   muted: 'var(--muted)',
   foreground: 'var(--foreground)',
   'muted-foreground': 'var(--muted-foreground)',
+  'subtle-foreground': 'var(--subtle-foreground)',
   placeholder: 'var(--placeholder)',
+  icon: 'var(--icon)',
+  'muted-icon': 'var(--muted-icon)',
 
   scrim: 'var(--scrim)',
 
@@ -347,6 +353,7 @@ export const Colors = {
 };
 
 export const BorderColors = {
+  separator: 'var(--separator)',
   'surface-rim': 'var(--surface-rim)',
   border: 'var(--border)',
   'border-strong': 'var(--border-strong)',

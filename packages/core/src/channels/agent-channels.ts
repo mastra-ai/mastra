@@ -3,6 +3,7 @@ import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thre
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
+import type { MastraDBMessage } from '../agent/message-list';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
@@ -32,10 +33,20 @@ import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { createChatLogger } from './chat-logger';
+import { createChannelToolScope } from './chat-tools';
+import type { ChannelToolScope, ChannelToolsSettings } from './chat-tools';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
-import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
+import {
+  CONTINUE_RUN_ACTION_ID,
+  CONTINUE_RUN_MESSAGE,
+  formatArgsSummary,
+  formatToolApproved,
+  formatToolDenied,
+  stripToolPrefix,
+} from './formatting';
+import { ChatChannelGenerativeUIProcessor, GENERATIVE_UI_PROCESSOR_ID, RENDER_CARD_TOOL_NAME } from './generative-ui';
 import {
   buildInlineMediaCheck,
   extractUrls,
@@ -48,6 +59,8 @@ import type { InlineLinkRule } from './inline-media';
 import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
+import { ChannelReplyModeProcessor, channelReplyTypingStatus, threadLinkOptions } from './reply-mode';
+import { ChannelReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool';
 import { MastraStateAdapter } from './state-adapter';
 import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -59,6 +72,8 @@ import {
   messageText,
 } from './thread-history';
 import type { ThreadHistoryLogContext, ThreadHistoryWindow } from './thread-history';
+import { ChannelThreadLinkProcessor, markNewChannelThread } from './thread-link-processor';
+import { resolveChannelRenderContext } from './thread-lookup';
 import type {
   ChannelAdapterConfig,
   ChannelConfig,
@@ -88,8 +103,98 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
+  | 'id'
+  | 'getMastraInstance'
+  | 'sendMessage'
+  | 'approveToolCall'
+  | 'declineToolCall'
+  | 'listSuspendedRuns'
+  | 'getMemory'
+  | 'getWorkspace'
 >;
+
+/** Messages read per page when recovering a pending approval from Memory. */
+const APPROVAL_LOOKUP_PAGE_SIZE = 50;
+/** Most approval lookup results kept per AgentChannels instance. */
+const APPROVAL_LOOKUP_CACHE_SIZE = 1000;
+/**
+ * How long a lookup that found no approval for a card is trusted. Short, so an
+ * approval persisted by another instance after the first click is still picked
+ * up, while repeat clicks on an unknown card read history at most once per window.
+ */
+const APPROVAL_LOOKUP_MISSING_TTL_MS = 60_000;
+/**
+ * How long a pending or answered lookup is trusted. Another instance may answer
+ * a pending approval meanwhile; the next resume then fails as stale and marks
+ * the card answered, so this only bounds how long that state is reused.
+ */
+const APPROVAL_LOOKUP_TTL_MS = 10 * 60_000;
+
+/**
+ * Resume errors meaning the card's approval can no longer be applied: the run
+ * finished, was aborted, or no longer waits on this tool call. Workflow-backed
+ * resumes report a missing run as a plain `No snapshot found` error instead.
+ */
+const ANSWERED_RESUME_ERROR_IDS = new Set([
+  'AGENT_RESUME_NO_SNAPSHOT_FOUND',
+  'AGENT_RESUME_ABORTED_RUN',
+  'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+  'AGENT_RESUME_RUN_FINISHED',
+  'AGENT_RESUME_RUN_NOT_SUSPENDED',
+]);
+/** Run statuses a durable `AGENT_RESUME_RUN_NOT_SUSPENDED` reports while another resume is still running it. */
+const RESUMING_RUN_STATUSES = new Set(['running', 'pending']);
+
+/** How a failed approval resume should be treated. */
+const classifyResumeError = (err: unknown): 'answered' | 'in-progress' | undefined => {
+  if (err instanceof MastraError) {
+    // A not-suspended error that only timed out waiting for the suspension to
+    // persist leaves the card answerable, so it takes the normal error path.
+    if (err.details?.timedOut === true) return undefined;
+    // Another click (here or on another instance) is resuming the run right now.
+    if (
+      err.id === 'AGENT_RESUME_ALREADY_CLAIMED' ||
+      (err.id === 'AGENT_RESUME_RUN_NOT_SUSPENDED' && RESUMING_RUN_STATUSES.has(String(err.details?.status)))
+    ) {
+      return 'in-progress';
+    }
+    if (ANSWERED_RESUME_ERROR_IDS.has(err.id)) return 'answered';
+  }
+  return err instanceof Error && err.message.includes('No snapshot found') ? 'answered' : undefined;
+};
+
+/** The persisted pending-approval entry an agent stores on its assistant message. */
+type PersistedPendingApproval = {
+  toolCallId: string;
+  runId: string;
+  parentRunId?: string;
+  toolName: string;
+  args: Record<string, unknown>;
+};
+
+/** What the Memory fallback found for an approval click. */
+type ApprovalLookupResult =
+  | {
+      status: 'pending';
+      runId: string;
+      toolName: string;
+      args: Record<string, unknown>;
+      /** Platform user ids that spoke in the user turn that led to the approval. */
+      authors: string[];
+    }
+  | { status: 'answered' }
+  | { status: 'missing' };
+
+type CachedApprovalLookup = {
+  result: ApprovalLookupResult;
+  expiresAt: number;
+};
+
+/** Identifies one approval card: tool call ids alone can repeat across threads and runs. */
+type ApprovalCardKey = { threadId: string; messageId: string; toolCallId: string };
+
+const approvalCardKey = ({ threadId, messageId, toolCallId }: ApprovalCardKey) =>
+  JSON.stringify([threadId, messageId, toolCallId]);
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
@@ -174,6 +279,23 @@ export class AgentChannels {
    * context. Entries are removed after the resume completes.
    */
   private pendingApprovalCards = new Map<string, PendingApprovalRecord>();
+  /**
+   * Approval state per card (thread, card message, toolCallId). A click that
+   * misses `pendingApprovalCards` may have to read the whole thread, so the
+   * result is kept: repeat clicks (including rejected ones from other users)
+   * reuse it with no storage read. Cards whose resume fails because the run was
+   * already answered are marked here too. Bounded by `APPROVAL_LOOKUP_CACHE_SIZE`;
+   * entries expire per the `APPROVAL_LOOKUP_*_TTL_MS` constants.
+   */
+  private approvalLookups = new Map<string, CachedApprovalLookup>();
+  /**
+   * Cards a click is answering right now: from its card edit until its resume
+   * is dispatched. Another click on the same card meanwhile is ignored, so it
+   * cannot overwrite the card with a decision core is about to refuse.
+   */
+  private approvalsInFlight = new Set<string>();
+  /** Lookups in progress, so concurrent clicks on one card share one read. */
+  private approvalLookupsInFlight = new Map<string, Promise<ApprovalLookupResult>>();
 
   /**
    * Platforms we've already warned about for misconfigured `toolDisplay` (e.g.
@@ -191,7 +313,7 @@ export class AgentChannels {
       if (value && typeof value === 'object' && 'adapter' in value) {
         const cfg = value as ChannelAdapterConfig;
         adapters[name] = cfg.adapter;
-        adapterConfigs[name] = cfg;
+        adapterConfigs[name] = cfg.replyMode ? withReplyModeDefaults(cfg) : cfg;
       } else {
         adapters[name] = value as Adapter;
         adapterConfigs[name] = { adapter: value as Adapter };
@@ -213,6 +335,10 @@ export class AgentChannels {
     this.resolveThreadId = config.resolveThreadId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
+    // The card itself is the output; a tool card for the call would duplicate it.
+    if (this.generativeUIEnabled) this.channelToolNames.add(RENDER_CARD_TOOL_NAME);
+    // Its post is the reply; a tool card for the call would duplicate it.
+    if (this.replyModeEnabled) this.channelToolNames.add(REPLY_TOOL_NAME);
   }
 
   /**
@@ -491,7 +617,7 @@ export class AgentChannels {
             'Channels require storage to be configured on the Mastra instance. Configure a storage provider like LibSQLStore.',
           );
         }
-        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId());
+        this.stateAdapter = new MastraStateAdapter(memoryStore, () => this.getOwnerId(), this.logger);
         this.log('info', 'Using MastraStateAdapter (subscriptions persist across restarts)');
       }
 
@@ -687,10 +813,54 @@ export class AgentChannels {
 
       if (onAction !== false) {
         chat.onAction(event => {
-          const { handlerContext } = beginMessage();
+          const { defaultHandler: handleMessage, handlerContext } = beginMessage();
           // Tool approval buttons — id is "tool_approve:<toolCallId>" or "tool_deny:<toolCallId>"
           const defaultHandler = async () => {
             const { actionId } = event;
+            if (actionId === CONTINUE_RUN_ACTION_ID) {
+              // A continue button on an error card: the clicker asks the agent to continue,
+              // as if they had replied in the thread, so the reply route's gates still apply.
+              const clickedThread = event.thread as Thread | null;
+              if (!clickedThread || onSubscribedMessage === false) return;
+              // A card posted at the top level of a conversation reports itself as the thread.
+              const threadId = this.resolveExternalThreadId({
+                platform: event.adapter.name,
+                chatThread: clickedThread,
+                messageId: event.messageId,
+              });
+              const text = CONTINUE_RUN_MESSAGE;
+              const message = new ChatMessage({
+                attachments: [],
+                author: event.user,
+                formatted: {
+                  type: 'root',
+                  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+                },
+                id: event.triggerId ?? crypto.randomUUID(),
+                isMention: true,
+                metadata: { dateSent: new Date(), edited: false },
+                raw: event.raw,
+                text,
+                threadId,
+              });
+              const chatThread =
+                threadId === clickedThread.id
+                  ? clickedThread
+                  : new ThreadImpl({
+                      adapter: event.adapter,
+                      channelId: clickedThread.channelId,
+                      channelVisibility: clickedThread.channelVisibility,
+                      currentMessage: message,
+                      id: threadId,
+                      isDM: clickedThread.isDM,
+                      stateAdapter: this.stateAdapter,
+                    });
+              // The click's own scope, so context a custom onAction set reaches the run.
+              if (typeof onSubscribedMessage === 'function') {
+                return onSubscribedMessage(chatThread, message, handleMessage, handlerContext);
+              }
+              return handleMessage(chatThread, message);
+            }
             if (!actionId.startsWith('tool_approve:') && !actionId.startsWith('tool_deny:')) return;
             const platform = event.adapter.name;
             const messageId = event.messageId;
@@ -702,6 +872,10 @@ export class AgentChannels {
               toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
+            // Set once the card's Mastra thread is known.
+            let card: ApprovalCardKey | undefined;
+            // Set while this click owns the card's in-flight mark.
+            let inFlightKey: string | undefined;
             try {
               const approved = actionId.startsWith('tool_approve:');
               const toolCallId = actionEventContext.toolCallId;
@@ -733,6 +907,11 @@ export class AgentChannels {
                 this.log('warn', 'No mapped channel thread found for tool approval action', actionEventContext);
                 return;
               }
+              card = { threadId: mastraThread.id, messageId, toolCallId };
+              if (this.getApprovalLookup(approvalCardKey(card))?.result.status === 'answered') {
+                this.log('info', 'Tool approval already answered', actionEventContext);
+                return;
+              }
 
               // Look up the runId for this toolCallId. Prefer the in-memory
               // `pendingApprovalCards` map (set when the approval card was posted)
@@ -752,66 +931,23 @@ export class AgentChannels {
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
               } else {
-                const storage = mastra.getStorage();
-                const memoryStore = storage ? await storage.getStore('memory') : undefined;
-                if (!memoryStore) {
-                  throw new Error('Storage is required for tool approval lookups');
+                const { result: lookup } = await this.lookupPersistedApproval({ mastra, card, platform });
+                if (lookup.status === 'answered') {
+                  this.log('info', 'Tool approval already answered', actionEventContext);
+                  return;
                 }
-
-                const { messages } = await memoryStore.listMessages({
-                  threadId: mastraThread.id,
-                  perPage: 50,
-                  orderBy: { field: 'createdAt', direction: 'DESC' },
-                });
-
-                for (const [index, msg] of messages.entries()) {
-                  const pending = msg.content?.metadata?.pendingToolApprovals as
-                    | Record<
-                        string,
-                        {
-                          toolCallId: string;
-                          runId: string;
-                          parentRunId?: string;
-                          toolName: string;
-                          args: Record<string, unknown>;
-                        }
-                      >
-                    | undefined;
-                  if (pending) {
-                    for (const toolData of Object.values(pending)) {
-                      if (toolData.toolCallId === toolCallId) {
-                        runId = toolData.parentRunId ?? toolData.runId;
-                        toolName = toolData.toolName;
-                        toolArgs = toolData.args;
-                        // Recover the card's owner from the user turn that led to it
-                        // (messages are newest-first). If that turn has messages from
-                        // more than one author we can't tell who triggered the tool,
-                        // so no one may answer the card.
-                        const earlier = messages.slice(index + 1);
-                        const turnStart = earlier.findIndex(m => m.role === 'user');
-                        const turnEnd = earlier.findIndex((m, i) => i > turnStart && m.role !== 'user');
-                        const authors = new Set(
-                          (turnStart === -1 ? [] : earlier.slice(turnStart, turnEnd === -1 ? undefined : turnEnd))
-                            .map(
-                              m =>
-                                (
-                                  m.content?.providerMetadata?.mastra as
-                                    | { channels?: Record<string, { author?: { userId?: string } }> }
-                                    | undefined
-                                )?.channels?.[platform]?.author?.userId,
-                            )
-                            .filter((id): id is string => !!id),
-                        );
-                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
-                          this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
-                          return;
-                        }
-                        requesterId ??= [...authors][0];
-                        break;
-                      }
-                    }
-                    if (runId) break;
+                if (lookup.status === 'pending') {
+                  runId = lookup.runId;
+                  toolName = lookup.toolName;
+                  toolArgs = lookup.args;
+                  // If the user turn that led to the approval has messages from
+                  // more than one author we can't tell who triggered the tool, so
+                  // no one may answer the card.
+                  if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && lookup.authors.length > 1) {
+                    this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
+                    return;
                   }
+                  requesterId ??= lookup.authors[0];
                 }
               }
 
@@ -827,6 +963,41 @@ export class AgentChannels {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,
+                });
+                return;
+              }
+
+              const cardKey = approvalCardKey(card);
+              if (this.approvalsInFlight.has(cardKey)) {
+                this.log(
+                  'info',
+                  'Ignoring tool approval action: the card is already being answered',
+                  actionEventContext,
+                );
+                return;
+              }
+              this.approvalsInFlight.add(cardKey);
+              inFlightKey = cardKey;
+
+              // Every target can be stale: a remembered one can outlive its approval,
+              // and a fresh history scan can read pages written before another
+              // instance answered the card. Check before resuming.
+              if (
+                await this.isAnsweredElsewhere({
+                  runId,
+                  toolCallId,
+                  memory: { thread: mastraThread.id, resource: mastraThread.resourceId },
+                })
+              ) {
+                // Resuming would answer the run's newer tool call instead.
+                this.setApprovalLookup(cardKey, {
+                  result: { status: 'answered' },
+                  expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+                });
+                if (stashed) this.pendingApprovalCards.delete(toolCallId);
+                this.log('info', 'Ignoring stale tool approval action (run waits on another tool call)', {
+                  ...actionEventContext,
+                  runId,
                 });
                 return;
               }
@@ -922,13 +1093,6 @@ export class AgentChannels {
                       resource: mastraThread.resourceId,
                     },
                   });
-                } catch (err) {
-                  const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-                  if (isStaleApproval) {
-                    this.log('info', 'Ignoring stale tool denial action (runId already consumed)', actionEventContext);
-                  } else {
-                    throw err;
-                  }
                 } finally {
                   // Stash entry is no longer needed; the resumed decline stream
                   // won't emit a tool-result for this call.
@@ -978,19 +1142,32 @@ export class AgentChannels {
                 },
               });
             } catch (err) {
-              const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
-              if (isStaleApproval) {
-                this.log('info', 'Ignoring stale tool approval action (runId already consumed)', actionEventContext);
-                return;
-              }
               // The resolver also runs on approval continuations, so a refusal
               // here means this clicker isn't allowed to act — same silence as the
               // inbound path (see handleChatMessage).
+              // Checked first: a refusal is about this click, not the run, so it must
+              // never mark the card answered.
               if (err instanceof ChannelSessionRejectedError) {
                 this.log('info', 'Session resolver refused the tool approval action', {
                   ...actionEventContext,
                   reason: err.message,
                 });
+                return;
+              }
+              const resumeError = classifyResumeError(err);
+              if (resumeError === 'answered') {
+                // Remember it, so later clicks on this card neither resume nor read history.
+                if (card) {
+                  this.setApprovalLookup(approvalCardKey(card), {
+                    result: { status: 'answered' },
+                    expiresAt: Date.now() + APPROVAL_LOOKUP_TTL_MS,
+                  });
+                }
+                this.log('info', 'Ignoring stale tool approval action (run already answered)', actionEventContext);
+                return;
+              }
+              if (resumeError === 'in-progress') {
+                this.log('info', 'Ignoring tool approval action: the run is already resuming', actionEventContext);
                 return;
               }
               this.log('error', 'Error handling tool approval action', { ...actionEventContext, error: err });
@@ -1007,6 +1184,8 @@ export class AgentChannels {
               } catch (err) {
                 this.log('warn', 'Failed to post error message for action', { ...actionEventContext, error: err });
               }
+            } finally {
+              if (inFlightKey) this.approvalsInFlight.delete(inFlightKey);
             }
           };
 
@@ -1156,10 +1335,49 @@ export class AgentChannels {
    * - Skipped if the user already added a processor with the same id.
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
-    if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
-    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
-    if (hasProcessor) return [];
-    return [new ChatChannelProcessor(this)];
+    const has = (id: string) => configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+    const processors: InputProcessor[] = [];
+    if (this.channelConfig.threadContext?.addSystemMessage !== false && !has('chat-channel-context')) {
+      processors.push(new ChatChannelProcessor(this));
+    }
+    if (this.generativeUIEnabled && !has(GENERATIVE_UI_PROCESSOR_ID)) {
+      processors.push(new ChatChannelGenerativeUIProcessor(this));
+    }
+    if (this.replyModeEnabled && !has(REPLY_MODE_PROCESSOR_ID)) {
+      processors.push(
+        new ChannelReplyModeProcessor({
+          resolveRender: (requestContext, state) => this.resolveRunRender(requestContext, state),
+          adapter: platform => this.adapterConfigs[platform],
+        }),
+      );
+    }
+    return processors;
+  }
+
+  private get replyModeEnabled(): boolean {
+    return Object.values(this.adapterConfigs).some(cfg => cfg.replyMode);
+  }
+
+  /**
+   * The chat thread a run posts to: the one it came in on, else the one its
+   * thread (the controller's, or memory's) is linked to. Cached on `state`
+   * when given; `null` remembers a thread that isn't channel-backed.
+   */
+  private async resolveRunRender(
+    requestContext: RequestContext | undefined,
+    state?: Record<string, unknown>,
+  ): Promise<ChatChannelRenderContext | undefined> {
+    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+    if (inbound) return inbound;
+    if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;
+    const render = await resolveChannelRenderContext(requestContext, () => this);
+    if (state) state.render = render ?? null;
+    return render;
+  }
+
+  /** Whether the Slack adapter opted into `generativeUI` (the only platform it supports). */
+  private get generativeUIEnabled(): boolean {
+    return this.adapterConfigs.slack?.generativeUI === true;
   }
 
   /**
@@ -1181,9 +1399,22 @@ export class AgentChannels {
   }
 
   getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
-    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
-    if (hasProcessor) return [];
-    return [new ChatChannelOutputProcessor(this)];
+    const has = (id: string) => configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+    const processors: OutputProcessor[] = [];
+    // Ahead of the render processor, so the link's text reaches the thread.
+    if (Object.values(this.adapterConfigs).some(cfg => cfg.threadLink) && !has(THREAD_LINK_PROCESSOR_ID)) {
+      processors.push(
+        new ChannelThreadLinkProcessor(requestContext => {
+          const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+          return render && threadLinkOptions(this.adapterConfigs[render.platform]?.threadLink);
+        }),
+      );
+    }
+    if (!has('chat-channel-render')) processors.push(new ChatChannelOutputProcessor(this));
+    if (this.replyModeEnabled && !has(REPLY_STREAM_PROCESSOR_ID)) {
+      processors.push(new ChannelReplyStreamProcessor(requestContext => this.resolveRunRender(requestContext)));
+    }
+    return processors;
   }
 
   /**
@@ -1206,6 +1437,20 @@ export class AgentChannels {
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
+  }
+
+  /**
+   * The conversation a channel tool call runs in, for `createChannelTools`.
+   * @internal
+   */
+  async __resolveToolScope(
+    context: { requestContext?: RequestContext; agent?: { threadId?: string } } | undefined,
+    settings: ChannelToolsSettings,
+  ): Promise<ChannelToolScope> {
+    const { adapter, threadId } = await this.getAdapterFromContext(context ?? {});
+    if (!this.chat) throw new Error('Channels are not initialized yet.');
+    const platform = Object.keys(this.adapters).find(key => this.adapters[key] === adapter) ?? adapter.name;
+    return createChannelToolScope({ chat: this.chat, adapter, platform, threadId, settings });
   }
 
   // ---------------------------------------------------------------------------
@@ -1503,6 +1748,10 @@ export class AgentChannels {
       messageId: message.id,
       actor: message.author,
     });
+    // `eventType` stays 'mention' for subscribed-thread messages too, so mark
+    // the ones that actually tag the bot; the prompt tells the model to always
+    // answer those.
+    if (!chatThread.isDM && batch.some(m => m.isMention)) attributes.mentioned = 'true';
 
     // NOTE: `requestContext` is constructed per message at the handler boundary
     // (see `beginMessage` in initialize) so a custom handler can contribute to
@@ -1539,6 +1788,7 @@ export class AgentChannels {
               requestContext,
             })
         : undefined,
+      onCreate: () => markNewChannelThread(requestContext),
       mastra,
     });
 
@@ -2109,6 +2359,7 @@ export class AgentChannels {
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
       textDisplay: adapterConfig?.textDisplay,
+      generativeUI: platform === 'slack' && adapterConfig?.generativeUI === true,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
@@ -2290,7 +2541,8 @@ export class AgentChannels {
    * normally in cards/hidden modes.
    *
    * When the run's stream ends, an empty status is sent to clear any status
-   * this run set, so runs that end without posting a message (e.g. terminated
+   * left on the thread — set by this run or by a channel handler before it
+   * dispatched — so runs that end without posting a message (e.g. terminated
    * by `stopWhen` on a tool call, or aborted) don't leave a stale status
    * pinned to the thread.
    */
@@ -2310,7 +2562,6 @@ export class AgentChannels {
           : defaultTypingStatus;
 
     let currentTypingStatus: string | undefined;
-    let statusSent = false;
 
     try {
       for await (const chunk of stream) {
@@ -2334,7 +2585,6 @@ export class AgentChannels {
           }
           if (typeof result === 'string' && result.length > 0 && result !== currentTypingStatus) {
             currentTypingStatus = result;
-            statusSent = true;
             chatThread.startTyping(result).catch(e => {
               this.log('debug', 'Typing indicator failed (best-effort)', {
                 platform,
@@ -2356,17 +2606,200 @@ export class AgentChannels {
       // End of the run's stream (the session queue closed on the terminal
       // step-finish / error / abort, or the driver stopped consuming). Slack's
       // `assistant.threads.setStatus` only auto-clears on `chat.postMessage`,
-      // so a run that set a status but never posted a message would leave it
+      // so a status left by a run that never posted a message would stay
       // pinned on the thread indefinitely. Send an empty status to clear it —
-      // a no-op when a post already cleared it. Skip the clear while the
-      // streaming gate is active: the in-flight streaming post clears the
-      // status when it completes.
-      if (statusSent && !typingGate.active) {
+      // a no-op when a post already cleared it. Clear even when this run's
+      // stream set no status itself: a channel handler may have set one before
+      // dispatching (e.g. an early "is thinking..." acknowledgement), and a
+      // custom `typingStatus` that ignores every chunk of the run would never
+      // replace it. Skip the clear while the streaming gate is active: the
+      // in-flight streaming post clears the status when it completes.
+      if (typingStatusFn && !typingGate.active) {
         chatThread.startTyping('').catch(e => {
           this.log('debug', 'Typing clear failed (best-effort)', { platform, threadId: chatThread.id, error: e });
         });
       }
     }
+  }
+
+  /**
+   * Find a pending tool approval in Memory for a click that missed the
+   * in-memory card cache (e.g. after a rebuild or restart). Results are cached
+   * per card and concurrent lookups for the same card share one read, so
+   * repeated clicks cannot each force a history scan.
+   */
+  private async lookupPersistedApproval(args: {
+    mastra: Mastra;
+    card: ApprovalCardKey;
+    platform: string;
+  }): Promise<{ result: ApprovalLookupResult; cached: boolean }> {
+    const key = approvalCardKey(args.card);
+    const cached = this.getApprovalLookup(key);
+    if (cached) return { result: cached.result, cached: true };
+    const inFlight = this.approvalLookupsInFlight.get(key);
+    if (inFlight) return { result: await inFlight, cached: false };
+
+    // Entries are per card, so a card posted later for a reused toolCallId
+    // gets its own key and needs no invalidation.
+    const promise = this.readPersistedApproval({ mastra: args.mastra, platform: args.platform, ...args.card });
+    this.approvalLookupsInFlight.set(key, promise);
+    try {
+      const result = await promise;
+      this.setApprovalLookup(key, {
+        result,
+        expiresAt: Date.now() + (result.status === 'missing' ? APPROVAL_LOOKUP_MISSING_TTL_MS : APPROVAL_LOOKUP_TTL_MS),
+      });
+      return { result, cached: false };
+    } finally {
+      this.approvalLookupsInFlight.delete(key);
+    }
+  }
+
+  /**
+   * Whether a card's tool call was answered elsewhere: its run is suspended
+   * again, but on other tool calls. A target from the lookup cache or from
+   * posting the card can outlive its approval, and a history scan can race
+   * another instance's answer; a `DurableAgent` resume would then apply the old
+   * answer to the run's newer tool call. One read of the thread's suspended
+   * runs, no history scan.
+   *
+   * A run that is not suspended (finished, aborted, still resuming, or whose
+   * suspension is not stored yet) is left to the resume, which reports those
+   * cases itself. This matches core's own rule for a stale `toolCallId`.
+   */
+  private async isAnsweredElsewhere(args: {
+    runId: string;
+    toolCallId: string;
+    memory: { thread: string; resource: string };
+  }): Promise<boolean> {
+    // AgentControllerChannels sets no agent: its session's armed approval gate
+    // rejects a stale target itself.
+    const agent = this.getDispatchAgent() as ChannelAgent | undefined;
+    if (!agent) return false;
+    const { runs } = await agent.listSuspendedRuns({
+      threadId: args.memory.thread,
+      resourceId: args.memory.resource,
+    });
+    const suspendedToolCallIds = (runs.find(run => run.runId === args.runId)?.toolCalls ?? [])
+      .map(toolCall => toolCall.toolCallId)
+      .filter((id): id is string => id !== undefined);
+    return suspendedToolCallIds.length > 0 && !suspendedToolCallIds.includes(args.toolCallId);
+  }
+
+  /** The cached entry for a card, or undefined when missing or expired. */
+  private getApprovalLookup(key: string): CachedApprovalLookup | undefined {
+    const entry = this.approvalLookups.get(key);
+    if (entry && entry.expiresAt <= Date.now()) {
+      this.approvalLookups.delete(key);
+      return undefined;
+    }
+    return entry;
+  }
+
+  private setApprovalLookup(key: string, entry: CachedApprovalLookup): void {
+    // Re-insert so Map order tracks recency, then drop the oldest entries.
+    this.approvalLookups.delete(key);
+    this.approvalLookups.set(key, entry);
+    for (const oldest of this.approvalLookups.keys()) {
+      if (this.approvalLookups.size <= APPROVAL_LOOKUP_CACHE_SIZE) break;
+      this.approvalLookups.delete(oldest);
+    }
+  }
+
+  /**
+   * Read history newest-first, one page at a time, until the approval and the
+   * user turn that triggered it are found. Storage cannot filter on the nested
+   * `pendingToolApprovals` entries, so this scans. There is deliberately no page
+   * cap: any fixed limit would strand approvals behind it again (#29186). The
+   * cost is bounded instead by `lookupPersistedApproval`, which runs this at
+   * most once per card per `APPROVAL_LOOKUP_TTL_MS` for pending or answered
+   * approvals and per `APPROVAL_LOOKUP_MISSING_TTL_MS` for unknown ones.
+   */
+  private async readPersistedApproval({
+    mastra,
+    threadId,
+    toolCallId,
+    platform,
+  }: {
+    mastra: Mastra;
+    threadId: string;
+    toolCallId: string;
+    platform: string;
+  }): Promise<ApprovalLookupResult> {
+    const storage = mastra.getStorage();
+    const memoryStore = storage ? await storage.getStore('memory') : undefined;
+    if (!memoryStore) {
+      throw new Error('Storage is required for tool approval lookups');
+    }
+
+    let found: PersistedPendingApproval | undefined;
+    // Messages older than the approval, newest-first.
+    let earlier: MastraDBMessage[] = [];
+    const turnBounds = () => {
+      const start = earlier.findIndex(m => m.role === 'user');
+      const end = earlier.findIndex((m, i) => i > start && m.role !== 'user');
+      return { start, end };
+    };
+    for (let page = 0; ; page++) {
+      const { messages, hasMore } = await memoryStore.listMessages({
+        threadId,
+        page,
+        perPage: APPROVAL_LOOKUP_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        includeTotal: false,
+      });
+      if (found) {
+        earlier.push(...messages);
+      } else {
+        for (const [index, msg] of messages.entries()) {
+          const pending = msg.content?.metadata?.pendingToolApprovals as
+            | Record<string, PersistedPendingApproval>
+            | undefined;
+          found = pending && Object.values(pending).find(entry => entry.toolCallId === toolCallId);
+          if (found) {
+            earlier = messages.slice(index + 1);
+            break;
+          }
+          // Agents store the pending entry on the newest assistant message that
+          // carries the tool call, so reaching that message without one means
+          // the approval was answered; older history cannot hold it.
+          const answered =
+            msg.role === 'assistant' &&
+            (msg.content?.parts ?? []).some(
+              part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === toolCallId,
+            );
+          if (answered) return { status: 'answered' };
+        }
+      }
+      // Stop once the user turn that led to the approval is fully read.
+      const turn = turnBounds();
+      if (found && turn.start !== -1 && turn.end !== -1) break;
+      if (!hasMore || messages.length === 0) break;
+    }
+
+    if (!found) return { status: 'missing' };
+
+    // Recover the card's owner from the user turn that led to it.
+    const turn = turnBounds();
+    const authors = new Set(
+      (turn.start === -1 ? [] : earlier.slice(turn.start, turn.end === -1 ? undefined : turn.end))
+        .map(
+          m =>
+            (
+              m.content?.providerMetadata?.mastra as
+                | { channels?: Record<string, { author?: { userId?: string } }> }
+                | undefined
+            )?.channels?.[platform]?.author?.userId,
+        )
+        .filter((id): id is string => !!id),
+    );
+    return {
+      status: 'pending',
+      runId: found.parentRunId ?? found.runId,
+      toolName: found.toolName,
+      args: found.args,
+      authors: [...authors],
+    };
   }
 
   /**
@@ -2452,6 +2885,50 @@ export class AgentChannels {
   }
 
   /**
+   * Map a chat thread to a Mastra thread (creating the mapping if needed) and
+   * subscribe to it, so follow-up replies reach the agent without a mention.
+   *
+   * Use this for threads the bot started itself, e.g. a scheduled digest posted
+   * to Slack. Inbound messages create the mapping automatically, but a thread
+   * the bot opened has none until someone mentions it. An existing mapping is
+   * reused and keeps its original owner.
+   *
+   * @example
+   * ```ts
+   * const sent = await channel.post('Daily digest');
+   * await agent.getChannels()!.subscribeThread({ thread: sent.thread, resourceId: 'digest-bot' });
+   * ```
+   */
+  async subscribeThread({
+    thread,
+    resourceId,
+    threadId,
+  }: {
+    thread: Thread;
+    /** Owner of the Mastra thread when a new mapping is created. */
+    resourceId: string;
+    /** Id for a newly created Mastra thread. Defaults to a random UUID. */
+    threadId?: string;
+  }): Promise<StorageThreadType> {
+    const mastra = this.getMastra();
+    if (!mastra) {
+      throw new Error('subscribeThread requires the agent to be registered with a Mastra instance.');
+    }
+    await this.initialize(mastra);
+
+    const mastraThread = await this.getOrCreateThread({
+      externalThreadId: thread.id,
+      channelId: thread.channelId,
+      platform: thread.adapter.name,
+      resourceId,
+      threadId: threadId ? () => threadId : undefined,
+      mastra,
+    });
+    await this.stateAdapter.subscribe(thread.id);
+    return mastraThread;
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -2460,6 +2937,7 @@ export class AgentChannels {
     platform,
     resourceId,
     threadId,
+    onCreate,
     mastra,
   }: {
     externalThreadId: string;
@@ -2477,6 +2955,8 @@ export class AgentChannels {
      * Omitted: a random UUID.
      */
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
+    /** Called once when a new thread is created, never when one is reused. */
+    onCreate?: () => void;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const {
@@ -2490,6 +2970,7 @@ export class AgentChannels {
       mastra,
     });
     if (existingThread) return existingThread;
+    onCreate?.();
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
@@ -2753,4 +3234,22 @@ async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root 
     else total += entry.size ?? (await fs.stat(path)).size;
   }
   return total;
+}
+
+const REPLY_MODE_PROCESSOR_ID = 'channel-reply-mode';
+const REPLY_STREAM_PROCESSOR_ID = 'channel-reply-stream';
+const THREAD_LINK_PROCESSOR_ID = 'channel-thread-link';
+
+/** Reply mode keeps reply text and tool calls out of the thread and shows progress in the status, unless set. */
+function withReplyModeDefaults(cfg: ChannelAdapterConfig): ChannelAdapterConfig {
+  const legacyCards = 'cards' in cfg && cfg.cards !== undefined;
+  // An explicit `undefined` means "not set", so it must not clear a default.
+  const set = Object.fromEntries(Object.entries(cfg).filter(([, value]) => value !== undefined));
+  const textDisplay = cfg.textDisplay ?? 'hidden';
+  return {
+    textDisplay,
+    ...(legacyCards ? {} : { toolDisplay: 'hidden' }),
+    typingStatus: channelReplyTypingStatus(textDisplay),
+    ...set,
+  } as ChannelAdapterConfig;
 }

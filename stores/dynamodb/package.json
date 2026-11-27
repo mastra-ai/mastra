@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dynamodb",
-  "version": "1.5.0",
+  "version": "1.5.3",
   "description": "DynamoDB storage adapter for Mastra",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,7 +20,8 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",

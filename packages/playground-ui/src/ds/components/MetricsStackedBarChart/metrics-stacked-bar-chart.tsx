@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
 import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
@@ -6,7 +6,7 @@ import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
 import { CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
+import { singleBarBox, stackedSegmentBox, zeroStubBox, zeroStubSeries } from '@/ds/primitives/chart-column-layout';
 import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
 import {
   CHART_TICK,
@@ -18,7 +18,7 @@ import {
   valueYAxis,
 } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_AXIS_FONT_SIZE, CHART_MARGIN, ChartHideYAxis } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { DragSelectionBand, activeIndex, useDragSelection } from '@/ds/primitives/charts/drag-selection';
@@ -37,6 +37,11 @@ const CAP_BODY = 0.55;
 const CAP_HEIGHT = 3;
 /** Opacity of the other columns while one is hovered. */
 const DIMMED = 0.3;
+/**
+ * Neutral, so a zero never reads as a small value of a series. Between `--fill`, which the grid line
+ * swallows in light, and `--fill-strong`, which the observability histogram's bars use.
+ */
+const ZERO_STUB_COLOR = 'var(--gray-alpha-3)';
 const COLUMN_LABEL_SPACE = 16;
 
 type SegmentProps = {
@@ -54,6 +59,7 @@ function segmentShape({
   capped,
   keys,
   dataKey,
+  timestampKey,
 }: {
   fill: string;
   color: string;
@@ -61,11 +67,24 @@ function segmentShape({
   /** The column's data keys, bottom to top. */
   keys: string[];
   dataKey: string;
+  timestampKey: string;
 }) {
   return function Segment({ x = 0, width = 0, index, payload, ...geo }: SegmentProps) {
     const values = keys.map(k => Number(payload?.[k]) || 0);
     const self = keys.indexOf(dataKey);
     const box = { y: geo.y ?? 0, height: Math.max(geo.height ?? 0, 0) };
+    // Dimming is a CSS rule keyed on `data-bucket` (see `HoverDim`), so hovering re-renders no bars.
+    const bucket = { 'data-bucket': index };
+    if (zeroStubSeries(keys.map(k => payload?.[k])) === self && !isFuture(payload?.[timestampKey])) {
+      const stub = zeroStubBox(box, width);
+      if (!stub) return <g />;
+      // Square, as the segments' own radius rule leaves anything this short.
+      return (
+        <g {...bucket} data-slot="chart-zero-stub" aria-hidden>
+          <rect x={x} width={width} {...stub} fill={ZERO_STUB_COLOR} />
+        </g>
+      );
+    }
     // Every non-zero value gets a few readable pixels; zeros draw nothing.
     const laid =
       keys.length > 1
@@ -74,8 +93,6 @@ function segmentShape({
     if (!laid) return <g />;
     const { y, height: h } = laid;
     const radius = Math.min(RADIUS, Math.floor(h / 3));
-    // Dimming is a CSS rule keyed on `data-bucket` (see `HoverDim`), so hovering re-renders no bars.
-    const bucket = { 'data-bucket': index };
 
     if (capped) {
       return (
@@ -92,6 +109,9 @@ function segmentShape({
     );
   };
 }
+
+/** A bucket that hasn't started: its zero isn't a count yet. */
+const isFuture = (timestamp: unknown) => typeof timestamp === 'number' && timestamp > Date.now();
 
 /**
  * Dims every column outside the hovered one, or outside the range being dragged. Its own tiny
@@ -124,6 +144,10 @@ export type MetricsStackedBarChartOverlay = MetricsLineChartSeries & {
 };
 
 export type MetricsStackedBarChartProps = {
+  /**
+   * One row per column. A row whose values are all 0 draws a short neutral stub; leave a value out
+   * (or `null`) when there is no data, and the column stays empty.
+   */
   data: Record<string, unknown>[];
   series: MetricsLineChartSeries[];
   /** Pixels, or `fill` to grow with the parent (a flex column, e.g. a card's content). */
@@ -150,7 +174,10 @@ export type MetricsStackedBarChartProps = {
   showTotal?: boolean;
   /** Row field printed under the x-axis. */
   xKey?: string;
-  /** Row field with the bucket's start time (ms), which places labels on round clock times. */
+  /**
+   * Row field with the bucket's start time (ms), which places labels on round clock times and keeps
+   * the zero stub off buckets that haven't started.
+   */
   timestampKey?: string;
   /** `auto` fits as many labels as the width allows; `edges` prints only the first and last. */
   xLabels?: ChartXLabels;
@@ -228,12 +255,15 @@ function BarPlot({
         capped: variant === 'capped',
         keys,
         dataKey,
+        timestampKey,
       }),
     );
-  }, [keyList, colorList, variant, id]);
+  }, [keyList, colorList, variant, id, timestampKey]);
 
   const format = valueFormatter ?? compactNumber.format;
-  const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const hideYAxis = useContext(ChartHideYAxis);
+  const withYAxis = showYAxis && !hideYAxis;
+  const plotWidth = size.width - (withYAxis ? Y_AXIS_WIDTH : 0);
   const margin = columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN;
 
   return (
@@ -278,7 +308,7 @@ function BarPlot({
           {selection.enabled && <DragSelectionBand selection={selection} count={data.length} />}
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
           {valueYAxis({
-            show: showYAxis,
+            show: withYAxis,
             size,
             formatter: axisFormatter ?? format,
             domain: yDomain,

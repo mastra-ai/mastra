@@ -332,7 +332,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
-  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
+  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning' | 'title_generation';
   /** Token usage statistics */
   usage?: UsageStats;
   /** Whether one or more model steps omitted a primary token count */
@@ -630,6 +630,8 @@ export interface SkillActionAttributes extends AIBaseAttributes, ProcessorPipeli
   skillCount?: number;
   /** Format the catalog was rendered in (inject only) */
   skillFormat?: string;
+  /** Configured catalog-injection option; `false` means no catalog was rendered (inject only) */
+  injectCatalog?: boolean;
   /** Skill the operation targeted (activate / read) */
   skillName?: string;
   /** Whether the operation succeeded */
@@ -1482,6 +1484,8 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
 
   /** Record an error for the span, optionally end the span as well */
   error(options: ErrorSpanOptions<TType>): void;
+  /** Record a local failure without changing outcome, payload or completion. Older implementations may omit this. */
+  recordError?(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void;
 
   /** Update span attributes */
   update(options: UpdateSpanOptions<TType>): void;
@@ -1656,7 +1660,7 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   provider?: string;
   /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
   timeToFirstTokenMs?: number;
-  /** Errors in this span and all nested spans, filled at export; the live span does not carry it */
+  /** Failures originating directly on this span, excluding propagated/descendant failures. Unset when unknown. */
   errorCount?: number;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
@@ -1714,6 +1718,8 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
  * `hideInput` and `hideOutput`.
  */
 export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
+  /** @internal Local occurrences already accounted for; retained across durable reconstruction. */
+  errorOccurrenceIds?: string[];
   traceState?: TraceState;
   /** Version of the span's own entity, `null` when it has none. Absent in snapshots from older versions. */
   ownEntityVersionId?: string | null;
@@ -1763,7 +1769,7 @@ export interface IModelSpanTracker {
   getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   /** @internal Record a chunk after the runtime has applied output processors. */
-  recordChunk?(chunk: ChunkType): void;
+  recordChunk?<OUTPUT>(chunk: ChunkType<OUTPUT>): void;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
 
@@ -2079,6 +2085,8 @@ export interface UpdateSpanOptions<TType extends SpanType> extends UpdateBaseOpt
 
 /** Options for recording an error on a span. */
 export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOptions<TType> {
+  /** Explicitly identify a new failure or a propagated report when Error/cause identity is insufficient. */
+  origin?: 'new' | 'propagated';
   /** The error associated with the issue */
   error: MastraError | Error;
   /** End the span when true */
@@ -2104,6 +2112,17 @@ export interface ResumeTracingContext {
   resumedFromSpanId?: string;
   /** External parent of the suspended invocation, kept by a resume that gives none of its own */
   externalParentSpanId?: string;
+  /**
+   * Whether the suspended invocation was sampled. Workflow runs save it (see
+   * `getWorkflowResumeTracingContext`) and their resumes repeat the decision instead of sampling
+   * again. Agent runs and snapshots from older versions lack it, so those resumes decide as before.
+   */
+  sampled?: boolean;
+  /**
+   * Trace-level state of the suspended invocation. A resume keeps its hidden input/output and keys
+   * where the resume call sets none of its own.
+   */
+  traceState?: TraceState;
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */

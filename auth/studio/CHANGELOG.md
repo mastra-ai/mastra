@@ -1,5 +1,92 @@
 # @mastra/auth-studio
 
+## 1.4.3-alpha.0
+
+### Patch Changes
+
+- Added `pinnedOrganizationId` to `MastraAuthStudio`: the organization the deployment is pinned to, if any. Routes that check their own tokens can use it to refuse other organizations. ([#30896](https://github.com/mastra-ai/mastra/pull/30896))
+
+  ```ts
+  // `auth` is the deployment's configured MastraAuthStudio instance.
+  if (auth.pinnedOrganizationId && orgId !== auth.pinnedOrganizationId) return forbidden();
+  ```
+
+## 1.4.2
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.4.2-alpha.0
+
+### Patch Changes
+
+- Stopped publishing JavaScript source maps (`.js.map` and `.cjs.map` files) and their `//# sourceMappingURL=` comments. They made up more than half of the installed size of some packages and pointed at `src/*.ts` files that are not included in the package. ([#31176](https://github.com/mastra-ai/mastra/pull/31176))
+
+- Stopped publishing TypeScript declaration map files (`.d.ts.map`). They pointed at source files that are not included in the package, so they could not be used after install. Installs are smaller (about 1,050 fewer files and 2 MB less for `@mastra/core`), and go to definition and type checking work exactly as before. ([#31173](https://github.com/mastra-ai/mastra/pull/31173))
+
+## 1.4.1
+
+### Patch Changes
+
+- Fixed connecting the Mastra Gateway from a local Factory, which failed with "Your Mastra role cannot create gateway keys for this organization" even for organization admins. Requests made to Mastra platform on behalf of the signed-in user now include the origin of the browser request. ([#30742](https://github.com/mastra-ai/mastra/pull/30742))
+
+## 1.4.1-alpha.0
+
+### Patch Changes
+
+- Fixed connecting the Mastra Gateway from a local Factory, which failed with "Your Mastra role cannot create gateway keys for this organization" even for organization admins. Requests made to Mastra platform on behalf of the signed-in user now include the origin of the browser request. ([#30742](https://github.com/mastra-ai/mastra/pull/30742))
+
+## 1.4.0
+
+### Minor Changes
+
+- Added `fetchAsRequestUser(request, path, init)` to `MastraAuthStudio`. It calls the Mastra platform API as the signed-in user of an incoming request, so your server can act on the organization that user's session is on without its own platform token. It resolves to `null` when the request has no Mastra session, and gives up after 15 seconds unless you pass your own `signal`. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  const auth = new MastraAuthStudio();
+
+  const response = await auth.fetchAsRequestUser(request, '/auth/me');
+  if (!response) {
+    // The request has no Mastra session: ask the user to sign in.
+  }
+  ```
+
+  When a call renews the user's session, later calls for the same request send the renewed session, so several platform calls can run in one request. Add the headers from `consumePendingResponseHeaders(request)` to your response so the browser keeps the renewed session.
+
+### Patch Changes
+
+- Fixed sign-outs and extra platform calls when a page sends several requests at once. Requests that arrive together with the same session cookie now share one check with the Mastra platform. Before, each request checked the cookie on its own. When the session had expired, each one also tried to renew it with the same refresh token. The platform accepts a refresh token only once, so the other requests failed and could sign the user out. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
+## 1.4.0-alpha.1
+
+### Minor Changes
+
+- Added `fetchAsRequestUser(request, path, init)` to `MastraAuthStudio`. It calls the Mastra platform API as the signed-in user of an incoming request, so your server can act on the organization that user's session is on without its own platform token. It resolves to `null` when the request has no Mastra session, and gives up after 15 seconds unless you pass your own `signal`. ([#29183](https://github.com/mastra-ai/mastra/pull/29183))
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  const auth = new MastraAuthStudio();
+
+  const response = await auth.fetchAsRequestUser(request, '/auth/me');
+  if (!response) {
+    // The request has no Mastra session: ask the user to sign in.
+  }
+  ```
+
+  When a call renews the user's session, later calls for the same request send the renewed session, so several platform calls can run in one request. Add the headers from `consumePendingResponseHeaders(request)` to your response so the browser keeps the renewed session.
+
+## 1.3.12-alpha.0
+
+### Patch Changes
+
+- Fixed sign-outs and extra platform calls when a page sends several requests at once. Requests that arrive together with the same session cookie now share one check with the Mastra platform. Before, each request checked the cookie on its own. When the session had expired, each one also tried to renew it with the same refresh token. The platform accepts a refresh token only once, so the other requests failed and could sign the user out. ([#29434](https://github.com/mastra-ai/mastra/pull/29434))
+
 ## 1.3.11
 
 ### Patch Changes

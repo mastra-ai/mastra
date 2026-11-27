@@ -24,10 +24,30 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   docker?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
+  /** Let anyone with a port's URL open it without signing in. Fixed when a sandbox is created. */
+  publicPorts?: boolean;
+}
+
+/** vCPU counts a sandbox can be created with: one, or an even number up to 8. Any other count fails at creation. */
+const CPU_COUNTS = [1, 2, 4, 6, 8];
+
+/**
+ * The first of `counts` that is offered, else the built-in default. A count saved
+ * before the list existed, or passed as a default, may not be on it; a saved one
+ * falls back to the configured default, the same as once Factory drops it.
+ */
+function offeredCpuCount(...counts: Array<number | undefined>): number {
+  return counts.find(count => count !== undefined && CPU_COUNTS.includes(count)) ?? DEFAULT_SETTINGS.cpuCount;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
-const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, docker: false, idleTimeoutMinutes: 5 } as const;
+const DEFAULT_SETTINGS = {
+  cpuCount: 2,
+  memoryMb: 1024,
+  docker: false,
+  idleTimeoutMinutes: 5,
+  publicPorts: false,
+} as const;
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -37,8 +57,7 @@ const SETTINGS_SCHEMA = {
       title: 'CPU',
       description: 'vCPUs for the sandbox template',
       default: DEFAULT_SETTINGS.cpuCount,
-      minimum: 1,
-      maximum: 64,
+      oneOf: CPU_COUNTS.map(count => ({ const: count })),
     },
     memoryMb: {
       type: 'integer',
@@ -69,14 +88,21 @@ const SETTINGS_SCHEMA = {
       minimum: 1,
       maximum: 1440,
     },
+    publicPorts: {
+      type: 'boolean',
+      title: 'Public preview links',
+      description:
+        "Anyone with a sandbox's preview link can open it without signing in. Applies to newly created sandboxes, not existing ones.",
+      default: DEFAULT_SETTINGS.publicPorts,
+    },
   },
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
 /**
  * The settings schema with the provider's effective defaults as `default`:
- * the built-in values, overridden by the host's `idleTimeoutMinutes` option and
- * then its `defaults` option. The schema
+ * the built-in values, overridden by the host's `idleTimeoutMinutes` and
+ * `publicPorts` options and then its `defaults` option. The schema
  * is what clients show as placeholders, so it must match what the provider
  * applies when a setting is unset.
  */
@@ -84,6 +110,7 @@ function settingsSchema(
   defaults: Partial<PlatformFactorySandboxSettings> | undefined,
 ): PublicSchema<PlatformFactorySandboxSettings> {
   const effective = { ...DEFAULT_SETTINGS, ...defaults };
+  effective.cpuCount = offeredCpuCount(effective.cpuCount);
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
@@ -144,6 +171,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     this.#options = options;
     this.settings = settingsSchema({
       ...(options.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: options.idleTimeoutMinutes } : {}),
+      ...(options.publicPorts !== undefined ? { publicPorts: options.publicPorts } : {}),
       ...options.defaults,
     });
   }
@@ -153,10 +181,14 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     settings: PlatformFactorySandboxSettings,
   ): PlatformRepoTemplateResolver | undefined {
     const { defaults, template } = this.#options;
+    // Factory's build env goes in explicitly, never through the spread.
+    const { buildEnv, buildEnvRevision, ...rest } = ctx;
+    const mergedBuildEnv = { ...template?.buildEnv, ...buildEnv };
     return createRepoTemplate({
-      ...ctx,
-      ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
-      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      ...rest,
+      ...(Object.keys(mergedBuildEnv).length > 0 ? { buildEnv: mergedBuildEnv } : {}),
+      ...(buildEnvRevision ? { buildEnvRevision } : {}),
+      cpuCount: offeredCpuCount(settings.cpuCount, defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
       docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });
@@ -179,6 +211,7 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
         defaults?.idleTimeoutMinutes ??
         options.idleTimeoutMinutes ??
         DEFAULT_SETTINGS.idleTimeoutMinutes,
+      publicPorts: settings.publicPorts ?? defaults?.publicPorts ?? options.publicPorts ?? DEFAULT_SETTINGS.publicPorts,
     });
   }
 

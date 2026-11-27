@@ -156,9 +156,9 @@ describe('Composer on a lazy user-session draft', () => {
     const { client } = renderDraft();
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
+    await waitFor(() => expect(modelPicker).toHaveTextContent('GPT-4o Mini'));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));
     expect(preparation.operations).toEqual([]);
 
@@ -181,7 +181,7 @@ describe('Composer on a lazy user-session draft', () => {
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}/model`, () =>
+      http.put(`${TEST_BASE_URL}/web/config/session-model`, () =>
         HttpResponse.json({ error: 'Model unavailable' }, { status: 500 }),
       ),
     );
@@ -190,7 +190,7 @@ describe('Composer on a lazy user-session draft', () => {
 
     const modelPicker = await screen.findByLabelText('Session model');
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
     await user.type(message, 'keep my prompt');
     await user.keyboard('{Enter}');

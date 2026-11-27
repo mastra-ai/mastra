@@ -6,6 +6,7 @@ import type { RenderHookOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
+import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
 
 /**
  * Base URL every test stubs against. `src` is platform-agnostic and
@@ -31,7 +32,9 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
-          <ApiConfigProvider config={TEST_API}>{children}</ApiConfigProvider>
+          <ApiConfigProvider config={TEST_API}>
+            <FactoryPlatformConnect>{children}</FactoryPlatformConnect>
+          </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>
     </ThemeProvider>
@@ -86,10 +89,10 @@ export async function waitForMutationsIdle(client: QueryClient) {
   });
 }
 
-/** The routed page's `PageLayout` header (the sidebar renders its own `banner`). */
+/** The chat page's own header (the sidebar renders its own `banner`). */
 export function findPageHeader(): Promise<HTMLElement> {
   return waitFor(() => {
-    const header = document.querySelector<HTMLElement>('[data-slot="page-layout"] > header');
+    const header = document.querySelector<HTMLElement>('[data-slot="chat-page-header"] > header');
     if (!header) throw new Error('Page header not rendered');
     return header;
   });

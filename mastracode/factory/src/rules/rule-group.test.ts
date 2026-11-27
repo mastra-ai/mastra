@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { cardRuleGroupSchema, evaluateRuleGroup } from './rule-group.js';
+import { cardRuleGroupSchema, evaluateRuleGroup, explainRuleGroup } from './rule-group.js';
 import type { RuleCondition, RuleGroup } from './rule-group.js';
 
 const all = (...conditions: Array<RuleCondition | RuleGroup>): RuleGroup => ({ operator: 'AND', conditions });
@@ -82,6 +82,30 @@ describe('evaluateRuleGroup', () => {
     );
   });
 
+  it('tests a list fact by its members, and an empty list as no value', () => {
+    const assigned = { 'item.assignees': ['Ada', 'grace'] };
+    const unassigned = { 'item.assignees': [] };
+    const test = (operator: RuleCondition['operator'], value: unknown, facts: Record<string, unknown>) =>
+      evaluateRuleGroup(all({ field: 'item.assignees', operator, value } as RuleCondition), facts);
+
+    expect(test('equals', 'ada', assigned)).toBe(true);
+    expect(test('equals', 'linus', assigned)).toBe(false);
+    expect(test('not_equals', 'ada', assigned)).toBe(false);
+    expect(test('not_equals', 'linus', assigned)).toBe(true);
+    expect(test('in', ['linus', 'Grace'], assigned)).toBe(true);
+    expect(test('not_in', ['linus', 'Grace'], assigned)).toBe(false);
+    expect(test('not_in', ['linus'], assigned)).toBe(true);
+    expect(test('exists', undefined, assigned)).toBe(true);
+    expect(test('not_exists', undefined, assigned)).toBe(false);
+
+    expect(test('exists', undefined, unassigned)).toBe(false);
+    expect(test('not_exists', undefined, unassigned)).toBe(true);
+    expect(test('equals', 'ada', unassigned)).toBe(false);
+    expect(test('not_equals', 'ada', unassigned)).toBe(true);
+    expect(test('contains', 'ada', unassigned)).toBe(false);
+    expect(test('not_contains', 'ada', unassigned)).toBe(true);
+  });
+
   it('combines AND and OR groups', () => {
     const releaseOrDocs = any(
       { field: 'item.labels', operator: 'contains', value: 'release' },
@@ -119,9 +143,17 @@ describe('rule group schemas', () => {
   });
 
   it("lets a condition test whether the card's author is trusted", () => {
-    expect(
-      cardRuleGroupSchema.safeParse(all({ field: 'author.trusted', operator: 'equals', value: true })).success,
-    ).toBe(true);
+    expect(cardRuleGroupSchema.safeParse(all({ field: 'item.trusted', operator: 'equals', value: true })).success).toBe(
+      true,
+    );
+  });
+});
+
+describe('a condition stored under author.trusted', () => {
+  it("tests the card's item.trusted fact", () => {
+    const stored = all({ field: 'author.trusted', operator: 'equals', value: true });
+    expect(evaluateRuleGroup(stored, { 'item.trusted': true })).toBe(true);
+    expect(evaluateRuleGroup(stored, { 'item.trusted': false })).toBe(false);
   });
 
   it('checks each operator gets the value it needs', () => {
@@ -139,5 +171,47 @@ describe('rule group schemas', () => {
       cardRuleGroupSchema.safeParse(all({ field: 'item.title', operator: 'greater_than', value: 'a' })).success,
     ).toBe(false);
     expect(cardRuleGroupSchema.safeParse({ operator: 'AND', conditions: [] }).success).toBe(false);
+  });
+});
+
+describe('explainRuleGroup', () => {
+  const issue = { 'source.kind': 'issue', 'item.labels': ['bug'], 'item.trusted': false };
+  const cond = (field: string, operator: RuleCondition['operator'], value?: unknown) =>
+    ({ field, operator, ...(value !== undefined && { value }) }) as RuleCondition;
+
+  it.each([
+    {
+      name: 'every failing condition of an AND group, with the fact it read',
+      group: all(
+        cond('item.labels', 'contains', 'bug'),
+        cond('item.labels', 'contains', 'ship'),
+        cond('source.kind', 'equals', 'pr'),
+      ),
+      failed: [
+        { field: 'item.labels', operator: 'contains', value: 'ship', actual: ['bug'] },
+        { field: 'source.kind', operator: 'equals', value: 'pr', actual: 'issue' },
+      ],
+    },
+    {
+      name: 'every branch of a failed OR group, a missing fact as null',
+      group: any(cond('source.kind', 'equals', 'pr'), cond('item.assignees', 'exists')),
+      failed: [
+        { field: 'source.kind', operator: 'equals', value: 'pr', actual: 'issue' },
+        { field: 'item.assignees', operator: 'exists', actual: null },
+      ],
+    },
+    {
+      name: 'a renamed field read under its new name, as the rule reads it',
+      group: all(cond('author.trusted', 'equals', true)),
+      failed: [{ field: 'author.trusted', operator: 'equals', value: true, actual: false }],
+    },
+    {
+      name: 'nothing for a matching group',
+      group: any(cond('source.kind', 'equals', 'pr'), cond('item.labels', 'contains', 'BUG')),
+      failed: [],
+    },
+    { name: 'nothing for no group', group: null, failed: [] },
+  ])('names $name', ({ group, failed }) => {
+    expect(explainRuleGroup(group, issue)).toEqual({ matched: failed.length === 0, failed });
   });
 });

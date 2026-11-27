@@ -1,6 +1,6 @@
 {
   "name": "@mastra/modal",
-  "version": "0.7.4",
+  "version": "0.7.5",
   "description": "Modal cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -50,7 +50,8 @@
     "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.d.*ts.map"
   ],
   "homepage": "https://mastra.ai",
   "repository": {

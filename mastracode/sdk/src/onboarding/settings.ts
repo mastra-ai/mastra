@@ -5,6 +5,7 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -28,6 +29,7 @@ export { isThinkingLevelSetting, THINKING_LEVEL_VALUES } from '../thinking.js';
 export type { ThinkingLevelSetting, ThinkingLevelSource } from '../thinking.js';
 import { getAppDataDir } from '../utils/project.js';
 import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../voice/stt-registry.js';
+import { customProviderHeaderProblem, isCustomProviderAuthScheme } from './custom-provider-headers.js';
 import { pruneUnknownModePackFallbacks, pruneUnknownPackAccountPreferences } from './packs.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -37,11 +39,25 @@ export interface CustomPack {
   createdAt: string;
 }
 
+/** How a custom provider sends its API key: `Authorization: Bearer <key>` or `x-api-key: <key>`. */
+export type CustomProviderAuthScheme = 'bearer' | 'x-api-key';
+
+/** An extra header a custom provider sends on every call. */
+export interface CustomProviderHeader {
+  name: string;
+  value: string;
+  /** Hidden in UIs and never returned by the Factory API. */
+  secret?: boolean;
+}
+
 /** A saved custom provider for OpenAI-compatible endpoints. */
 export interface CustomProviderSetting {
   name: string;
   url: string;
   apiKey?: string;
+  /** Absent means `bearer`. */
+  authScheme?: CustomProviderAuthScheme;
+  headers?: CustomProviderHeader[];
   models: string[];
 }
 
@@ -346,6 +362,10 @@ export interface GlobalSettings {
      * honored while its API key is configured.
      */
     webSearchProvider: WebSearchProviderSetting;
+    /** Opt-in mouse support for TUI dialogs and slash suggestions: clicks, hover and wheel scrolling. */
+    mouseDialogs: boolean;
+    /** Opt-in mouse mode for the TUI input box: clicks and drags edit the prompt while typing. */
+    mouseInput: boolean;
   };
   // Storage backend configuration
   storage: StorageSettings;
@@ -520,6 +540,8 @@ const DEFAULTS: GlobalSettings = {
     subagentsEnabled: false,
     previewLines: 2,
     webSearchProvider: 'auto',
+    mouseDialogs: false,
+    mouseInput: false,
   },
   storage: { ...STORAGE_DEFAULTS },
   customModelPacks: [],
@@ -707,6 +729,8 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
     previewLines: parsePreviewLines(raw),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
+    mouseDialogs: raw.mouseDialogs === true,
+    mouseInput: raw.mouseInput === true,
   };
 }
 
@@ -826,6 +850,33 @@ export function stripMastraCodeCustomProviderPrefix(
   return isCustomProvider ? rest : modelId;
 }
 
+/**
+ * Read the custom headers of a saved provider. An entry that breaks the header
+ * rules is dropped on its own, so one bad hand-edited header does not discard
+ * the provider or its other headers.
+ */
+function parseCustomProviderHeaders(
+  rawHeaders: unknown,
+  authScheme: CustomProviderAuthScheme | undefined,
+): CustomProviderHeader[] {
+  if (!Array.isArray(rawHeaders)) return [];
+  const headers: CustomProviderHeader[] = [];
+  for (const rawHeader of rawHeaders) {
+    if (!rawHeader || typeof rawHeader !== 'object') continue;
+    const candidate = rawHeader as Record<string, unknown>;
+    if (typeof candidate.name !== 'string' || typeof candidate.value !== 'string') continue;
+    const header: CustomProviderHeader = {
+      name: candidate.name.trim(),
+      value: candidate.value.trim(),
+      ...(typeof candidate.secret === 'boolean' ? { secret: candidate.secret } : {}),
+    };
+    // Checking the kept list plus the candidate also drops duplicates and anything past the limit.
+    if (customProviderHeaderProblem([...headers, header], authScheme) === undefined) headers.push(header);
+  }
+  return headers;
+}
+
+/** Read and sanitize the `customProviders` list of settings.json. */
 export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {
   if (!Array.isArray(rawProviders)) return [];
 
@@ -859,10 +910,15 @@ export function parseCustomProviders(rawProviders: unknown): CustomProviderSetti
     const apiKey =
       typeof candidate.apiKey === 'string' && candidate.apiKey.trim().length > 0 ? candidate.apiKey.trim() : undefined;
 
+    const authScheme = isCustomProviderAuthScheme(candidate.authScheme) ? candidate.authScheme : undefined;
+    const headers = parseCustomProviderHeaders(candidate.headers, authScheme);
+
     parsedProviders.push({
       name,
       url,
       ...(apiKey ? { apiKey } : {}),
+      ...(authScheme ? { authScheme } : {}),
+      ...(headers.length > 0 ? { headers } : {}),
       models,
     });
   }
@@ -1545,7 +1601,7 @@ const PROFILE_PROVIDER_MARKER = '.mastra-provider';
  * Returns the provider name if the marker exists, undefined otherwise.
  */
 export function getProfileProvider(profilePath: string): BrowserProvider | undefined {
-  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
+  const markerPath = join(expandHome(profilePath), PROFILE_PROVIDER_MARKER);
   if (!existsSync(markerPath)) {
     return undefined;
   }
@@ -1565,9 +1621,10 @@ export function getProfileProvider(profilePath: string): BrowserProvider | undef
  * Creates the directory if it doesn't exist.
  */
 export function setProfileProvider(profilePath: string, provider: BrowserProvider): void {
-  const markerPath = join(profilePath, PROFILE_PROVIDER_MARKER);
-  if (!existsSync(profilePath)) {
-    mkdirSync(profilePath, { recursive: true });
+  const expandedProfilePath = expandHome(profilePath);
+  const markerPath = join(expandedProfilePath, PROFILE_PROVIDER_MARKER);
+  if (!existsSync(expandedProfilePath)) {
+    mkdirSync(expandedProfilePath, { recursive: true });
   }
   writeFileSync(markerPath, provider, 'utf-8');
 }
@@ -1719,6 +1776,10 @@ export interface CreateBrowserOptions {
   chatModelId?: string;
 }
 
+export function expandHome(path: string): string {
+  return path.replace(/^~(?=$|[\\/])/, homedir());
+}
+
 /**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
@@ -1732,7 +1793,9 @@ export async function createBrowserFromSettings(
     return undefined;
   }
 
-  const { provider, headless, viewport, cdpUrl, profile, executablePath, stagehand, agentBrowser } = settings;
+  const { provider, headless, viewport, cdpUrl, stagehand, agentBrowser } = settings;
+  const profile = settings.profile ? expandHome(settings.profile) : undefined;
+  const executablePath = settings.executablePath ? expandHome(settings.executablePath) : undefined;
 
   // Chrome only allows one process per profile directory, so force 'shared' scope
   // when a profile is set. Otherwise use the user's setting (or provider default).
@@ -1791,7 +1854,7 @@ export async function createBrowserFromSettings(
   } else if (provider === 'agent-browser') {
     const { AgentBrowser } = await import('@mastra/agent-browser');
     const agentBrowserOpts = {
-      storageState: agentBrowser?.storageState,
+      storageState: agentBrowser?.storageState ? expandHome(agentBrowser.storageState) : undefined,
       recording: browserRecordingOptions(),
     };
     return cdpUrl

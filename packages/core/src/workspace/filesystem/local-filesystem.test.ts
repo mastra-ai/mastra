@@ -1239,20 +1239,15 @@ describe('LocalFilesystem', () => {
   // getInstructions with custom override
   // ===========================================================================
   describe('getInstructions with custom override', () => {
-    it('should return custom instructions when provided', () => {
+    it.each([
+      ['should return custom instructions when provided', 'Custom filesystem instructions here.'],
+      ['should return empty string when override is empty string', ''],
+    ] as const)('%s', (_title, instructions) => {
       const testFs = new LocalFilesystem({
         basePath: tempDir,
-        instructions: 'Custom filesystem instructions here.',
+        instructions,
       });
-      expect(testFs.getInstructions()).toBe('Custom filesystem instructions here.');
-    });
-
-    it('should return empty string when override is empty string', () => {
-      const testFs = new LocalFilesystem({
-        basePath: tempDir,
-        instructions: '',
-      });
-      expect(testFs.getInstructions()).toBe('');
+      expect(testFs.getInstructions()).toBe(instructions);
     });
 
     it('should return auto-generated instructions when no override', () => {

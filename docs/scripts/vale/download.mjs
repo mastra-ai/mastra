@@ -3,12 +3,12 @@ import { createWriteStream, existsSync, mkdirSync, unlinkSync, chmodSync } from 
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { VALE_VERSION } from './version.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const isWindows = process.platform === 'win32'
-const VALE_VERSION = '3.25.1'
 const OUTPUT_PATH = join(__dirname, 'bin')
 const OUTPUT_BIN = join(OUTPUT_PATH, isWindows ? 'vale.exe' : 'vale')
 
@@ -36,7 +36,7 @@ function getPlatform() {
 function getReleaseUrl() {
   const platform = getPlatform()
   const ext = isWindows ? '.zip' : '.tar.gz'
-  return `https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_${platform}${ext}`
+  return `https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_${platform}${ext}`
 }
 
 function getInstalledVersion() {

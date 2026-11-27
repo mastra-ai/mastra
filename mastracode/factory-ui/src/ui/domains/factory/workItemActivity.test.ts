@@ -20,7 +20,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 1,
   createdAt: '2026-08-01T09:00:00.000Z',
   updatedAt: '2026-08-05T09:00:00.000Z',
@@ -168,7 +168,7 @@ describe('workItemActivity', () => {
     expect(activity.lastWorker).toEqual({
       id: 'github:octocat',
       name: 'octocat',
-      avatarUrl: 'https://github.com/octocat.png?size=64',
+      avatarUrl: 'https://avatars.githubusercontent.com/octocat?s=64',
     });
   });
 

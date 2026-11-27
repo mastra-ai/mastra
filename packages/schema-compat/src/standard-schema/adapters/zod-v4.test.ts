@@ -76,8 +76,23 @@ describe('zod-v4 standard-schema adapter', () => {
       const inputJsonSchema = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' });
       const outputJsonSchema = standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
 
-      // For Zod schemas, input and output JSON schemas are the same
-      expect(inputJsonSchema).toEqual(outputJsonSchema);
+      expect(inputJsonSchema.properties).toEqual(outputJsonSchema.properties);
+      expect(inputJsonSchema.required).toEqual(outputJsonSchema.required);
+    });
+
+    it('documents defaulted and transformed fields differently for input and output (#30050)', () => {
+      const standardSchema = toStandardSchema(
+        z.object({ limit: z.string().transform(Number).default('10'), enabled: z.boolean().default(true) }),
+        { unrepresentable: 'any' },
+      );
+
+      const input = standardSchemaToJSONSchema(standardSchema, { io: 'input' });
+      const output = standardSchemaToJSONSchema(standardSchema, { io: 'output' });
+
+      expect(input.properties?.limit).toMatchObject({ type: 'string' });
+      expect(input.required).toBeUndefined();
+      expect(output.properties?.limit).not.toHaveProperty('type');
+      expect(output.required).toEqual(['limit', 'enabled']);
     });
 
     it('should preserve original Zod v4 methods', () => {
@@ -263,29 +278,16 @@ describe('zod-v4 standard-schema adapter', () => {
   });
 
   describe('$schema mapping', () => {
-    it('should not produce console warnings when using draft-07 target', () => {
+    it.each([
+      ['should not produce console warnings when using draft-07 target', 'draft-07'],
+      ['should not produce console warnings when using draft-04 target', 'draft-04'],
+    ] as const)('%s', (_title, target) => {
       const zodSchema = z.object({ name: z.string() });
       const standardSchema = toStandardSchema(zodSchema);
 
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      standardSchema['~standard'].jsonSchema.output({ target: 'draft-07' });
-
-      const draftWarnings = warnSpy.mock.calls.filter(
-        call => typeof call[0] === 'string' && call[0].includes('Invalid target'),
-      );
-      expect(draftWarnings).toHaveLength(0);
-
-      warnSpy.mockRestore();
-    });
-
-    it('should not produce console warnings when using draft-04 target', () => {
-      const zodSchema = z.object({ name: z.string() });
-      const standardSchema = toStandardSchema(zodSchema);
-
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      standardSchema['~standard'].jsonSchema.output({ target: 'draft-04' });
+      standardSchema['~standard'].jsonSchema.output({ target });
 
       const draftWarnings = warnSpy.mock.calls.filter(
         call => typeof call[0] === 'string' && call[0].includes('Invalid target'),

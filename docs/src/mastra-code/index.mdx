@@ -102,7 +102,7 @@ mastracode --tui-prompt "Pick up where we left off and run the tests"
 
 Launchers that can only pass environment variables through, such as an editor pane or a terminal multiplexer, can set `MASTRACODE_TUI_INITIAL_PROMPT` instead. It works like `--tui-initial-prompt`, and Mastra Code removes the variable at startup so shells and nested sessions it starts don't send the prompt again. A flag takes precedence over the variable.
 
-Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--tui-initial-prompt` resumes a conversation. A prompt that is a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
+Piped stdin is added after a plain-text prompt in the same first message, and is skipped with the prompt when `--tui-initial-prompt` resumes a conversation. A prompt that's a slash command or starts with `!` can't be combined with piped stdin. To run a task without the interactive UI and exit, use [headless mode](/headless).
 
 ## Update Mastra Code
 
@@ -140,7 +140,7 @@ After exit, run `mastracode resume <thread-id>` to continue the same thread dire
 | `/settings` | Open the settings panel |
 | `/memory`, `/om` | Configure Observational Memory |
 | `/context`, `/ctx` | Show a context audit for the current session |
-| `/knowledge` | Inspect scoped knowledge when it is enabled |
+| `/knowledge` | Inspect scoped knowledge when it's enabled |
 | `/schedules` | Create, run, pause, resume, or delete recurring prompts |
 | `/subagents` | Configure subagent model defaults |
 | `/skills` | List available skills |
@@ -165,7 +165,7 @@ After exit, run `mastracode resume <thread-id>` to continue the same thread dire
 | `/api-keys` | Manage API keys for model providers |
 | `/custom-providers` | Manage custom providers and models |
 | `/observability` | Configure cloud observability |
-| `/gateway` | Configure the Mastra gateway URL and API key for memory models |
+| `/gateway` | Configure the Mastra Gateway URL and API key for memory models |
 | `/feedback` | Submit feedback about Mastra Code |
 | `/voice` | Toggle push-to-talk voice input |
 | `/setup` | Run the setup wizard |
@@ -190,7 +190,7 @@ You can also define custom slash commands as markdown files. See [Configuration]
 | `Alt+Z` | Undo last clear |
 | `Ctrl+T` | Toggle thinking blocks visibility |
 | `Ctrl+E` | Expand/collapse all tool outputs |
-| `Enter` | Send a message. While the agent is running, text messages are delivered to the active run, slash commands and `!` shell commands run immediately, and messages with images are queued |
+| `Enter` | Send a message. During a run, text messages go to the active run, slash commands and `!` shell commands run immediately, and messages with images are queued |
 | `Ctrl+F` | Queue a follow-up message to send after the current run finishes. When no run is active, sends the message immediately |
 | `Ctrl+Y` | Toggle YOLO mode |
 

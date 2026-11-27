@@ -374,9 +374,6 @@ describe('workspace skill invocation route', () => {
       orgId: 'org-1',
       connectionId: connection.id,
       repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/workspace/repository',
     });
     await sourceControlStorage.sessions.create({
       sessionId,
@@ -480,7 +477,7 @@ describe('factory skills catalog route', () => {
     const names = skills.map(s => s.name);
     expect(names).toContain('factory-triage');
     expect(names).toContain('factory-plan');
-    expect(names).toContain('factory-complete-issue');
+    expect(names).toContain('factory-build');
     const triage = skills.find(s => s.name === 'factory-triage')!;
     expect(triage.description.length).toBeGreaterThan(0);
     expect(triage.content).toContain('# Factory Triage');
@@ -629,10 +626,12 @@ describe('project skill edit routes', () => {
     writeFileSync(join(projectDir, 'factory-skills', dir, 'SKILL.md'), content);
   }
 
-  async function setup() {
+  /** `afterAudit` runs once each write is audited, before the route responds, as another request could. */
+  async function setup({ afterAudit }: { afterAudit?: () => Promise<void> } = {}) {
     const seed = await createFactoryStorageForTests();
     const admins = new Set([ADMIN.workosId]);
     const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => admins.has(userId) });
+    const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
     const routes = new SkillRoutes({
       auth,
       controllerId: 'code',
@@ -640,7 +639,12 @@ describe('project skill edit routes', () => {
       overrides: {
         projects: seed.projects,
         storage: seed.skillOverrides,
-        audit: new AuditDomain({ auth, audit: seed.audit, projects: seed.projects }),
+        audit: {
+          emit: async input => {
+            await auditDomain.emit(input);
+            await afterAudit?.();
+          },
+        },
       },
     }).routes();
     const projectA = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'A' } });
@@ -664,6 +668,12 @@ describe('project skill edit routes', () => {
       });
     const revert = (user: TestAuthUser, projectId: string, name: string) =>
       request(user, `/web/factory/projects/${projectId}/skills/${name}`, { method: 'DELETE' });
+    const create = (user: TestAuthUser, projectId: string, name: string, content: string) =>
+      request(user, `/web/factory/projects/${projectId}/skills`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, content }),
+      });
     const list = async (user: TestAuthUser, projectId: string) => {
       const response = await request(user, `/web/factory/skills?projectId=${projectId}`);
       expect(response.status).toBe(200);
@@ -675,6 +685,7 @@ describe('project skill edit routes', () => {
           content: string;
           origin: string;
           edited?: { updatedBy: string; updatedAt: string };
+          created?: { updatedBy: string; updatedAt: string };
           originalChanged?: boolean;
         }[];
       };
@@ -687,10 +698,203 @@ describe('project skill edit routes', () => {
         project: event.factoryProjectId,
         targets: event.targets,
       }));
-    return { seed, projectA, projectB, elsewhere, save, revert, list, skill, auditActions };
+    return { seed, projectA, projectB, elsewhere, save, revert, create, list, skill, auditActions };
   }
 
   const editedPlan = (body: string) => `---\nname: factory-plan\ndescription: Our planning rules\n---\n\n${body}\n`;
+  const releaseNotes = (body: string) =>
+    `---\nname: release-notes\ndescription: Write release notes for a merged change\n---\n\n${body}\n`;
+
+  describe('creating skills', () => {
+    it('creates a skill for its project only, lists it as a project skill, and records it', async () => {
+      const { projectA, projectB, create, list, auditActions } = await setup();
+      const response = await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      expect(response.status).toBe(201);
+      expect(((await response.json()) as { skill: unknown }).skill).toMatchObject({
+        name: 'release-notes',
+        description: 'Write release notes for a merged change',
+        content: '# Notes',
+        origin: 'project',
+        builtIn: false,
+        created: { updatedBy: ADMIN.workosId },
+      });
+
+      const a = await list(ADMIN, projectA.id);
+      const created = a.skills.find(s => s.name === 'release-notes');
+      expect(created).toMatchObject({ origin: 'project', content: '# Notes' });
+      expect(created?.edited).toBeUndefined();
+      // The catalog stays sorted by name with created skills among the others.
+      const names = a.skills.map(s => s.name);
+      expect(names).toEqual([...names].sort());
+      expect((await list(ADMIN, projectB.id)).skills.map(s => s.name)).not.toContain('release-notes');
+      expect(await auditActions()).toEqual([
+        { action: 'factory.skill.created', project: projectA.id, targets: [{ type: 'skill', id: 'release-notes' }] },
+      ]);
+    });
+
+    it('creates a skill with an all-digit name when the SKILL.md quotes it, as the settings editor writes it', async () => {
+      const { projectA, create, skill } = await setup();
+      const response = await create(
+        ADMIN,
+        projectA.id,
+        '123',
+        '---\nname: "123"\ndescription: "Numbered"\n---\n\n# 123\n',
+      );
+      expect(response.status).toBe(201);
+      expect(await skill(ADMIN, projectA.id, '123')).toMatchObject({ origin: 'project', description: 'Numbered' });
+    });
+
+    it('answers a create or save with the skill it stored, even when another admin deletes it at once', async () => {
+      let deleteAfterAudit: (() => Promise<unknown>) | undefined;
+      const { seed, projectA, create, save } = await setup({
+        afterAudit: async () => void (await deleteAfterAudit?.()),
+      });
+      const scope = { orgId: 'org-1', projectId: projectA.id, skillName: 'release-notes' };
+      deleteAfterAudit = () => seed.skillOverrides.delete(scope);
+
+      const created = await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      expect(created.status).toBe(201);
+      expect(((await created.json()) as { skill: unknown }).skill).toMatchObject({
+        name: 'release-notes',
+        content: '# Notes',
+        origin: 'project',
+      });
+      expect(await seed.skillOverrides.get(scope)).toBeNull();
+
+      deleteAfterAudit = undefined;
+      await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      deleteAfterAudit = () => seed.skillOverrides.delete(scope);
+      const saved = await save(ADMIN, projectA.id, 'release-notes', releaseNotes('# Shorter'));
+      expect(saved.status).toBe(200);
+      expect(((await saved.json()) as { skill: unknown }).skill).toMatchObject({
+        content: '# Shorter',
+        origin: 'project',
+      });
+    });
+
+    it('updates a created skill, then deletes it', async () => {
+      const { projectA, create, save, revert, list, auditActions } = await setup();
+      expect((await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Notes'))).status).toBe(201);
+
+      const updated = await save(ADMIN, projectA.id, 'release-notes', releaseNotes('# Shorter notes'));
+      expect(updated.status).toBe(200);
+      expect(((await updated.json()) as { skill: unknown }).skill).toMatchObject({
+        content: '# Shorter notes',
+        origin: 'project',
+      });
+
+      const deleted = await revert(ADMIN, projectA.id, 'release-notes');
+      expect(deleted.status).toBe(200);
+      expect(await deleted.json()).toEqual({ skill: null });
+      expect((await list(ADMIN, projectA.id)).skills.map(s => s.name)).not.toContain('release-notes');
+      // Gone, so neither a save nor a second delete finds it.
+      expect((await save(ADMIN, projectA.id, 'release-notes', releaseNotes('# Again'))).status).toBe(404);
+      expect((await revert(ADMIN, projectA.id, 'release-notes')).status).toBe(404);
+      expect((await auditActions()).map(event => event.action).sort()).toEqual([
+        'factory.skill.created',
+        'factory.skill.deleted',
+        'factory.skill.updated',
+      ]);
+    });
+
+    it('refuses a name an app skill or another created skill already has', async () => {
+      writeLocalSkill('deploy-notes', '---\nname: deploy-notes\ndescription: Folder skill\n---\n\n# Folder\n');
+      const { projectA, projectB, create, skill } = await setup();
+      const builtIn = await create(ADMIN, projectA.id, 'factory-plan', editedPlan('# Not a new skill'));
+      expect(builtIn.status).toBe(409);
+      expect(await builtIn.json()).toEqual({
+        error: 'skill_exists',
+        message: 'A skill named "factory-plan" already exists. Edit it instead.',
+      });
+      const folder = '---\nname: deploy-notes\ndescription: Mine\n---\n\n# Mine\n';
+      expect((await create(ADMIN, projectA.id, 'deploy-notes', folder)).status).toBe(409);
+
+      expect((await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# First'))).status).toBe(201);
+      expect((await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Second'))).status).toBe(409);
+      expect((await skill(ADMIN, projectA.id, 'release-notes')).content).toBe('# First');
+      // Another project may use the name.
+      expect((await create(ADMIN, projectB.id, 'release-notes', releaseNotes('# Other'))).status).toBe(201);
+      expect((await skill(ADMIN, projectA.id, 'factory-plan')).edited).toBeUndefined();
+    });
+
+    it('creates one skill when two admins create the same name at once', async () => {
+      const { projectA, create, seed } = await setup();
+      const statuses = await Promise.all(
+        ['# One', '# Two', '# Three'].map(body => create(ADMIN, projectA.id, 'release-notes', releaseNotes(body))),
+      ).then(responses => responses.map(response => response.status).sort());
+      expect(statuses).toEqual([201, 409, 409]);
+      expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toHaveLength(1);
+    });
+
+    it('rejects a skill the runtime could not load, or a name that is not a skill name', async () => {
+      const { projectA, create, seed } = await setup();
+      const cases = [
+        [
+          'release-notes',
+          '---\nname: other-notes\ndescription: Renamed\n---\n\n# Notes\n',
+          /must match directory name/,
+        ],
+        ['release-notes', '---\nname: release-notes\n---\n\n# Notes\n', /description/i],
+        ['Release Notes', '---\nname: Release Notes\ndescription: x\n---\n\n# Notes\n', /Invalid/i],
+        ['release-notes', '', /Too small/],
+      ] as const;
+      for (const [name, content, message] of cases) {
+        const response = await create(ADMIN, projectA.id, name, content);
+        expect(response.status).toBe(400);
+        const body = (await response.json()) as { error: string; message: string };
+        expect(body.error).toBe('invalid_skill');
+        expect(body.message).toMatch(message);
+      }
+      expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toEqual([]);
+    });
+
+    it('refuses creation from members who are not org admins and in other organizations', async () => {
+      const { projectA, elsewhere, create, seed, auditActions } = await setup();
+      const member = await create(MEMBER, projectA.id, 'release-notes', releaseNotes('# Notes'));
+      expect(member.status).toBe(403);
+      expect(await member.json()).toEqual({
+        error: 'forbidden',
+        message: 'Organization administrator access is required to create skills.',
+      });
+      expect((await create(ADMIN, elsewhere.id, 'release-notes', releaseNotes('# Notes'))).status).toBe(404);
+      expect((await create(ADMIN, 'not-a-uuid', 'release-notes', releaseNotes('# Notes'))).status).toBe(404);
+      expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toEqual([]);
+      expect(await auditActions()).toEqual([]);
+    });
+
+    it('treats a created skill as an edit once the app ships a skill of the same name', async () => {
+      const { projectA, create, revert, skill } = await setup();
+      expect((await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Ours'))).status).toBe(201);
+
+      writeLocalSkill('release-notes', releaseNotes('# From the app'));
+      expect(await skill(ADMIN, projectA.id, 'release-notes')).toMatchObject({
+        origin: 'folder',
+        content: '# Ours',
+        edited: { updatedBy: ADMIN.workosId },
+        originalChanged: true,
+      });
+
+      // Reverting drops the project's text for the app's skill.
+      const reverted = await revert(ADMIN, projectA.id, 'release-notes');
+      expect(((await reverted.json()) as { skill: unknown }).skill).toMatchObject({
+        origin: 'folder',
+        content: '# From the app',
+      });
+    });
+
+    it('creates over an edit whose skill the app no longer has', async () => {
+      writeLocalSkill('release-notes', releaseNotes('# From the app'));
+      const { projectA, save, create, skill } = await setup();
+      expect((await save(ADMIN, projectA.id, 'release-notes', releaseNotes('# Edited'))).status).toBe(200);
+      rmSync(join(projectDir, 'factory-skills', 'release-notes'), { recursive: true });
+
+      expect((await create(ADMIN, projectA.id, 'release-notes', releaseNotes('# Ours now'))).status).toBe(201);
+      expect(await skill(ADMIN, projectA.id, 'release-notes')).toMatchObject({
+        origin: 'project',
+        content: '# Ours now',
+      });
+    });
+  });
 
   it("serves an admin's edit to its project only, with who edited it", async () => {
     const { projectA, projectB, save, list, skill, auditActions } = await setup();

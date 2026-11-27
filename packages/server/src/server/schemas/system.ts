@@ -37,6 +37,14 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Advanced trace queries (POST /observability/traces/query). When false, list traces with GET /observability/traces/light instead.',
     ),
+  traceQueryAggregatedRoots: z
+    .boolean()
+    .default(false)
+    .describe("Supports explicit `rootSource: 'aggregated'` trace queries"),
+  traceQueryTokenSearch: z.boolean().default(false).describe('Token matching across any span in a trace'),
+  spanQueryTokenSearch: z.boolean().default(false).describe('Token matching within individual spans'),
+  traceAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in trace aggregates'),
+  spanAggregateTokenSearch: z.boolean().default(false).describe('Token predicates in span aggregates'),
   traceQueryRootDuration: z.boolean().describe('`durationMs` predicates in trace and thread queries'),
   traceQueryContextIds: z
     .boolean()
@@ -84,6 +92,8 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable.',
     ),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  spanQueryDurationSort: z.boolean().default(false).describe('Whether completed spans can be sorted by duration'),
+  spanQueryModelProviderSort: z.boolean().default(false).describe('Whether spans can be sorted by model and provider'),
   spanQueryContextFields: z
     .boolean()
     .default(false)
@@ -128,6 +138,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Days of traces the store keeps. Older traces are gone, so clients can stop users from picking dates before them. Omitted when the store does not report a limit.',
     ),
+  feedbackReplacement: z.boolean().default(false).describe('Full feedback replacement with PUT'),
   feedback: z
     .boolean()
     .describe(

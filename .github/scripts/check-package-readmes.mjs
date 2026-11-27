@@ -9,7 +9,6 @@ export const IGNORE_LIST = [
   '@internal',
   '@mastra/memory-integration-tests',
   '@mastra/longmemeval',
-  '@mastra/mcp-configuration',
   'mastra-docs',
   '@mastra/core',
   '@mastra/codemod',

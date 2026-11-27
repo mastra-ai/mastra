@@ -895,19 +895,17 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(result.value.maxDealAmount).toBeUndefined();
     });
 
-    it('is transformed by applyOpenAICompatTransforms', () => {
+    it.each([
+      ['is transformed by applyOpenAICompatTransforms', 'azure.chat', 'gpt-4o'],
+      [
+        'is transformed by applyOpenAICompatTransforms for prefixed reasoning deployments',
+        'azure.responses',
+        'my-o3-deployment',
+      ],
+    ] as const)('%s', (_title, provider, modelId) => {
       const processed = applyOpenAICompatTransforms(schema, {
-        provider: 'azure.chat',
-        modelId: 'gpt-4o',
-        supportsStructuredOutputs: false,
-      });
-      expect(processed).not.toBe(schema);
-    });
-
-    it('is transformed by applyOpenAICompatTransforms for prefixed reasoning deployments', () => {
-      const processed = applyOpenAICompatTransforms(schema, {
-        provider: 'azure.responses',
-        modelId: 'my-o3-deployment',
+        provider,
+        modelId,
         supportsStructuredOutputs: false,
       });
       expect(processed).not.toBe(schema);

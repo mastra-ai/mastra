@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { DownloadIcon } from 'lucide-react';
 import { useState } from 'react';
 import { bucketLabels } from '../lib/bucket-labels';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
@@ -10,6 +9,7 @@ import { ChartCard } from './chart-card';
 import { Button } from '@/ds/components/Button';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
+import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 const DAY = 24 * 3_600_000;
@@ -187,6 +187,47 @@ export const TitleLink: Story = {
   ),
 };
 
+function RenamableCard() {
+  const [title, setTitle] = useState('Tokens');
+  return (
+    <ChartCard
+      variant="compact"
+      title={title}
+      onTitleChange={setTitle}
+      dragHandle={{ 'aria-label': 'Move Tokens', draggable: true }}
+      total="1.6M"
+      toolbar={<MetricsLineChartLegend series={tokenSeries} />}
+    >
+      <ChartArea>
+        <MetricsLineChart
+          data={data}
+          series={tokenSeries}
+          height="fill"
+          xLabels="edges"
+          showLegend={false}
+          lineStyle="thin"
+          dots="hover"
+          valueFormatter={tokens.format}
+          axisFormatter={tokens.format}
+          {...EDGE_BUCKET_AXIS}
+        />
+      </ChartArea>
+    </ChartCard>
+  );
+}
+
+/**
+ * `onTitleChange`: the title reads as plain text and edits in place, outlined on hover and focus.
+ * Enter or blur commits, Escape reverts. Shown here next to a drag handle, as a dashboard being arranged.
+ */
+export const EditableTitle: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <RenamableCard />
+    </div>
+  ),
+};
+
 /** `isLoading`: a skeleton in place of the total. */
 export const CompactLoading: Story = {
   render: () => (
@@ -200,6 +241,28 @@ export const CompactLoading: Story = {
       >
         <ChartArea>
           <MetricsLineChart data={data} series={tokenSeries} height="fill" showLegend={false} isLoading />
+        </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
+/** `ChartArea` with `isEmpty`: the dates stay, under dashed rulers and "No data in this range"; the legend hides. */
+export const CompactEmpty: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <ChartCard variant="compact" title="Tokens" total="0" toolbar={<MetricsLineChartLegend series={tokenSeries} />}>
+        <ChartArea isEmpty>
+          <MetricsLineChart
+            data={data.map(d => ({ ...d, input: 0, cached: 0, output: 0 }))}
+            series={tokenSeries}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            valueFormatter={tokens.format}
+            axisFormatter={tokens.format}
+            {...EDGE_BUCKET_AXIS}
+          />
         </ChartArea>
       </ChartCard>
     </div>
@@ -224,7 +287,7 @@ export const Hero: Story = {
               <TraceIcon />
             </Button>
             <Button variant="ghost" size="icon-sm" tooltip="Download CSV">
-              <DownloadIcon />
+              <IconArrowInbox />
             </Button>
           </>
         }

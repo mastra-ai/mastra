@@ -2,7 +2,7 @@ import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { McpServerListResponse } from '../types';
+import type { GetBuiltinMcpServerResponse, McpServerListResponse } from '../types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -55,14 +55,13 @@ describe('MCP Server Registry Client Methods', () => {
         }),
       );
     } else {
-      const response = new Response(undefined, {
+      const response = new Response(JSON.stringify(data), {
         status: 200,
         statusText: 'OK',
         headers: new Headers({
           'Content-Type': 'application/json',
         }),
       });
-      response.json = () => Promise.resolve(data);
       (global.fetch as any).mockResolvedValueOnce(response);
     }
   };
@@ -126,6 +125,24 @@ describe('MCP Server Registry Client Methods', () => {
       expect(url).toContain(`${clientOptions.baseUrl}/api/mcp/v0/servers?`);
       expect(url).toContain('page=0');
       expect(url).toContain('perPage=1');
+    });
+  });
+
+  describe('getBuiltinMcpServer()', () => {
+    const descriptor: GetBuiltinMcpServerResponse = {
+      enabled: true,
+      path: '/mastra/mcp',
+      mcpPackageInstalled: true,
+      toolsets: ['agents', 'tools'],
+      readOnly: false,
+      auth: { type: 'protected', provider: 'jwt' },
+    };
+
+    it('fetches GET /mcp/builtin under the configured apiPrefix', async () => {
+      mockFetchResponse(descriptor);
+      const prefixed = new MastraClient({ ...clientOptions, apiPrefix: '/mastra' });
+      expect(await prefixed.getBuiltinMcpServer()).toEqual(descriptor);
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/mastra/mcp/builtin', expect.any(Object));
     });
   });
 

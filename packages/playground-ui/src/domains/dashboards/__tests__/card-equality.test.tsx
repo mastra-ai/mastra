@@ -43,7 +43,7 @@ import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
-import { metricsWidget } from './equality-harness';
+import { expectSameMarkup, metricsWidget, normalise, pickIn } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
@@ -118,9 +118,8 @@ function recordRequests() {
  * MIGRATION SCAFFOLD. Comparing `innerHTML` with today's cards pins class names and markup: it proves
  * the widgets reproduce the cards while both exist, and loses its meaning once the cards are deleted.
  * Delete these comparisons with the cards; the behaviour assertions beside them are what stays.
+ * `normalise` (the harness's) drops the ids that differ between two trees.
  */
-/** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
-const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
 async function settle(recorder: ReturnType<typeof recordRequests>) {
@@ -225,26 +224,19 @@ async function renderWidgets(widgets: DashboardWidget[], scope: MetricsScope | u
 function expectSame(card: Rendered, widget: Rendered) {
   expect(widget.root).not.toBeNull();
   expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
-}
-
-/** Picks a view from the card's title menu. The menu portals out, but only one is open at a time. */
-function pickIn(root: HTMLElement, view: string) {
-  const trigger = within(root)
-    .getAllByRole('button')
-    .find(b => b.getAttribute('aria-haspopup') === 'menu');
-  if (!trigger) throw new Error('No title menu');
-  fireEvent.click(trigger);
-  fireEvent.click(screen.getByRole('menuitemradio', { name: view }));
+  expectSameMarkup(card.root, widget.root);
 }
 
 /** Opens a view in both, then compares the requests that view sent and the markup it shows. */
 async function expectSameView(card: Rendered, widget: Rendered, view: string) {
   for (const side of [card, widget]) {
     const recorder = recordRequests();
-    pickIn(side.root, view);
-    await settle(recorder);
-    recorder.stop();
+    try {
+      pickIn(side.root, view);
+      await settle(recorder);
+    } finally {
+      recorder.stop();
+    }
     side.sent = recorder.sent;
   }
   expectSame(card, widget);
@@ -264,7 +256,7 @@ async function expectSameViewFromCache(card: Rendered, widget: Rendered, view: s
   }
   expect(card.sent.length).toBeGreaterThan(0);
   expect(widget.sent).toEqual([]);
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 const noop = () => {};
@@ -356,7 +348,7 @@ async function clickBoth(card: Rendered, widget: Rendered, role: 'button', name:
     recorder.stop();
     expect(recorder.sent).toEqual([]);
   }
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
 }
 
 const BREAKDOWN_VIEWS = {
@@ -462,7 +454,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       const widget = await renderWidget(latencyWidget, scope);
       const recorder = recordRequests();
       pickIn(widget.root, 'Workflow latency');
-      expect(await within(widget.root).findByText('No workflow runs in this range.')).toBeDefined();
+      expect(await within(widget.root).findByText('No data in this range')).toBeDefined();
       await settle(recorder);
       recorder.stop();
       expect(recorder.sent).toHaveLength(1);
@@ -505,8 +497,8 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     // Org-wide it opens on Projects, with two to compare; a project opens on Agents.
     it(`opens on ${scope ? 'projects' : 'agents'}`, async () => {
       const widget = await renderWidget(breakdownWidget, scope);
-      const opened = `Breakdown by ${scope ? 'project' : 'agent'}`;
-      expect(within(widget.root).getByRole('button', { name: opened })).toBeDefined();
+      const opened = scope ? 'Projects' : 'Agents';
+      expect(within(widget.root).getByRole('tab', { name: opened }).getAttribute('aria-selected')).toBe('true');
     });
 
     it.each(BREAKDOWN_VIEWS[scope ? 'org' : 'project'])('matches the card on the breakdown by %s', async by => {
@@ -654,7 +646,7 @@ async function tooltipsOf(root: HTMLElement) {
 /** Same markup at real size, and the same tooltip on hovering each chart. */
 async function expectSameDrawn(card: Rendered, widget: Rendered) {
   expect(card.root.querySelector('.recharts-surface')).not.toBeNull();
-  expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+  expectSameMarkup(card.root, widget.root);
   const tips = await tooltipsOf(card.root);
   expect(tips.length).toBeGreaterThan(0);
   expect(tips.every(t => t.length > 0)).toBe(true);
@@ -759,7 +751,7 @@ describe('Latency switching views, drawn at real size', () => {
     await switchWhileLoading(card, widget, 'Workflow latency');
     release();
     await act(() => new Promise(resolve => setTimeout(resolve, 50)));
-    expect(normalise(widget.root.innerHTML)).toBe(normalise(card.root.innerHTML));
+    expectSameMarkup(card.root, widget.root);
   });
 
   it('refetches a view opened again, as the card does', async () => {
@@ -775,8 +767,8 @@ describe('Latency switching views, drawn at real size', () => {
       side.sent = recorder.sent;
     }
     expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-    expect(within(widget.root).getByText('No workflow runs in this range.')).toBeTruthy();
-    expect(within(card.root).getByText('No workflow runs in this range.')).toBeTruthy();
+    expect(within(widget.root).getByText('No data in this range')).toBeTruthy();
+    expect(within(card.root).getByText('No data in this range')).toBeTruthy();
     await expectSameView(card, widget, 'Agent latency');
     expect(widget.sent).toHaveLength(1);
   });

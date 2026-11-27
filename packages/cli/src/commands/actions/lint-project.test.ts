@@ -73,8 +73,14 @@ describe('lintProject', () => {
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
-  it('passes with zero issues when preflight finds no issues', async () => {
-    writeBundle(`export default {};`);
+  it.each([
+    ['passes with zero issues when preflight finds no issues', `export default {};`],
+    [
+      'passes with warnings when preflight finds missing env vars in non-strict mode',
+      `const x = process.env.MY_KEY; export default x;`,
+    ],
+  ] as const)('%s', async (_title, input) => {
+    writeBundle(input);
     writeEnv('OTHER=value\n');
 
     await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true })).resolves.toBeUndefined();
@@ -89,15 +95,6 @@ describe('lintProject', () => {
     await expect(lintProject({ root: tmpDir, preflight: true })).resolves.toBeUndefined();
 
     expect(runBuildMock).toHaveBeenCalledWith(tmpDir, { debug: undefined });
-    expect(exitSpy).not.toHaveBeenCalled();
-  });
-
-  it('passes with warnings when preflight finds missing env vars in non-strict mode', async () => {
-    writeBundle(`const x = process.env.MY_KEY; export default x;`);
-    writeEnv('OTHER=value\n');
-
-    await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true })).resolves.toBeUndefined();
-
     expect(exitSpy).not.toHaveBeenCalled();
   });
 

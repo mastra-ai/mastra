@@ -77,7 +77,14 @@ function renderRoute(initialThreadId: string) {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null }),
+      HttpResponse.json({
+        modelId: 'openai/gpt-5',
+        thinkingLevel: null,
+        modelPacks: [
+          { id: 'personal', name: 'Personal', models: [{ modelId: 'openai/gpt-5', thinkingLevel: 'medium' }] },
+        ],
+        defaultModelPackId: 'personal',
+      }),
     ),
     // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
@@ -87,9 +94,19 @@ function renderRoute(initialThreadId: string) {
       const threadId = params.get('threadId') ?? '';
       requestedThreads.push(threadId);
       const factoryBilled = threadId === WORK_THREAD_ID;
+      const defaultModelId = factoryBilled ? 'openai/gpt-5' : 'anthropic/claude-sonnet-4-6';
       return HttpResponse.json({
         modelScope: factoryBilled ? 'factory' : 'user',
-        defaultModelId: factoryBilled ? 'openai/gpt-5' : 'anthropic/claude-sonnet-4-6',
+        defaultModelId,
+        modelPacks: [
+          {
+            id: 'default',
+            name: factoryBilled ? 'Factory build' : 'My build',
+            models: [{ modelId: defaultModelId, thinkingLevel: 'medium' }],
+          },
+        ],
+        defaultModelPackId: 'default',
+        modelSelection: { kind: 'pack', packId: 'default' },
         models: models.filter(model => model.provider === (factoryBilled ? 'openai' : 'anthropic')),
       });
     }),
@@ -143,21 +160,25 @@ function renderRoute(initialThreadId: string) {
 
 async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /gpt-5/ });
-  expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
-  expect(await screen.findByRole('note')).toHaveTextContent(
-    "Showing models this Factory's organization credentials can run.",
-  );
+  const pack = await screen.findByRole('button', { name: 'Factory build' });
+  expect(pack).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getAllByRole('list', { name: 'Models in this pack' })[0]).toHaveTextContent(/Primary model: .*GPT-5/);
+  expect(screen.getByRole('option', { name: /GPT-5/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 
 async function expectInteractiveCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
-  expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
+  const pack = await screen.findByRole('button', { name: 'My build' });
+  expect(pack).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getAllByRole('list', { name: 'Models in this pack' })[0]).toHaveTextContent(
+    /Primary model: .*Claude Sonnet 4\.6/,
+  );
+  expect(screen.getByRole('option', { name: /Claude Sonnet 4\.6/ })).toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 

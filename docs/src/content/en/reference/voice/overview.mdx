@@ -35,12 +35,12 @@ const voiceAgent = new Agent({
 
 You can then use the following voice capabilities:
 
-### Text to Speech (TTS)
+### Text to speech (TTS)
 
 Turn your agent's responses into natural-sounding speech using Mastra's TTS capabilities.
 Choose from multiple providers like OpenAI, ElevenLabs, and more.
 
-For detailed configuration options and advanced features, check out our [Text-to-Speech guide](./text-to-speech).
+For detailed configuration options and advanced features, see the [Text-to-Speech guide](./text-to-speech).
 
 <Tabs>
   <TabItem value="openai" label="OpenAI">
@@ -315,7 +315,7 @@ For detailed configuration options and advanced features, check out our [Text-to
   </TabItem>
 </Tabs>
 
-### Speech to Text (STT)
+### Speech to text (STT)
 
 Transcribe spoken content using providers like OpenAI, ElevenLabs, and more. For detailed configuration options and more, check out [Speech to Text](./speech-to-text).
 
@@ -552,7 +552,7 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
   </TabItem>
 </Tabs>
 
-### Speech to Speech (STS)
+### Speech to speech (STS)
 
 Create conversational experiences with speech-to-speech capabilities. The unified API enables real-time voice interactions between users and AI agents.
 For detailed configuration options and advanced features, check out [Speech to Speech](./speech-to-speech).
@@ -780,16 +780,12 @@ Each voice provider can be configured with different models and options. Below a
     // OpenAI Voice Configuration
     const voice = new OpenAIVoice({
       speechModel: {
-        name: 'gpt-3.5-turbo', // Example model name
+        name: 'tts-1-hd', // 'tts-1' or 'tts-1-hd'
         apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        voiceType: 'neural', // Type of voice model
       },
       listeningModel: {
-        name: 'whisper-1', // Example model name
+        name: 'whisper-1',
         apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        format: 'wav', // Audio format
       },
       speaker: 'alloy', // Example speaker name
     })
@@ -803,19 +799,14 @@ Each voice provider can be configured with different models and options. Below a
     // Azure Voice Configuration
     const voice = new AzureVoice({
       speechModel: {
-        name: 'en-US-JennyNeural', // Example model name
         apiKey: process.env.AZURE_SPEECH_KEY,
         region: process.env.AZURE_SPEECH_REGION,
-        language: 'en-US', // Language code
-        style: 'cheerful', // Voice style
-        pitch: '+0Hz', // Pitch adjustment
-        rate: '1.0', // Speech rate
+        voiceName: 'en-US-JennyNeural',
       },
       listeningModel: {
-        name: 'en-US', // Example model name
         apiKey: process.env.AZURE_SPEECH_KEY,
         region: process.env.AZURE_SPEECH_REGION,
-        format: 'simple', // Output format
+        language: 'en-US',
       },
     })
     ```
@@ -846,16 +837,12 @@ Each voice provider can be configured with different models and options. Below a
     // Google Voice Configuration
     const voice = new GoogleVoice({
       speechModel: {
-        name: 'en-US-Studio-O', // Example model name
         apiKey: process.env.GOOGLE_API_KEY,
-        languageCode: 'en-US', // Language code
-        gender: 'FEMALE', // Voice gender
-        speakingRate: 1.0, // Speaking rate
       },
       listeningModel: {
-        name: 'en-US', // Example model name
-        sampleRateHertz: 16000, // Sample rate
+        apiKey: process.env.GOOGLE_API_KEY,
       },
+      speaker: 'en-US-Studio-O',
     })
     ```
 
@@ -866,14 +853,12 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Cloudflare Voice Configuration
     const voice = new CloudflareVoice({
-      speechModel: {
-        name: 'cloudflare-voice', // Example model name
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-        apiToken: process.env.CLOUDFLARE_API_TOKEN,
-        language: 'en-US', // Language code
-        format: 'mp3', // Audio format
+      listeningModel: {
+        model: '@cf/openai/whisper-large-v3-turbo',
+        apiKey: process.env.CLOUDFLARE_AI_API_KEY,
+        account_id: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
-      // Cloudflare may not have a separate listening model
+      // Cloudflare supports speech-to-text only. In a Worker, pass `binding: env.AI` instead of an API key.
     })
     ```
 
@@ -1191,7 +1176,7 @@ const responseAudio = await voice.speak(`You said: ${transcript}`, {
 playAudio(responseAudio)
 ```
 
-### Using AI SDK Model Providers
+### Using AI SDK model providers
 
 You can also use AI SDK models directly with `CompositeVoice`:
 

@@ -83,7 +83,7 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { content: 'Finished reply.' });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      await run.output.consumeStream();
+      await (run.output ?? run).consumeStream();
 
       try {
         const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
@@ -91,7 +91,10 @@ describeForAllEngines(
         expect(textOf(replay.chunks)).toBe('Finished reply.');
         expect(replay.types.at(-1)).toBe('finish');
 
-        const beyond = await drain(await agent.observe(run.runId, { offset: 1_000_000 }), CLOSE_WITHIN_MS);
+        // Indices are opaque cursors (epoch-seeded logs): "past the end" is
+        // relative to the run's real indices, not an absolute count.
+        const pastEnd = Math.max(...replay.chunks.map(chunk => (chunk as { index?: number }).index ?? 0)) + 1_000_000;
+        const beyond = await drain(await agent.observe(run.runId, { offset: pastEnd }), CLOSE_WITHIN_MS);
         expect(beyond).toMatchObject({ types: [], timedOut: false });
       } finally {
         run.cleanup?.();
@@ -103,14 +106,15 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { error: { message: 'Provider down', type: 'invalid_request_error' }, status: 400 });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      await run.output.consumeStream().catch(() => undefined);
+      await (run.output ?? run).consumeStream().catch(() => undefined);
 
       try {
         const replay = await drain(await agent.observe(run.runId), CLOSE_WITHIN_MS);
         expect(replay.timedOut).toBe(false);
         expect(replay.types).toContain('error');
 
-        const beyond = await drain(await agent.observe(run.runId, { offset: 1_000_000 }), CLOSE_WITHIN_MS);
+        const pastEnd = Math.max(...replay.chunks.map(chunk => (chunk as { index?: number }).index ?? 0)) + 1_000_000;
+        const beyond = await drain(await agent.observe(run.runId, { offset: pastEnd }), CLOSE_WITHIN_MS);
         expect(beyond).toMatchObject({ types: [], timedOut: false });
       } finally {
         run.cleanup?.();
@@ -122,7 +126,7 @@ describeForAllEngines(
       llm.on({ endpoint: 'chat' }, { content: 'Slow but alive.' }, { streamingProfile: { ttft: SILENCE_MS } });
       const { agent } = await createSharedAgent(llm, { engine });
       const run = await agent.stream('Go', { maxSteps: 2 });
-      const producerDone = run.output.consumeStream();
+      const producerDone = (run.output ?? run).consumeStream();
 
       try {
         const startedAt = Date.now();
@@ -158,7 +162,7 @@ describeForAllEngines(
       });
       const { agent } = await createSharedAgent(llm, { engine, tools: { slow_lookup: slowLookup } });
       const run = await agent.stream('Go', { stopWhen: stepCountIs(3), maxSteps: 3 });
-      const producerDone = run.output.consumeStream();
+      const producerDone = (run.output ?? run).consumeStream();
 
       try {
         await toolStartedPromise;

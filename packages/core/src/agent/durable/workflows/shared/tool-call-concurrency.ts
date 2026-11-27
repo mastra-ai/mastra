@@ -79,3 +79,12 @@ export function resolveDurableToolCallConcurrency({
 
   return limit > 0 ? limit : DurableAgentDefaults.TOOL_CALL_CONCURRENCY;
 }
+
+/**
+ * Whether the step's tool calls run at the same time. Then more than one can suspend in the same
+ * execution, on workers that share no memory, so none of them can report the step's model usage
+ * exactly once. The run's last execution reports it instead.
+ */
+export function toolCallsRunSideBySide(args: Parameters<typeof resolveDurableToolCallConcurrency>[0]): boolean {
+  return (args.toolCalls?.length ?? 0) > 1 && resolveDurableToolCallConcurrency(args) > 1;
+}

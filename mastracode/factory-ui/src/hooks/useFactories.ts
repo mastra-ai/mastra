@@ -5,7 +5,6 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   connectInstallation,
-  createFactoryProject,
   deleteFactoryProject,
   isGitLabRepository,
   linkRepository,
@@ -19,7 +18,7 @@ import type {
 } from '../ui/domains/workspaces/services/github';
 import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
-import { useSaveIntakeConfigMutation } from './useIntakeConfig';
+import { useSaveIntakeSelectionMutation } from './useIntakeConfig';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -64,32 +63,22 @@ export function useFactoryQuery(factoryId: string | undefined) {
   });
 }
 
-export function useCreateFactoryMutation() {
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ name, description }: { name: string; description?: string }) =>
-      createFactoryProject(baseUrl, name, description),
-    onSuccess: () => refetchFactories(queryClient),
-  });
-}
-
-/** @deprecated Use useCreateFactoryMutation. */
-export const useAddFactoryMutation = useCreateFactoryMutation;
-
 // Link lands first so the list refreshes even if the intake write fails; the link is idempotent, so retry is safe.
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const saveIntakeConfig = useSaveIntakeConfigMutation();
+  const saveGitlabSelection = useSaveIntakeSelectionMutation('gitlab');
   return useMutation({
     mutationFn: async ({
       factoryProjectId,
       repo,
+      selectIntake = true,
       onLinked,
     }: {
       factoryProjectId: string;
       repo: SourceControlRepository;
+      /** Callers whose own switch decides the selection (onboarding's Work step) link with this off. */
+      selectIntake?: boolean;
       onLinked?: (linked: LinkedRepositoryPayload) => Promise<void>;
     }) => {
       const gitlab = isGitLabRepository(repo);
@@ -100,21 +89,20 @@ export function useLinkRepositoryMutation() {
         linkableRepo.installationStorageId,
         gitlab ? 'gitlab' : 'github',
       );
-      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
+      const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo, selectIntake);
       await onLinked?.(linked);
       // Refresh the list alongside the intake write and wait for both, so the row
       // goes straight from "Linking…" to linked instead of flashing "Link" first.
-      const refreshed = invalidateFactoryRepositories(queryClient, factoryProjectId);
+      const refreshed = Promise.all([
+        invalidateFactoryRepositories(queryClient, factoryProjectId),
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeConfig() }),
+      ]);
       try {
-        const config = await fetchIntakeConfig(baseUrl);
-        if (gitlab) {
+        // The server selects a GitHub repository with the link; a GitLab project is selected here.
+        if (selectIntake && gitlab) {
+          const config = await fetchIntakeConfig(baseUrl);
           const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
-          if (gitlabSelection !== config.gitlab)
-            await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
-        } else {
-          const githubSelection = selectIntakeSource(config.github, repo.fullName);
-          if (githubSelection !== config.github)
-            await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+          if (gitlabSelection !== config.gitlab) await saveGitlabSelection.mutateAsync(gitlabSelection);
         }
       } finally {
         await refreshed;

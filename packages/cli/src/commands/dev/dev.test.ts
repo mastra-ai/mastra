@@ -47,6 +47,7 @@ vi.mock('get-port', () => ({
 vi.mock('../../utils/dev-logger.js', () => ({
   devLogger: {
     starting: vi.fn(),
+    stopStarting: vi.fn(),
     ready: vi.fn(),
     watching: vi.fn(),
     restarting: vi.fn(),
@@ -342,7 +343,27 @@ describe('dev command - inspect flag behavior', () => {
   });
 
   describe('inspect flag with custom host:port', () => {
-    it('should pass --inspect=0.0.0.0:9229 when inspect is "0.0.0.0:9229"', async () => {
+    it.each([
+      [
+        'should pass --inspect=0.0.0.0:9229 when inspect is "0.0.0.0:9229"',
+        '0.0.0.0:9229',
+        false,
+        '--inspect=0.0.0.0:9229',
+      ],
+      ['should pass --inspect=9230 when inspect is "9230"', '9230', false, '--inspect=9230'],
+      [
+        'should pass --inspect=localhost:9230 when inspect is "localhost:9230"',
+        'localhost:9230',
+        false,
+        '--inspect=localhost:9230',
+      ],
+      [
+        'should pass --inspect-brk=0.0.0.0:9229 when inspectBrk is "0.0.0.0:9229"',
+        false,
+        '0.0.0.0:9229',
+        '--inspect-brk=0.0.0.0:9229',
+      ],
+    ] as const)('%s', async (_title, inspect, inspectBrk, expected) => {
       const { dev } = await import('./dev');
 
       await dev({
@@ -350,8 +371,8 @@ describe('dev command - inspect flag behavior', () => {
         root: process.cwd(),
         tools: undefined,
         env: undefined,
-        inspect: '0.0.0.0:9229',
-        inspectBrk: false,
+        inspect,
+        inspectBrk,
         customArgs: undefined,
         https: false,
         debug: false,
@@ -361,73 +382,7 @@ describe('dev command - inspect flag behavior', () => {
       const callArgs = execaMock.mock.calls[0];
       const commands = callArgs[1] as string[];
 
-      expect(commands).toContain('--inspect=0.0.0.0:9229');
-    });
-
-    it('should pass --inspect=9230 when inspect is "9230"', async () => {
-      const { dev } = await import('./dev');
-
-      await dev({
-        dir: undefined,
-        root: process.cwd(),
-        tools: undefined,
-        env: undefined,
-        inspect: '9230',
-        inspectBrk: false,
-        customArgs: undefined,
-        https: false,
-        debug: false,
-      });
-
-      expect(execaMock).toHaveBeenCalled();
-      const callArgs = execaMock.mock.calls[0];
-      const commands = callArgs[1] as string[];
-
-      expect(commands).toContain('--inspect=9230');
-    });
-
-    it('should pass --inspect=localhost:9230 when inspect is "localhost:9230"', async () => {
-      const { dev } = await import('./dev');
-
-      await dev({
-        dir: undefined,
-        root: process.cwd(),
-        tools: undefined,
-        env: undefined,
-        inspect: 'localhost:9230',
-        inspectBrk: false,
-        customArgs: undefined,
-        https: false,
-        debug: false,
-      });
-
-      expect(execaMock).toHaveBeenCalled();
-      const callArgs = execaMock.mock.calls[0];
-      const commands = callArgs[1] as string[];
-
-      expect(commands).toContain('--inspect=localhost:9230');
-    });
-
-    it('should pass --inspect-brk=0.0.0.0:9229 when inspectBrk is "0.0.0.0:9229"', async () => {
-      const { dev } = await import('./dev');
-
-      await dev({
-        dir: undefined,
-        root: process.cwd(),
-        tools: undefined,
-        env: undefined,
-        inspect: false,
-        inspectBrk: '0.0.0.0:9229',
-        customArgs: undefined,
-        https: false,
-        debug: false,
-      });
-
-      expect(execaMock).toHaveBeenCalled();
-      const callArgs = execaMock.mock.calls[0];
-      const commands = callArgs[1] as string[];
-
-      expect(commands).toContain('--inspect-brk=0.0.0.0:9229');
+      expect(commands).toContain(expected);
     });
   });
 
@@ -522,6 +477,27 @@ describe('dev command - factory mode environment', () => {
     const callOptions = execaMock.mock.calls[0][2] as { env: Record<string, string> };
     expect(callOptions.env.MASTRA_FACTORY_DEV).toBe('true');
     expect(callOptions.env.MASTRA_TELEMETRY_COMMAND).toBe('factory dev');
+    expect(callOptions.env.MASTRA_FACTORY_DEBUG).toBeUndefined();
+  });
+
+  it('should set MASTRA_FACTORY_DEBUG=true in spawned env for mastra factory dev --debug', async () => {
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: false,
+      debug: true,
+      factory: true,
+    });
+
+    const callOptions = execaMock.mock.calls[0][2] as { env: Record<string, string> };
+    expect(callOptions.env.MASTRA_FACTORY_DEBUG).toBe('true');
   });
 
   it('should pass factory: true to DevBundler when factory is set', async () => {

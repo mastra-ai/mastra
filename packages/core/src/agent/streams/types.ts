@@ -1,11 +1,13 @@
 import type { MastraServerCache } from '../../cache/base';
 import type { PubSub } from '../../events/pubsub';
+import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 
 /**
  * Event types emitted via pubsub for agent streaming
  */
 export type AgentStreamEventType =
   | 'chunk'
+  | 'iteration-start'
   | 'step-start'
   | 'step-finish'
   | 'finish'
@@ -29,6 +31,8 @@ export interface AgentStreamEvent<T = unknown> {
   producedAt?: number;
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
+  /** Persisted model iteration for an iteration-start or step-start event. */
+  stepIndex?: number;
   /**
    * Position of this event in its run topic's log. Only present on events read
    * back from the topic; it is stripped before an event reaches an `observe()`
@@ -47,6 +51,24 @@ export interface AgentStreamEvent<T = unknown> {
  * are published on and the replay cache that lets readers reconnect.
  */
 export interface AgentStreamsConfig {
+  /** Select the default (in-process) or evented durable engine, or false for the plain Agent loop. */
+  executionEngine?: 'default' | 'evented' | false;
+
+  /** Maximum steps for the durable loop when neither defaultOptions nor the call sets a limit. */
+  maxSteps?: number;
+
+  /**
+   * Storage version for new durable runs. Version 2 uses the run journal when supported,
+   * otherwise the agent logs a warning and stores new runs as version 1.
+   * Existing runs keep their stored version.
+   * @default 1
+   * @experimental
+   */
+  storageVersion?: 1 | 2;
+
+  /** Snapshot persistence policy for durable execution. */
+  shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+
   /**
    * PubSub instance for streaming events.
    * Optional - if not provided, defaults to EventEmitterPubSub.

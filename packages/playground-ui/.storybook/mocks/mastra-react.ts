@@ -25,7 +25,7 @@ const stub = {
 
 const ClientContext = createContext<unknown>(stub);
 
-const Real = RealProvider as typeof RealMastraReactProvider;
+const Real: typeof RealMastraReactProvider = RealProvider;
 
 export function MastraReactProvider({
   children,

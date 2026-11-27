@@ -1,8 +1,9 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
+import type { LLMock } from '@copilotkit/aimock';
 import { it, expect } from 'vitest';
 import { Agent } from '../../../../agent';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -16,9 +17,6 @@ import { SCENARIO_MODEL_ID } from '../types';
  * runId, which threw AGENT_RESUME_NO_SNAPSHOT_FOUND before the sub-agent ever
  * ran.
  *
- * Ported from packages/core/src/agent/__tests__/subagent-resume-without-suspension.test.ts
- * to the cross-engine scenario matrix.
- *
  * Related: https://github.com/mastra-ai/mastra/issues/21608
  */
 
@@ -31,66 +29,85 @@ function mentionsNoSnapshotError(value: unknown): boolean {
 describeForAllEngines('AIMock loop scenario: subagent resume without suspension', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it('runs the sub-agent instead of resuming when the model authors resumeData', async () => {
-    const mock = getMock();
-
-    // The sub-agent shares the same AIMock-backed provider as the supervisor.
+  // The sub-agent shares the same AIMock-backed provider as the supervisor.
+  function makeSubAgent(mockUrl: string) {
     const openai = createOpenAI({
       apiKey: 'aimock-test-key',
-      baseURL: `${mock.url.replace(/\/+$/, '')}/v1`,
+      baseURL: `${mockUrl.replace(/\/+$/, '')}/v1`,
     });
-
-    const subAgent = new Agent({
+    return new Agent({
       id: 'sub-agent',
       name: 'Sub Agent',
       description: 'Does the work.',
       instructions: SUB_AGENT_INSTRUCTIONS,
       model: openai(SCENARIO_MODEL_ID),
     });
+  }
+
+  function scenarioFixtures(llm: LLMock) {
+    // AIMock matches fixtures in registration order (first match wins), so
+    // the sub-agent's fixture must come first: the supervisor's turn-1
+    // matcher below (`hasToolResult: false`) would otherwise also match the
+    // sub-agent's first request and feed it the delegation tool call.
+    llm.on({ endpoint: 'chat', systemMessage: SUB_AGENT_INSTRUCTIONS }, { content: 'work done' });
+    // Supervisor turn 1: a single delegation carrying model-authored
+    // `resumeData` and no suspendedToolRunId — nothing is suspended anywhere.
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [
+          {
+            id: 'sup-tc-1',
+            name: 'agent-subAgent',
+            arguments: {
+              prompt: 'do the work',
+              resumeData: { fileUrl: ['https://example.com/f.pdf'] },
+            },
+          },
+        ],
+      },
+    );
+    // Supervisor turn 2: the sub-agent result comes back; the supervisor wraps up.
+    llm.on({ endpoint: 'chat', toolCallId: 'sup-tc-1', hasToolResult: true }, { content: 'all done' });
+  }
+
+  // The sub-agent ran exactly once — a fresh run, not a resume attempt.
+  function expectSubAgentRanOnce(requests: Array<{ body?: unknown }>) {
+    const subAgentRequests = requests.filter(request =>
+      JSON.stringify(request.body ?? {}).includes(SUB_AGENT_INSTRUCTIONS),
+    );
+    expect(subAgentRequests).toHaveLength(1);
+  }
+
+  it('runs the sub-agent instead of resuming when the model authors resumeData', async () => {
+    const mock = getMock();
 
     const { output, requests, chunks } = await runLoopScenario({
       engine,
       llm: mock,
       prompt: 'do the work',
-      agents: { subAgent },
+      agents: { subAgent: makeSubAgent(mock.url) },
       stopWhen: stepCountIs(3),
       collectChunks: true,
-      fixtures: llm => {
-        // AIMock matches fixtures in registration order (first match wins), so
-        // the sub-agent's fixture must come first: the supervisor's turn-1
-        // matcher below (`hasToolResult: false`) would otherwise also match the
-        // sub-agent's first request and feed it the delegation tool call.
-        llm.on({ endpoint: 'chat', systemMessage: SUB_AGENT_INSTRUCTIONS }, { content: 'work done' });
-        // Supervisor turn 1: a single delegation carrying model-authored
-        // `resumeData` and no suspendedToolRunId — nothing is suspended anywhere.
-        llm.on(
-          { endpoint: 'chat', hasToolResult: false },
-          {
-            toolCalls: [
-              {
-                id: 'sup-tc-1',
-                name: 'agent-subAgent',
-                arguments: {
-                  prompt: 'do the work',
-                  resumeData: { fileUrl: ['https://example.com/f.pdf'] },
-                },
-              },
-            ],
-          },
-        );
-        // Supervisor turn 2: the sub-agent result comes back; the supervisor wraps up.
-        llm.on({ endpoint: 'chat', toolCallId: 'sup-tc-1', hasToolResult: true }, { content: 'all done' });
-      },
+      fixtures: scenarioFixtures,
     });
 
     // The run completed without an AGENT_RESUME_NO_SNAPSHOT_FOUND error anywhere.
     expect((chunks ?? []).some(mentionsNoSnapshotError)).toBe(false);
     expect(await output.text).toBe('all done');
+    expectSubAgentRanOnce(requests);
+  });
 
-    // The sub-agent ran exactly once — a fresh run, not a resume attempt.
-    const subAgentRequests = requests.filter(request =>
-      JSON.stringify(request.body ?? {}).includes(SUB_AGENT_INSTRUCTIONS),
-    );
-    expect(subAgentRequests).toHaveLength(1);
+  // generate() delegates through resumeGenerate rather than resumeStream.
+  it('runs the sub-agent instead of resuming when the model authors resumeData (generate)', async () => {
+    const mock = getMock();
+    scenarioFixtures(mock);
+    const { agent } = await createSharedAgent(mock, { engine, agents: { subAgent: makeSubAgent(mock.url) } });
+
+    const result = await agent.generate('do the work', { maxSteps: 3 });
+
+    expect(mentionsNoSnapshotError(result.toolResults)).toBe(false);
+    expect(result.text).toBe('all done');
+    expectSubAgentRanOnce(mock.getRequests());
   });
 });

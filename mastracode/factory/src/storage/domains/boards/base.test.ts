@@ -30,6 +30,7 @@ function board(key: string, overrides: Partial<StoredBoardInput> = {}): StoredBo
         kind: 'working',
         runner: { skill: 'ship-it', context: 'work', instructions: 'Be careful.' },
         nextPhases: ['intake', 'done'],
+        outcomes: [{ key: 'ship', label: 'Shipped', to: 'done' }],
         autoStart: true,
         autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'go' }] },
         exitTool: {
@@ -95,8 +96,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       name: 'Build',
       description: 'Builds it.',
       kind: 'working',
+      tools: null,
       runner: { skill: 'ship-it', context: 'work', instructions: 'Be careful.' },
       nextPhases: ['intake', 'done'],
+      outcomes: [{ key: 'ship', label: 'Shipped', to: 'done' }],
       autoStart: true,
       autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'go' }] },
       exitTool: {
@@ -117,6 +120,38 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       exitTool: null,
     });
     expect(await boards.list(scope)).toEqual([created]);
+  });
+
+  it("reads back the goal a phase's runner pursues", async () => {
+    const { boards, scope } = await setup();
+    const input = board('release');
+    const runner = {
+      context: 'release',
+      skill: 'release-notes',
+      goal: { objective: 'Notes are published.', maxRuns: 9 },
+    };
+    input.phases = [input.phases[0]!, { ...input.phases[1]!, runner }, input.phases[2]!];
+
+    const created = await boards.create(scope, input, 'user-1');
+
+    expect(created.phases[1]).toMatchObject({ runner });
+    expect((await boards.list(scope))[0]!.phases[1]).toEqual(created.phases[1]);
+  });
+
+  it('reads back the Factory tools a phase grants', async () => {
+    const { boards, scope } = await setup();
+    const input = board('release');
+    input.phases = [
+      input.phases[0]!,
+      { ...input.phases[1]!, tools: ['factory_record_review_verdict', 'factory_review_source'] },
+      input.phases[2]!,
+    ];
+
+    const created = await boards.create(scope, input, 'user-1');
+
+    expect(created.phases[1]).toMatchObject({ tools: ['factory_record_review_verdict', 'factory_review_source'] });
+    expect(created.phases[0]).toMatchObject({ tools: null });
+    expect((await boards.list(scope))[0]!.phases[1]).toEqual(created.phases[1]);
   });
 
   it('keeps two projects with the same board key apart', async () => {

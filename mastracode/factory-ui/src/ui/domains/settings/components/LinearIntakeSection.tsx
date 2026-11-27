@@ -1,7 +1,7 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectListingQuery, useLinearTeamListingQuery } from '../../../../hooks/useLinearData';
@@ -12,27 +12,32 @@ import {
   linearTeamSourceId,
 } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
-import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
-import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { IntakeProviderCard, toggleSource } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
+import { AddLinearWorkspaceButton, LinearConnectButton } from './LinearConnectionControls';
+import { LinearMigrationNotice } from './LinearMigrationNotice';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
-import { IntakeSyncControl } from './common/IntakeSyncControl';
 import { PausedLinearWorkspace } from './PausedLinearWorkspace';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function LinearIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<LinearStatus> }) {
+  const selection = useIntakeSelection('linear');
+  const removeSources = (sourceIds: string[]) =>
+    selection.update(current => {
+      const remaining = (current.sourceIds ?? []).filter(id => !sourceIds.includes(id));
+      return { ...current, sourceIds: remaining.length ? remaining : null };
+    });
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
-  const reconnect = useLinearReconnectResult(statusQuery);
   const connected = Boolean(status?.enabled && status.connected);
   const projectsQuery = useLinearProjectListingQuery(connected);
   const teamsQuery = useLinearTeamListingQuery(connected);
@@ -84,6 +89,10 @@ export function LinearIntakeSection({
     if (status?.enabled === false) return 'Linear is not configured on this server.';
     if (reauthRequired) return 'Linear authorization expired. Reconnect to keep syncing issues.';
     if (!connected && paused.length > 0) return 'Intake is paused until you reconnect your Linear workspace.';
+    if (!connected && status?.reason === 'migration_required') return 'Linear workspaces are moving to Mastra Connect.';
+    if (!connected && status?.requiresFreshConnect?.length) {
+      return 'Linear access was revoked. Reconnect to keep syncing issues.';
+    }
     if (!connected) return 'Connect a Linear workspace to sync its issues.';
     return undefined;
   }
@@ -111,40 +120,53 @@ export function LinearIntakeSection({
     return repositorySlugs.length ? [{ project, repositorySlugs }] : [];
   });
 
+  function linearConnection() {
+    if (status?.enabled === false || statusUnavailable) return null;
+    if (!listed) return <LinearConnectButton />;
+    if (reauthRequired) return <LinearConnectButton action="Reconnect" />;
+    if (!connected && paused.length === 0) {
+      return <LinearConnectButton action={status?.requiresFreshConnect?.length ? 'Reconnect' : 'Connect'} />;
+    }
+    if (status?.mode === 'platform' && status.workspaces?.some(workspace => workspace.connected))
+      return <AddLinearWorkspaceButton />;
+    return null;
+  }
   return (
     <IntakeProviderCard
       name="Linear"
       icon={<SettingsIntegrationIcon provider="linear" />}
       account={status?.workspace?.name ?? undefined}
       listed={listed}
-      connectable={status?.enabled !== false}
+      connection={linearConnection()}
       description={description}
-      syncControl={
-        <IntakeSyncControl
-          accessibleLabel="Sync Linear issues"
-          description="Active issues from selected projects and teams feed your board. Whole teams include projectless issues."
-          checked={config.linear.enabled}
-          disabled={busy || !connected}
-          onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-        />
-      }
       action={
         statusUnavailable && (
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void statusQuery.refetch()}
+          >
             Retry
           </Button>
         )
       }
     >
-      {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
-        <DisconnectedLinearWorkspaces
-          workspaces={inferredSources.disconnected}
-          pending={busy}
-          onRemove={sourceIds => {
-            const next = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
-            void update({ ...config, linear: { ...config.linear, sourceIds: next.length ? next : null } });
-          }}
-        />
+      {status?.migration && <LinearMigrationNotice migration={status.migration} />}
+      {Boolean(status?.unidentified?.length) && (
+        <Notice variant="warning" title="Linear isn't answering for some connections">
+          <Notice.Message>
+            Factory couldn't reach{' '}
+            {status!.unidentified!.length === 1
+              ? '1 Linear connection'
+              : `${status!.unidentified!.length} Linear connections`}{' '}
+            and keeps checking. Until they answer, their workspaces' sources are paused and Factory won't close cards
+            for issues it can't find.
+          </Notice.Message>
+        </Notice>
+      )}
+      {connected && !reauthRequired && inferredSources.disconnected.length > 0 && (
+        <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}
       {[...workspaceErrors.values()].map(error => (
         <SettingsRow
@@ -155,7 +177,7 @@ export function LinearIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             onClick={() => {
               void projectsQuery.refetch();
               void teamsQuery.refetch();
@@ -170,16 +192,10 @@ export function LinearIntakeSection({
           key={workspace.id}
           workspace={workspace}
           count={sourceIds.length}
-          pending={busy}
-          reconnect={reconnect.resultFor(workspace)}
-          onRetry={() => void reconnect.retry()}
-          onRemove={() => {
-            const remaining = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
-            void update({ ...config, linear: { ...config.linear, sourceIds: remaining.length ? remaining : null } });
-          }}
+          onRemove={() => removeSources(sourceIds)}
         />
       ))}
-      {connected && config.linear.enabled && !reauthRequired && (
+      {connected && !reauthRequired && (
         <RoutedSourcePicker
           integrationId="linear"
           routingLabel="Linear"
@@ -190,28 +206,26 @@ export function LinearIntakeSection({
           groups={groups}
           selectedIds={projectsQuery.isPending || teamsQuery.isPending ? [] : selectedIds}
           fallbackLabel={missingSourceLabel}
-          pending={busy}
+          saving={selection.saving}
           loading={projectsQuery.isPending}
           error={sourceError ? "Couldn't load Linear projects and teams." : undefined}
           onRetry={() => {
             void projectsQuery.refetch();
             void teamsQuery.refetch();
           }}
-          onToggleItem={id =>
-            update({
-              ...config,
-              linear: { ...config.linear, sourceIds: toggleSourceId(config.linear.sourceIds, id) },
-            })
-          }
+          onToggleItem={id => selection.update(current => toggleSource(current, id))}
         />
       )}
       {routedProjects.length > 0 && (
         <LinearRepositoryMappings
           projects={routedProjects}
           mapping={config.linear.repositoryByLinearProject}
-          pending={busy}
-          onChange={repositoryByLinearProject =>
-            update({ ...config, linear: { ...config.linear, repositoryByLinearProject } })
+          saving={selection.saving}
+          onSetRepository={(projectId, slug) =>
+            selection.update(current => {
+              const { [projectId]: _, ...others } = current.repositoryByLinearProject ?? {};
+              return { ...current, repositoryByLinearProject: slug ? { ...others, [projectId]: slug } : others };
+            })
           }
         />
       )}

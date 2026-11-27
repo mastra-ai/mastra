@@ -1,8 +1,11 @@
 import { describe, expectTypeOf, it } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createTool } from '../tools';
 import { createWorkflow } from './create';
+import { createStep as createEventedStep } from './evented';
+import type { Step } from './step';
 import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
@@ -710,6 +713,22 @@ describe('declarative builder output inference', () => {
         expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
         return inputData;
       });
+  });
+
+  // zod v3 schemas have no `~standard.jsonSchema`, so options typed as StandardSchemaWithJSON rejected them (#29574)
+  it('agent steps infer the structured type from a zod v3 schema (#29574)', () => {
+    const schema = z3.object({ score: z3.number() });
+    type StructuredStep = Step<'typed-agent', unknown, { prompt: string }, { score: number }, unknown, unknown, any>;
+
+    createWorkflow({ id: 'wf', inputSchema: z.object({ prompt: z.string() }), outputSchema: z.any() })
+      .agent(agent, { structuredOutput: { schema } })
+      .map(async ({ inputData }) => {
+        expectTypeOf(inputData).toEqualTypeOf<{ score: number }>();
+        return inputData;
+      });
+
+    expectTypeOf(createStep(agent, { structuredOutput: { schema } })).toExtend<StructuredStep>();
+    expectTypeOf(createEventedStep(agent, { structuredOutput: { schema } })).toExtend<StructuredStep>();
   });
 
   it('.tool() advances prev schema to the tool output type', () => {

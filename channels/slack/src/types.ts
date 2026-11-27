@@ -64,6 +64,27 @@ interface SlackAdapterChannelConfigBase {
 
   /** Who can approve or deny tool calls in a channel. Defaults to the requester; use `'anyone'` for shared channels. */
   toolApprovers?: ChannelAdapterConfig['toolApprovers'];
+
+  /**
+   * **Experimental.** Give the agent a `render_card` tool that posts
+   * generative UI cards as native Block Kit. Needs `@json-render/chat`
+   * installed. See `ChannelAdapterConfig['generativeUI']`.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
+
+  /**
+   * Reply through a `reply_in_thread` tool instead of posting reply text and
+   * tool calls. See `ChannelAdapterConfig['replyMode']`.
+   */
+  replyMode?: ChannelAdapterConfig['replyMode'];
+
+  /**
+   * Link the first reply of a new thread to your web UI. See
+   * `ChannelAdapterConfig['threadLink']`.
+   */
+  threadLink?: ChannelAdapterConfig['threadLink'];
 }
 
 /**

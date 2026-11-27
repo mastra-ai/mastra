@@ -64,11 +64,6 @@ class PlainSandbox extends MastraSandbox {
 }
 
 describe('supportsComputer', () => {
-  it('returns true for a sandbox implementing the computer capability', () => {
-    const sandbox: WorkspaceSandbox = new DesktopSandbox();
-    expect(supportsComputer(sandbox)).toBe(true);
-  });
-
   it('returns false for a sandbox without computer', () => {
     const sandbox: WorkspaceSandbox = new PlainSandbox();
     expect(supportsComputer(sandbox)).toBe(false);

@@ -18,12 +18,7 @@ import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
-import {
-  createSharedAgent,
-  describeForAllEngines,
-  isDurableEngineVariant,
-  useLoopScenarioAimock,
-} from '../aimock-scenario';
+import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 function textOf(message: { content: { parts?: Array<{ type: string; text?: string }> } }) {
   return (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join('');
@@ -55,7 +50,7 @@ describeForAllEngines('AIMock loop scenario: trailing assistant guard persistenc
       ],
       { memory: { thread: threadId, resource: resourceId } },
     );
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     await output.consumeStream();
 
     // Guard: the guard really fired, so the provider request ended on the synthetic user turn.
@@ -108,7 +103,7 @@ describeForAllEngines('AIMock loop scenario: trailing assistant guard persistenc
       ],
       { memory: { thread: threadId, resource: resourceId } },
     );
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     await output.consumeStream();
 
     const requests = llm.getRequests();
@@ -160,7 +155,7 @@ describeForAllEngines('AIMock loop scenario: trailing assistant guard persistenc
         structuredOutput: { schema: z.object({ plan: z.string() }) },
       },
     );
-    const output = isDurableEngineVariant(engine) ? result.output : result;
+    const output = result.output ?? result;
     await output.consumeStream();
     expect(await output.object).toEqual({ plan: 'Alfama' });
 

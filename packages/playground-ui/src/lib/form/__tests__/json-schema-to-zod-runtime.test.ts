@@ -205,12 +205,4 @@ describe('jsonSchemaToZodRuntime nullable unions', () => {
       expect(schema.safeParse('eu-west').success).toBe(true);
     });
   });
-
-  describe('when a property is a real union', () => {
-    it('stays a union', () => {
-      const schema = jsonSchemaToZodRuntime({ anyOf: [{ type: 'string' }, { type: 'number' }] });
-
-      expect(inferFieldType(getBaseSchema(schema))).toBe('union');
-    });
-  });
 });

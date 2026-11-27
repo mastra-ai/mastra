@@ -1362,15 +1362,17 @@ describe('FilterBar', () => {
       initial,
       onChange,
       maxDepth,
+      fields = FIELDS,
     }: {
       initial: FilterBarExpression;
       onChange?: (expression: FilterBarExpression) => void;
       maxDepth?: number;
+      fields?: FilterBarField[];
     }) {
       const [value, setValue] = useState<FilterBarExpression>(initial);
       return (
         <FilterBar
-          fields={FIELDS}
+          fields={fields}
           operators={OPERATORS}
           value={value}
           maxDepth={maxDepth}
@@ -1401,6 +1403,47 @@ describe('FilterBar', () => {
         { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
       ],
     };
+
+    describe('when a field is restricted to the root', () => {
+      it('offers the field in the root picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        getInput().focus();
+        expect(await screen.findByRole('option', { name: 'Contains text' })).toBeTruthy();
+      });
+
+      it('omits the field from the nested field editor', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('combobox', { name: 'Field: Tags' })[0]);
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+
+      it('omits the field from the nested condition picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+        const add = within(editor).getByPlaceholderText('Add condition');
+        fireEvent.focus(add);
+        fireEvent.change(add, { target: { value: 'Contains text' } });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+    });
 
     describe('when the value is a flat list', () => {
       it('offers no advanced filter option and no chip', async () => {
@@ -1632,12 +1675,15 @@ describe('FilterBar', () => {
       key('Enter');
     };
 
-    it('adds a second value to the same field as "is any of" on the existing chip', async () => {
-      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'running' }]} />);
+    it.each([
+      ['adds a second value to the same field as "is any of" on the existing chip', 'is', 'Status in Running, Error'],
+      ['replaces the value when the operators cannot be combined', 'is-not', 'Status is Error'],
+    ] as const)('%s', async (_title, operatorId, value) => {
+      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId, value: 'running' }]} />);
 
       await addStatus(0, 'err');
 
-      expect(chipLabels()).toEqual(['Status in Running, Error']);
+      expect(chipLabels()).toEqual([value]);
     });
 
     it('adds to an existing "is any of" chip without repeating values', async () => {
@@ -1683,14 +1729,6 @@ describe('FilterBar', () => {
       fireEvent.click(screen.getByText('Pick another view'));
 
       await waitFor(() => expect(chipLabels()).toEqual([]));
-    });
-
-    it('replaces the value when the operators cannot be combined', async () => {
-      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is-not', value: 'running' }]} />);
-
-      await addStatus(0, 'err');
-
-      expect(chipLabels()).toEqual(['Status is Error']);
     });
 
     it('replaces the value when the field takes a single value', async () => {

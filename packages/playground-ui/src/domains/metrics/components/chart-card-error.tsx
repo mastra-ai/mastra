@@ -1,9 +1,9 @@
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/react/hooks/query';
-import { RotateCcwIcon } from 'lucide-react';
 import { PermissionDenied } from '@/domains/auth/components/permission-denied';
 import { SessionExpired } from '@/domains/auth/components/session-expired';
 import { Button } from '@/ds/components/Button';
 import { MetricsCard } from '@/ds/components/MetricsCard';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 
 /**
  * Fills a chart card's body when its data failed to load. Pass `error` and `onRetry` to explain
@@ -16,7 +16,7 @@ export function ChartCardError({ error, onRetry }: { error?: unknown; onRetry?: 
     <div className="flex h-full flex-col items-center justify-center gap-3">
       <MetricsCard.Error message="Couldn't load this data. Try again in a moment." />
       {onRetry && (
-        <Button size="sm" icon={<RotateCcwIcon />} onClick={onRetry}>
+        <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={onRetry}>
           Retry
         </Button>
       )}

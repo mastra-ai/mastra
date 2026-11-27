@@ -7,6 +7,7 @@ export { useSpanDetail } from './use-span-detail';
 export { useTags } from './use-tags';
 export { useThreadHasOtherTraces } from './use-thread-has-other-traces';
 export { useTraceLightSpans } from './use-trace-light-spans';
+export { useTraceTrajectory } from './use-trace-trajectory';
 export {
   useTraceOrBranchSpans,
   type UseTraceOrBranchSpansArgs,

@@ -864,7 +864,9 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('custom-openai-compatible');
       expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
-      expect(result.apiKey).toBe('acme-secret');
+      // The key travels in `headers`, written last, never as the provider's `apiKey` option.
+      expect(result.apiKey).toBeUndefined();
+      expect(result.headers).toEqual({ Authorization: 'Bearer acme-secret' });
     });
 
     it('leaves mastracode/-prefixed ids alone when the segment is not a configured custom provider', () => {
@@ -899,10 +901,11 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('custom-openai-compatible');
       expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
-      expect(result.apiKey).toBe('acme-secret');
+      expect(result.apiKey).toBeUndefined();
       expect(result.headers).toEqual({
         'x-thread-id': 'thread-123',
         'x-resource-id': 'resource-456',
+        Authorization: 'Bearer acme-secret',
       });
     });
   });
@@ -1094,6 +1097,23 @@ describe('resolveModel', () => {
         baseUrl: 'https://gateway-api.mastra.ai',
       });
       expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
+    });
+
+    it("routes a Factory tenant's mastra-prefixed model with the tenant's own gateway key", () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'mastra-gateway' ? 'msk_tenant_key' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4', { requestContext }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toMatchObject({ providerId: 'anthropic', apiKey: 'msk_tenant_key' });
     });
 
     it('routes explicit mastra-prefixed anthropic OAuth model through custom gateway middleware', () => {

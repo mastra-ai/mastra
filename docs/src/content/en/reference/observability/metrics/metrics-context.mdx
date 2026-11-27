@@ -1,0 +1,176 @@
+---
+title: "Reference: MetricsContext | Observability"
+description: "API reference for MetricsContext, including emit() parameters, label cardinality filtering, and how custom metrics are correlated with traces."
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# `MetricsContext`
+
+`MetricsContext` emits custom metrics from your code. Tools and workflow steps receive it as `metrics`, scoped to the span of the current tool call or step. Custom metrics are stored and exported alongside [automatic metrics](/reference/observability/metrics/automatic-metrics), and you query them by name with the [metric query APIs](/reference/observability/metrics/queries).
+
+For an introduction, see [Emit custom metrics](/docs/observability/metrics/overview#emit-custom-metrics).
+
+## Usage example
+
+```typescript title="src/mastra/tools/search-docs.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const searchDocs = createTool({
+  id: 'search-docs',
+  description: 'Searches the documentation index',
+  inputSchema: z.object({ query: z.string() }),
+  execute: async ({ query }, context) => {
+    const results = await searchIndex(query)
+
+    context.metrics?.emit('docs_search_results', results.length, {
+      empty: results.length === 0 ? 'true' : 'false',
+    })
+
+    return { results }
+  },
+})
+```
+
+In a workflow step, `metrics` is a property of the `execute` parameters:
+
+```typescript title="src/mastra/workflows/index-docs.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const indexDocuments = createStep({
+  id: 'index-documents',
+  inputSchema: z.object({ documents: z.array(z.string()) }),
+  outputSchema: z.object({ indexed: z.number() }),
+  execute: async ({ inputData, metrics }) => {
+    metrics?.emit('documents_indexed', inputData.documents.length, { source: 'upload' })
+
+    return { indexed: inputData.documents.length }
+  },
+})
+```
+
+`metrics` is typed as optional on tool and step contexts, so use optional chaining. When observability isn't configured, `metrics` is a no-op context and `emit()` does nothing.
+
+## Methods
+
+### `emit(name, value, labels?, options?)`
+
+Records one observation of a metric. Each call stores a separate row, and aggregation such as sum, average, or percentiles happens at query time. Returns `void`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description:
+      'Metric name. Use the same name every time you record the same measurement, and pass it to the query APIs to read the metric back. Use lowercase snake case, and avoid the `mastra_` prefix used by automatic metrics.',
+  },
+  {
+    name: 'value',
+    type: 'number',
+    description:
+      'The observed value, such as `1` for a count or a duration in milliseconds. Mastra drops the observation if the value is negative, `NaN`, or infinite.',
+  },
+  {
+    name: 'labels',
+    type: 'Record<string, string>',
+    description:
+      'Dimensions to filter and group the metric by. Mastra removes labels that the [cardinality settings](#cardinality-protection) block before it stores the metric.',
+    isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'MetricEmitOptions',
+    description: 'Cost attribution for the observation. Most custom metrics omit it.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'MetricEmitOptions',
+        parameters: [
+          {
+            name: 'costContext',
+            type: 'CostContext',
+            description:
+              'Cost data stored with the observation: `provider`, `model`, `estimatedCost`, `costUnit`, and `costMetadata`, all optional.',
+            isOptional: true,
+          },
+          {
+            name: 'usageId',
+            type: 'string',
+            description:
+              'Groups observations that come from the same model usage, so token and cost rows for one model call can be matched.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### Deprecated methods
+
+`counter(name)`, `gauge(name)`, and `histogram(name)` return objects whose `add()`, `set()`, and `record()` methods call `emit()`. Use `emit()` directly instead.
+
+## Trace correlation
+
+Every observation records the trace and span ID of the tool call or step that emitted it, plus the same correlation context as automatic metrics, such as the entity, environment, and service name. Use these fields to go from a metric to the trace that produced it. They're stored separately from labels, so cardinality filtering doesn't remove them.
+
+## Cardinality protection
+
+Each distinct combination of label values creates a separate series, and unbounded values such as IDs can make metric storage and queries expensive. Before Mastra stores a metric, it removes:
+
+- labels whose name is in the blocked list, compared case-insensitively. The default list is `trace_id`, `span_id`, `run_id`, `request_id`, `user_id`, `resource_id`, `session_id`, and `thread_id`.
+- labels whose value is a UUID, unless `blockUUIDs` is `false`.
+
+The same filter applies to automatic metrics. Configure it with the `cardinality` option of an [observability instance](/reference/observability/tracing/configuration#observabilityinstanceconfig):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { DEFAULT_BLOCKED_LABELS } from '@mastra/core/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new MastraStorageExporter()],
+        cardinality: {
+          blockedLabels: [...DEFAULT_BLOCKED_LABELS, 'order_id'],
+        },
+      },
+    },
+  }),
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'blockedLabels',
+    type: 'string[]',
+    description:
+      'Label names to remove. Setting it replaces the default list. To keep the defaults, spread `DEFAULT_BLOCKED_LABELS` from `@mastra/core/observability` into your list. Pass `[]` to allow every label name.',
+    isOptional: true,
+    defaultValue: 'DEFAULT_BLOCKED_LABELS',
+  },
+  {
+    name: 'blockUUIDs',
+    type: 'boolean',
+    description: 'Remove labels whose value is a UUID.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+]}
+/>
+
+## Related
+
+- [Metrics overview](/docs/observability/metrics/overview)
+- [Automatic metrics](/reference/observability/metrics/automatic-metrics)
+- [Metric queries](/reference/observability/metrics/queries)
+- [Observability configuration](/reference/observability/tracing/configuration)

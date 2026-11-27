@@ -1,0 +1,11 @@
+{
+  "attachment": ["kimi-k3-1-pro"],
+  "reasoning": {
+    "kimi-k3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ import type {
 import {
   checkProfileProviderMismatch,
   createBrowserFromSettings,
+  expandHome,
   loadSettings,
   parseViewportInput,
   resolveStagehandModel,
@@ -24,6 +25,7 @@ import { activeBrowserGeneration, discardBrowser, replaceActiveBrowser } from '.
 import type { ModelItem } from '../components/model-selector.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
+import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -235,7 +237,7 @@ async function promptForStagehandModel(
         resolve();
       },
     });
-    ctx.state.ui.showOverlay(selector, { width: '60%' });
+    showModalOverlay(ctx.state.ui, selector);
   });
 }
 
@@ -452,7 +454,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       return;
     }
 
-    const expandedValue = value.trim().replace(/^~/, process.env.HOME || '~');
+    const expandedValue = expandHome(value.trim());
 
     switch (key) {
       case 'profile':
@@ -810,7 +812,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     }
     const exportableBrowser = browserInstance as StorageStateExportBrowser;
 
-    const expandedPath = exportPath.replace(/^~/, process.env.HOME || '~');
+    const expandedPath = expandHome(exportPath);
 
     try {
       await exportableBrowser.exportStorageState(expandedPath);
@@ -957,7 +959,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         ctx.showInfo('Browser setup cancelled.');
         return;
       }
-      executablePath = execPath.replace(/^~/, process.env.HOME || '~');
+      executablePath = expandHome(execPath);
     } else if (launchMode === 'Connect via CDP') {
       const cdpUrlInput = await askText(ctx, 'CDP WebSocket URL (e.g., ws://localhost:9222):', cdpUrl);
       if (cdpUrlInput === null) {
@@ -994,7 +996,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
           ctx.showInfo('Browser setup cancelled.');
           return;
         }
-        profile = profilePath.replace(/^~/, process.env.HOME || '~');
+        profile = expandHome(profilePath);
       } else {
         profile = undefined;
       }

@@ -233,6 +233,46 @@ thrown. Note that `id` and `description` can only be set at creation time.
               },
             ],
           },
+          {
+            name: 'mongodb',
+            type: 'MongoDBConfig',
+            description: 'Configuration specific to MongoDB Atlas vector search',
+            isOptional: true,
+            properties: [
+              {
+                type: 'MongoDBConfig',
+                parameters: [
+                  {
+                    name: 'numCandidates',
+                    description:
+                      'Number of candidates considered before selecting the top-K results. Must be at least topK. Defaults to 20 * topK, capped at 10,000.',
+                    isOptional: true,
+                    type: 'number',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'turbopuffer',
+            type: 'TurbopufferConfig',
+            description: 'Configuration specific to turbopuffer',
+            isOptional: true,
+            properties: [
+              {
+                type: 'TurbopufferConfig',
+                parameters: [
+                  {
+                    name: 'consistency',
+                    description:
+                      "Query consistency level. 'strong' (default) sees all data written before the query started; 'eventual' has lower latency but may miss recent writes.",
+                    isOptional: true,
+                    type: "'strong' | 'eventual'",
+                  },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
@@ -382,7 +422,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
 
 <Tabs>
   <TabItem value="pinecone" label="Pinecone">
-    ### Pinecone Configuration
+    ### Pinecone configuration
 
     ```typescript
     const pineconeQueryTool = createVectorQueryTool({
@@ -410,7 +450,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
   </TabItem>
 
   <TabItem value="pgvector" label="pgVector">
-    ### pgVector Configuration
+    ### pgVector configuration
 
     ```typescript
     const pgVectorQueryTool = createVectorQueryTool({
@@ -436,7 +476,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
   </TabItem>
 
   <TabItem value="chroma" label="Chroma">
-    ### Chroma Configuration
+    ### Chroma configuration
 
     ```typescript
     const chromaQueryTool = createVectorQueryTool({
@@ -467,7 +507,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
   </TabItem>
 
   <TabItem value="turbopuffer" label="Turbopuffer">
-    ### Turbopuffer Configuration
+    ### Turbopuffer configuration
 
     ```typescript
     const turbopufferQueryTool = createVectorQueryTool({
@@ -489,7 +529,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
   </TabItem>
 
   <TabItem value="multiple-configs" label="Multiple Configs">
-    ### Multiple Database Configurations
+    ### Multiple database configurations
 
     ```typescript
     // Configure for multiple databases (useful for dynamic stores)
@@ -520,7 +560,7 @@ The `databaseConfig` parameter allows you to use features and optimizations spec
   </TabItem>
 </Tabs>
 
-### Runtime Configuration Override
+### Runtime configuration override
 
 You can override database configurations at runtime to adapt to different scenarios:
 

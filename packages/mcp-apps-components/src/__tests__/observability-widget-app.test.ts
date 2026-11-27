@@ -1,5 +1,5 @@
 // The built package, as consumers install it.
-import { observabilityWidgetApp } from '@mastra/mcp-apps-components';
+import { observabilityDashboardApp } from '@mastra/mcp-apps-components';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { serveAndConnect } from './greeting-server';
 import { OBSERVABILITY_WIDGET_URI, observabilityServer } from './observability-server';
@@ -7,7 +7,7 @@ import { OBSERVABILITY_WIDGET_URI, observabilityServer } from './observability-s
 let host: Awaited<ReturnType<typeof serveAndConnect>>;
 beforeAll(async () => {
   host = await serveAndConnect(
-    observabilityServer({ appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityWidgetApp } }).server,
+    observabilityServer({ appResources: { [OBSERVABILITY_WIDGET_URI]: observabilityDashboardApp } }).server,
   );
 });
 afterAll(() => host.close());

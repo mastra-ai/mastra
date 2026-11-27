@@ -1,10 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DialogBody, DialogFooter } from '@mastra/playground-ui/components/Dialog';
 import { Entity, EntityContent, EntityName } from '@mastra/playground-ui/components/Entity';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { IconChevronRightMedium } from '@mastra/playground-ui/icons/central/IconChevronRightMedium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { ChevronRight, Plus } from 'lucide-react';
-
 import type { ManageableConnection } from './manage-connection-dialog';
 
 interface ManageConnectionListProps {
@@ -43,7 +42,7 @@ export const ManageConnectionList = ({
                 >
                   <EntityName className="truncate">{connection.label?.trim() || 'Unnamed connection'}</EntityName>
                   <Icon className="shrink-0 text-muted-foreground">
-                    <ChevronRight />
+                    <IconChevronRightMedium />
                   </Icon>
                 </button>
               </EntityContent>
@@ -56,16 +55,11 @@ export const ManageConnectionList = ({
           <Button
             type="button"
             onClick={onAddConnection}
-            disabled={disabled || addingConnection}
+            disabled={disabled}
             data-testid={`${testIdPrefix}-add`}
+            icon={<IconPlusMedium />}
+            loading={addingConnection}
           >
-            {addingConnection ? (
-              <Spinner size="sm" />
-            ) : (
-              <Icon>
-                <Plus />
-              </Icon>
-            )}
             Add connection
           </Button>
         </DialogFooter>

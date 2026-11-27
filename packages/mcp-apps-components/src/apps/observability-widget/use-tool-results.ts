@@ -9,13 +9,17 @@ const toolOutput = z.object({ data: z.unknown() });
 
 /**
  * Asks the server's `queryObservability` tool for one request's answer: the action is the request's
- * method, the args are sent as planned. An unsatisfiable request answers empty without a call.
+ * method, the args are sent as planned, with the widget's `project` when it has one. An
+ * unsatisfiable request answers empty without a call.
  */
-async function ask(app: App, request: DashboardRequest): Promise<DashboardAnswer> {
+async function ask(app: App, request: DashboardRequest, project: string | undefined): Promise<DashboardAnswer> {
   if (request.unsatisfiable) return emptyAnswer(request.method);
+  // Tool-call arguments must be JSON: the planned window holds `Date`s, which hosts such as Codex
+  // refuse instead of serializing.
+  const args = JSON.parse(JSON.stringify(request.args)) as Record<string, unknown>;
   const result = await app.callServerTool({
     name: QUERY_OBSERVABILITY_TOOL,
-    arguments: { action: request.method, args: request.args },
+    arguments: { action: request.method, args, ...(project ? { project } : {}) },
   });
   const text = result.content.find(block => block.type === 'text')?.text;
   if (result.isError) throw new Error(text ?? `${QUERY_OBSERVABILITY_TOOL} failed.`);
@@ -29,12 +33,12 @@ async function ask(app: App, request: DashboardRequest): Promise<DashboardAnswer
  * Sends the requests through the tool, as plain results lined up with `requests` (an `undefined`
  * request keeps its slot). The window is frozen when the app opens, so an answer never goes stale.
  */
-export function useToolResults(app: App, requests: (DashboardRequest | undefined)[]) {
+export function useToolResults(app: App, requests: (DashboardRequest | undefined)[], project: string | undefined) {
   const sent = requests.filter(request => request !== undefined);
   const queries = useQueries({
     queries: sent.map(request => ({
-      queryKey: requestKey(request),
-      queryFn: () => ask(app, request),
+      queryKey: [...requestKey(request), project],
+      queryFn: () => ask(app, request, project),
       staleTime: Infinity,
     })),
   });

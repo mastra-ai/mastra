@@ -4,18 +4,16 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import type { MediaToolResult } from './media';
-import { DEFAULT_MAX_MEDIA_BYTES, mediaToModelOutput } from './media';
+import {
+  DEFAULT_MAX_MEDIA_BYTES,
+  DEFAULT_MEDIA_TYPES,
+  MEDIA_SNIFF_BYTES,
+  contentMediaType,
+  isUtf8Text,
+  mediaToModelOutput,
+} from './media';
 import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-/**
- * Default mime types surfaced to the model as media parts. The list is
- * intentionally the intersection of image formats supported by the major
- * model providers (Anthropic, OpenAI, Gemini) plus `application/pdf`.
- * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
- * that some providers reject. Override `mediaTypes` to broaden this.
- */
-const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 /**
  * `application/*` mime types that are actually text content and safe to read
@@ -194,24 +192,39 @@ export const readFileTool = createTool({
       // config (#23896). Read as base64 and return a MediaToolResult so
       // `toModelOutput` can surface it as a file/image part the model can
       // natively consume.
+      // Set when the extension says media but the bytes don't, and the bytes read as text.
+      let mislabeledNote: string | undefined;
       if (shouldReturnAsMedia(stat.mimeType)) {
         const maxMediaBytes = readFileConfig?.maxMediaBytes ?? DEFAULT_MAX_MEDIA_BYTES;
         if (stat.size <= maxMediaBytes) {
           const base64 = (await filesystem.readFile(path, { encoding: 'base64' })) as string;
-          const header = `${stat.path} (${stat.size} bytes, ${stat.mimeType})`;
-          span.end({ success: true }, { bytesTransferred: stat.size });
-          return {
-            __workspaceMedia: true,
-            text: header,
-            mediaType: stat.mimeType!,
-            data: base64,
-          } satisfies MediaToolResult;
-        }
-        // Oversized media: avoid materializing huge base64 strings (and
-        // persisting them through storage on rehydration). Return metadata-only
-        // unless the caller explicitly asked for raw bytes via `encoding`, in
-        // which case fall through to the raw read path below.
-        if (!encoding) {
+          const head = Buffer.from(base64.slice(0, Math.ceil(MEDIA_SNIFF_BYTES / 3) * 4), 'base64');
+          const mediaType = contentMediaType(head, stat.mimeType!);
+          if (mediaType && shouldReturnAsMedia(mediaType)) {
+            const header = `${stat.path} (${stat.size} bytes, ${mediaType})`;
+            span.end({ success: true }, { bytesTransferred: stat.size });
+            return {
+              __workspaceMedia: true,
+              text: header,
+              mediaType,
+              data: base64,
+            } satisfies MediaToolResult;
+          }
+          // The extension says media but the content isn't. Never send it as media: show text
+          // content as text, and only metadata for anything else, unless `encoding` was given.
+          const mismatch = `the extension says ${stat.mimeType}, but the content is ${mediaType ?? 'not a valid file of that type'}`;
+          // The whole file, not just its head: binary content can follow a first KiB of ASCII.
+          if (isUtf8Text(Buffer.from(base64, 'base64'))) {
+            mislabeledNote = mismatch;
+          } else if (!encoding) {
+            span.end({ success: true }, { bytesTransferred: 0 });
+            return `${stat.path} (${stat.size} bytes) — ${mismatch}, so it was not sent as media. Pass an explicit \`encoding\` (e.g. \`hex\`) to read the raw bytes.`;
+          }
+        } else if (!encoding) {
+          // Oversized media: avoid materializing huge base64 strings (and
+          // persisting them through storage on rehydration). Return metadata-only
+          // unless the caller explicitly asked for raw bytes via `encoding`, in
+          // which case fall through to the raw read path below.
           span.end({ success: true }, { bytesTransferred: 0 });
           return `${stat.path} (${stat.size} bytes, ${stat.mimeType}) — exceeds maxMediaBytes (${maxMediaBytes}). Returning metadata only; configure \`maxMediaBytes\` on the read_file tool to raise this cap.`;
         }
@@ -221,7 +234,7 @@ export const readFileTool = createTool({
       // a binary type that's neither text-readable nor in `mediaTypes`,
       // return metadata only so the agent knows about the file without
       // dumping useless base64 into the conversation.
-      if (!encoding && !isTextLikeMimeType(stat.mimeType)) {
+      if (!encoding && !mislabeledNote && !isTextLikeMimeType(stat.mimeType)) {
         span.end({ success: true }, { bytesTransferred: 0 });
         return `${stat.path} (${stat.size} bytes, ${stat.mimeType ?? 'unknown'}) — binary file not readable as text. Pass an explicit \`encoding\` (e.g. \`base64\`) to read the raw bytes, or configure \`mediaTypes\` on the read_file tool to surface it as a media part.`;
       }
@@ -269,6 +282,7 @@ export const readFileTool = createTool({
       } else {
         header = `${stat.path} (${stat.size} bytes)`;
       }
+      if (mislabeledNote) header += ` — ${mislabeledNote}; showing it as text`;
 
       const output = await applyTokenLimit(`${header}\n${formattedContent}`, tokenLimit, 'end');
       span.end({ success: true }, { bytesTransferred: stat.size });

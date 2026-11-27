@@ -11,18 +11,24 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 28 providers (1076 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 35 providers (1263 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
-MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/canva), [Clay](/integrations/crm/clay), [Neon](/integrations/databases/neon), [Render](/integrations/deploy/render), [Robinhood](/integrations/other/robinhood), and [Sanity](/integrations/other/sanity)) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/reference/connect/tools#mcp-providers) for how `tools()` discovers them.
+MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/canva), [Clay](/integrations/crm/clay), [Cloudflare Workers](/integrations/other/cloudflare-workers), [Digits](/integrations/other/digits), [Neon](/integrations/databases/neon), [Render](/integrations/deploy/render), [Robinhood](/integrations/other/robinhood), [Sanity](/integrations/other/sanity), and [Sentry](/integrations/observability/sentry)) serve their tools from their hosted MCP servers at runtime and aren't listed here. See [MCP providers](/reference/connect/tools#mcp-providers) for how `tools()` discovers them.
 
 | Provider | Provider ID | Tools |
 | - | - | - |
+| <ProviderLogo slug="anthropic" mono /> [Anthropic](#anthropic) | `anthropic` | 12 |
 | <ProviderLogo slug="clerk" mono /> [Clerk](#clerk) | `clerk` | 42 |
 | <ProviderLogo slug="discord" /> [Discord](#discord) | `discord` | 34 |
+| <ProviderLogo slug="elevenlabs" mono /> [ElevenLabs](#elevenlabs) | `elevenlabs` | 35 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/exa.svg" /> [Exa](#exa) | `exa` | 3 |
+| <ProviderLogo slug="figma" /> [Figma](#figma) | `figma` | 29 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> [Fireflies.ai](#firefliesai) | `fireflies` | 27 |
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
+| <ProviderLogo slug="gitlab" /> [GitLab](#gitlab) | `gitlab` | 44 |
+| <ProviderLogo slug="googleanalytics" /> [Google Analytics](#google-analytics) | `google-analytics` | 11 |
 | <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
 | <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
 | <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 32 |
@@ -42,11 +48,31 @@ MCP providers ([Attio](/integrations/crm/attio), [Canva](/integrations/other/can
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/outlook.svg" /> [Microsoft Outlook](#microsoft-outlook) | `outlook` | 30 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/sendgrid.svg" /> [SendGrid](#sendgrid) | `sendgrid` | 53 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/sharepoint-online.svg" /> [SharePoint Online](#sharepoint-online) | `sharepoint-online` | 53 |
 | <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
 | <ProviderLogo slug="snowflake" /> [Snowflake](#snowflake) | `snowflake` | 15 |
 | <ProviderLogo slug="supabase" /> [Supabase](#supabase) | `supabase` | 27 |
 | <ProviderLogo src="https://svgl.app/library/workos.svg" /> [WorkOS](#workos) | `workos` | 40 |
+
+## Anthropic
+
+Provider ID: `anthropic` · 12 tools
+
+| Tool | Description |
+| - | - |
+| `anthropic_cancel_message_batch` | Cancel an Anthropic Message Batch. |
+| `anthropic_count_message_tokens` | Count tokens for an Anthropic message request. |
+| `anthropic_create_message` | Create an Anthropic model message. |
+| `anthropic_create_message_batch` | Create a message batch in Anthropic. |
+| `anthropic_delete_file` | Delete or archive a file in Anthropic. |
+| `anthropic_get_file` | Retrieve a single file from Anthropic. |
+| `anthropic_get_message_batch` | Retrieve a single message batch from Anthropic. |
+| `anthropic_get_model` | Retrieve a single model from Anthropic. |
+| `anthropic_list_files` | List files from Anthropic. |
+| `anthropic_list_message_batch_results` | Stream or retrieve results for an Anthropic Message Batch |
+| `anthropic_list_message_batches` | List message batches from Anthropic. |
+| `anthropic_list_models` | List models from Anthropic. |
 
 ## Clerk
 
@@ -138,6 +164,106 @@ Provider ID: `discord` · 34 tools
 | `discord_update_role` | Update a role in Discord |
 | `discord_update_webhook` | Update a webhook in Discord. |
 
+## ElevenLabs
+
+Provider ID: `elevenlabs` · 35 tools
+
+| Tool | Description |
+| - | - |
+| `elevenlabs_add_pronunciation_dictionary_rules` | Add rules to a pronunciation dictionary. |
+| `elevenlabs_clone_voice` | Create an instant voice clone from recordings of a person's voice and add it to the voice library. Only clone a voice with its owner's consent. |
+| `elevenlabs_compose_music` | Compose a song with Eleven Music from a prompt or a composition plan. Returns the audio base64-encoded; the model only sees a summary of it. Uses credits. |
+| `elevenlabs_create_agent` | Create a Conversational AI agent. |
+| `elevenlabs_create_composition_plan` | Draft a section-by-section plan for a song from a prompt, without generating audio. Free, but rate limited. Edit the plan, then compose it with elevenlabs_compose_music. |
+| `elevenlabs_delete_agent` | Delete a Conversational AI agent. |
+| `elevenlabs_delete_conversation` | Delete a Conversational AI conversation. |
+| `elevenlabs_delete_dubbing_project` | Delete a dubbing project. |
+| `elevenlabs_delete_history_item` | Delete a history item. |
+| `elevenlabs_delete_knowledge_base_document` | Delete a knowledge base document. |
+| `elevenlabs_delete_voice` | Delete a voice you own, such as a voice clone, from the voice library. |
+| `elevenlabs_edit_voice_settings` | Update voice settings |
+| `elevenlabs_get_agent` | Retrieve a Conversational AI agent |
+| `elevenlabs_get_conversation` | Retrieve a Conversational AI conversation. |
+| `elevenlabs_get_default_voice_settings` | Get the account default voice settings. |
+| `elevenlabs_get_dubbing_project` | Retrieve a dubbing project. |
+| `elevenlabs_get_history_item` | Retrieve history item metadata. |
+| `elevenlabs_get_knowledge_base_document` | Retrieve a knowledge base document. |
+| `elevenlabs_get_pronunciation_dictionary` | Retrieve a pronunciation dictionary. |
+| `elevenlabs_get_user` | Get user/account details. |
+| `elevenlabs_get_user_subscription` | Get subscription details. |
+| `elevenlabs_get_voice` | Retrieve a voice. |
+| `elevenlabs_get_voice_settings` | Get settings for a specific voice. |
+| `elevenlabs_list_agents` | List Conversational AI agents. |
+| `elevenlabs_list_conversations` | List Conversational AI conversations. |
+| `elevenlabs_list_dubbing_projects` | List dubbing projects. |
+| `elevenlabs_list_history` | List generated history items. |
+| `elevenlabs_list_knowledge_base` | List knowledge base documents. |
+| `elevenlabs_list_models` | List models. |
+| `elevenlabs_list_pronunciation_dictionaries` | List pronunciation dictionaries. |
+| `elevenlabs_list_voices` | List voices |
+| `elevenlabs_remove_pronunciation_dictionary_rules` | Remove rules from a pronunciation dictionary. |
+| `elevenlabs_speech_to_text` | Transcribe audio or video with ElevenLabs Scribe, from base64 audio or a URL. Can tag sound events and label speakers. Uses transcription credits. |
+| `elevenlabs_text_to_speech` | Convert text to speech with an ElevenLabs voice. Returns the audio base64-encoded; the model only sees a summary of it. Uses character credits. |
+| `elevenlabs_update_agent` | Update a Conversational AI agent |
+
+## Exa
+
+Provider ID: `exa` · 3 tools
+
+:::note
+
+Exa bills each search, contents, and answer call to the API key on the connection. The `deep` search types run multi-step searches that take several seconds and cost more than `auto` or `lite`.
+
+:::
+
+| Tool | Description |
+| - | - |
+| `exa_answer` | Generate an AI answer to a question, backed by live web citations. |
+| `exa_get_contents` | Retrieve full page text, highlights, or a summary for one or more URLs. |
+| `exa_search` | Search the web with Exa and return ranked results, optionally with each page's text, highlights, or summary. |
+
+## Figma
+
+Provider ID: `figma` · 29 tools
+
+:::note
+
+Figma only lets full members of Enterprise organizations use the variable tools, and updating variables also needs edit access to the file. On other plans, Figma refuses those calls. Node IDs work in either the `1:2` form the API uses or the `1-2` form in Figma URLs. The toolset can't list a team's projects or files, so give the agent a file key or file URL.
+
+:::
+
+| Tool | Description |
+| - | - |
+| `figma_create_comment` | Create a comment in Figma. |
+| `figma_create_comment_reaction` | Add a reaction emoji to a comment in Figma. |
+| `figma_create_dev_resources` | Create dev resources linked to Figma nodes |
+| `figma_delete_comment` | Delete a specific comment from a Figma file. Only the author of the comment can delete it. |
+| `figma_delete_comment_reaction` | Remove a reaction from a comment in Figma. |
+| `figma_delete_dev_resource` | Delete a dev resource in Figma |
+| `figma_get_comment` | Retrieve a single comment from Figma. |
+| `figma_get_component` | Retrieve a single component from Figma. |
+| `figma_get_component_set` | Retrieve a single component set from Figma. |
+| `figma_get_current_user` | Fetch the current Figma user. |
+| `figma_get_file_component_sets` | Retrieve all component sets defined within a Figma file. |
+| `figma_get_file_components` | Retrieve all components defined within a Figma file. |
+| `figma_get_file_node` | Retrieve a single file node from Figma |
+| `figma_get_file_styles` | Retrieve all styles defined within a Figma file. |
+| `figma_get_local_variables` | Retrieve all local variables defined in a Figma file. |
+| `figma_get_published_variables` | Retrieve all published variables for a Figma file. |
+| `figma_get_style` | Retrieve a single style from Figma. |
+| `figma_get_version` | Retrieve a single version from Figma by id. Searches the newest 1,000 versions; for an older version, page through figma_list_versions instead. |
+| `figma_list_comment_reactions` | List reactions on a Figma comment. |
+| `figma_list_comments` | List comments from Figma. |
+| `figma_list_component_sets` | List component sets for a Figma team. |
+| `figma_list_components` | List components from Figma. |
+| `figma_list_dev_resources` | List dev resources linked to nodes in a Figma file. |
+| `figma_list_file_nodes` | List file nodes from Figma. |
+| `figma_list_styles` | List styles from Figma. |
+| `figma_list_versions` | List versions from Figma. |
+| `figma_render_images` | Render images for Figma file nodes. |
+| `figma_update_dev_resources` | Update dev resources linked to Figma nodes. |
+| `figma_update_variables` | Create, update, or delete variables and variable collections in a Figma file |
+
 ## Fireflies.ai
 
 Provider ID: `fireflies` · 27 tools
@@ -227,6 +353,75 @@ Provider ID: `github` · 49 tools
 | `github_update_label` | Update a repository label's name, color, or description. |
 | `github_update_pull_request` | Edit a pull request's title, body, base branch, or state. |
 | `github_update_release` | Edit release metadata such as name, notes, or draft state. |
+
+## GitLab
+
+Provider ID: `gitlab` · 44 tools
+
+| Tool | Description |
+| - | - |
+| `gitlab_cancel_pipeline` | Cancel a GitLab pipeline. |
+| `gitlab_create_branch` | Create a branch in GitLab. |
+| `gitlab_create_commit` | Create a commit in GitLab |
+| `gitlab_create_file` | Create a GitLab repository file. |
+| `gitlab_create_group` | Create a group in GitLab. |
+| `gitlab_create_issue` | Create an issue in GitLab. |
+| `gitlab_create_merge_request` | Create a merge request in GitLab |
+| `gitlab_create_pipeline` | Create a pipeline in GitLab. |
+| `gitlab_create_project` | Create a project in GitLab. |
+| `gitlab_create_release` | Create a release in GitLab. |
+| `gitlab_delete_branch` | Delete a branch in GitLab. |
+| `gitlab_delete_file` | Delete a GitLab repository file. |
+| `gitlab_delete_group` | Schedule a group for deletion in GitLab. Pass the numeric group id: GitLab renames the group when it schedules deletion, so a path stops working. To then remove a subgroup permanently, read its renamed full_path with gitlab_get_group and call again with permanently_remove and that full_path; GitLab accepts the removal and completes it asynchronously. |
+| `gitlab_delete_issue` | Delete an issue in GitLab. |
+| `gitlab_delete_merge_request` | Delete a merge request in GitLab. |
+| `gitlab_delete_pipeline` | Delete a pipeline in GitLab. This permanently deletes the pipeline and all immediately related objects, such as builds, logs, artifacts, and triggers. This action cannot be undone. |
+| `gitlab_delete_project` | Delete or archive a project in GitLab. |
+| `gitlab_delete_release` | Delete a release in GitLab. |
+| `gitlab_get_branch` | Retrieve a single branch from GitLab. |
+| `gitlab_get_commit` | Retrieve a single commit from GitLab. |
+| `gitlab_get_file` | Fetch a GitLab repository file. |
+| `gitlab_get_group` | Retrieve a single group from GitLab. |
+| `gitlab_get_issue` | Retrieve a single issue from GitLab. |
+| `gitlab_get_job` | Retrieve a single job from GitLab. |
+| `gitlab_get_merge_request` | Retrieve a single merge request from GitLab. |
+| `gitlab_get_pipeline` | Retrieve a single pipeline from GitLab. |
+| `gitlab_get_project` | Retrieve a single project from GitLab. |
+| `gitlab_get_release` | Retrieve a single release from GitLab. |
+| `gitlab_list_branches` | List branches from GitLab. |
+| `gitlab_list_commits` | List commits from GitLab. |
+| `gitlab_list_groups` | List groups from GitLab. |
+| `gitlab_list_issues` | List issues from GitLab |
+| `gitlab_list_jobs` | List jobs from GitLab, newest first. |
+| `gitlab_list_merge_requests` | List merge requests from GitLab. |
+| `gitlab_list_pipelines` | List pipelines from GitLab. |
+| `gitlab_list_projects` | List projects from GitLab. |
+| `gitlab_list_releases` | List releases from GitLab. |
+| `gitlab_retry_job` | Retry a GitLab CI job. |
+| `gitlab_update_file` | Update a GitLab repository file. |
+| `gitlab_update_group` | Update a group in GitLab |
+| `gitlab_update_issue` | Update an issue in GitLab. |
+| `gitlab_update_merge_request` | Update a merge request in GitLab. |
+| `gitlab_update_project` | Update a project in GitLab. |
+| `gitlab_update_release` | Update a release in GitLab. |
+
+## Google Analytics
+
+Provider ID: `google-analytics` · 11 tools
+
+| Tool | Description |
+| - | - |
+| `google_analytics_archive_conversion_event` | Archive a GA4 conversion event. |
+| `google_analytics_batch_run_reports` | Run multiple GA4 reports in one request. |
+| `google_analytics_create_conversion_event` | Create a conversion event for a GA4 property. |
+| `google_analytics_create_data_stream` | Create a data stream for a GA4 property. |
+| `google_analytics_create_property` | Create a GA4 property under an account. |
+| `google_analytics_get_metadata` | Retrieve GA4 dimensions and metrics metadata. |
+| `google_analytics_run_pivot_report` | Run a GA4 pivot report. |
+| `google_analytics_run_realtime_report` | Run a realtime GA4 report. |
+| `google_analytics_run_report` | Run a GA4 report for a property |
+| `google_analytics_update_data_stream` | Update a GA4 data stream. |
+| `google_analytics_update_property` | Update a GA4 property. |
 
 ## Google Calendar
 
@@ -1109,6 +1304,66 @@ Connect Resend with an API key that has **Full access** permission. A **Sending 
 | `resend_update_webhook` | Update an existing webhook in Resend. |
 | `resend_verify_domain` | Verify domain in Resend. |
 | `resend_verify_domain_claim` | Verify a domain claim in Resend. |
+
+## SendGrid
+
+Provider ID: `sendgrid` · 53 tools
+
+| Tool | Description |
+| - | - |
+| `sendgrid_activate_template_version` | Mark a template version as the active one used when sending. |
+| `sendgrid_add_contacts_to_list` | Add existing contacts to a list. |
+| `sendgrid_add_global_suppressions` | Add email addresses to the global suppression (unsubscribe) list |
+| `sendgrid_add_group_suppressions` | Unsubscribe email addresses from a specific group. |
+| `sendgrid_create_custom_field` | Create a custom contact field definition. |
+| `sendgrid_create_dynamic_template` | Create a dynamic template. |
+| `sendgrid_create_list` | Create a contact list. |
+| `sendgrid_create_segment` | Create a segment from a SQL query over contacts. |
+| `sendgrid_create_sender_identity` | Create a sender identity (triggers a verification email). |
+| `sendgrid_create_suppression_group` | Create an unsubscribe group. |
+| `sendgrid_create_template_version` | Create a new version of a dynamic template. |
+| `sendgrid_delete_blocks` | Clear block suppressions for one or more addresses, or all of them. |
+| `sendgrid_delete_bounces` | Clear bounce suppressions for one or more addresses, or all of them. |
+| `sendgrid_delete_contacts` | Delete contacts by id. |
+| `sendgrid_delete_custom_field` | Delete a custom contact field definition. |
+| `sendgrid_delete_dynamic_template` | Delete a dynamic template and all of its versions. |
+| `sendgrid_delete_global_suppression` | Remove a single email address from the global suppression list. |
+| `sendgrid_delete_group_suppression` | Remove a single email address's unsubscribe from a specific group. |
+| `sendgrid_delete_invalid_emails` | Clear invalid-email suppressions for one or more addresses, or all of them. |
+| `sendgrid_delete_list` | Delete a contact list. |
+| `sendgrid_delete_segment` | Delete a segment. |
+| `sendgrid_delete_sender_identity` | Delete a sender identity. |
+| `sendgrid_delete_spam_reports` | Clear spam-report suppressions for one or more addresses, or all of them. |
+| `sendgrid_delete_suppression_group` | Delete an unsubscribe group. |
+| `sendgrid_delete_template_version` | Delete a template version. |
+| `sendgrid_get_contacts_count` | Get total and billable contact counts. |
+| `sendgrid_get_dynamic_template` | Get a single dynamic template and all of its versions. |
+| `sendgrid_get_list` | Get a single contact list by id. |
+| `sendgrid_get_segment` | Get a single segment by id, including a contact sample. |
+| `sendgrid_get_stats` | Get email statistics. |
+| `sendgrid_list_blocks` | List blocked email addresses. |
+| `sendgrid_list_bounces` | List bounced email addresses. |
+| `sendgrid_list_contacts` | List marketing contacts (small, capped result set). |
+| `sendgrid_list_custom_fields` | List custom contact field definitions. |
+| `sendgrid_list_dynamic_templates` | List dynamic templates. |
+| `sendgrid_list_global_suppressions` | List globally unsubscribed email addresses. |
+| `sendgrid_list_group_suppressions` | List the email addresses unsubscribed from a specific group. |
+| `sendgrid_list_invalid_emails` | List invalid email addresses. |
+| `sendgrid_list_lists` | List contact lists. |
+| `sendgrid_list_segments` | List segments (Segmentation v2). |
+| `sendgrid_list_sender_identities` | List verified sender identities. |
+| `sendgrid_list_spam_reports` | List email addresses that reported spam. |
+| `sendgrid_list_suppression_groups` | List unsubscribe groups. |
+| `sendgrid_remove_contacts_from_list` | Remove contacts from a list. |
+| `sendgrid_resend_sender_verification` | Resend the verification email for a sender identity. |
+| `sendgrid_search_contacts` | Search marketing contacts with a SQL-like query. |
+| `sendgrid_send_mail` | Send an email. |
+| `sendgrid_update_dynamic_template` | Rename a dynamic template. |
+| `sendgrid_update_segment` | Update a segment's name or query. |
+| `sendgrid_update_sender_identity` | Update a sender identity's details. |
+| `sendgrid_update_suppression_group` | Update an unsubscribe group's name or description. |
+| `sendgrid_update_template_version` | Update a template version's content. |
+| `sendgrid_upsert_contacts` | Create or update marketing contacts, optionally adding them to lists. |
 
 ## SharePoint Online
 

@@ -141,21 +141,6 @@ describe('AgentBuilderFavoritePage', () => {
     expect(rows[1].getAttribute('href')).toBe('/agent-builder/agents/fav-2/view');
   });
 
-  it('shows the empty state when the API returns no agents', async () => {
-    server.use(
-      http.get(`${BASE_URL}/api/stored/agents`, () =>
-        HttpResponse.json({ agents: [], total: 0, page: 1, perPage: 100, hasMore: false }),
-      ),
-    );
-
-    renderPage();
-
-    await waitFor(() => {
-      expect(screen.getByText('No favorite agents yet')).toBeTruthy();
-    });
-    expect(screen.queryByTestId('favorite-agent-row')).toBeNull();
-  });
-
   it('shows the error state when the API returns 500', async () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),

@@ -126,7 +126,8 @@ A workflow run's `status` indicates its current execution state. The possible va
   {
     name: 'paused',
     type: 'string',
-    description: 'Workflow execution stopped after a single step because the run uses per-step execution',
+    description:
+      'Workflow execution stopped after a single step because the run uses per-step execution. Continue it with `run.timeTravel()`, not `run.resume()`. See [Run one step at a time](./run-methods/start#run-one-step-at-a-time)',
   },
   {
     name: 'canceled',
@@ -138,7 +139,7 @@ A workflow run's `status` indicates its current execution state. The possible va
     name: 'bailed',
     type: 'string',
     description:
-      'A step called bail() to end the workflow early. The run itself completes with a success status and the bail payload as its result',
+      'Internal status for a step that called bail() to end the workflow early. Runs never report it: a bailed run completes with status `success` and the bail payload as its result, and the bailing step is recorded as `success` too. With the evented engine and `perStep: true`, the run reports `paused` with no top-level result instead, and the bail payload stays in the step output',
   },
   {
     name: 'skipped',

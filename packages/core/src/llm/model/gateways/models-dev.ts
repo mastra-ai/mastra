@@ -7,7 +7,8 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createGroq } from '@ai-sdk/groq-v7';
 import { createMistral } from '@ai-sdk/mistral-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAI as createOpenAIV6 } from '@ai-sdk/openai-v6';
+import { createOpenAI as createOpenAIV7 } from '@ai-sdk/openai-v7';
 import { createPerplexity } from '@ai-sdk/perplexity-v6';
 import { createTogetherAI } from '@ai-sdk/togetherai-v7';
 import { createXai } from '@ai-sdk/xai-v7';
@@ -26,6 +27,7 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
+import { interpolateUrlTemplate } from './url-template.js';
 
 interface ModelsDevModelInfo {
   id: string;
@@ -96,19 +98,6 @@ function selectApiKeyEnvVar({ envVars, providerId }: { envVars?: string[]; provi
   }
 
   return envVars[0] || fallbackEnvVar;
-}
-
-function interpolateUrlTemplate(url: string, envVars?: typeof process.env): string {
-  return url.replace(/\$\{([^}]+)\}/g, (_match, envVarName: string) => {
-    const key = envVarName.trim();
-    const value = envVars?.[key] ?? process.env[key];
-
-    if (value === undefined || value === null) {
-      throw new Error(`Missing environment variable ${envVarName} required to build provider URL`);
-    }
-
-    return value;
-  });
 }
 
 function resolveApiKeyFromEnv(apiKeyEnvVar: ProviderConfig['apiKeyEnvVar']): string | undefined {
@@ -404,12 +393,12 @@ export class ModelsDevGateway extends MastraModelGateway {
     // default is chat-completions). Honor `shape` for any provider.
     const override = this.providerConfigs[providerId]?.modelOverrides?.[modelId];
     if (override?.shape === 'responses') {
-      return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
+      return createOpenAIV7({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
     }
 
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
+        return createOpenAIV7({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
         return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
@@ -467,7 +456,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/openai') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
+          return createOpenAIV6({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/google') {

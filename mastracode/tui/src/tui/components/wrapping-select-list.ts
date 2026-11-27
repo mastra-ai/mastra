@@ -8,6 +8,9 @@
 import { getKeybindings, wrapTextWithAnsi } from '@earendil-works/pi-tui';
 import type { Component, SelectItem, SelectListTheme } from '@earendil-works/pi-tui';
 
+import type { MouseAware, MousePoint, MouseTarget } from '../mouse/hit-test.js';
+import { ListWindow } from './list-window.js';
+
 const SELECTED_PREFIX = '→ ';
 const UNSELECTED_PREFIX = '  ';
 const CONTINUATION_PREFIX = '↳ ';
@@ -24,10 +27,11 @@ export interface CardListStyle {
   selectedLabel: (label: string) => string;
 }
 
-export class WrappingSelectList implements Component {
+export class WrappingSelectList implements Component, MouseAware {
   private items: SelectItem[];
   private filteredItems: SelectItem[];
   private selectedIndex = 0;
+  private readonly window = new ListWindow();
   private maxVisible: number;
   private theme: SelectListTheme;
   /** When true, items are toggled (space) and confirmed together (enter) instead of selected one at a time. */
@@ -42,7 +46,7 @@ export class WrappingSelectList implements Component {
   onConfirmMulti?: (items: SelectItem[]) => void;
 
   /**
-   * `card` style (inline prompts): an accent ❯ cursor and a bold label instead of a highlighted row,
+   * `card` style (inline prompts): an accent cursor and a bold label instead of a highlighted row,
    * and ●/○ instead of [x]/[ ] in multi-select mode.
    */
   private cardStyle: CardListStyle | undefined;
@@ -85,11 +89,7 @@ export class WrappingSelectList implements Component {
       return lines;
     }
 
-    const startIndex = Math.max(
-      0,
-      Math.min(this.selectedIndex - Math.floor(this.maxVisible / 2), this.filteredItems.length - this.maxVisible),
-    );
-    const endIndex = Math.min(startIndex + this.maxVisible, this.filteredItems.length);
+    const { startIndex, endIndex } = this.visibleRange();
 
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i];
@@ -107,6 +107,46 @@ export class WrappingSelectList implements Component {
     return lines;
   }
 
+  menuWindow(): ListWindow {
+    return this.window;
+  }
+
+  /** Maps a row to the (possibly multi-row) item drawn there. Clicks select, or toggle in multi-select mode. */
+  mouseTarget(point: MousePoint): MouseTarget | undefined {
+    const { startIndex, endIndex } = this.visibleRange();
+    let top = 0;
+    for (let i = startIndex; i < endIndex; i++) {
+      const item = this.filteredItems[i];
+      if (!item) continue;
+      const height = this.renderItem(item, i === this.selectedIndex, point.width).length;
+      if (point.row < top + height) {
+        return {
+          top,
+          height,
+          activate: () => {
+            if (this.selectedIndex !== i) {
+              this.selectedIndex = i;
+              this.notifySelectionChange();
+            }
+            if (this.multiSelect) this.toggleChecked(item);
+            else this.onSelect?.(item);
+          },
+        };
+      }
+      top += height;
+    }
+    return undefined;
+  }
+
+  private visibleRange(): { startIndex: number; endIndex: number } {
+    return this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
+  }
+
+  private toggleChecked(item: SelectItem): void {
+    if (this.checkedValues.has(item.value)) this.checkedValues.delete(item.value);
+    else this.checkedValues.add(item.value);
+  }
+
   handleInput(keyData: string): void {
     const kb = getKeybindings();
 
@@ -118,13 +158,7 @@ export class WrappingSelectList implements Component {
       this.notifySelectionChange();
     } else if (this.multiSelect && keyData === ' ') {
       const current = this.filteredItems[this.selectedIndex];
-      if (current) {
-        if (this.checkedValues.has(current.value)) {
-          this.checkedValues.delete(current.value);
-        } else {
-          this.checkedValues.add(current.value);
-        }
-      }
+      if (current) this.toggleChecked(current);
     } else if (kb.matches(keyData, 'tui.select.confirm')) {
       if (this.multiSelect) {
         const checked = this.items.filter(item => this.checkedValues.has(item.value));

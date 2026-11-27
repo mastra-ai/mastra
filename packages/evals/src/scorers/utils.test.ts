@@ -1388,11 +1388,27 @@ describe('Scorer Utils', () => {
 
         const result = compareTrajectories(actual, expected);
 
-        // search found at index 1, then summarize searched from index 2 -> not found after
-        // summarize exists at index 0 but is before lastMatchedIndex+1=2, so out of order
+        // only one of the two can be matched in order; the earlier expected step wins the tie
         expect(result.score).toBe(0.5);
         expect(result.matchedSteps).toBe(1);
         expect(result.outOfOrderSteps).toContain('summarize');
+      });
+
+      it('should score one misplaced step the same wherever it moved', () => {
+        const names = (list: string[]) => ({ steps: list.map(name => step(name)) });
+        const expected = names(['verify', 'find', 'check', 'refund', 'notify']);
+
+        const lastStepFirst = compareTrajectories(names(['notify', 'verify', 'find', 'check', 'refund']), expected);
+        const firstStepLast = compareTrajectories(names(['find', 'check', 'refund', 'notify', 'verify']), expected);
+
+        // four of the five expected steps appear in order in both runs
+        expect(lastStepFirst.score).toBe(0.8);
+        expect(lastStepFirst.missingSteps).toEqual(['notify']);
+        expect(lastStepFirst.outOfOrderSteps).toEqual(['notify']);
+        expect(firstStepLast.score).toBe(0.8);
+        expect(firstStepLast.matchedSteps).toBe(4);
+        expect(firstStepLast.missingSteps).toEqual(['verify']);
+        expect(firstStepLast.outOfOrderSteps).toEqual(['verify']);
       });
 
       it('should return 0 when actual is empty but expected is not', () => {
@@ -1535,6 +1551,38 @@ describe('Scorer Utils', () => {
 
         expect(result.score).toBe(1);
         expect(result.matchedSteps).toBe(1);
+      });
+
+      it('should match toolArgs whose keys are in a different order, at any depth', () => {
+        const a = {
+          steps: [
+            { stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hi', filter: { lang: 'en', year: 1 } } },
+          ],
+        };
+        const b = {
+          steps: [
+            { stepType: 'tool_call' as const, name: 'search', toolArgs: { filter: { year: 1, lang: 'en' }, q: 'hi' } },
+          ],
+        };
+
+        expect(compareTrajectories(a, b).score).toBe(1);
+      });
+
+      it('should match an Error in toolResult whose props are in a different order, and keep boxed numbers apart', () => {
+        const step = (toolResult: Record<string, unknown>) => ({
+          stepType: 'tool_call' as const,
+          name: 'fetch',
+          toolResult,
+        });
+        const error = Object.assign(new Error('boom'), { status: 500, code: 'E1' });
+
+        expect(
+          compareTrajectories({ steps: [step({ error })] }, { steps: [step({ error: { code: 'E1', status: 500 } })] })
+            .score,
+        ).toBe(1);
+        expect(
+          compareTrajectories({ steps: [step({ n: new Number(1) })] }, { steps: [step({ n: new Number(2) })] }).score,
+        ).toBe(0);
       });
 
       it('should not match steps with different toolArgs', () => {
@@ -2044,6 +2092,17 @@ describe('Scorer Utils', () => {
       expect(result.redundantCalls).toHaveLength(1);
       expect(result.redundantCalls[0]!.name).toBe('search');
       expect(result.score).toBeLessThan(1);
+    });
+
+    it('should flag a repeated tool call whose args keys are in a different order', () => {
+      const trajectory: Trajectory = {
+        steps: [
+          { stepType: 'tool_call' as const, name: 'weather', toolArgs: { city: 'NYC', unit: 'C' } },
+          { stepType: 'tool_call' as const, name: 'weather', toolArgs: { unit: 'C', city: 'NYC' } },
+        ],
+      };
+      const result = checkTrajectoryEfficiency(trajectory, { noRedundantCalls: true });
+      expect(result.redundantCalls).toEqual([{ name: 'weather', index: 1 }]);
     });
 
     it('should not flag different consecutive tool calls as redundant', () => {

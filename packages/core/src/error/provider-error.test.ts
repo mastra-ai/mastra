@@ -136,6 +136,22 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
   ],
   ['402', apiError(402, 'Payment Required'), 'quota'],
   [
+    'OpenAI no credits worded without a code',
+    apiError(
+      429,
+      'You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.',
+    ),
+    'quota',
+  ],
+  [
+    'Gemini free-tier quota that says when to retry',
+    apiError(
+      429,
+      'You exceeded your current quota, please check your plan and billing details.\nQuota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20\nPlease retry in 45.06s.',
+    ),
+    'rate_limited',
+  ],
+  [
     'message-only insufficient balance',
     { name: 'AI_APICallError', message: 'Insufficient balance to complete this request' },
     'quota',

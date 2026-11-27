@@ -30,14 +30,22 @@ export function resolveExperimentalAgent(
   return parseExperimentalAgentSetting(settings.experimentalAgent, settings._experimentalAgentSettingsPath);
 }
 
+/**
+ * Reads `MASTRACODE_AGENT_STREAMS`. `off` stops the plain coding agent publishing
+ * its runs on a resumable stream; `on` or unset keeps the core default. Any other
+ * value, including an empty string, throws so a typo can't silently leave streams on.
+ */
+export function resolveAgentStreamsOff(env: { MASTRACODE_AGENT_STREAMS?: string } = process.env): boolean {
+  const value = env.MASTRACODE_AGENT_STREAMS;
+  if (value === undefined || value === 'on') return false;
+  if (value === 'off') return true;
+  throw new Error(`Invalid MASTRACODE_AGENT_STREAMS value ${JSON.stringify(value)}. Expected "on", "off", or unset.`);
+}
+
 export function wrapExperimentalAgent(agent: Agent, selection: ExperimentalAgent | null): Agent {
   if (selection === 'durable') return createDurableAgent({ agent }) as unknown as Agent;
   if (selection === 'evented') return createEventedAgent({ agent }) as unknown as Agent;
   return agent;
-}
-
-interface WorkflowBackedAgent extends Agent {
-  getWorkflow(): { engineType?: string };
 }
 
 export function validateExperimentalAgent(
@@ -45,12 +53,9 @@ export function validateExperimentalAgent(
   mastra: Mastra | undefined,
   report: (message: string) => void = console.info,
 ): void {
-  const selection: ExperimentalAgent | null = isEventedAgent(agent)
-    ? 'evented'
-    : isDurableAgent(agent)
-      ? 'durable'
-      : null;
-  if (!selection) return;
+  const evented = isEventedAgent(agent);
+  if (!evented && !isDurableAgent(agent)) return;
+  const selection: ExperimentalAgent = evented ? 'evented' : 'durable';
 
   if (selection === 'evented' && (!mastra || agent.getMastraInstance() !== mastra)) {
     throw new Error(
@@ -68,7 +73,7 @@ export function validateExperimentalAgent(
     );
   }
 
-  const engineType = (agent as WorkflowBackedAgent).getWorkflow().engineType;
+  const engineType = agent.getWorkflow().engineType;
   const expectedEngine = selection === 'evented' ? 'evented' : 'default';
   if (engineType !== expectedEngine) {
     throw new Error(

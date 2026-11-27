@@ -15,7 +15,6 @@ const PRIMARY_PROJECT = 'rhys-group1/factory-validation-rhys-20260916/factory-gi
 const primaryRepository = listedRepository('repo-1', PRIMARY_PROJECT, {
   integrationId: 'gitlab',
   branch: 'main',
-  sandboxWorkdir: '~/factory-gitlab-primary',
 });
 
 function repositoryEnvironment() {
@@ -25,7 +24,7 @@ function repositoryEnvironment() {
 }
 
 function renderRepositoriesSettings() {
-  renderWithProviders(
+  return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/repositories`]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/repositories" element={<RepositoriesSection />} />
@@ -78,8 +77,6 @@ describe('Repositories settings', () => {
               installationStorageId: 'inst-1',
               accountLabel: 'gitlab.com',
               defaultBranch: 'main',
-              sandboxProvider: 'custom',
-              sandboxWorkdir: '~/factory-gitlab-control',
             },
           ],
         });
@@ -111,10 +108,6 @@ describe('Repositories settings', () => {
     expect(screen.getByRole('switch', { name: `Clone ${PRIMARY_PROJECT} into every session` })).toBeChecked();
     await user.keyboard(' ');
     expect(await screen.findByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Manage connections' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/settings/connections`,
-    );
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(addRepository).toHaveFocus());
     await user.click(addRepository);
@@ -132,7 +125,6 @@ describe('Repositories settings', () => {
     const repository = {
       id: 'repo-2',
       branch: 'main',
-      sandboxWorkdir: '~/widget',
       repository: { externalId: '42', slug: 'acme/widget', defaultBranch: 'main' },
     };
     server.use(
@@ -151,8 +143,6 @@ describe('Repositories settings', () => {
               private: true,
               installationId: 1,
               installationStorageId: 'inst-1',
-              sandboxProvider: 'custom',
-              sandboxWorkdir: '~/widget',
             },
           ],
         }),
@@ -168,7 +158,6 @@ describe('Repositories settings', () => {
                     listedRepository('repo-2', 'acme/widget', {
                       externalId: '42',
                       branch: 'main',
-                      sandboxWorkdir: '~/widget',
                     }),
                   ]
                 : [],
@@ -221,6 +210,49 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add repository' })).not.toBeInTheDocument());
     expect(await screen.findByRole('button', { name: 'Remove acme/widget' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
+  });
+
+  it('asks for a search instead of claiming nothing is left when the recent repositories are all added', async () => {
+    const user = userEvent.setup();
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      fullName: `acme/recent-${index}`,
+      name: `recent-${index}`,
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: true,
+      installationId: 1,
+      installationStorageId: 'inst-1',
+      sandboxProvider: 'custom',
+      sandboxWorkdir: `~/recent-${index}`,
+    }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: recent })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
+              repositories: [
+                primaryRepository,
+                ...recent.map(repo => listedRepository(`linked-${repo.id}`, repo.fullName)),
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+
+    expect(await screen.findByText(/most recent repositories are already added/)).toBeInTheDocument();
+    expect(screen.queryByText(/No more repositories available/)).not.toBeInTheDocument();
   });
 
   it('does not mistake an unsettled GitHub search or a failed request for an empty result', async () => {
@@ -374,7 +406,7 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Show settings for acme/other' }));
     await user.click(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
-    expect(await screen.findByText('Removing…')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: `Remove ${PRIMARY_PROJECT}`, busy: true })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Clone acme/other into every session' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled();
     releaseRemoval();
@@ -479,7 +511,7 @@ describe('Repositories settings', () => {
             {
               id: FACTORY_ID,
               name: 'personal-factory',
-              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main', sandboxWorkdir: '~/agent' })],
+              repositories: [listedRepository('repo-1', 'octo/agent', { branch: 'main' })],
             },
           ],
         }),
@@ -514,8 +546,6 @@ describe('Repositories settings', () => {
               private: false,
               installationId: 7,
               installationStorageId: 'inst-7',
-              sandboxProvider: 'none',
-              sandboxWorkdir: '~/hello',
             },
           ],
         });
@@ -558,5 +588,64 @@ describe('Repositories settings', () => {
     expect(
       await screen.findByText('GitHub is disabled on the server. Missing env vars: GITHUB_APP_ID.'),
     ).toBeInTheDocument();
+  });
+
+  it('shows GitHub CLI tokens only once GitHub matters, and keeps a failed token draft for retry', async () => {
+    let configured = false;
+    let rejectSave = true;
+    const saved: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () => HttpResponse.json({ configured, reviewerConfigured: false })),
+      http.post(`${TEST_BASE_URL}/web/github/pat`, async ({ request }) => {
+        saved.push(await request.json());
+        if (rejectSave) return HttpResponse.json({ error: 'Token rejected' }, { status: 400 });
+        configured = true;
+        return HttpResponse.json({ ok: true });
+      }),
+      http.delete(`${TEST_BASE_URL}/web/github/pat`, ({ request }) => {
+        expect(new URL(request.url).searchParams.get('kind')).toBe('default');
+        configured = false;
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    const { unmount } = renderRepositoriesSettings();
+    expect(await screen.findByText(PRIMARY_PROJECT)).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'GitHub CLI tokens' })).not.toBeInTheDocument();
+    unmount();
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+          reason: 'ready',
+        }),
+      ),
+    );
+    renderRepositoriesSettings();
+    const tokens = await screen.findByRole('region', { name: 'GitHub CLI tokens' });
+    const workerRow = (await within(tokens).findByText('Worker token')).closest<HTMLElement>(
+      '[data-slot="settings-row"]',
+    );
+    if (!workerRow) throw new Error('Worker token row is missing');
+    expect(within(workerRow).getByText('Not set')).toBeInTheDocument();
+    await userEvent.click(within(workerRow).getByRole('button', { name: 'Add token' }));
+    const input = screen.getByLabelText('Worker token GitHub Personal Access Token');
+    await userEvent.type(input, 'worker-secret');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Token rejected')).toBeInTheDocument();
+    expect(input).toHaveValue('worker-secret');
+    rejectSave = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    const updateToken = await screen.findByRole('button', { name: 'Update token' });
+    expect(within(tokens).getByText('Configured')).toBeInTheDocument();
+    await waitFor(() => expect(updateToken).toHaveFocus());
+    expect(saved).toEqual([
+      { token: 'worker-secret', kind: 'default' },
+      { token: 'worker-secret', kind: 'default' },
+    ]);
+    await userEvent.click(within(tokens).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(within(tokens).getAllByRole('button', { name: 'Add token' })).toHaveLength(2));
   });
 });

@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
 import { MastraError } from '../../../error/index.js';
+import { prepareToolsForMastraGateway } from '../mastra-gateway-provider-tools.js';
 import { PROVIDER_REGISTRY } from '../provider-registry.js';
 import { MastraModelGateway } from './base.js';
 import type { ProviderConfig, GatewayLanguageModel } from './base.js';
@@ -28,6 +29,38 @@ function withGatewayAuthHeader(apiKey: string, headers?: Record<string, string>)
   return result;
 }
 
+/**
+ * Whether the Gateway serves Observational Memory for a given API key.
+ *
+ * Gateway keys come in two shapes with different memory behaviour:
+ * - project keys (`msk_…`) are served with server-side Observational Memory;
+ * - organization keys (`msk-gateway-…`, `mskv2_…`) are served by a gateway without
+ *   the memory API, so memory has to stay local.
+ *
+ * Anything unrecognised (including a missing key) reports `false`: memory is never
+ * assumed to be handled remotely unless the key says so.
+ */
+export function gatewayServesObservationalMemory(apiKey: string | undefined): boolean {
+  if (typeof apiKey !== 'string' || apiKey.length === 0) return false;
+  if (apiKey.startsWith('msk-gateway-') || apiKey.startsWith('mskv2_')) return false;
+  return apiKey.startsWith('msk_');
+}
+
+/**
+ * Every request to the gateway's chat endpoint goes through a model built here, whichever gateway
+ * or caller asked for it, so this is where its provider tools are made runnable.
+ */
+function withGatewayProviderTools(
+  model: ReturnType<ReturnType<typeof createOpenRouter>['chat']>,
+  routerId: string,
+): GatewayLanguageModel {
+  const doGenerate = model.doGenerate.bind(model);
+  const doStream = model.doStream.bind(model);
+  model.doGenerate = async options => doGenerate(prepareToolsForMastraGateway(options, routerId));
+  model.doStream = async options => doStream(prepareToolsForMastraGateway(options, routerId));
+  return model as unknown as GatewayLanguageModel;
+}
+
 export class MastraGateway extends MastraModelGateway {
   readonly id = 'mastra';
   readonly name = 'Gateway';
@@ -38,16 +71,58 @@ export class MastraGateway extends MastraModelGateway {
 
   private getBaseUrl(): string {
     const raw = this.config?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-    return raw.replace(/\/+$/, '').replace(/\/v1$/, '');
+    // Trim trailing slashes with a loop; the equivalent /\/+$/ regex is quadratic on long runs of '/'.
+    let end = raw.length;
+    while (end > 0 && raw[end - 1] === '/') end--;
+    return raw.slice(0, end).replace(/\/v1$/, '');
   }
 
   override shouldEnable(): boolean {
     return !!(this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY']);
   }
 
+  /**
+   * Gateway v2 deployments are signaled by MASTRA_GATEWAY_VERSION=v2 (set by the platform)
+   * or by a v2 (organization) API key prefix, which predates the env var signal.
+   * Keep in sync with isGatewayV2 in @mastra/server's gateway-memory-client.
+   * Public so the server can ask a registered gateway instance for its
+   * effective v2 state (the instance may carry a v2 key via config.apiKey
+   * that env-only checks cannot see).
+   */
+  isV2(): boolean {
+    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
+    const key = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    const isV2 = this.isV2();
     const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
-    const models = openrouterConfig?.models ?? [];
+    let models = openrouterConfig?.models ?? [];
+    if (isV2) {
+      const apiKey = await this.getApiKey();
+      const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
+        headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`Gateway model catalog unavailable (${response.status})`);
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || !('data' in body) || !Array.isArray(body.data)) {
+        throw new Error('Gateway model catalog has an invalid response');
+      }
+      // The Mastra gateway model uses the OpenAI-compatible chat transport.
+      // Models offered only through another endpoint cannot be selected here.
+      models = body.data
+        .filter(
+          (item): item is { id: string; endpoints: string[] } =>
+            !!item &&
+            typeof item === 'object' &&
+            typeof item.id === 'string' &&
+            Array.isArray(item.endpoints) &&
+            item.endpoints.includes('chat'),
+        )
+        .map(item => item.id);
+    }
 
     const providers = {
       mastra: {
@@ -56,7 +131,8 @@ export class MastraGateway extends MastraModelGateway {
         name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
-        modelReleaseDates: openrouterConfig?.modelReleaseDates,
+        // Static release dates describe the bundled registry, not the live v2 catalog.
+        modelReleaseDates: isV2 ? undefined : openrouterConfig?.modelReleaseDates,
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };
@@ -107,22 +183,28 @@ export class MastraGateway extends MastraModelGateway {
 
     if (this.config?.customFetch) {
       // Non-Anthropic OAuth path: gateway key in GATEWAY_AUTH_HEADER, customFetch owns Authorization
-      return createOpenRouter({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL,
-        headers: withGatewayAuthHeader(apiKey, headers),
-        fetch: this.config.customFetch,
-      }).chat(fullModelId) as unknown as GatewayLanguageModel;
+      return withGatewayProviderTools(
+        createOpenRouter({
+          apiKey: 'oauth-gateway-placeholder',
+          baseURL,
+          headers: withGatewayAuthHeader(apiKey, headers),
+          fetch: this.config.customFetch,
+        }).chat(fullModelId),
+        `mastra/${fullModelId}`,
+      );
     }
 
     // API key path: gateway key goes via Authorization (standard flow)
-    return createOpenRouter({
-      apiKey,
-      baseURL,
-      headers: {
-        'User-Agent': MASTRA_USER_AGENT,
-        ...headers,
-      },
-    }).chat(fullModelId) as unknown as GatewayLanguageModel;
+    return withGatewayProviderTools(
+      createOpenRouter({
+        apiKey,
+        baseURL,
+        headers: {
+          'User-Agent': MASTRA_USER_AGENT,
+          ...headers,
+        },
+      }).chat(fullModelId),
+      `mastra/${fullModelId}`,
+    );
   }
 }

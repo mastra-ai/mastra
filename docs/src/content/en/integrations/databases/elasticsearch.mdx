@@ -64,7 +64,7 @@ const storage = new ElasticSearchStore({ id: 'elasticsearch-storage', client })
 const vector = new ElasticSearchVector({ id: 'elasticsearch-vector', client })
 ```
 
-When you provide your own client, `storage.close()` does not close it — you remain responsible for its lifecycle.
+When you provide your own client, `storage.close()` doesn't close it, and you remain responsible for its lifecycle.
 
 ## Parameters
 
@@ -107,11 +107,11 @@ When you provide your own client, `storage.close()` does not close it — you re
 You must provide either `url` or `client`. These options are mutually exclusive.
 :::
 
-## Additional Notes
+## Additional notes
 
-### Index Structure
+### Index structure
 
-Each Mastra storage table maps to one Elasticsearch index of the same name (for example `mastra_threads`, `mastra_messages`, `mastra_workflow_snapshot`, `mastra_scorers`). Records are stored as opaque JSON documents with a keyword `key` field, so no index mappings need to be managed manually — indexes are created on first use.
+Each Mastra storage table maps to one Elasticsearch index of the same name (for example `mastra_threads`, `mastra_messages`, `mastra_workflow_snapshot`, `mastra_scorers`). Records are stored as opaque JSON documents with a keyword `key` field, so no index mappings need to be managed manually. Indexes are created on first use.
 
 ### Consistency
 
@@ -125,9 +125,9 @@ When shutting down your application, close the connection:
 await storage.close()
 ```
 
-This only closes clients created by `ElasticSearchStore` from a `url`; user-provided clients are left open.
+This only closes clients created by `ElasticSearchStore` from a `url`. User-provided clients are left open.
 
-## Usage Example
+## Usage example
 
 ### Adding memory to an agent
 

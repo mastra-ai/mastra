@@ -17,6 +17,7 @@ import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { runCatalogThinkingLevel } from '../thinking-catalog.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+import type { CodexServiceTier } from './model-ids.js';
 export { supportsMaxReasoningEffort } from '../thinking.js';
 
 // Codex API endpoint (not standard OpenAI API)
@@ -75,7 +76,10 @@ export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | 
 /**
  * Create Codex middleware with the given reasoning effort level.
  */
-export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
+export function createCodexMiddleware(
+  reasoningEffort?: string,
+  oauthOptions?: { serviceTier?: CodexServiceTier },
+): LanguageModelMiddleware {
   return {
     specificationVersion: 'v4',
     transformParams: async ({ params }) => {
@@ -84,6 +88,9 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
         delete params.topP;
       }
 
+      const fast =
+        oauthOptions &&
+        (oauthOptions.serviceTier === 'fast' || params.providerOptions?.mastracode?.codexServiceTier === 'fast');
       // Codex API requires specific settings via providerOptions
       // Use type assertion to satisfy JSONValue constraints
       params.providerOptions = {
@@ -97,6 +104,7 @@ export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMi
           // skips the reasoning/action phase and goes straight to final_answer,
           // resulting in narration instead of tool calls.
           ...(reasoningEffort ? { reasoningEffort } : {}),
+          ...(fast ? { serviceTier: 'priority' } : {}),
         },
       } as typeof params.providerOptions;
 
@@ -526,22 +534,28 @@ async function aggregateCodexStream(response: Response): Promise<string> {
  */
 export function openaiCodexProvider(
   modelId: string = 'codex-mini-latest',
-  options?: { thinkingLevel?: ThinkingLevel; headers?: Record<string, string>; authStorage?: CredentialStore },
+  options?: {
+    thinkingLevel?: ThinkingLevel;
+    headers?: Record<string, string>;
+    authStorage?: CredentialStore;
+    serviceTier?: CodexServiceTier;
+  },
 ): MastraModelConfig {
   const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
   const effectiveLevel = getEffectiveThinkingLevel(modelId, requestedLevel);
   const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
   const headers = options?.headers;
   const promptCacheKeyMiddleware = createPromptCacheKeyMiddleware(getRequestThreadId(headers));
+  const useTestApiKey = process.env.NODE_ENV === 'test' || Boolean(process.env.VITEST);
   const middleware = [
-    createCodexMiddleware(reasoningEffort),
+    createCodexMiddleware(reasoningEffort, { serviceTier: options?.serviceTier }),
     ...(promptCacheKeyMiddleware ? [promptCacheKeyMiddleware] : []),
   ];
 
   const baseURL = process.env.OPENAI_BASE_URL;
 
   // Test environment: use API key
-  if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
+  if (useTestApiKey) {
     const openai = createOpenAI({
       apiKey: 'test-api-key',
       baseURL,

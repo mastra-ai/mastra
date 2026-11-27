@@ -1,4 +1,3 @@
-import { createClient } from '@libsql/client';
 import type { Client as TursoClient, InValue } from '@libsql/client';
 
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -17,6 +16,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { createClient } from '../shared/create-client';
 import { gateIfLocalFile } from '../shared/file-transaction-gate';
 import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
@@ -898,8 +898,9 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     await this.turso.execute({
-      sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
+      sql: `DELETE FROM ${parsedIndexName} WHERE rowid IS NOT NULL`,
       args: [],
     });
   }

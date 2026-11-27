@@ -1,0 +1,101 @@
+---
+title: 'Reference: threadLink | Channels'
+description: "The threadLink adapter option appends a link to your app's web UI to the first reply of each new channel thread."
+packages:
+  - '@mastra/core'
+---
+
+# threadLink
+
+The `threadLink` adapter option appends a link to the first reply the agent posts in a new channel thread, so people can open the same conversation in your app's web UI. Follow-up messages in that thread get no link.
+
+The link is posted to the thread only. It's stripped from the saved message. The agent never sees its own links in memory.
+
+## Usage example
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'You help people with their accounts.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        threadLink: ({ threadId }) =>
+          threadId ? `https://app.example.com/threads/${threadId}` : undefined,
+      },
+    },
+  },
+})
+```
+
+Pass an object to change the link text:
+
+```typescript oxfmt:false
+threadLink: {
+  label: 'Open in app ↗',
+  link: ({ threadId }) => `https://app.example.com/threads/${threadId}`,
+},
+```
+
+## Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'threadLink',
+    type: '((target: ChannelThreadLinkTarget) => string | undefined) | { link: (target: ChannelThreadLinkTarget) => string | undefined; label?: string }',
+    description:
+      "Builds the URL for the run's thread. Return `undefined` to post no link. Pass an object to set the link text.",
+    isOptional: true,
+  },
+  {
+    name: 'label',
+    type: 'string',
+    description: 'Link text.',
+    isOptional: true,
+    default: "'Open thread ↗'",
+  },
+]}
+/>
+
+### ChannelThreadLinkTarget
+
+<PropertiesTable
+  content={[
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: "The run's request context. Read your own ids from it, such as a project or tenant.",
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: "The run's memory thread id.",
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: "The run's memory resource id.",
+    isOptional: true,
+  },
+]}
+/>
+
+## Behavior
+
+- The link is added only on the run that created the thread.
+- With `textDisplay: 'show'`, the link ends the first reply. It's posted before the first tool call, or at the end of the step if no tool runs.
+- With [`replyMode`](/docs/channels#reply-mode), the link ends the agent's first `reply_in_thread` post instead.
+- The URL is built once per run. The saved message is cleaned using the exact link that was posted, so builders that return a different URL each call are safe.
+
+## Related
+
+- [Channels](/docs/channels)
+- [SlackProvider](/reference/channels/slack-provider)

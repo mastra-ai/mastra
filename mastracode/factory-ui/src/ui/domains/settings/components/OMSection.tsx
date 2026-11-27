@@ -9,9 +9,9 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -99,6 +99,34 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
   );
 }
 
+function OMSkeleton() {
+  const field = <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />;
+  return (
+    <div role="status" aria-label="Loading observational-memory settings" className="@container flex flex-col gap-3">
+      <ol aria-hidden className="flex flex-col">
+        <OMRow as="li" rail="node" label="Messages" />
+        <OMRow as="li" rail="edge" label="Observe after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Observer" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="edge" label="Reflect after" controlNamesItself>
+          {field}
+        </OMRow>
+        <OMRow as="li" rail="node" label="Reflector" controlNamesItself>
+          {field}
+        </OMRow>
+      </ol>
+      <div aria-hidden>
+        <OMRow rail="none" label="Attachments" controlNamesItself>
+          <Skeleton className="h-control-sm w-36 rounded-full motion-reduce:before:animate-none" />
+        </OMRow>
+      </div>
+    </div>
+  );
+}
+
 export function OMSection({
   sessionId,
   factoryId,
@@ -137,32 +165,7 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (omQuery.isPending) {
-    return (
-      <div role="status" aria-label="Loading observational-memory settings">
-        <div aria-hidden className="@container flex flex-col gap-3">
-          <ol className="flex flex-col">
-            <OMRow as="li" rail="node" label="Messages" />
-            <OMRow as="li" rail="edge" label="Observe after">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="node" label="Observer">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="edge" label="Reflect after">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-            <OMRow as="li" rail="node" label="Reflector">
-              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-            </OMRow>
-          </ol>
-          <OMRow rail="none" label="Attachments">
-            <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
-          </OMRow>
-        </div>
-      </div>
-    );
-  }
+  if (omQuery.isPending) return <OMSkeleton />;
 
   if (omQuery.data === undefined) {
     return (

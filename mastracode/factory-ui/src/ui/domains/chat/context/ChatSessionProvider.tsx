@@ -11,11 +11,12 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 import { isSessionNotFound } from '../../workspaces/services/user-sessions';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { opensWithPrompt } from '../hooks/useHandoffPrompt';
 import { readFailedDraft } from '../services/handoffFiles';
+import { opensWithPrompt } from '../services/promptHandoff';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -25,11 +26,15 @@ import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
-import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
+import { TranscriptLoading } from '../components/TranscriptLoading';
 import { useChatSessionContext } from './useChatSessionContext';
+import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey';
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
   if (session?.capabilities?.switchModel !== false) return undefined;
+  if (isFactoryOwnedSession(session)) {
+    return 'Only an organization admin can change this session’s model or thinking level.';
+  }
   return `Only ${session.owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`;
 }
 
@@ -49,7 +54,7 @@ export function ChatSessionConfigProvider({
   const location = useLocation();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
-  const isUserDraft = userScoped && Boolean(draftSessionId);
+  const isDraft = Boolean(draftSessionId);
   const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
@@ -91,7 +96,7 @@ export function ChatSessionConfigProvider({
   // added router dependency.
   const entryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
   const addressOverride = userScoped ? null : (entryParams.get('sessionId') ?? entryParams.get('resourceId'));
-  const routedSessionId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId);
+  const routedSessionId = draftSessionId ?? (userScoped ? threadId : (storedSession?.sessionId ?? sessionId));
   const chatSessionId = addressOverride ?? routedSessionId ?? factory?.id;
   const resourceId =
     addressOverride ?? (inSession ? (storedSession?.resourceId ?? storedSession?.userId) : factory?.id);
@@ -122,7 +127,7 @@ export function ChatSessionConfigProvider({
   // so a denied/missing session cannot keep the preparing loader up forever.
   // A thread opened with its first prompt is mid-create: it shows that prompt,
   // not the preparing steps, and sends it once the session exists.
-  const openingWithPrompt = userScoped && opensWithPrompt(location.state);
+  const openingWithPrompt = opensWithPrompt(location.state);
   const sandboxPreparing = resolvingSession && !addressOverride && !openingWithPrompt;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
@@ -131,7 +136,7 @@ export function ChatSessionConfigProvider({
     userScoped || !inSession
       ? Boolean(chatSessionId)
       : Boolean(addressOverride) || (Boolean(storedSession) && !resolvingSession);
-  const resourceEnabled = !isUserDraft && resourceAddressable;
+  const resourceEnabled = !isDraft && resourceAddressable;
   const value = {
     sessionId: chatSessionId ?? '',
     resourceId: resourceId ?? '',
@@ -151,7 +156,7 @@ export function ChatSessionConfigProvider({
       : undefined,
     sessionThreadId: storedSession?.sessionId ?? undefined,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
-    draftSessionId: isUserDraft ? draftSessionId : undefined,
+    draftSessionId,
     factorySessionState:
       factory && repository
         ? {
@@ -184,6 +189,7 @@ export function ChatSessionBoundary({
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
   const location = useLocation();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
+  const transcript = useTranscriptKey({ sessionId, threadId });
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -209,27 +215,29 @@ export function ChatSessionBoundary({
   // Above the transcript so the favicon and the stepper read one pending state.
   return (
     <ChatThreadMessagesContext.Provider value={messages}>
-      <ChatTranscriptProvider
-        // No `isPending` segment: remounting on the pending -> ready flip would drop
-        // the live SSE listener. Results merge into the reducer instead.
-        key={`${sessionId}:${threadId ?? 'draft'}`}
-        threadId={threadId}
-        initialMessages={messagesQuery.data}
-        hasMoreHistory={messagesQuery.hasMore}
-        isLoadingMoreHistory={messagesQuery.isLoadingMore}
-        loadMoreHistory={messagesQuery.loadMore}
-      >
-        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
-          <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
-            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-              <ComposerImagesProvider initialImages={failedDraft?.files}>
-                {/* Below the keyed transcript, so each thread starts with no annotations. */}
-                <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
-              </ComposerImagesProvider>
-            </ChatCommandsProvider>
-          </ChatThinkingProvider>
-        </ChatModelsProvider>
-      </ChatTranscriptProvider>
+      <TranscriptContinuationContext.Provider value={transcript.continueInto}>
+        <ChatTranscriptProvider
+          // No `isPending` segment: remounting on the pending -> ready flip would drop
+          // the live SSE listener. Results merge into the reducer instead.
+          key={transcript.key}
+          threadId={threadId}
+          initialMessages={messagesQuery.data}
+          hasMoreHistory={messagesQuery.hasMore}
+          isLoadingMoreHistory={messagesQuery.isLoadingMore}
+          loadMoreHistory={messagesQuery.loadMore}
+        >
+          <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
+            <ChatThinkingProvider>
+              <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+                <ComposerImagesProvider initialImages={failedDraft?.files}>
+                  {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                  <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+                </ComposerImagesProvider>
+              </ChatCommandsProvider>
+            </ChatThinkingProvider>
+          </ChatModelsProvider>
+        </ChatTranscriptProvider>
+      </TranscriptContinuationContext.Provider>
     </ChatThreadMessagesContext.Provider>
   );
 }
@@ -245,12 +253,12 @@ export function ChatMessageBoundary({
   const value = useContext(ChatThreadMessagesContext);
   if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
   const { sessionError } = useChatSessionContext();
-  const { historyInitializing, preparing } = useChatMessagePreparation();
+  const { preparing } = useChatMessagePreparation();
 
   if (sessionError) return <ChatMessageFeedback error={sessionError} />;
 
   if (preparing) {
-    return showPreparation ? <SessionPrepareSteps historyInitializing={historyInitializing} /> : null;
+    return showPreparation ? <TranscriptLoading /> : null;
   }
 
   if (value.threadId && value.error) {

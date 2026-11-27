@@ -144,12 +144,16 @@ const exporter = new LangSmithExporter({
 
 | Span Type | LangSmith Type |
 | - | - |
-| `MODEL_GENERATION` | `llm` |
-| `MODEL_CHUNK` | `llm` |
+| `MODEL_INFERENCE` | `llm` |
+| `MODEL_GENERATION` | `chain`, or `llm` when it has usage that no `MODEL_INFERENCE` run reports |
 | `TOOL_CALL` | `tool` |
 | `MCP_TOOL_CALL` | `tool` |
 | `PROVIDER_TOOL_CALL` | `tool` |
 | All others | `chain` |
+
+Token usage is only set on `llm` runs, and each token is counted once. A `MODEL_GENERATION` run is counted for calls without a run of their own, as with `generateLegacy()` and `streamLegacy()`, or when `excludeSpanTypes` or `spanFilter` removes `MODEL_INFERENCE` spans.
+
+The `inputs.messages` of a `MODEL_INFERENCE` run use the OpenAI Chat Completions format: the messages the generation started with, then each earlier call and its tool results.
 
 ## `langsmithRunIdFor`
 

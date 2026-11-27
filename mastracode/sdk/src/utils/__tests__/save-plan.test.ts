@@ -164,6 +164,12 @@ function writePlanFile(filename: string, content: string): string {
   return filePath;
 }
 
+function readArchive(resourceId: string): string {
+  const dir = path.join(tmpDir, resourceId);
+  const file = fs.readdirSync(dir).find(name => name.endsWith('.md')) ?? '';
+  return fs.readFileSync(path.join(dir, file), 'utf-8');
+}
+
 describe('local plan directories', () => {
   it('uses .mastracode/plans/ outside Factory sessions', () => {
     expect(getLocalPlansRelativeDir()).toBe('.mastracode/plans');
@@ -272,6 +278,35 @@ describe('approvePlanFile', () => {
     });
 
     expect(filename).toBe('file-title.md');
+  });
+
+  it('archives the reviewed text instead of re-reading a file that changed after review', async () => {
+    const file = writePlanFile('reviewed.md', '# Reviewed\n\nBody the user never saw\n');
+
+    await approvePlanFile({
+      planPath: file,
+      title: 'Reviewed',
+      resourceId: 'resource-reviewed',
+      plansDir: tmpDir,
+      plan: 'Body the user actually reviewed',
+    });
+
+    const archived = readArchive('resource-reviewed');
+    expect(archived).toContain('Body the user actually reviewed');
+    expect(archived).not.toContain('Body the user never saw');
+  });
+
+  it('archives the reviewed text even when the plan file is gone', async () => {
+    const filename = await approvePlanFile({
+      planPath: path.join(getLocalPlansDir(tmpProjectPath), 'deleted.md'),
+      title: 'Gone',
+      resourceId: 'resource-gone',
+      plansDir: tmpDir,
+      plan: 'Reviewed before the file vanished',
+    });
+
+    expect(filename).toBe('deleted.md');
+    expect(readArchive('resource-gone')).toContain('Reviewed before the file vanished');
   });
 
   it('returns undefined when the plan file does not exist', async () => {

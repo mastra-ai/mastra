@@ -1,7 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
-
-import { ArrowRightIcon } from 'lucide-react';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { AgentStepContainer } from './agent-step-container';
 import { Skills } from './skills';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
@@ -24,11 +22,8 @@ export const AgentProfileSkillsStep = () => {
     <AgentStepContainer
       title="Skills"
       cta={
-        <Button onClick={handleContinue} disabled={isStreaming}>
-          Continue{' '}
-          <Icon>
-            <ArrowRightIcon />
-          </Icon>
+        <Button iconEnd={<IconArrowRight />} onClick={handleContinue} disabled={isStreaming}>
+          Continue
         </Button>
       }
     >

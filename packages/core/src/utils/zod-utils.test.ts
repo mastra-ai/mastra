@@ -51,20 +51,13 @@ describe('isZodType', () => {
     expect(isZodType(z.string().optional())).toBe(true);
   });
 
-  it('returns false for null', () => {
-    expect(isZodType(null)).toBe(false);
-  });
-
-  it('returns false for undefined', () => {
-    expect(isZodType(undefined)).toBe(false);
-  });
-
-  it('returns false for a plain number', () => {
-    expect(isZodType(42)).toBe(false);
-  });
-
-  it('returns false for a plain string', () => {
-    expect(isZodType('hello')).toBe(false);
+  it.each([
+    ['returns false for null', null],
+    ['returns false for undefined', undefined],
+    ['returns false for a plain number', 42],
+    ['returns false for a plain string', 'hello'],
+  ] as const)('%s', (_title, input) => {
+    expect(isZodType(input)).toBe(false);
   });
 
   it('returns true for a plain object that duck-types Zod internals', () => {

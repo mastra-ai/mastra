@@ -14,6 +14,7 @@ import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { InlineLinkEntry } from './inline-media';
+import type { ChannelReplyMode, ChannelThreadLink } from './reply-mode';
 import type { TypingStatusFn } from './typing-status';
 import type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 
@@ -89,6 +90,48 @@ export interface ChannelAdapterBaseConfig {
    * Tool display, approval prompts, error messages, and typing status are unaffected.
    */
   textDisplay?: 'show' | 'hidden';
+
+  /**
+   * **Experimental. Slack only; ignored on other adapters.** Let the agent post
+   * Block Kit cards.
+   *
+   * When `true`, runs on the Slack adapter get a `render_card` tool. The agent
+   * calls it with a [json-render](https://json-render.dev) spec (cards, fields,
+   * tables, charts, images, link buttons) and the card is posted to the thread
+   * as Block Kit. Invalid specs come back to the agent as a list of issues so it
+   * can fix them and retry.
+   *
+   * Requires the optional `@json-render/chat` package to be installed.
+   *
+   * @default false
+   */
+  generativeUI?: boolean;
+
+  /**
+   * **Experimental. Tested on Slack only.** Let the agent decide when to post.
+   *
+   * With `'tool'`, reply text and tool calls stay out of the thread
+   * (`textDisplay` and `toolDisplay` default to `'hidden'`), the typing status
+   * names the agent's current step, and the agent posts through a
+   * `reply_in_thread` tool that streams into the thread. The agent is told how
+   * to write for the thread, and nudged to post a status after five quiet
+   * minutes. Runs started elsewhere (web UI, signals) whose thread is linked to
+   * this adapter get the tool too. Pass a config to add host-specific prompt
+   * lines or change the reminder.
+   */
+  replyMode?: ChannelReplyMode;
+
+  /**
+   * Link to the conversation in your app, appended to the agent's first reply
+   * in a new thread. Return `undefined` to skip it. Never saved to memory, so
+   * the model doesn't see its own link on later turns.
+   *
+   * @example
+   * ```ts
+   * threadLink: ({ threadId }) => `https://app.example.com/threads/${threadId}`
+   * ```
+   */
+  threadLink?: ChannelThreadLink;
 
   /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
@@ -483,7 +526,8 @@ export type SlashCommandChannelHandlerConfig = SlashCommandChannelHandler | fals
 /**
  * Handler function for action events (button clicks, select changes).
  * Receives the original Chat SDK event, the default handler implementation
- * (built-in tool approval card handling; a no-op for other action ids), and a
+ * (built-in tool approval cards and `run_continue` retry buttons; a no-op for
+ * other action ids), and a
  * runtime context carrying the resolved Mastra instance.
  */
 export type ActionChannelHandler = (
@@ -582,8 +626,9 @@ export interface ChannelHandlers {
   /**
    * Handler for action events (button clicks, select changes).
    * Default: Handles the built-in tool approval cards
-   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and ignores other action ids.
-   * Setting `false` also disables the built-in tool approval buttons.
+   * (`tool_approve:<toolCallId>` / `tool_deny:<toolCallId>`) and `run_continue` buttons,
+   * which send `Continue.` from the clicker through `onSubscribedMessage`. Ignores other action ids.
+   * Setting `false` also disables these built-in buttons.
    */
   onAction?: ActionChannelHandlerConfig;
 }

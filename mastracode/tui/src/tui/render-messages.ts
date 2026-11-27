@@ -713,11 +713,14 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     return;
   }
 
-  // Only the work-item feed the factory appends may trail the envelope; it folds
+  // Only the work-item description the factory appends may trail the envelope; it folds
   // into the collapsed content, any other trailer keeps the message raw.
   const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>\s*([\s\S]*)$/);
   const skillTrailer = skillMatch?.[3]?.trim() ?? '';
-  if (skillMatch && (skillTrailer === '' || /^<work-item-feed>[\s\S]*<\/work-item-feed>$/.test(skillTrailer))) {
+  if (
+    skillMatch &&
+    (skillTrailer === '' || /^<work-item-description>[\s\S]*<\/work-item-description>$/.test(skillTrailer))
+  ) {
     const commandName = `skill/${skillMatch[1]!}`;
     const skillBody = skillTrailer ? `${skillMatch[2]!.trim()}\n\n${skillTrailer}` : skillMatch[2]!.trim();
     const skillContent = unescapeSkillBoundary(skillBody);
@@ -1048,7 +1051,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           // Render ask_user with the proper question component
           if (toolName === 'ask_user' && hasResult) {
             const askArgs = toolArgs as
-              | { question?: string; options?: Array<{ label: string; description?: string }> }
+              | { question?: string; options?: Array<{ label: string; description?: string; recommended?: boolean }> }
               | undefined;
             const answer = typeof resultValue === 'string' ? resultValue : formatToolResult(resultValue);
             const cancelled = answer === '(skipped)';

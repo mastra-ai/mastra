@@ -195,8 +195,13 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
   /**
    * When true, callers only need run metadata. Adapters MAY reduce each run's
-   * snapshot to `{ status, timestamp }` to avoid loading the full snapshot.
-   * Adapters that ignore this return full snapshots.
+   * snapshot to `{ status, timestamp, parentWorkflow?: { workflowId, runId } }`
+   * to avoid loading the full snapshot. A reduced snapshot has no `context` or
+   * any other snapshot field, and leaves out `status` or `timestamp` when the
+   * run has none. `parentWorkflow` is present only when the run's parent has
+   * both IDs, and is never `null`. Every other run field is unchanged.
+   * Adapters that ignore this return full snapshots; every adapter that
+   * supports run fencing reduces them.
    */
   summary?: boolean;
 };
@@ -1321,6 +1326,13 @@ export interface ObservationalMemoryRecord {
    * to separate reflected vs unreflected observations.
    */
   reflectedObservationLineCount?: number;
+  /**
+   * Set to `true` only on the generation `swapBufferedReflectionToActive` creates when it checked,
+   * in the same atomic step, that the stored `bufferedReflection` and
+   * `reflectedObservationLineCount` were still the caller's snapshot. Never persisted; absent on
+   * every other read and on records from adapters that do not make that check.
+   */
+  bufferedReflectionVerified?: boolean;
 
   /**
    * Message IDs observed in the current generation.
@@ -1543,6 +1555,12 @@ export interface UpdateBufferedReflectionInput {
  * and appends any unreflected observations that were added after the reflection started.
  */
 export interface SwapBufferedReflectionToActiveInput {
+  /**
+   * The caller's snapshot. When it carries a `bufferedReflection`, the swap applies only if the
+   * stored `bufferedReflection` and `reflectedObservationLineCount` still equal the snapshot's;
+   * otherwise nothing is created and the stored record is returned. A generation created after
+   * that check is returned with `bufferedReflectionVerified: true`.
+   */
   currentRecord: ObservationalMemoryRecord;
   /**
    * Token count for the combined new activeObservations (bufferedReflection + unreflected).
@@ -2358,6 +2376,8 @@ export interface UpdateWorkflowStateOptions {
   resumeClaimedAt?: number;
   /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
   resumeLeasedClaimAt?: number;
+  /** What an agent resume claims this run with. See `WorkflowRunState.resumeClaimIntent`. */
+  resumeClaimIntent?: WorkflowRunState['resumeClaimIntent'];
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { MetricsCardGroup } from '../MetricsCardGroup';
@@ -12,6 +11,10 @@ import type { ShareBarRow } from '../ShareBar';
 import { MetricsCard } from './metrics-card';
 import type { MetricsCardTitleMenuProps } from './metrics-card-title-menu';
 import { agentActivityByHour, count, ms, percent, traceVolume, usageBy, usd } from './metrics-story-data';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const meta: Meta = {
   title: 'Metrics/Examples/Metrics Overview',
@@ -27,7 +30,7 @@ const score = (value: number) => value.toFixed(2);
 const kpis = [
   {
     label: 'Agent runs',
-    icon: <BotIcon />,
+    icon: <IconRobot />,
     value: '147',
     changePct: -8.1,
     detail: '9 failed',
@@ -35,17 +38,17 @@ const kpis = [
   },
   {
     label: 'Model cost',
-    icon: <CoinsIcon />,
+    icon: <IconCoins />,
     value: '$30.02',
     changePct: 40,
     lowerIsBetter: true,
     detail: '4 models',
     prev: '$21.44',
   },
-  { label: 'Tokens', icon: <HashIcon />, value: '39.4M', changePct: -15, detail: '76% input', prev: '46.4M' },
+  { label: 'Tokens', icon: <IconHashtag />, value: '39.4M', changePct: -15, detail: '76% input', prev: '46.4M' },
   {
     label: 'Threads',
-    icon: <MessagesSquareIcon />,
+    icon: <IconChatBubbles />,
     value: '12',
     changePct: -14,
     detail: '7 active today',
