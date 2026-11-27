@@ -87,6 +87,20 @@ export interface TxOptions {
   deadlineAt?: number;
 }
 
+/** @experimental */
+export interface TransactionTimeoutOptions {
+  /**
+   * How long, in ms, a deadline-bound transaction may reuse the `statement_timeout` and
+   * `lock_timeout` it set instead of setting them again before the next statement. When more than
+   * twice this is left, the timeouts are set to the time left minus this, so a reused setting
+   * never gives a statement more time than is left; a statement may be stopped up to this much
+   * earlier than with `0`. A setting is reused only within this long of reading the clock for it,
+   * never after a refresh that took this long or failed, and never after `ROLLBACK TO SAVEPOINT`
+   * (which restores the earlier setting). `0` (the default) sets them before every statement.
+   */
+  timeoutHeadroomMs?: number;
+}
+
 /** The transaction ran past its `deadlineAt` and was rolled back. Nothing in it was applied. */
 export class TransactionDeadlineError extends Error {
   readonly retryable = true;
@@ -164,6 +178,7 @@ export class PoolAdapter implements DbClient {
   constructor(
     public readonly $pool: Pool,
     private readonly onRollbackError?: (error: unknown) => void | Promise<void>,
+    private readonly timeouts?: TransactionTimeoutOptions,
   ) {}
 
   connect(): Promise<PoolClient> {
@@ -229,7 +244,7 @@ export class PoolAdapter implements DbClient {
         destroyClient = true;
         throw error;
       }
-      const txClient = new TransactionClient(client, deadlineAt);
+      const txClient = new TransactionClient(client, deadlineAt, this.timeouts?.timeoutHeadroomMs);
       try {
         const result = await callback(txClient);
         // Drain before COMMIT so fire-and-forget / batch tails can't race it.
@@ -295,10 +310,13 @@ export class TransactionClient implements TxClient {
    */
   #tail: Promise<void> = Promise.resolve();
   #error: { value: unknown } | undefined;
+  /** When the clock was read for the timeouts now set, while they may be reused; see {@link TransactionTimeoutOptions}. */
+  #timeoutsReadAt: number | undefined;
 
   constructor(
     private readonly client: PoolClient,
     private readonly deadlineAt?: number,
+    private readonly timeoutHeadroomMs = 0,
   ) {}
 
   /** Throws {@link TransactionDeadlineError} once the transaction's deadline has passed. */
@@ -309,9 +327,7 @@ export class TransactionClient implements TxClient {
   /** One statement, bounded by what is left of the deadline (statement time and lock waits). */
   async #run(query: string, values?: QueryValues): Promise<QueryResult> {
     if (this.deadlineAt === undefined) return this.client.query(query, values);
-    const left = remainingMs(this.deadlineAt);
-    if (left <= 0) throw new TransactionDeadlineError();
-    await this.client.query(`SET LOCAL statement_timeout = ${left}; SET LOCAL lock_timeout = ${left}`);
+    if (!this.#timeoutsReusable()) await this.#setTimeouts(this.deadlineAt);
     // Setting the timeouts is itself a round trip; don't send the statement if it used up the rest.
     this.assertWithinDeadline();
     try {
@@ -322,6 +338,25 @@ export class TransactionClient implements TxClient {
         throw new TransactionDeadlineError({ cause: error });
       throw error;
     }
+  }
+
+  #timeoutsReusable(): boolean {
+    if (this.#timeoutsReadAt === undefined) return false;
+    const age = Date.now() - this.#timeoutsReadAt;
+    return age >= 0 && age < this.timeoutHeadroomMs;
+  }
+
+  async #setTimeouts(deadlineAt: number): Promise<void> {
+    this.#timeoutsReadAt = undefined;
+    const readAt = Date.now();
+    const left = Math.ceil(deadlineAt - readAt);
+    if (left <= 0) throw new TransactionDeadlineError();
+    const headroom = this.timeoutHeadroomMs;
+    const reusable = headroom > 0 && left > 2 * headroom;
+    const bound = reusable ? left - headroom : left;
+    await this.client.query(`SET LOCAL statement_timeout = ${bound}; SET LOCAL lock_timeout = ${bound}`);
+    // Aged from before the round trip, so a refresh that took the headroom is never reused.
+    if (reusable) this.#timeoutsReadAt = readAt;
   }
 
   #enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -363,6 +398,8 @@ export class TransactionClient implements TxClient {
       return result;
     } catch (error) {
       await this.drain().catch(() => undefined);
+      // It restores the timeouts set before the savepoint, so set them again before the next statement.
+      this.#timeoutsReadAt = undefined;
       // Not bounded by the deadline: it takes no locks, and it keeps the caller's own error.
       await this.#enqueue(() => this.client.query(`ROLLBACK TO SAVEPOINT ${name}`));
       await this.#enqueue(() => this.client.query(`RELEASE SAVEPOINT ${name}`));

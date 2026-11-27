@@ -2,6 +2,7 @@ import type { Pool, PoolClient, QueryResult } from 'pg';
 import { describe, expect, it } from 'vitest';
 
 import { PinnedClientAdapter, PoolAdapter, TransactionDeadlineError } from './client';
+import type { TransactionClient } from './client';
 
 /**
  * What a deadline-bound transaction sends, with the clock in the client's hands: a fake PoolClient
@@ -68,5 +69,123 @@ describe('transaction deadline: what is sent', () => {
     expect(sent[0]).toBe('BEGIN');
     expect(sent).toContain('SELECT payload');
     expect(sent.at(-1)).toBe('COMMIT');
+  });
+});
+
+describe('transaction deadline: timeout headroom', () => {
+  const setCalls = (sent: string[]) => sent.filter(sql => sql.startsWith('SET LOCAL statement_timeout'));
+  const installed = (sql: string) => Number(/statement_timeout = (\d+)/.exec(sql)![1]);
+
+  it('refreshes the timeouts once per headroom window instead of before every statement', async () => {
+    const { client, sent } = recordingClient();
+    const adapter = new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 });
+    const started = Date.now();
+    await adapter.tx(
+      async t => {
+        for (let i = 0; i < 50; i++) await t.query(`SELECT ${i}`);
+      },
+      { deadlineAt: started + 45_000 },
+    );
+    const elapsed = Date.now() - started;
+    expect(setCalls(sent).length).toBeLessThanOrEqual(1 + Math.ceil(elapsed / 1_000));
+    expect(installed(setCalls(sent)[0]!)).toBeLessThanOrEqual(44_000);
+  });
+
+  it('refreshes before every statement without headroom, as before', async () => {
+    for (const options of [undefined, { timeoutHeadroomMs: 0 }]) {
+      const { client, sent } = recordingClient();
+      await new PoolAdapter(poolOf(client), undefined, options).tx(
+        async t => {
+          for (let i = 0; i < 5; i++) await t.query(`SELECT ${i}`);
+        },
+        { deadlineAt: Date.now() + 45_000 },
+      );
+      expect(sent.slice(1, -1).map(sql => (sql.startsWith('SET LOCAL') ? 'SET' : sql))).toEqual([
+        'SET',
+        'SELECT 0',
+        'SET',
+        'SELECT 1',
+        'SET',
+        'SELECT 2',
+        'SET',
+        'SELECT 3',
+        'SET',
+        'SELECT 4',
+      ]);
+      for (const sql of setCalls(sent)) expect(installed(sql)).toBeGreaterThan(44_000);
+    }
+  });
+
+  it('keeps no reuse record when setting the timeouts took longer than the headroom', async () => {
+    const { client, sent } = recordingClient([[/^SET LOCAL statement_timeout/, 30]]);
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 10 }).tx(
+      async t => {
+        for (let i = 0; i < 5; i++) await t.query(`SELECT ${i}`);
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+    expect(setCalls(sent)).toHaveLength(5);
+  });
+
+  it('installs the whole time left, and keeps no record, within twice the headroom of the deadline', async () => {
+    const { client, sent } = recordingClient();
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        for (let i = 0; i < 3; i++) await t.query(`SELECT ${i}`);
+      },
+      { deadlineAt: Date.now() + 1_500 },
+    );
+    expect(setCalls(sent)).toHaveLength(3);
+    for (const sql of setCalls(sent)) expect(installed(sql)).toBeGreaterThan(1_400);
+  });
+
+  it('refreshes after a timeout refresh that failed', async () => {
+    const { client, sent } = recordingClient();
+    let failed = false;
+    const flaky = {
+      ...client,
+      release() {},
+      async query(sql: string) {
+        if (!failed && sql.startsWith('SET LOCAL')) {
+          failed = true;
+          sent.push(sql);
+          throw new Error('connection blip');
+        }
+        return client.query(sql);
+      },
+    } as unknown as PoolClient;
+    // The failed call is kept for COMMIT, so the transaction itself rejects; what was sent matters here.
+    await new PoolAdapter(poolOf(flaky), undefined, { timeoutHeadroomMs: 1_000 })
+      .tx(
+        async t => {
+          await t.query('SELECT a').catch(() => undefined);
+          await t.query('SELECT b');
+        },
+        { deadlineAt: Date.now() + 45_000 },
+      )
+      .catch(() => undefined);
+    const b = sent.indexOf('SELECT b');
+    expect(sent[b - 1]).toMatch(/^SET LOCAL statement_timeout/);
+    expect(setCalls(sent)).toHaveLength(2);
+  });
+
+  it('refreshes after rolling back to a savepoint, which restores the timeouts set before it', async () => {
+    const { client, sent } = recordingClient();
+    await new PoolAdapter(poolOf(client), undefined, { timeoutHeadroomMs: 1_000 }).tx(
+      async t => {
+        await t.query('SELECT outer');
+        await (t as TransactionClient)
+          .savepoint('sp_1', async () => {
+            await t.query('SELECT inner');
+            throw new Error('refused');
+          })
+          .catch(() => undefined);
+        await t.query('SELECT after');
+      },
+      { deadlineAt: Date.now() + 45_000 },
+    );
+    const after = sent.indexOf('SELECT after');
+    expect(sent[after - 1]).toMatch(/^SET LOCAL statement_timeout/);
+    expect(sent.slice(0, after)).toContain('ROLLBACK TO SAVEPOINT sp_1');
   });
 });

@@ -239,8 +239,10 @@ export class PostgresStore extends MastraCompositeStore {
       // Wrap the writer adapter in a routing client so init() can temporarily
       // pin all DDL traffic to a single PoolClient. See PostgresStore.init().
       const onRollbackError = (error: unknown) => this.logger?.error?.('Transaction rollback failed', { error });
-      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool, onRollbackError));
-      this.#readDb = this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool, onRollbackError);
+      const timeouts = { timeoutHeadroomMs: config.transactionTimeoutHeadroomMs };
+      this.#db = new RoutingDbClient(new PoolAdapter(this.#writePool, onRollbackError, timeouts));
+      this.#readDb =
+        this.#readPool === this.#writePool ? this.#db : new PoolAdapter(this.#readPool, onRollbackError, timeouts);
 
       const domainConfig: PgDomainClientConfig = {
         client: this.#db,
