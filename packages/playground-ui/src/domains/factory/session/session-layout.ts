@@ -21,3 +21,5 @@ export function elapsedLabel(from: number, to: number): string {
   const days = Math.floor(hours / 24);
   return hours % 24 === 0 ? `${days}d` : `${days}d ${hours % 24}h`;
 }
+
+export const overviewClass = 'flex min-h-0 w-full min-w-0 grow flex-col divide-y divide-border overflow-y-auto';

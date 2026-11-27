@@ -6,3 +6,4 @@ export * from './moves-graph-model';
 export * from './description-markdown';
 export * from './card-description';
 export * from './card-overview';
+export * from './panel-frame';
