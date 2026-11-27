@@ -363,6 +363,30 @@ describe('PlatformFactorySandbox', () => {
     expect(JSON.parse(create[1].body as string).publicPorts).toBe(true);
   });
 
+  it.each([
+    ['sends the session owner as the acting user', 'user_owner', 'user_owner'],
+    ['sends no acting user for a session without an owner', undefined, null],
+  ])('%s when the session sandbox is created', async (_name, userId, header) => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }), {
+        status: 201,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    const sandbox = new PlatformFactorySandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_1',
+      environmentId: 'env_1',
+      fetch: fetchMock,
+    });
+    const created = sandbox.create({ sessionId: 'sess_3', getRepositoryAccess: undefined, userId }, {});
+    await created._start();
+
+    const create = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST')!;
+    expect((create[1].headers as Headers).get('x-acting-user-id')).toBe(header);
+  });
+
   describe('builds', () => {
     function buildFetch(
       results: Array<{ status: 'ready' | 'pending' | 'failed'; templateId: string; error?: string }>,

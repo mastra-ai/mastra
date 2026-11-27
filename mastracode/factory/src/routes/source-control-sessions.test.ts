@@ -11,6 +11,7 @@ import { TITLE_PINNED_THREAD_METADATA_KEY, isThreadTitlePinned } from '@mastra/c
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -21,7 +22,10 @@ import {
 } from '../rules/binding-context.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { createTerminalStageCleanup } from '../rules/terminal-cleanup.js';
-import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { evictSessionSandbox, getSessionSandbox, peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { sandboxHostMayUseCredentialVault } from '../sandbox/vault-host.js';
+import { bindSandboxOwner } from '../sandbox/vault.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
   listSessionOpenRuns,
@@ -1675,10 +1679,13 @@ describe('session sandbox recreate', () => {
     options: {
       sessionRetirement?: SessionRetirementCoordinator;
       sandboxRecreateSupported?: boolean;
+      vaultSandboxes?: boolean;
+      sandbox?: RouteOptions['sandbox'];
       isOrganizationAdmin?: (orgId: string, userId: string) => Promise<boolean>;
       controller?: RouteOptions['controller'];
       abortSettleTimeoutMs?: number;
       caller?: { workosId: string; organizationId: string };
+      workItems?: RouteOptions['workItems'];
     } = {},
   ) {
     const app = new Hono();
@@ -1695,8 +1702,11 @@ describe('session sandbox recreate', () => {
         projectSessions: createProjectSessionsReader({ sourceControls: [sourceControl] }),
         memorySettings: seed.memorySettings,
         ...(options.controller ? { controller: options.controller } : {}),
+        ...(options.workItems ? { workItems: options.workItems } : {}),
         ...(options.sessionRetirement ? { sessionRetirement: options.sessionRetirement } : {}),
         sandboxRecreateSupported: options.sandboxRecreateSupported ?? true,
+        ...(options.sandbox ? { sandbox: options.sandbox } : {}),
+        ...(options.vaultSandboxes !== undefined ? { vaultSandboxes: options.vaultSandboxes } : {}),
         ...(options.abortSettleTimeoutMs !== undefined ? { abortSettleTimeoutMs: options.abortSettleTimeoutMs } : {}),
       }),
     );
@@ -1783,6 +1793,142 @@ describe('session sandbox recreate', () => {
       expect(start).not.toHaveBeenCalled();
     });
 
+    describe("an org admin on someone else's credential-vault session", () => {
+      const admin = { workosId: 'admin-2', organizationId: 'org-1' };
+      function vaultSandbox(vault: boolean | undefined, refresh?: boolean | Error) {
+        const sandbox = {
+          vault,
+          start: vi.fn(async () => {}),
+          refreshVault: vi.fn(async () => {
+            if (refresh instanceof Error) throw refresh;
+            if (refresh !== undefined) sandbox.vault = refresh;
+          }),
+        };
+        return sandbox;
+      }
+
+      it.each([
+        ['the mode is vault', true, undefined],
+
+        ['the platform reports vault', undefined, true],
+      ] as const)('refuses to start it when %s', async (_name, vault, refresh) => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(vault, refresh);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(403);
+        expect(sandbox.start).not.toHaveBeenCalled();
+      });
+
+      it('keeps prior offline startup behavior until vault mode is confirmed', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(undefined);
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
+
+      it('starts a session the platform confirms is token mode', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(undefined, false);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: true,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps prior offline custom-callback startup behavior without a positive vault report', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('custom'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets an admin bring an offline e2b sandbox online', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          vaultSandboxes: sandboxHostMayUseCredentialVault('e2b'),
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+      });
+
+      it('brings an offline session online for an admin on a host whose sandboxes have no vault', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const start = vi.fn(async () => {});
+        const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+        const app = buildRecreateApp(seed, sourceControl, {
+          controller,
+          caller: admin,
+          isOrganizationAdmin: async () => true,
+        });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(controller.createSession).toHaveBeenCalledTimes(1);
+        expect(start).toHaveBeenCalledTimes(1);
+      });
+
+      it('lets the owner start their own vault session', async () => {
+        const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+        const sandbox = vaultSandbox(true);
+        const controller = fakeController({ getWorkspace: () => ({ sandbox }) });
+        const app = buildRecreateApp(seed, sourceControl, { controller, vaultSandboxes: true });
+
+        const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+        expect(response.status).toBe(200);
+        expect(sandbox.start).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('returns 500 with the message when the start fails', async () => {
       const { seed, sourceControl, session } = await seedRecreateSession();
       const error = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -1802,6 +1948,250 @@ describe('session sandbox recreate', () => {
 
       expect(response.status).toBe(500);
       await expect(response.json()).resolves.toEqual({ error: 'setup failed' });
+    });
+  });
+
+  describe("taking over someone else's session on a host whose sandboxes can use the vault", () => {
+    const taker = { workosId: 'user-2', organizationId: 'org-1' };
+
+    // A memoized sandbox built for the previous owner, as the session's workspace leaves it.
+    function heldSandbox(sessionRowId: string, vault: boolean | undefined) {
+      const sandbox = {
+        status: 'running',
+        vault,
+        refreshVault: vi.fn(async () => {}),
+        destroy: vi.fn(async () => {}),
+      };
+      getSessionSandbox(sessionRowId, 'acme/repo', () => {
+        bindSandboxOwner(sandbox, 'user-1');
+        return sandbox as never;
+      });
+      onTestFinished(() => evictSessionSandbox(sessionRowId));
+      return sandbox;
+    }
+
+    async function materialized() {
+      const seeded = await seedRecreateSession('user-1');
+      await seeded.sourceControl.sessions.setSandbox({
+        id: seeded.session.id,
+        sandboxId: 'vm-1',
+        sandboxWorkdir: '/w',
+      });
+      return seeded;
+    }
+
+    it.each([false, true])('keeps a legacy Platform token VM after ownership transfer (cold=%s)', async cold => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      onTestFinished(() => vi.unstubAllEnvs());
+      const { seed, sourceControl, session } = await materialized();
+      const requests: string[] = [];
+      const sandbox = new PlatformFactorySandbox({
+        accessToken: 'test-platform-token',
+        projectId: 'project-1',
+        environmentId: 'env-1',
+        fetch: async (url, init) => {
+          requests.push((init?.method ?? 'GET') + ' ' + String(url));
+          return Response.json({ id: 'vm-1', vault: false });
+        },
+      });
+      if (!cold) {
+        getSessionSandbox(session.id, 'acme/repo', () =>
+          sandbox.create(
+            {
+              sessionId: session.id,
+              orgId: session.orgId,
+              userId: session.userId,
+              sandboxId: 'vm-1',
+              getRepositoryAccess: undefined,
+            },
+            {},
+          ),
+        );
+        onTestFinished(() => evictSessionSandbox(session.id));
+      }
+      const sessionRetirement = new SessionRetirementCoordinator({ sandbox });
+      const release = vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox');
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        sandbox,
+        workItems: noRuns,
+        sessionRetirement,
+      });
+      expect((await takeOwnership(app, session.sessionId, 'user-1')).status).toBe(200);
+      expect(release).not.toHaveBeenCalled();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: 'vm-1',
+        branch: session.branch,
+      });
+      expect(requests.some(request => request.startsWith('DELETE '))).toBe(false);
+      expect(requests.some(request => request.startsWith('POST '))).toBe(false);
+    });
+
+    it("destroys the previous owner's vault sandbox and clears its id", async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = heldSandbox(session.id, true);
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement: new SessionRetirementCoordinator(),
+      });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(200);
+      expect(sandbox.destroy).toHaveBeenCalledTimes(1);
+      expect(peekSessionSandbox(session.id)).toBeUndefined();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: null,
+      });
+    });
+
+    it("refuses the new owner the previous owner's sandbox while the takeover is still releasing it", async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = Object.assign(heldSandbox(session.id, true), {
+        start: vi.fn(async () => {}),
+        executeCommand: vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' })),
+      });
+      const sessionRetirement = new SessionRetirementCoordinator();
+      let releasing!: () => void;
+      const released = new Promise<void>(resolve => (releasing = resolve));
+      let entered!: () => void;
+      const releaseStarted = new Promise<void>(resolve => (entered = resolve));
+      sandbox.destroy.mockImplementation(async () => {
+        entered();
+        await released;
+      });
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement,
+        controller: {
+          getSession: vi.fn(async () => ({ getWorkspace: () => ({ sandbox }) })),
+          deleteSession: vi.fn(async () => {}),
+          queryThreadById: vi.fn(async () => null),
+        } as never,
+      });
+
+      const takeover = takeOwnership(app, session.sessionId, 'user-1');
+      await releaseStarted;
+      const concurrentTakeover = takeOwnership(app, session.sessionId, 'user-1');
+      // Ownership must remain unchanged until the credential-bearing VM is gone.
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-1',
+        sandboxId: 'vm-1',
+      });
+      const start = await app.request(`/web/user-sessions/${session.sessionId}/sandbox/start`, { method: 'POST' });
+
+      expect(start.status).toBe(403);
+      expect(sandbox.start).not.toHaveBeenCalled();
+      expect(sandbox.executeCommand).not.toHaveBeenCalled();
+      releasing();
+      expect((await takeover).status).toBe(200);
+      expect((await concurrentTakeover).status).toBe(200);
+      expect(sandbox.destroy).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a detached VM without a positive vault report', async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sessionRetirement = new SessionRetirementCoordinator();
+      const release = vi.spyOn(sessionRetirement, 'releasePreviousOwnerSandbox').mockResolvedValue();
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement,
+      });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(200);
+      expect(release).not.toHaveBeenCalled();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: 'vm-1',
+      });
+    });
+
+    it("keeps the owner and VM id unchanged when the previous owner's VM can't be destroyed", async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      onTestFinished(() => error.mockRestore());
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = heldSandbox(session.id, true);
+      sandbox.destroy.mockRejectedValue(new Error('proxy unavailable'));
+      const sessionRetirement = new SessionRetirementCoordinator();
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement,
+      });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(503);
+      expect((await takeOwnership(app, session.sessionId, 'user-1')).status).toBe(503);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-1',
+        sandboxId: 'vm-1',
+      });
+    });
+
+    it("doesn't change the owner where the previous owner's sandbox can't be released", async () => {
+      const { seed, sourceControl, session } = await materialized();
+      heldSandbox(session.id, true);
+      const app = buildRecreateApp(seed, sourceControl, { caller: taker, vaultSandboxes: true, workItems: noRuns });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(503);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-1',
+        sandboxId: 'vm-1',
+      });
+    });
+
+    it('keeps a sandbox the platform confirms is token mode', async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = heldSandbox(session.id, false);
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        vaultSandboxes: true,
+        workItems: noRuns,
+        sessionRetirement: new SessionRetirementCoordinator(),
+      });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(200);
+      expect(sandbox.destroy).not.toHaveBeenCalled();
+      expect(peekSessionSandbox(session.id)?.sandbox).toBe(sandbox);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        userId: 'user-2',
+        sandboxId: 'vm-1',
+      });
+    });
+
+    it('keeps the sandbox on a host whose sandboxes have no vault', async () => {
+      const { seed, sourceControl, session } = await materialized();
+      const sandbox = heldSandbox(session.id, undefined);
+      const app = buildRecreateApp(seed, sourceControl, {
+        caller: taker,
+        workItems: noRuns,
+        sessionRetirement: new SessionRetirementCoordinator(),
+      });
+
+      const response = await takeOwnership(app, session.sessionId, 'user-1');
+
+      expect(response.status).toBe(200);
+      expect(sandbox.destroy).not.toHaveBeenCalled();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        sandboxId: 'vm-1',
+      });
     });
   });
 

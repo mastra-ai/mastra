@@ -120,7 +120,7 @@ async function fixture(integrationId = 'gitlab') {
     sourceId: repositoryId === 'repo-2' ? 'acme/other' : 'acme/repo',
   }));
   const getRepositoryAccess = vi.fn(async ({ repositoryId }: { repositoryId: string }) => ({
-    cloneUrl: `https://gitlab.com/${repositoryId === 'repo-2' ? 'acme/other' : 'acme/repo'}.git`,
+    cloneUrl: `https://${integrationId === 'github' ? 'github.com' : 'gitlab.com'}/${repositoryId === 'repo-2' ? 'acme/other' : 'acme/repo'}.git`,
     authorization: { scheme: 'bearer' as const, token: 'glpat-secret', username: 'oauth2' },
   }));
   const createReviewComment = vi.fn(async () => ({
@@ -546,6 +546,7 @@ describe('createSourceControlTools', () => {
     const sandbox = {
       id: 'sandbox-1',
       provider: 'custom',
+      vault: false,
       workingDirectory: '/workspace',
       executeCommand: vi.fn(async (_command: string, args: string[]) => {
         executions.push(args);
@@ -609,6 +610,7 @@ describe('createSourceControlTools', () => {
       const sandbox = {
         id: 'sandbox-1',
         provider: 'custom',
+        vault: false,
         workingDirectory: '/home/user',
         executeCommand: vi.fn(async (command: string, args: string[], options?: { env?: Record<string, string> }) => {
           executions.push({ command, args, options });
@@ -684,6 +686,104 @@ describe('createSourceControlTools', () => {
       await expect(
         (built.source_control_get_change_request!.execute as any)({ changeRequestId: 18, repository: 'nope/x' }),
       ).rejects.toThrow("Repository 'nope/x' is not in this Factory's environment.");
+    });
+
+    describe("a non-owner on the owner's credential-vault sandbox", () => {
+      // A PlatformSandbox reports its vault mode once it starts or is asked.
+      function vaultSandbox(vault: boolean | undefined, refresh?: boolean | Error) {
+        const fake = fakeSandbox();
+        const start = vi.fn(async () => {});
+        const sandbox = Object.assign(fake.sandbox, {
+          vault,
+          start,
+          refreshVault: vi.fn(async () => {
+            if (refresh instanceof Error) throw refresh;
+            if (refresh !== undefined) sandbox.vault = refresh;
+          }),
+        });
+        return { ...fake, sandbox, start };
+      }
+      const asMember = async (setup: Awaited<ReturnType<typeof fixture>>) =>
+        createSourceControlTools({
+          requestContext: requestContext({ userId: 'member-2' }),
+          providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+          audit: setup.audit,
+        });
+      const refused = /uses its owner's credential vault and is not available to the current user/;
+
+      it.each([
+        ['the mode is vault', true, undefined],
+        ['the platform reports vault', undefined, true],
+        ['the VM is unstarted and mode remains unknown', undefined, undefined],
+        ['the unstarted VM mode read fails', undefined, new Error('proxy unavailable')],
+      ] as const)(
+        'refuses source_control_push_branch when %s, without starting or running anything',
+        async (_name, vault, refresh) => {
+          const setup = await fixture();
+          const built = await asMember(setup);
+          const { sandbox, executions, start } = vaultSandbox(vault, refresh);
+
+          await expect(
+            (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+          ).rejects.toThrow(refused);
+          expect(start).not.toHaveBeenCalled();
+          expect(executions).toHaveLength(0);
+          expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([false])('lets a non-owner push on a confirmed non-Vault sandbox (%s)', async mode => {
+        const setup = await fixture();
+        const built = await asMember(setup);
+        const { sandbox, pushes } = vaultSandbox(
+          mode instanceof Error ? undefined : mode,
+          mode instanceof Error ? mode : undefined,
+        );
+
+        await expect(
+          (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+        ).resolves.toMatchObject({ pushed: true, branch: 'factory/issue-1' });
+        expect(pushes()).toHaveLength(1);
+      });
+
+      it.each([undefined, new Error('proxy unavailable')])(
+        'refuses an owner push while Platform mode is unresolved (%s)',
+        async refresh => {
+          const setup = await fixture();
+          const built = await tools(setup);
+          const { sandbox, executions, start } = vaultSandbox(undefined, refresh);
+
+          await expect(
+            (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } }),
+          ).rejects.toThrow('credential mode is unavailable');
+          expect(start).not.toHaveBeenCalled();
+          expect(executions).toHaveLength(0);
+          expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each(['acme/repo', 'acme/other'])(
+        'lets the owner push %s through Vault without acquiring a token',
+        async repository => {
+          const setup = await fixture('github');
+          const built = await createSourceControlTools({
+            requestContext: requestContext(),
+            providers: [{ id: 'github', storage: setup.storage, versionControl: setup.versionControl }],
+            audit: setup.audit,
+          });
+          const { sandbox, pushes, executions } = fakeSandbox({
+            remotes: { '/home/user/other': 'https://github.com/acme/other.git' },
+          });
+          sandbox.vault = true;
+
+          await expect(
+            (built.source_control_push_branch!.execute as any)({ repository }, { workspace: { sandbox } }),
+          ).resolves.toMatchObject({ pushed: true });
+          expect(pushes()).toHaveLength(1);
+          expect(setup.getRepositoryAccess).not.toHaveBeenCalled();
+          expect(JSON.stringify(executions)).not.toContain('secret');
+        },
+      );
     });
 
     it("pushes the session's own repository by default and records the row", async () => {
@@ -1195,6 +1295,7 @@ describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%
     const sandbox = {
       id: 'real-git',
       provider: 'custom',
+      vault: false,
       workingDirectory: root,
       async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
         const result = spawnSync(command === 'git' ? gitBinary : command, args, {

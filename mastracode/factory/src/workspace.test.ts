@@ -19,6 +19,9 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  vault: 'absent' as boolean | undefined | 'absent',
+  /** What the platform's sandbox record reports when a vault-capable stub re-asks for its mode. */
+  vaultOnRefresh: undefined as boolean | Error | undefined,
   /** How the stub reports its start: a fresh sandbox, or a reattach to an existing one. */
   startOutcome: 'created' as 'created' | 'connected',
   /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
@@ -82,6 +85,17 @@ const mocks = vi.hoisted(() => ({
       }),
       executeCommand: (...args: [string, ...unknown[]]) => sandbox.exec(...args),
       setEnv: mocks.setEnv,
+      // Credential-vault mode as the platform reported it; absent for providers without vault support.
+      ...(mocks.vault === 'absent'
+        ? {}
+        : {
+            vault: mocks.vault,
+            refreshVault: vi.fn(async () => {
+              if (mocks.vaultOnRefresh instanceof Error) throw mocks.vaultOnRefresh;
+              if (mocks.vaultOnRefresh !== undefined) sandbox.vault = mocks.vaultOnRefresh;
+              return sandbox.vault;
+            }),
+          }),
     };
     return sandbox;
   }),
@@ -105,6 +119,8 @@ const mocks = vi.hoisted(() => ({
   setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
+  settingsHold: null as Promise<void> | null,
+  settingsHoldSkip: 0,
   githubReviewerPat: null as string | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
@@ -144,6 +160,7 @@ import { MaterializeError, SetupCommandError } from './integrations/github/sandb
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -199,6 +216,8 @@ afterEach(async () => {
   mocks.updates.splice(0);
   mocks.createSandbox.mockClear();
   mocks.localRoot = null;
+  mocks.vault = 'absent';
+  mocks.vaultOnRefresh = undefined;
   mocks.startOutcome = 'created';
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
@@ -214,6 +233,8 @@ afterEach(async () => {
   mocks.mintInstallationToken.mockClear();
   mocks.setEnv.mockClear();
   mocks.githubPat = null;
+  mocks.settingsHold = null;
+  mocks.settingsHoldSkip = 0;
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
@@ -320,8 +341,9 @@ function addSession(overrides: Record<string, unknown> = {}) {
 }
 
 function fakeGithubIntegration() {
-  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxWorkdir }) => {
+  const setSandbox = vi.fn(async ({ id, sandboxId, sandboxWorkdir, expectedUserId }) => {
     const session = mocks.sessions.find(row => row.id === id);
+    if (session && expectedUserId !== undefined && session.userId !== expectedUserId) return;
     if (session) Object.assign(session, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
     mocks.updates.push({ set: { sandboxId, sandboxWorkdir }, where: { id } });
   });
@@ -335,14 +357,17 @@ function fakeGithubIntegration() {
     getInstallationOctokit: vi.fn(),
     integrationStorage: {
       settings: {
-        get: vi.fn(async () =>
-          mocks.githubPat || mocks.githubReviewerPat
+        get: vi.fn(async () => {
+          const hold = mocks.settingsHoldSkip-- > 0 ? null : mocks.settingsHold;
+          if (hold) mocks.settingsHold = null;
+          if (hold) await hold;
+          return mocks.githubPat || mocks.githubReviewerPat
             ? {
                 ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
                 ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
               }
-            : null,
-        ),
+            : null;
+        }),
       },
     },
     sourceControlStorage: {
@@ -1242,7 +1267,10 @@ describe('GitHub session workspace preparation', () => {
       input: { path },
       context: {
         requestContext: {
-          controller: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
+          get: (key: string) =>
+            key === 'controller'
+              ? { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } }
+              : requestContext.get(key),
         },
       },
     });
@@ -1390,6 +1418,16 @@ describe('GitHub session workspace preparation', () => {
     // The persisted physical id must reach the host callback so a physical-id
     // reattach provider (e.g. Railway) resumes the original VM.
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
+  });
+
+  it('passes the session owner to the sandbox callback so the host can act as that user', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ userId: 'owner-1' }));
   });
 
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
@@ -2628,6 +2666,473 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_org_pat');
     // …but git materialization keeps the installation-scoped token.
     expect(mocks.materializeRepo).toHaveBeenCalledWith(expect.objectContaining({ token: 'repo-token-repository-1' }));
+  });
+
+  describe('credential-vault sandboxes', () => {
+    const placeholder = 'ghp_placeholder' + '0'.repeat(25);
+    /** The provider env a vault sandbox boots with (SANDBOX_VAULT left unset on purpose). */
+    const vaultProviderEnv = { GH_TOKEN: placeholder, GH_ENTERPRISE_TOKEN: placeholder };
+
+    /** Every env value Factory wrote into the sandbox, across all setEnv calls. */
+    function writtenEnvValues(): string[] {
+      return mocks.setEnv.mock.calls.flatMap(([update]) =>
+        Object.values((update as (env: Record<string, string>) => Record<string, string>)({ ...vaultProviderEnv })),
+      ) as string[];
+    }
+
+    it('leaves only the placeholder GitHub token when the platform reports vault mode, even without SANDBOX_VAULT', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      await workspace({ requestContext });
+
+      const env = lastSandboxEnv() as Record<string, string | undefined>;
+      const merged = {
+        ...vaultProviderEnv,
+        ...(mocks.setEnv.mock.calls.at(-1)?.[0] as any)?.({ ...vaultProviderEnv }),
+      };
+      expect(env.GH_TOKEN).toBeUndefined();
+      expect(merged.GH_TOKEN).toBe(placeholder);
+      expect(merged.SANDBOX_VAULT).toBeUndefined();
+      expect(Object.keys(merged).filter(key => /^GH_TOKEN_\d+$/.test(key))).toEqual([]);
+      expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+      expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
+    });
+
+    it('asks the platform when the start left the mode unset, and withholds tokens from a vault sandbox', async () => {
+      mocks.vault = undefined;
+      mocks.vaultOnRefresh = true;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBeUndefined();
+      expect(writtenEnvValues().filter(value => /pat|token-/.test(value))).toEqual([]);
+    });
+
+    it('fails the start instead of installing tokens when the platform cannot be asked for the mode', async () => {
+      mocks.vault = undefined;
+      mocks.vaultOnRefresh = new Error('proxy unavailable');
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('asks the platform when the start left the mode unset, and installs tokens for a non-vault sandbox', async () => {
+      mocks.vault = undefined;
+      mocks.vaultOnRefresh = false;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('installs the org PAT when a sandbox that withheld tokens reconnects as non-vault', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBeUndefined();
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      mocks.setEnv.mockClear();
+      await sandbox.start();
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+      expect(mocks.mintInstallationToken).not.toHaveBeenCalled();
+    });
+
+    it('never reinstalls a PAT that was withheld while the sandbox was in vault mode', async () => {
+      mocks.vault = true;
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      mocks.runBindingRole = 'review';
+      await reuse();
+      mocks.runBindingRole = 'work';
+      await reuse().catch(() => {});
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      mocks.setEnv.mockClear();
+      await sandbox.start();
+
+      expect(lastGhToken()).not.toBe('ghp_reviewer');
+    });
+
+    it('drops a withheld PAT lookup that a role change overtook during reconnect', async () => {
+      mocks.vault = true;
+      mocks.githubPat = 'ghp_org_pat';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const reuse = () =>
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      mocks.runBindingRole = 'review';
+      await reuse();
+
+      // Setup reads the PAT first; hold the reconnect's reviewer PAT lookup while the role changes back.
+      mocks.settingsHoldSkip = 1;
+      let release!: () => void;
+      mocks.settingsHold = new Promise<void>(resolve => (release = resolve));
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      const reconnect = sandbox.start();
+      await vi.waitFor(() => expect(mocks.settingsHold).toBeNull());
+      mocks.runBindingRole = 'work';
+      await reuse();
+      expect(lastGhToken()).toBe('ghp_org_pat');
+      release();
+      await reconnect;
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    it('re-mints on the next command after a failed mint left a reconnected sandbox without a token', async () => {
+      mocks.vault = true;
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const resolved = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      // Setup mints for the clone; the reconnect's own mint then fails.
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = false;
+      let calls = 0;
+      const mint = mocks.getRepositoryAccess.getMockImplementation()!;
+      mocks.getRepositoryAccess.mockImplementation(async (args: { repositoryId: string }) => {
+        if (calls++ === 1) throw new Error('mint unavailable');
+        return mint(args);
+      });
+      await sandbox.start();
+      mocks.getRepositoryAccess.mockImplementation(mint);
+      mocks.setEnv.mockClear();
+
+      await (resolved as any).sandbox.executeCommand('echo', ['hi']);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+    });
+
+    it('clears a token left by an earlier token-mode start before setup runs a command', async () => {
+      mocks.githubPat = 'ghp_org_pat';
+      mocks.vault = false;
+      const { workspace } = await createLocalFactory();
+      // A setup command makes the start probe its marker with a sandbox command.
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(lastGhToken()).toBe('ghp_org_pat');
+
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      sandbox.vault = true;
+      mocks.setEnv.mockClear();
+      sandbox.exec.mockClear();
+      await sandbox.start();
+
+      const firstClear = mocks.setEnv.mock.invocationCallOrder[0];
+      expect(firstClear).toBeDefined();
+      expect(sandbox.exec).toHaveBeenCalled();
+      expect(firstClear!).toBeLessThan(sandbox.exec.mock.invocationCallOrder[0]!);
+      expect(lastGhToken()).toBeUndefined();
+    });
+
+    it('installs tokens as before when the platform reports a non-vault sandbox', async () => {
+      mocks.vault = false;
+      mocks.githubPat = 'ghp_org_pat';
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      expect(lastGhToken()).toBe('ghp_org_pat');
+    });
+
+    describe('owner-only vault sessions', () => {
+      const owner = { organizationId: 'org-1', workosId: 'owner-1' };
+      const member = { organizationId: 'org-1', workosId: 'member-2' };
+      const notAvailable = /uses its owner's credential vault and is not available to the current user/;
+
+      it('refuses a non-owner who opens an org-visible vault session first', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+      });
+
+      it('refuses a non-owner the vault workspace the owner already opened', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+        const opened = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        expect(opened).toBeDefined();
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+        // The owner keeps reusing it.
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) }),
+        ).resolves.toBe(opened);
+      });
+
+      // A workspace tool call as `caller`, through the hook the workspace installs.
+      const toolCall = (resolved: Awaited<ReturnType<typeof workspace>>, caller: Record<string, unknown>) =>
+        resolved.getToolsConfig()!.hooks!.beforeToolCall!({
+          toolName: 'execute_command',
+          workspaceToolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'echo hi' },
+          context: { requestContext: createGithubRequestContext('project-1', 'session-a', caller) },
+        } as never);
+
+      it('lets a non-owner view an unconfirmed session but refuses tool access until mode is known', async () => {
+        // A real PlatformSandbox reports no mode until it starts or is asked.
+        mocks.vault = undefined;
+        const { resolver } = await createLocalFactory();
+        addProject({ setupCommand: 'pnpm i' });
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const viewed = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        const sandbox = mocks.createSandbox.mock.results[0]!.value;
+        expect(sandbox.start).not.toHaveBeenCalled();
+        expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+        await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+        expect(sandbox.start).not.toHaveBeenCalled();
+        // Once the owner's start reports vault, the non-owner's resolution refuses too.
+        await (viewed as any).sandbox.getInfo();
+        sandbox.vault = true;
+        await expect(
+          resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+        expect(await toolCall(viewed, owner)).toBeUndefined();
+      });
+
+      it('asks the platform, without starting, for the mode of a reopened session', async () => {
+        mocks.vault = undefined;
+        mocks.vaultOnRefresh = true;
+        const { resolver } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+        const sandbox = mocks.createSandbox.mock.results[0]!.value;
+        expect(sandbox.refreshVault).toHaveBeenCalled();
+        expect(sandbox.start).not.toHaveBeenCalled();
+      });
+
+      it('refuses non-owner tool access without starting when mode discovery fails', async () => {
+        mocks.vault = undefined;
+        mocks.vaultOnRefresh = new Error('proxy unavailable');
+        const { resolver } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const viewed = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+        expect(mocks.createSandbox.mock.results[0]!.value.start).not.toHaveBeenCalled();
+      });
+
+      it('does not eagerly start an unknown-mode sandbox for a non-owner', async () => {
+        mocks.vault = undefined;
+        const github = fakeGithubIntegration();
+        const resolver = createWorkspaceFactory({
+          sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+          github: github as any,
+          sandboxStart: 'eager',
+        });
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(mocks.createSandbox.mock.results[0]!.value.start).not.toHaveBeenCalled();
+      });
+
+      it.each(['eager', 'lazy'] as const)(
+        'refuses non-owner custom sandbox access without a vault report (%s start)',
+        async sandboxStart => {
+          mocks.vault = 'absent';
+          const github = fakeGithubIntegration();
+          const resolver = createWorkspaceFactory({
+            sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
+            github: github as any,
+            sandboxStart,
+          });
+          addProject();
+          addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+          const viewed = await resolver({
+            requestContext: createGithubRequestContext('project-1', 'session-a', member),
+          });
+          await new Promise(resolve => setTimeout(resolve, 0));
+          const sandbox = mocks.createSandbox.mock.results[0]!.value;
+          expect(sandbox.start).not.toHaveBeenCalled();
+          await expect(toolCall(viewed, member)).rejects.toThrow(notAvailable);
+          expect(sandbox.start).not.toHaveBeenCalled();
+          expect(await toolCall(viewed, owner)).toBeUndefined();
+        },
+      );
+
+      it('opens a vault session for its owner', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) }),
+        ).resolves.toBeDefined();
+      });
+
+      it('opens a token-mode session to non-owners on create, on reuse and for tool calls', async () => {
+        mocks.vault = false;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+
+        const opened = await workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a', member),
+        });
+        expect(opened).toBeDefined();
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).resolves.toBe(opened);
+        expect(await toolCall(opened, member)).toBeUndefined();
+      });
+
+      it.each([
+        ['vault', true],
+        ['unknown', undefined],
+      ] as const)(
+        "refuses the new owner's tool access to the previous owner's sandbox (%s mode)",
+        async (_mode, vault) => {
+          mocks.vault = vault;
+          const { workspace } = await createLocalFactory();
+          addProject();
+          const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+          const opened = await workspace({
+            requestContext: createGithubRequestContext('project-1', 'session-a', owner),
+          });
+          const sandbox = mocks.createSandbox.mock.results[0]!.value;
+          sandbox.exec.mockClear();
+
+          // The takeover has committed the new owner but not yet released the sandbox.
+          row.userId = 'member-2';
+
+          if (vault === true) {
+            await expect(
+              workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+            ).rejects.toThrow(notAvailable);
+          } else {
+            await expect(
+              workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+            ).resolves.toBe(opened);
+          }
+          await expect(toolCall(opened, member)).rejects.toThrow(notAvailable);
+          expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+          expect(sandbox.exec).not.toHaveBeenCalled();
+        },
+      );
+
+      it('does not delegate a transferred card session owner to the previous human starter', async () => {
+        mocks.vault = true;
+        const { workspace } = await createLocalFactory();
+        addProject();
+        const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org', sandboxUserId: 'owner-1' });
+        const opened = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        row.userId = 'member-2';
+        await expect(toolCall(opened, member)).rejects.toThrow(notAvailable);
+        await expect(
+          workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) }),
+        ).rejects.toThrow(notAvailable);
+      });
+
+      it("gives the new owner a sandbox of their own once a takeover releases the old owner's", async () => {
+        mocks.vault = true;
+        const registry = new FactoryWorkspaceRegistry();
+        const { workspace, github } = await createLocalFactory('mastracode-web-local-vault-takeover-', registry);
+        addProject();
+        const row = addSession({ id: 'session-a', userId: 'owner-1', visibility: 'org' });
+        await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', owner) });
+        expect(mocks.createSandbox).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'owner-1' }));
+        expect(row.sandboxId).toBe('vm-session-a');
+
+        const previous = mocks.createSandbox.mock.results[0]!.value as { exec: ReturnType<typeof vi.fn> };
+        const previousExecs = previous.exec.mock.calls.length;
+        // Hold the previous owner's VM mid-destroy, after the release has fenced and evicted it.
+        const memo = peekSessionSandbox('session-a')!.sandbox as unknown as { destroy: () => Promise<void> };
+        let finishDestroy!: () => void;
+        let destroying!: () => void;
+        const destroyStarted = new Promise<void>(resolve => (destroying = resolve));
+        memo.destroy = () => {
+          destroying();
+          return new Promise<void>(resolve => (finishDestroy = resolve));
+        };
+
+        // What the owner-transfer route does on a vault host: move the row and clear its VM id in one
+        // write, then release the previous owner's VM by the id the transfer cleared.
+        Object.assign(row, { userId: 'member-2', sandboxId: null, sandboxWorkdir: '' });
+        const release = new SessionRetirementCoordinator({
+          invalidateSession: sessionId => registry.invalidateSession(sessionId),
+        }).releasePreviousOwnerSandbox({
+          sourceControl: github.sourceControlStorage as never,
+          orgId: 'org-1',
+          sessionId: 'session-a',
+          previousOwnerId: 'owner-1',
+          sandboxId: 'vm-session-a',
+        });
+        await destroyStarted;
+
+        // Rebuilt while the previous owner's VM is still being destroyed: never reattached to it.
+        await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a', member) });
+        expect(mocks.createSandbox).toHaveBeenCalledTimes(2);
+        const created = mocks.createSandbox.mock.calls[1]![0] as { userId?: string; sandboxId?: string };
+        expect(created.userId).toBe('member-2');
+        expect(created.sandboxId).toBeUndefined();
+        expect(previous.exec.mock.calls.length).toBe(previousExecs);
+
+        finishDestroy();
+        await release;
+        expect((memo as unknown as { status: string }).status).toBe('destroyed');
+      });
+    });
   });
 
   it('installs the reviewer PAT for review-board sessions', async () => {
@@ -4327,6 +4832,7 @@ describe('factory environment sandbox context', () => {
       'sandboxId',
       'sessionId',
       'setupCommand',
+      'userId',
       'workingDirectory',
       'workspaceSetupCommand',
     ]);
@@ -4459,7 +4965,7 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
-    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand', 'userId'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });

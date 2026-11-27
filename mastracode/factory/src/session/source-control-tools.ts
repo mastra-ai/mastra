@@ -16,6 +16,7 @@ import {
 import { normalizedVerdictLine } from '../review-verdict.js';
 import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { resolveSessionWorkdir } from '../sandbox/session-sandbox.js';
+import { assertVaultSandboxCaller, sandboxGithubAuth } from '../sandbox/vault.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import type {
   ProjectRepository,
@@ -213,6 +214,22 @@ function executableSandbox(value: unknown): WorkspaceSandbox & ExecutableSandbox
   return sandbox as WorkspaceSandbox & ExecutableSandbox;
 }
 
+/**
+ * The session's sandbox, for a caller allowed to run commands in it. These
+ * tools run git in the sandbox outside the workspace tools' hook, so they check
+ * the owner-only vault rule themselves before anything starts or execs.
+ */
+async function ownerSandbox(target: SessionTarget, value: unknown): Promise<WorkspaceSandbox & ExecutableSandbox> {
+  const sandbox = executableSandbox(value);
+  await assertVaultSandboxCaller(sandbox, {
+    ownerId: target.session.userId,
+    callerId: target.userId,
+    sessionId: target.session.sessionId,
+    requireKnownMode: true,
+  });
+  return sandbox;
+}
+
 async function emitAgentAudit(
   audit: AuditAgentEmitter,
   requestContext: RequestContext,
@@ -304,7 +321,7 @@ export async function createSourceControlTools({
         if (!mergeRequest || mergeRequest.state !== 'open' || mergeRequest.merged) {
           throw new Error('The bound GitLab merge request is no longer open.');
         }
-        const sandbox = executableSandbox(workspace?.sandbox);
+        const sandbox = await ownerSandbox(target, workspace?.sandbox);
         const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
         const access = await target.provider.versionControl.getRepositoryAccess({
           orgId: target.orgId,
@@ -327,12 +344,15 @@ export async function createSourceControlTools({
       inputSchema: repositorySchema,
       execute: async (input, { workspace }) => {
         const target = await targetFor(input);
-        const sandbox = executableSandbox(workspace?.sandbox);
+        const sandbox = await ownerSandbox(target, workspace?.sandbox);
         const workdir = await resolveSessionWorkdir(target.session.id, sandbox, target.repository.slug);
-        const access = await target.provider.versionControl.getRepositoryAccess({
-          orgId: target.orgId,
-          repositoryId: target.repository.id,
-        });
+        const access =
+          sandboxGithubAuth(sandbox) === 'vault' && target.provider.id === 'github'
+            ? { cloneUrl: `https://github.com/${target.repository.slug}.git` }
+            : await target.provider.versionControl.getRepositoryAccess({
+                orgId: target.orgId,
+                repositoryId: target.repository.id,
+              });
         // Another environment repository's directory may not be its checkout:
         // a boot skips a link whose directory name collides with another's, and
         // a session that booted single-repository has no siblings at all.
