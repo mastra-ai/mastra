@@ -1923,16 +1923,22 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Decide before the suspension is announced: a caller that hears of it can resume the run at
     // once and set it running again. A stored suspension sets the run suspended before this event
     // is published, so a row still running here, stored only for the guards, holds no suspension
-    // anything could resume from.
-    // Resumed and time-travelled runs reach this only on stores with step guards, whose steps need
-    // the row; a restart keeps its row.
+    // stored since the run last started. A run that was itself restarted, resumed or time-travelled
+    // may hold one stored before that, under a header its caller set running, so it keeps its row.
+    // A nested run started fresh after its parent resumed carries the parent's resume, whose target
+    // is not one of its own steps; on a store with step guards its row exists only for the guards.
     const runStorage = this.#runStorage(args.workflowId, runId);
     let recoveryOnly = false;
     try {
+      const inheritedResume =
+        !!parentWorkflow &&
+        !timeTravel &&
+        !!resumeSteps?.length &&
+        !workflow?.stepGraph.some(entry => getStepIds(entry).includes(resumeSteps[0]!));
       const cleansUp =
         !restart &&
         ((!timeTravel && !resumeSteps?.length) ||
-          this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows')));
+          (inheritedResume && this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows'))));
       const header = cleansUp ? await runStorage.loadHeader() : undefined;
       recoveryOnly = !!header?.guardedOnlySnapshot && header.status === 'running';
     } catch (error) {

@@ -695,6 +695,50 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // The same nested run, suspending instead of finishing. It only inherited its parent's resume,
+    // so its run, stored only for the guards, goes when it suspends without storing the suspension.
+    it('removes the stored run of a declining nested workflow that suspends after a parent resume', async () => {
+      const pause = createStep({
+        id: 'pause',
+        inputSchema: Num,
+        outputSchema: Num,
+        execute: async ({ suspend }) => suspend({}),
+      });
+      const child = createWorkflow({
+        id: `declining-paused-child-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(pause)
+        .commit();
+      const gate = createStep({
+        id: 'gate',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: Approval,
+        execute: async ({ inputData, resumeData, suspend }) => (resumeData ? inputData : suspend({})),
+      });
+      const parent = createWorkflow({
+        id: `declining-paused-parent-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+      })
+        .then(gate)
+        .then(child)
+        .commit();
+      await withHost({ [child.id]: child, [parent.id]: parent }, async () => {
+        const run = await parent.createRun();
+        expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+        expect(await run.resume({ step: 'gate', resumeData: { ok: true } })).toMatchObject({ status: 'suspended' });
+        await drainHandlers();
+        const childRunId = (await storedSteps(parent.id, run.runId))?.[child.id]?.metadata?.nestedRunId;
+        expect(childRunId).toEqual(expect.any(String));
+        const store = (await storage.getStore('workflows'))!;
+        expect(await store.loadWorkflowSnapshot({ workflowName: child.id, runId: childRunId })).toBeNull();
+      });
+    }, 20_000);
+
     // T9. A resumed run still finishes through the other entry types once its steps are guarded.
     it('finishes a resumed run through a loop, a nested workflow, a parallel, a branch and a sleep', async () => {
       const add = (id: string) =>

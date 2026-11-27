@@ -11,6 +11,7 @@ import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context'
 import type { MastraStorage } from '../../../storage';
 import type { WorkflowOptions, WorkflowRunState } from '../..';
 import { createStep, createWorkflow as createEventedWorkflow } from '..';
+import { drainHandlers } from './redelivery-contract';
 import { RedeliveryDriver } from './redelivery-driver';
 
 export function describeOccurrenceReplayCases({
@@ -839,6 +840,8 @@ export function describeOccurrenceReplayCases({
             if (persistSuspended && kind === 'step') {
               shouldPersistSuspended = false;
               expect(await run.resume({ resumeData: {} })).toMatchObject({ status: 'suspended' });
+              // The suspend handler goes on after the caller hears of the suspension.
+              await drainHandlers();
               expect(await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId })).toMatchObject({
                 context: { pause: { status: 'suspended', suspendPayload: { reason: 'approval' } } },
               });
