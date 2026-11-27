@@ -3,12 +3,12 @@ import { createWriteStream, existsSync, mkdirSync, unlinkSync, chmodSync } from 
 import { dirname, join } from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { VALE_VERSION } from './version.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const isWindows = process.platform === 'win32'
-const VALE_VERSION = '3.27.0'
 const OUTPUT_PATH = join(__dirname, 'bin')
 const OUTPUT_BIN = join(OUTPUT_PATH, isWindows ? 'vale.exe' : 'vale')
 

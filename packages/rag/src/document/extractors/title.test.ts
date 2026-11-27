@@ -22,19 +22,12 @@ describe('TitleExtractor', () => {
     });
   });
 
-  it('can use a custom model from the test suite', async () => {
+  it.each([
+    ['can use a custom model from the test suite', 'A title test using a custom model.'],
+    ['extracts title', 'This is a test document.'],
+  ] as const)('%s', async (_title, text) => {
     const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: 'A title test using a custom model.' });
-    const titles = await extractor.extract([node]);
-    expect(Array.isArray(titles)).toBe(true);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('extracts title', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: 'This is a test document.' });
+    const node = new TextNode({ text });
     const titles = await extractor.extract([node]);
     expect(Array.isArray(titles)).toBe(true);
     expect(titles[0]).toHaveProperty('documentTitle');
@@ -75,54 +68,16 @@ describe('TitleExtractor', () => {
     expect(titles[0].documentTitle).toBe('');
   });
 
-  it('handles special characters and emojis', async () => {
+  it.each([
+    ['handles special characters and emojis', '🚀✨🔥'],
+    ['handles numbers only', '1234567890'],
+    ['handles HTML tags', '<h1>Test</h1>'],
+    ['handles non-English text', '这是一个测试文档。'],
+    ['handles duplicate/repeated text', 'repeat repeat repeat'],
+    ['handles only punctuation', '!!!???...'],
+  ] as const)('%s', async (_title, text) => {
     const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: '🚀✨🔥' });
-    const titles = await extractor.extract([node]);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('handles numbers only', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: '1234567890' });
-    const titles = await extractor.extract([node]);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('handles HTML tags', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: '<h1>Test</h1>' });
-    const titles = await extractor.extract([node]);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('handles non-English text', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: '这是一个测试文档。' });
-    const titles = await extractor.extract([node]);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('handles duplicate/repeated text', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: 'repeat repeat repeat' });
-    const titles = await extractor.extract([node]);
-    expect(titles[0]).toHaveProperty('documentTitle');
-    expect(typeof titles[0].documentTitle).toBe('string');
-    expect(titles[0].documentTitle.length).toBeGreaterThan(0);
-  });
-
-  it('handles only punctuation', async () => {
-    const extractor = new TitleExtractor({ llm: model });
-    const node = new TextNode({ text: '!!!???...' });
+    const node = new TextNode({ text });
     const titles = await extractor.extract([node]);
     expect(titles[0]).toHaveProperty('documentTitle');
     expect(typeof titles[0].documentTitle).toBe('string');

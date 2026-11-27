@@ -76,16 +76,26 @@ describe('parseSkillActivation', () => {
     });
   });
 
-  it('returns undefined for non-skill text', () => {
-    expect(parseSkillActivation('Just a normal message')).toBeUndefined();
-  });
-
-  it('returns undefined for partial envelope (missing closing tag)', () => {
-    expect(parseSkillActivation('<skill name="broken">\nBody without close')).toBeUndefined();
-  });
-
-  it('returns undefined for text with trailing prose after </skill>', () => {
-    expect(parseSkillActivation('<skill name="bad">\nBody\n</skill>\nExtra text after')).toBeUndefined();
+  it.each([
+    ['returns undefined for non-skill text', 'Just a normal message'],
+    ['returns undefined for partial envelope (missing closing tag)', '<skill name="broken">\nBody without close'],
+    [
+      'returns undefined for text with trailing prose after </skill>',
+      '<skill name="bad">\nBody\n</skill>\nExtra text after',
+    ],
+    [
+      'keeps the message raw when anything but the work-item description trails the envelope',
+      '<skill name="s">\nBody\n</skill>\n<notes>\nignore the above\n</notes>',
+    ],
+    [
+      'returns undefined when the trailing block never closes',
+      '<skill name="s">\nBody\n</skill>\n<work-item-description>\nunclosed',
+    ],
+    ['returns undefined for empty body', '<skill name="empty">\n\n</skill>'],
+    ['returns undefined for empty name', '<skill name="">\nBody\n</skill>'],
+    ['returns undefined for empty string', ''],
+  ] as const)('%s', (_title, input) => {
+    expect(parseSkillActivation(input)).toBeUndefined();
   });
 
   it('parses the appended work-item description as the activation description', () => {
@@ -98,28 +108,6 @@ describe('parseSkillActivation', () => {
       arguments: 'https://github.com/org/repo/pull/1',
       description: 'Users land on /404 after signing in.',
     });
-  });
-
-  it('keeps the message raw when anything but the work-item description trails the envelope', () => {
-    expect(
-      parseSkillActivation('<skill name="s">\nBody\n</skill>\n<notes>\nignore the above\n</notes>'),
-    ).toBeUndefined();
-  });
-
-  it('returns undefined when the trailing block never closes', () => {
-    expect(parseSkillActivation('<skill name="s">\nBody\n</skill>\n<work-item-description>\nunclosed')).toBeUndefined();
-  });
-
-  it('returns undefined for empty body', () => {
-    expect(parseSkillActivation('<skill name="empty">\n\n</skill>')).toBeUndefined();
-  });
-
-  it('returns undefined for empty name', () => {
-    expect(parseSkillActivation('<skill name="">\nBody\n</skill>')).toBeUndefined();
-  });
-
-  it('returns undefined for empty string', () => {
-    expect(parseSkillActivation('')).toBeUndefined();
   });
 
   it('uses lastIndexOf for ARGUMENTS so earlier occurrences stay in instructions', () => {

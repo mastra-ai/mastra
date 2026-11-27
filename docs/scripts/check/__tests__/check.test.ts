@@ -13,6 +13,7 @@ import { buildRouteIndex, routeForFile } from '../routes'
 import { isKnownRuleId, matchesRuleFilter, RULE_FAMILIES, RULES, slugifyRuleName } from '../rules'
 import { runChecks, UsageError } from '../runner'
 import { isSuppressed, parseSuppressions } from '../suppress'
+import { VALE_VERSION } from '../../vale/version.mjs'
 
 const ROOT = '/repo'
 const VALID_FRONTMATTER = `---
@@ -451,6 +452,33 @@ describe('runChecks', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  it('warns when the Vale binary is not the version CI uses', async () => {
+    const bin = path.join(rootDir, 'scripts/vale/bin/vale')
+    await fs.mkdir(path.dirname(bin), { recursive: true })
+    const stub = (version: string) =>
+      fs.writeFile(
+        bin,
+        `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "vale version ${version}"; else echo '{}'; fi\n`,
+        { mode: 0o755 },
+      )
+
+    await stub('3.0.0')
+    const stale = await runChecks({ rootDir, rules: ['mastra/vale-*'] })
+    expect(stale.summary).toMatchObject({ errors: 0, warnings: 1 })
+    expect(stale.findings).toEqual([
+      expect.objectContaining({
+        ruleId: 'mastra/vale-version',
+        severity: 'warn',
+        message: expect.stringContaining(`Vale 3.0.0 is installed, but CI uses ${VALE_VERSION}`),
+        suggestion: expect.stringContaining('pnpm vale:download'),
+      }),
+    ])
+
+    await stub(VALE_VERSION)
+    const current = await runChecks({ rootDir, rules: ['mastra/vale-*'] })
+    expect(current.findings).toEqual([])
   })
 
   it('reports normalized findings and a summary', async () => {

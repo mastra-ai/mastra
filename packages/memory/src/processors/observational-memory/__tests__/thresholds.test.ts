@@ -145,20 +145,13 @@ describe('thresholds', () => {
       expect(resolveRetentionFloor(1000, 30000)).toBe(1000);
     });
 
-    it('ratio of 1.0 means zero retention', () => {
-      expect(resolveRetentionFloor(1.0, 30000)).toBe(0);
-    });
-
-    it('ratio of 0.0 means full retention', () => {
-      expect(resolveRetentionFloor(0.0, 30000)).toBe(30000);
-    });
-
-    it('clamps negative ratio to 0', () => {
-      expect(resolveRetentionFloor(-0.5, 30000)).toBe(30000);
-    });
-
-    it('clamps ratio > 1 to 1', () => {
-      expect(resolveRetentionFloor(1.5, 30000)).toBe(0);
+    it.each([
+      ['ratio of 1.0 means zero retention', 1.0, 0],
+      ['ratio of 0.0 means full retention', 0.0, 30000],
+      ['clamps negative ratio to 0', -0.5, 30000],
+      ['clamps ratio > 1 to 1', 1.5, 0],
+    ] as const)('%s', (_title, input, expected) => {
+      expect(resolveRetentionFloor(input, 30000)).toBe(expected);
     });
   });
 

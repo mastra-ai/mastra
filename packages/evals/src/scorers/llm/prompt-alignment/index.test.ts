@@ -447,35 +447,15 @@ describe('Prompt Alignment Scorer', () => {
       // The default mode is 'both' which evaluates both user and system prompts
     });
 
-    it('should create scorer with user evaluation mode', () => {
+    it.each([
+      ['should create scorer with user evaluation mode', 'user'],
+      ['should create scorer with system evaluation mode', 'system'],
+      ['should create scorer with both evaluation mode explicitly', 'both'],
+    ] as const)('%s', (_title, evaluationMode) => {
       const scorer = createPromptAlignmentScorerLLM({
         model: mockModel,
         options: {
-          evaluationMode: 'user',
-        },
-      });
-
-      expect(scorer.name).toBe('Prompt Alignment (LLM)');
-      expect(scorer.description).toContain('intent and requirements');
-    });
-
-    it('should create scorer with system evaluation mode', () => {
-      const scorer = createPromptAlignmentScorerLLM({
-        model: mockModel,
-        options: {
-          evaluationMode: 'system',
-        },
-      });
-
-      expect(scorer.name).toBe('Prompt Alignment (LLM)');
-      expect(scorer.description).toContain('intent and requirements');
-    });
-
-    it('should create scorer with both evaluation mode explicitly', () => {
-      const scorer = createPromptAlignmentScorerLLM({
-        model: mockModel,
-        options: {
-          evaluationMode: 'both',
+          evaluationMode,
         },
       });
 

@@ -11,7 +11,10 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
+import { ProcessorStepSchema } from '@mastra/core/processors';
+import type { ErrorProcessorOrWorkflow, ProcessorWorkflow } from '@mastra/core/processors';
 import { InMemoryMemory, InMemoryDB, InMemoryStore } from '@mastra/core/storage';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { Memory } from '../../../index';
@@ -125,6 +128,7 @@ describe('automatic context-overflow recovery in the OM processor (#21657)', () 
     observeOnContextOverflow?: boolean;
     scope?: 'thread' | 'resource';
     fail: (call: number) => Error | undefined;
+    errorProcessors?: (memory: Memory) => Promise<ErrorProcessorOrWorkflow[]>;
   }) {
     const store = new InMemoryStore();
     const memory = new Memory({
@@ -205,6 +209,7 @@ describe('automatic context-overflow recovery in the OM processor (#21657)', () 
       instructions: 'Answer the question.',
       model,
       memory,
+      errorProcessors: await opts.errorProcessors?.(memory),
     });
 
     const memoryOptions = { memory: { thread: threadId, resource: resourceId } };
@@ -241,6 +246,31 @@ describe('automatic context-overflow recovery in the OM processor (#21657)', () 
       ).toBe(true);
     },
   );
+
+  it('recovers when an OM step sits inside an error processor workflow', async () => {
+    const { run, prompts } = await setup({
+      fail: call => (call === 1 ? overflowError() : undefined),
+      errorProcessors: async memory => {
+        const om = new ObservationalMemoryProcessor((await memory.omEngine)!, memory);
+        return [
+          createWorkflow({
+            id: 'error-workflow',
+            type: 'processor',
+            inputSchema: ProcessorStepSchema,
+            outputSchema: ProcessorStepSchema,
+            options: { validateInputs: false },
+          })
+            .then(createStep(om))
+            .commit() as ProcessorWorkflow,
+        ];
+      },
+    });
+
+    expect(await run()).toBe(answer);
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).not.toContain('m0 xxx');
+    expect(prompts[1]).toContain('Observed older conversation');
+  });
 
   it.each(['thread', 'resource'] as const)(
     'retries a step at most once when the provider keeps rejecting it (%s scope)',

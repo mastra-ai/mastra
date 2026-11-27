@@ -581,49 +581,39 @@ describe('Responses Handlers', () => {
     expect(created.usage).toBeNull();
   });
 
-  it('accepts omitted model in the create response request schema', () => {
+  it.each([
+    ['accepts omitted model in the create response request schema', 'test-agent', true],
+    ['rejects empty agent_id in the create response request schema', '', false],
+  ] as const)('%s', (_title, agent_id, expected) => {
     const result = createResponseBodySchema.safeParse({
-      agent_id: 'test-agent',
+      agent_id,
       input: 'Hello',
       stream: false,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(expected);
   });
 
-  it('accepts omitted agent_id in the create response request schema when previous_response_id is provided', () => {
+  it.each([
+    [
+      'accepts omitted agent_id in the create response request schema when previous_response_id is provided',
+      'resp_123',
+      true,
+    ],
+    ['rejects empty previous_response_id in the create response request schema', '', false],
+  ] as const)('%s', (_title, previous_response_id, expected) => {
     const result = createResponseBodySchema.safeParse({
       input: 'Hello again',
-      previous_response_id: 'resp_123',
+      previous_response_id,
       stream: false,
     });
 
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(expected);
   });
 
   it('rejects create response requests without agent_id or previous_response_id', () => {
     const result = createResponseBodySchema.safeParse({
       input: 'Hello',
-      stream: false,
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty agent_id in the create response request schema', () => {
-    const result = createResponseBodySchema.safeParse({
-      agent_id: '',
-      input: 'Hello',
-      stream: false,
-    });
-
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects empty previous_response_id in the create response request schema', () => {
-    const result = createResponseBodySchema.safeParse({
-      input: 'Hello again',
-      previous_response_id: '',
       stream: false,
     });
 
@@ -3079,8 +3069,21 @@ describe('Responses Handlers', () => {
     ]);
   });
 
-  it('does not duplicate fallback text when persisted assistant text only differs by surrounding whitespace', async () => {
-    const toolTurn = { callId: 'call_trimmed_text_db_message', city: 'Lagos', weather: 'sunny' };
+  it.each([
+    [
+      'does not duplicate fallback text when persisted assistant text only differs by surrounding whitespace',
+      'call_trimmed_text_db_message',
+      'assistant-whitespace-final',
+      'The lookup is done.\n',
+    ],
+    [
+      'does not duplicate fallback text for non-prefix assistant text mismatches',
+      'call_mismatched_text_db_message',
+      'assistant-mismatched-final',
+      'The lookup is done!',
+    ],
+  ] as const)('%s', async (_title, callId, id, text) => {
+    const toolTurn = { callId, city: 'Lagos', weather: 'sunny' };
 
     vi.spyOn(toolAgent, 'stream').mockResolvedValue(
       createStreamResultFromChunks({
@@ -3097,10 +3100,10 @@ describe('Responses Handlers', () => {
         ],
         dbMessages: [
           createDbMessage({
-            id: 'assistant-whitespace-final',
+            id,
             role: 'assistant',
             createdAt: new Date('2026-03-23T10:59:00.000Z'),
-            parts: [{ type: 'text', text: 'The lookup is done.\n' }],
+            parts: [{ type: 'text', text }],
           }),
         ],
       }),
@@ -3139,73 +3142,7 @@ describe('Responses Handlers', () => {
         {
           id: completed.response.id,
           type: 'message',
-          content: [{ text: 'The lookup is done.\n' }],
-        },
-      ]);
-    }
-  });
-
-  it('does not duplicate fallback text for non-prefix assistant text mismatches', async () => {
-    const toolTurn = { callId: 'call_mismatched_text_db_message', city: 'Lagos', weather: 'sunny' };
-
-    vi.spyOn(toolAgent, 'stream').mockResolvedValue(
-      createStreamResultFromChunks({
-        text: 'The lookup is done.',
-        chunks: [
-          ...createWeatherToolCallChunk(toolTurn),
-          createWeatherToolResultChunk(toolTurn),
-          {
-            type: 'text-delta',
-            payload: {
-              text: 'The lookup is done.',
-            },
-          },
-        ],
-        dbMessages: [
-          createDbMessage({
-            id: 'assistant-mismatched-final',
-            role: 'assistant',
-            createdAt: new Date('2026-03-23T10:59:00.000Z'),
-            parts: [{ type: 'text', text: 'The lookup is done!' }],
-          }),
-        ],
-      }),
-    );
-
-    const response = (await CREATE_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      model: 'openai/gpt-5',
-      agent_id: 'tool-agent',
-      input: 'Check Lagos',
-      store: true,
-      stream: true,
-    })) as Response;
-
-    const events = (await readSseEvents(response)) as Array<Record<string, any>>;
-    const completed = events.find(event => event.type === 'response.completed')!;
-    const retrieved = await GET_RESPONSE_ROUTE.handler({
-      ...createTestServerContext({ mastra }),
-      responseId: completed.response.id,
-    });
-
-    for (const output of [completed.response.output, retrieved.output]) {
-      expect(output).toHaveLength(3);
-      expect(output.filter(item => item.type === 'message')).toHaveLength(1);
-      expect(output).toMatchObject([
-        {
-          id: toolTurn.callId,
-          type: 'function_call',
-          call_id: toolTurn.callId,
-        },
-        {
-          id: `${toolTurn.callId}:output`,
-          type: 'function_call_output',
-          call_id: toolTurn.callId,
-        },
-        {
-          id: completed.response.id,
-          type: 'message',
-          content: [{ text: 'The lookup is done!' }],
+          content: [{ text }],
         },
       ]);
     }

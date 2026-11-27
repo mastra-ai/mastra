@@ -160,13 +160,23 @@ export class FastembedWorker {
       return;
     }
     this.#active = job;
-    const child = this.#child ?? this.#spawn();
-    // Work in flight keeps the agent alive until the reply arrives.
-    child.ref();
-    child.channel?.ref();
-    child.send({ id: job.id, entry: this.#entry, values: job.options.values }, error => {
-      if (error) this.#onChildGone(child, error);
-    });
+    try {
+      const child = this.#child ?? this.#spawn();
+      // Work in flight keeps the agent alive until the reply arrives.
+      child.ref();
+      child.channel?.ref?.();
+      child.send({ id: job.id, entry: this.#entry, values: job.options.values }, error => {
+        if (error) this.#onChildGone(child, error);
+      });
+    } catch (error) {
+      // A Bun channel without `ref()`/`unref()`, or a refused `send()`, throws here. Drop the failed
+      // worker (so its late events miss the `#onChildGone` identity check), fail this job with the
+      // thrown value, and carry on with the queue instead of stranding it behind a stale active job.
+      this.#stopChild();
+      this.#active = undefined;
+      this.#settle(job, () => job.reject(error));
+      this.#pump();
+    }
   }
 
   #spawn(): ChildProcess {
@@ -238,7 +248,7 @@ export class FastembedWorker {
     if (!child) return;
     // An idle worker must not keep a finished CLI running.
     child.unref();
-    child.channel?.unref();
+    child.channel?.unref?.();
     this.#clearIdleTimer();
     this.#idleTimer = setTimeout(() => {
       this.#idleTimer = undefined;
