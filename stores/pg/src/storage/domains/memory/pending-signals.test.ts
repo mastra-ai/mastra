@@ -21,6 +21,7 @@ const newRun = () => `run-${randomUUID()}`;
 // Short enough that schema-prefixed index names stay under Postgres's 63-byte identifier limit.
 const newSchema = (name: string) => `signals_${name}_${randomUUID().replace(/-/g, '').slice(0, 8)}`;
 const ids = (messages: MastraDBMessage[]) => messages.map(message => message.id);
+const pendingThreadOf = (thread: { id: string }) => `mastra-pending-signals:${thread.id}`;
 const sorted = (values: string[]) => [...values].sort();
 const reversed = <T>(values: T[]) => [...values].reverse();
 
@@ -114,13 +115,16 @@ function helpers(ctx: Ctx) {
     store.claimPendingSignals({ threadId: thread.id, runId, consumedIds });
   const pendingIds = async (thread: StorageThreadType) =>
     ids(await ctx.memory.listPendingSignals({ threadId: thread.id }));
-  /** The thread's rows straight from the table, with the columns the store never returns. */
+  /**
+   * The rows of the thread and of its pending-signal id straight from the table, with the columns
+   * the store never returns.
+   */
   const rowsOf = async (thread: StorageThreadType) =>
     (
-      await ctx.pool.query<{ id: string; status: string | null; claimedBy: string | null }>(
-        `SELECT id, "signalStatus" AS status, "signalClaimedBy" AS "claimedBy"
-         FROM ${ctx.messagesTable} WHERE thread_id = $1 ORDER BY id`,
-        [thread.id],
+      await ctx.pool.query<{ id: string; threadId: string; resourceId: string | null; claimedBy: string | null }>(
+        `SELECT id, thread_id AS "threadId", "resourceId", "signalClaimedBy" AS "claimedBy"
+         FROM ${ctx.messagesTable} WHERE thread_id = ANY($1) ORDER BY id`,
+        [[thread.id, pendingThreadOf(thread)]],
       )
     ).rows;
   const claimedBy = async (thread: StorageThreadType, runId: string) =>
@@ -220,7 +224,9 @@ function raceTests(ctx: Ctx) {
         );
         expect(await ctx.memory.getSignalRun({ threadId: thread.id })).toBeNull();
         expect(await claimedBy(thread, runId)).toEqual([]);
-        expect((await rowsOf(thread)).filter(row => row.status === 'claimed')).toEqual([]);
+        // No row is left taken, and none under the pending-signal id carries a resource.
+        const stillPending = (await rowsOf(thread)).filter(row => row.threadId === pendingThreadOf(thread));
+        expect(stillPending.filter(row => row.claimedBy !== null || row.resourceId !== null)).toEqual([]);
       }
     },
     RACE_TIMEOUT,
@@ -309,6 +315,57 @@ function raceTests(ctx: Ctx) {
     },
     RACE_TIMEOUT,
   );
+
+  // The save, the close and the deletion each lock rows under both the thread id and its
+  // pending-signal id; the delete by id and the save under another thread lock pending rows too.
+  it(
+    'settles a thread deletion racing saves that move pending rows into the thread, a close and deletes by id',
+    async () => {
+      for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+        const thread = await newThread();
+        const other = await newThread(thread.resourceId);
+        const runId = await startRun(thread);
+        // Sent in the reverse of the lock order, so a scan of the pending-signal id meets them that way.
+        const prefix = `signal-${randomUUID()}`;
+        const sent = Array.from({ length: 12 }, (_, index) => signalFor(thread, { id: `${prefix}-${index}` }));
+        for (const message of reversed(sent)) {
+          expect(await ctx.memory.enqueuePendingSignal({ message })).toBe('accepted');
+        }
+        await claim(thread, runId);
+        const late = await sendMany(thread, 4);
+        const all = [...sent, ...late];
+
+        const results = await startShifted<unknown>(
+          [
+            () =>
+              ctx.memory.saveMessages({
+                messages: reversed(all).map(message => ({ ...message, createdAt: new Date() })),
+              }),
+            () =>
+              ctx.peer.saveMessages({ messages: all.slice(0, 6).map(message => ({ ...message, threadId: other.id })) }),
+            () => ctx.peer.closeSignalRun({ threadId: thread.id, runId, consumedIds: ids(sent.slice(0, 3)) }),
+            () => ctx.memory.deleteMessages(reversed(ids(all.slice(4, 10)))),
+            () => ctx.peer.deleteThread({ threadId: thread.id }),
+          ],
+          iteration,
+        );
+
+        // A save into the thread that finds it deleted is refused; nothing else may fail.
+        for (const result of results) {
+          if (result.status === 'fulfilled') continue;
+          expect(codesOf(result.reason)).toEqual([]);
+          expect(String(result.reason)).toContain(`Thread ${thread.id} not found`);
+        }
+        expect(await ctx.memory.getThreadById({ threadId: thread.id })).toBeNull();
+        expect(await rowsOf(thread)).toEqual([]);
+        // What survives is in the other thread: rows that had become messages before that save moved them.
+        const { messages: moved } = await ctx.memory.listMessages({ threadId: other.id, perPage: false });
+        expect(sorted(await existing(ids(all)))).toEqual(sorted(ids(moved)));
+        expect(ids(all.slice(0, 6))).toEqual(expect.arrayContaining(ids(moved)));
+      }
+    },
+    RACE_TIMEOUT,
+  );
 }
 
 describe('Pending signals on connections that default to REPEATABLE READ', () => {
@@ -378,7 +435,7 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
   );
 
   it(
-    'moves the rows of sends racing a thread transfer to the new resource',
+    'lists the rows of sends racing a thread transfer with the new resource',
     async () => {
       for (let iteration = 0; iteration < ITERATIONS; iteration++) {
         const thread = await newThread();
@@ -401,8 +458,8 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
           iteration,
         );
 
-        // A send either lands before the transfer and moves with it, or finds the thread under
-        // another resource and is refused.
+        // A send either lands before the transfer, or finds the thread under another resource and is
+        // refused. Pending rows store no resource, so every accepted one is listed with the new one.
         expect(results.filter(result => result.status === 'rejected')).toEqual([]);
         const pending = await ctx.memory.listPendingSignals({ threadId: thread.id });
         expect(sorted(ids(pending))).toEqual(sorted([...seeded, ...accepted]));
@@ -415,7 +472,7 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
 
 describe('Pending signals across two processes', () => {
   const ctx = twoProcesses('races');
-  const { newThread, startRun, send, sendMany, claim, pendingIds } = helpers(ctx);
+  const { newThread, startRun, send, sendMany, claim, pendingIds, rowsOf } = helpers(ctx);
 
   raceTests(ctx);
 
@@ -443,6 +500,15 @@ describe('Pending signals across two processes', () => {
     const pending = await send(thread, { createdAt: new Date(base + 2) });
     const fresh = createSampleMessageV2({ ...scope, createdAt: new Date(base + 3) });
     const savedAt = base + 50_000;
+    // Until the save, both signals sit under the pending-signal thread id, without a resource.
+    expect((await rowsOf(thread)).filter(row => row.id !== normal.id)).toEqual(
+      sorted([claimed.id, pending.id]).map(id => ({
+        id,
+        threadId: pendingThreadOf(thread),
+        resourceId: null,
+        claimedBy: id === claimed.id ? runId : null,
+      })),
+    );
 
     await ctx.peer.saveMessages({
       messages: [
@@ -455,28 +521,30 @@ describe('Pending signals across two processes', () => {
 
     const { rows } = await ctx.pool.query<{
       id: string;
-      status: string | null;
+      threadId: string;
+      resourceId: string | null;
       claimedBy: string | null;
       createdAt: string;
       createdAtZ: string;
     }>(
-      `SELECT id, "signalStatus" AS status, "signalClaimedBy" AS "claimedBy",
+      `SELECT id, thread_id AS "threadId", "resourceId", "signalClaimedBy" AS "claimedBy",
          (extract(epoch FROM "createdAt") * 1000)::bigint::text AS "createdAt",
          (extract(epoch FROM "createdAtZ") * 1000)::bigint::text AS "createdAtZ"
-       FROM ${ctx.messagesTable} WHERE thread_id = $1`,
-      [thread.id],
+       FROM ${ctx.messagesTable} WHERE thread_id = ANY($1)`,
+      [[thread.id, pendingThreadOf(thread)]],
     );
     const row = (id: string) => rows.find(candidate => candidate.id === id);
-    const state = (status: string | null, claimant: string | null, at: number) => ({
-      status,
+    const state = (claimant: string | null, at: number) => ({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
       claimedBy: claimant,
       createdAt: String(at),
       createdAtZ: String(at),
     });
-    expect(row(normal.id)).toMatchObject(state(null, null, base));
-    expect(row(claimed.id)).toMatchObject(state(null, runId, savedAt + 2));
-    expect(row(pending.id)).toMatchObject(state(null, null, savedAt));
-    expect(row(fresh.id)).toMatchObject(state(null, null, base + 3));
+    expect(row(normal.id)).toMatchObject(state(null, base));
+    expect(row(claimed.id)).toMatchObject(state(runId, savedAt + 2));
+    expect(row(pending.id)).toMatchObject(state(null, savedAt));
+    expect(row(fresh.id)).toMatchObject(state(null, base + 3));
 
     const { messages } = await ctx.memory.listMessages({ ...scope, perPage: false });
     expect(ids(messages)).toEqual([normal.id, fresh.id, pending.id, claimed.id]);
@@ -644,7 +712,6 @@ describe('Pending-signal schema', () => {
 
   const expectedColumns = [
     { table_name: 'mastra_messages', column_name: 'signalClaimedBy', data_type: 'text', is_nullable: 'YES' },
-    { table_name: 'mastra_messages', column_name: 'signalStatus', data_type: 'text', is_nullable: 'YES' },
     { table_name: 'mastra_threads', column_name: 'signalRunId', data_type: 'text', is_nullable: 'YES' },
   ];
 
@@ -663,12 +730,17 @@ describe('Pending-signal schema', () => {
       );
       await legacyMemory.saveMessages({ messages });
       // The tables as a release without pending signals left them; dropping the columns drops the index.
-      await admin.query(
-        `ALTER TABLE "${schemaName}"."mastra_messages" DROP COLUMN "signalStatus", DROP COLUMN "signalClaimedBy"`,
-      );
+      await admin.query(`ALTER TABLE "${schemaName}"."mastra_messages" DROP COLUMN "signalClaimedBy"`);
       await admin.query(`ALTER TABLE "${schemaName}"."mastra_threads" DROP COLUMN "signalRunId"`);
       expect(await signalColumns(schemaName)).toEqual([]);
       expect(await signalIndexes(schemaName)).toEqual([]);
+      // Message reads and writes name no signal column, so they work before the migration runs.
+      const added = createSampleMessageV2({ threadId: thread.id, resourceId: thread.resourceId });
+      await legacyMemory.saveMessages({ messages: [{ ...messages[0]!, content: { ...messages[0]!.content } }, added] });
+      await legacyMemory.updateMessages({ messages: [{ id: added.id, content: { metadata: { updated: true } } }] });
+      expect(ids((await legacyMemory.listMessagesById({ messageIds: [added.id] })).messages)).toEqual([added.id]);
+      expect((await legacyMemory.listMessages({ threadId: thread.id, perPage: 1 })).total).toBe(3);
+      await legacyMemory.deleteMessages([added.id]);
 
       const upgraded = [0, 1].map(
         index => new PostgresStore({ id: `signals-upgraded-${index}`, connectionString, schemaName }),
@@ -678,10 +750,10 @@ describe('Pending-signal schema', () => {
 
       expect(await signalColumns(schemaName)).toEqual(expectedColumns);
       const indexes = await signalIndexes(schemaName);
-      expect(indexes).toMatchObject([{ schema: schemaName, valid: true }]);
-      expect(indexes[0]!.definition).toContain(
-        '(thread_id) WHERE (("signalStatus" IS NOT NULL) OR ("signalClaimedBy" IS NOT NULL))',
-      );
+      expect(indexes).toMatchObject([
+        { schema: schemaName, name: `${schemaName}_mastra_messages_signal_claimed_idx`, valid: true },
+      ]);
+      expect(indexes[0]!.definition).toContain('(thread_id) WHERE ("signalClaimedBy" IS NOT NULL)');
 
       for (const store of [memory!, peer!]) {
         const listed = await store.listMessages({ threadId: thread.id, perPage: false });
