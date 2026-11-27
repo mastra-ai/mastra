@@ -1,6 +1,5 @@
 import type { FactoryModelScope } from '../workspaces/services/github';
-import { MODEL_ROUTES } from './components/models/routing/model-routes';
-import type { ModelDefaults } from './components/models/routing/model-routes';
+import { MODEL_DEFAULTS_ANCHORS, MODEL_ROUTES } from './components/models/routing/model-routes';
 
 export type SettingsSection =
   | 'account'
@@ -27,10 +26,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   debug: 'Debug',
 };
 
-export const MODEL_DEFAULTS_ANCHORS = {
-  personal: 'personal-defaults',
-  factory: 'factory-defaults',
-} as const satisfies Record<ModelDefaults, string>;
+export { MODEL_DEFAULTS_ANCHORS };
 
 export type ModelDefaultsAnchor = (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS];
 

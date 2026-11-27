@@ -29,23 +29,24 @@ import { compareModelReleaseDates } from '@/utils/model';
 // Catalogs run to thousands of models; rendering them all freezes the list.
 const MAX_SEARCH_RESULTS = 50;
 // A gateway catalog holds thousands of models; rendering them all as cmdk items takes seconds.
-// Past this many, the unfiltered list shows each provider's newest few and a filter or search reaches the rest.
+// Past this many, the unfiltered list keeps only the newest models; a provider filter or a search reaches the rest.
 const MAX_LISTED_MODELS = 200;
 const MODELS_PER_PROVIDER_WHEN_CAPPED = 5;
 // Each pill carries a tooltip; hundreds of them stall opening. The rest wait behind "+N".
 const MAX_PROVIDER_PILLS = 12;
 
 const newestRelease = (provider: ModelPickerProvider) =>
-  provider.models.reduce(
-    (latest, model) => (model.releaseDate && model.releaseDate > latest ? model.releaseDate : latest),
-    '',
+  provider.models.reduce<string | undefined>(
+    (latest, model) => (compareModelReleaseDates(model.releaseDate, latest) < 0 ? model.releaseDate : latest),
+    undefined,
   );
 
 /** The providers with the newest models, keeping the picked and filtered ones in the row. */
 function busiestProviders(providers: ModelPickerProvider[], value?: ModelPickerValue, filter?: string) {
   const pinned = (provider: ModelPickerProvider) => provider.id === value?.provider || provider.id === filter;
+  const newest = new Map(providers.map(provider => [provider, newestRelease(provider)]));
   const ranked = providers.toSorted(
-    (a, b) => Number(pinned(b)) - Number(pinned(a)) || newestRelease(b).localeCompare(newestRelease(a)),
+    (a, b) => Number(pinned(b)) - Number(pinned(a)) || compareModelReleaseDates(newest.get(a), newest.get(b)),
   );
   const kept = new Set(ranked.slice(0, MAX_PROVIDER_PILLS));
   return providers.filter(provider => kept.has(provider));
@@ -150,8 +151,11 @@ export function ModelPickerPanel({
   };
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
+  // A picked provider filter lists all its models: it is how a capped list reaches the rest.
   const capped =
-    mixedProviders && shownProviders.reduce((total, provider) => total + provider.models.length, 0) > MAX_LISTED_MODELS;
+    !providerFilter &&
+    shownProviders.reduce((total, provider) => total + provider.models.length, 0) > MAX_LISTED_MODELS;
+  const modelsPerProvider = mixedProviders ? MODELS_PER_PROVIDER_WHEN_CAPPED : MAX_LISTED_MODELS;
   const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
     <ModelPickerOption
       key={`${provider.id}/${model.id}`}
@@ -163,6 +167,17 @@ export function ModelPickerPanel({
       renderProviderIcon={renderProviderIcon}
     />
   );
+  // Capped, a provider shows its newest models plus the picked and default ones, so neither drops off the list.
+  const listedModels = (provider: ModelPickerProvider) => {
+    const sorted = provider.models.toSorted(byReleaseDate);
+    if (!capped) return sorted;
+    return sorted.filter(
+      (model, index) =>
+        index < modelsPerProvider ||
+        isSameModel(value, provider.id, model.id) ||
+        isSameModel(defaultModel, provider.id, model.id),
+    );
+  };
 
   return (
     <>
@@ -258,20 +273,14 @@ export function ModelPickerPanel({
               </CommandGroup>
             ) : (
               <>
-                {(capped
-                  ? shownProviders.slice(0, Math.floor(MAX_LISTED_MODELS / MODELS_PER_PROVIDER_WHEN_CAPPED))
-                  : shownProviders
-                ).map(provider => (
+                {shownProviders.map(provider => (
                   <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
-                    {(capped
-                      ? provider.models.toSorted(byReleaseDate).slice(0, MODELS_PER_PROVIDER_WHEN_CAPPED)
-                      : provider.models.toSorted(byReleaseDate)
-                    ).map(model => renderOption(provider, model))}
+                    {listedModels(provider).map(model => renderOption(provider, model))}
                   </CommandGroup>
                 ))}
                 {capped ? (
                   <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
-                    Search or pick a provider to see all models.
+                    {filtering ? 'Search or pick a provider to see all models.' : 'Search to see the rest.'}
                   </Txt>
                 ) : null}
               </>
