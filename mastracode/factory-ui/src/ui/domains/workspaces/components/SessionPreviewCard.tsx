@@ -13,7 +13,7 @@ import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLin
 import { toMinute } from '../../factory/stageStays';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
-import { isPullRequestSource } from '../../factory/services/workItems';
+import { isPullRequestSource } from '@internal/factory-contract';
 import { useSessionTrail } from '../hooks/useSessionTrail';
 import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';

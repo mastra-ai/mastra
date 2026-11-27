@@ -17,7 +17,7 @@ import { createQueryClient } from '../../query-client';
 import type { BoardCatalogResponse, ReplaceBoardBody } from '../../api/types';
 import { storedWorkBoard } from '../domains/boardConfig/__tests__/fixtures/work-board';
 import { rule } from '../domains/boardRules/__tests__/fixtures/rulesServer';
-import type { WorkItem } from '../domains/factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';

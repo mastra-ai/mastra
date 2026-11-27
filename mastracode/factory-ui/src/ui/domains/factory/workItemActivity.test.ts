@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AuditEventPage } from './services/audit';
-import type { WorkItem } from './services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { workItemActivity } from './workItemActivity';
 
 const item: WorkItem = {

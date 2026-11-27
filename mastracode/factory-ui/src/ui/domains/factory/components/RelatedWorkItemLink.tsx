@@ -1,4 +1,4 @@
-import { cardChangeRequest } from '@internal/factory-contract';
+import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
 import { RelatedItemLink } from '@mastra/playground-ui/domains/factory';
 
 import { HrefLink } from '../../../ui/HrefLink';
@@ -6,8 +6,7 @@ import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipLabel, workItemReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
-import { isPullRequestSource } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 

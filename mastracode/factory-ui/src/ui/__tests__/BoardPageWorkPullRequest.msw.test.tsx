@@ -16,7 +16,7 @@ import { builtinBoardCatalog, keptReviewBoard } from '../../../e2e/ui/board-cata
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
+import type { FactoryTransitionResult } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 import { reviewItem } from './fixtures/reviewCard';
 

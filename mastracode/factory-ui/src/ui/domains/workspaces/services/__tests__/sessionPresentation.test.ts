@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItem } from '../../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { FactoryUserSession } from '../user-sessions';
 import { getFactorySessionKind, getReviewBranchIdentifier } from '../sessionPresentation';
 

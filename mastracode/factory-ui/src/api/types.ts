@@ -41,26 +41,7 @@ export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemAc
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
 export type BoardPhasesResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema>;
 export type WorkItemFilterOptions = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema>;
-type BoardPhasesQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema>;
-export type BoardPhasesSort = BoardPhasesQuery['sort'];
-/** The filters of a board view: each is sent once per picked value. */
-export type BoardPhasesFilter = {
-  [Field in keyof BoardPhasesQuery]-?: BoardPhasesQuery[Field] extends Set<string> ? Field : never;
-}[keyof BoardPhasesQuery];
-
-/** What the board read is asked: one view of a board, and how deep each of its phases is listed. */
-export interface BoardPhasesRequest {
-  board: string;
-  sort: BoardPhasesSort;
-  /** Empty searches nothing. */
-  q: string;
-  /** The picked values of each filter, sorted. A filter that picks nothing is left out. */
-  filters: Partial<Record<BoardPhasesFilter, readonly string[]>>;
-  /** How many cards a phase lists, for the phases listed deeper than the server's first page. */
-  windows: Readonly<Record<string, number>>;
-  /** A card to answer for apart from the listing: its body, and where each phase holding it places it. */
-  item?: string;
-}
+export type { BoardPhasesFilter, BoardPhasesRequest, BoardPhasesSort } from '@internal/factory-contract';
 
 type SessionRowsQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.querySchema>;
 export type SessionRowsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.sessionRows.responseSchema>;

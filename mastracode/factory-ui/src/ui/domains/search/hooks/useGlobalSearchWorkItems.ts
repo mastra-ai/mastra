@@ -6,7 +6,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useSessionCardsQuery } from '../../../../hooks/useWorkItems';
 import { listWorkItems } from '../../factory/services/workItems';
-import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
+import type { BoardSnapshot, WorkItem } from '@internal/factory-contract';
 
 const NO_CARDS: WorkItem[] = [];
 

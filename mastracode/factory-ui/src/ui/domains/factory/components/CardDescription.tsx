@@ -1,6 +1,6 @@
 import { CardDescription as SharedCardDescription } from '@mastra/playground-ui/domains/factory';
 
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { useSourceDescription } from './BoardCardDetails';
 
 export function CardDescription({

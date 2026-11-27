@@ -1,6 +1,6 @@
 import type { BoardPhasesSnapshot } from '../../../hooks/useWorkItems';
 import { itemAppearsInStage } from './boardStages';
-import type { WorkItem } from './services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from './stages';
 
 /** What a board column shows of one phase, from one read of its view. */

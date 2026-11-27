@@ -1,12 +1,10 @@
-import { DEFAULT_BOARD_ID, relatedCardIndex } from '@internal/factory-contract';
-import type { PullRequestFacts } from '@internal/factory-contract';
+import { DEFAULT_BOARD_ID, relatedCardIndex, isPullRequestSource } from '@internal/factory-contract';
+import type { PullRequestFacts, WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { rememberedBoardPath } from './boardViews';
-import type { WorkItem, WorkItemSource } from './workItems';
-import { isPullRequestSource } from './workItems';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
 type IdentifiableItem = Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;

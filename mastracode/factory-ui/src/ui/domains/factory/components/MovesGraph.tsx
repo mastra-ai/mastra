@@ -5,7 +5,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { trackMomentLabel, trackStartLabel } from '../../workspaces/services/sessionTrack';
 import { elapsedLabel } from '../cardStageBar';
 import { movesGraphPhases } from '../movesGraph';
-import type { WorkItemStageEntry } from '../services/workItems';
+import type { WorkItemStageEntry } from '@internal/factory-contract';
 
 const labels: MovesGraphLabels = { elapsed: elapsedLabel, moment: trackMomentLabel, start: trackStartLabel };
 

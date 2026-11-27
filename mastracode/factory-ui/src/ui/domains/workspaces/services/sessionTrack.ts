@@ -4,7 +4,7 @@ import { differenceInCalendarDays } from 'date-fns';
 
 import type { AuditEvent } from '../../factory/services/audit';
 import { stageMoves, stageStays } from '../../factory/stageStays';
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 export interface RunInterval {
   startedAt: number;

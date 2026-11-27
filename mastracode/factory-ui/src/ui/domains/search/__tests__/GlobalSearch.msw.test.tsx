@@ -1,5 +1,5 @@
 import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
-import type { FactoryTransitionResultRejected } from '@internal/factory-contract';
+import type { FactoryTransitionResultRejected, WorkItem } from '@internal/factory-contract';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -13,7 +13,6 @@ import { recordProviderListRequests } from '../../../../../e2e/ui/provider-list-
 import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { createQueryClient } from '../../../../query-client';
-import type { WorkItem } from '../../factory/services/workItems';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createAppRoutes } from '../../../router';
 import {

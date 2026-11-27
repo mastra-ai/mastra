@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CardMove } from './cardPrimaryAction';
-import type { WorkItemSessionRef } from './services/workItems';
+import type { WorkItemSessionRef } from '@internal/factory-contract';
 import { primaryCardMove } from './workItemCardPresentation';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };

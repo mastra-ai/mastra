@@ -24,7 +24,7 @@ import { relativeTime } from '../../../../lib/date/relativeTime';
 import { changeRequestStatusLabel } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
-import { isPullRequestSource } from '../../factory/services/workItems';
+import { isPullRequestSource } from '@internal/factory-contract';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 

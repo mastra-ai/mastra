@@ -17,7 +17,7 @@ import type { FactoryProject } from '../../workspaces/services/github';
 import { createUserSession, getUserSession } from '../../workspaces/services/user-sessions';
 import { itemSessionSpec } from '../boardItems';
 import { startFactoryRun } from '../services/workItems';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 interface CardStart {
   factory: FactoryProject;

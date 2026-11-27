@@ -12,7 +12,7 @@ import {
   linearIdentifierForItem,
   linearIssueIdForItem,
 } from '../boardItems';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
 type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'workItem' | 'metadata'>;

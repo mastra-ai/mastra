@@ -6,7 +6,7 @@ import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
 import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
 import { workItemIdentifier, workItemShortReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 

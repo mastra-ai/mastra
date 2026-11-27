@@ -7,14 +7,14 @@ import {
   workItemSource,
   workItemThreadTitle,
 } from '@internal/factory-contract';
-import type { FactoryRuleActor, WorkItemBranchSource } from '@internal/factory-contract';
+import type { FactoryRuleActor, WorkItemBranchSource, FactoryDispatchFailureCode } from '@internal/factory-contract';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { InlineSkill } from '@mastra/core/skills';
 
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import { createDispatcherBoardEngine } from '../board-engine/engine.js';
@@ -73,7 +73,7 @@ import {
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';

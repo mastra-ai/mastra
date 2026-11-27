@@ -7,7 +7,7 @@ import {
 } from '../../../../hooks/useWorkItems';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { itemBoard } from '../boardStages';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 
 /** The inline "new card" composer: which lane owns it, where focus returns, and what a submit files. */

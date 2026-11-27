@@ -1,7 +1,7 @@
 import { CARD_SOURCES as SHARED_CARD_SOURCES } from '@mastra/playground-ui/domains/factory';
 import type { CardSourcePresentation } from '@mastra/playground-ui/domains/factory';
 
-import type { WorkItemSource } from './services/workItems';
+import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 
 export type { CardSourcePresentation } from '@mastra/playground-ui/domains/factory';
 

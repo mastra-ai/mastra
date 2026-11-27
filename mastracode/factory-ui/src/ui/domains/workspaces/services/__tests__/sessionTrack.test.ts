@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { AuditEvent } from '../../../factory/services/audit';
-import type { WorkItemStageEntry } from '../../../factory/services/workItems';
+import type { WorkItemStageEntry } from '@internal/factory-contract';
 import { auditOwnerChanges, auditRunIntervals, layoutSessionTrack } from '../sessionTrack';
 
 const HOUR = 3_600_000;

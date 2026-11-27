@@ -8,7 +8,7 @@ import { renderHookWithProviders, waitForMutationsIdle } from '../../e2e/ui/rend
 import { useBoardComposer } from '../ui/domains/factory/hooks/useBoardComposer';
 import { useBoardItems } from '../ui/domains/factory/hooks/useBoardItems';
 import { factoryAttentionTargetPath } from '../ui/domains/factory/services/attention';
-import type { WorkItem } from '../ui/domains/factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 const item: WorkItem = {
   id: 'release-1',
