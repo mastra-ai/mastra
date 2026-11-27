@@ -179,6 +179,8 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // No thread has a reserved id; deleting by it would remove another thread's pending signals.
+    if (isPendingSignalThreadId(threadId)) return;
     this.db.threads.delete(threadId);
     this.db.signalRunIds.delete(threadId);
 
@@ -858,10 +860,12 @@ export class InMemoryMemory extends MemoryStorage {
   // ============================================
 
   async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'setSignalRun');
     if (this.db.threads.has(threadId)) this.db.signalRunIds.set(threadId, runId);
   }
 
   async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    assertNotPendingSignalThreadId(threadId, 'getSignalRun');
     if (!this.db.threads.has(threadId)) return null;
     return this.db.signalRunIds.get(threadId) ?? null;
   }
@@ -875,6 +879,7 @@ export class InMemoryMemory extends MemoryStorage {
   }): Promise<PendingSignalEnqueueResult> {
     if (!message.threadId) throw new Error('Thread ID is required');
     if (!message.resourceId) throw new Error('Resource ID is required');
+    assertNotPendingSignalThreadId(message.threadId, 'enqueuePendingSignal');
 
     if (toRunId !== undefined) {
       const thread = this.db.threads.get(message.threadId);
@@ -901,6 +906,7 @@ export class InMemoryMemory extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
     if (!this.db.threads.has(threadId) || this.db.signalRunIds.get(threadId) !== runId) return [];
 
     const pendingThreadId = pendingSignalThreadId(threadId);
@@ -922,6 +928,7 @@ export class InMemoryMemory extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
     const consumed = new Set(consumedIds);
     for (const row of this.signalRowsOf(threadId)) {
       if (row.signalClaimedBy !== runId) continue;
@@ -933,6 +940,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    assertNotPendingSignalThreadId(threadId, 'cancelPendingSignals');
     const pendingThreadId = pendingSignalThreadId(threadId);
     const cancelled: string[] = [];
     for (const id of ids) {
@@ -945,6 +953,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'listPendingSignals');
     const pendingThreadId = pendingSignalThreadId(threadId);
     return this.toSignalMessages(
       threadId,

@@ -342,8 +342,11 @@ export abstract class MemoryStorage extends StorageDomain {
   // - `saveThread`, `copyThread` and `cloneThread` (target id),
   //   `saveMessages`, `updateMessages` (a `threadId` in an update) and
   //   `listMessages` reject a thread id that starts with the pending-signal
-  //   prefix (`assertNotPendingSignalThreadId`).
+  //   prefix (`assertNotPendingSignalThreadId`). `deleteThread` given such an
+  //   id changes nothing, as for a thread that does not exist.
   // - The signal run survives `saveThread` and `updateThread`.
+  //
+  // Every method below rejects a thread id with the reserved prefix.
   //
   // None of the methods below changes a thread's `updatedAt`.
   //

@@ -18,6 +18,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  isPendingSignalThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   PENDING_SIGNAL_THREAD_PREFIX,
   pendingSignalThreadId,
@@ -1233,6 +1234,9 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // No thread has a reserved id; deleting by it would remove another thread's pending signals
+    // without that thread's lock.
+    if (isPendingSignalThreadId(threadId)) return;
     try {
       const tableName = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
       const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
@@ -2396,6 +2400,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'setSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       await this.#db.client.tx(async t => {
@@ -2407,6 +2412,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    assertNotPendingSignalThreadId(threadId, 'getSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       const row = await this.#db.client.oneOrNone<{ signalRunId: string | null }>(
@@ -2429,6 +2435,7 @@ export class MemoryPG extends MemoryStorage {
     const { threadId, resourceId } = message;
     if (!threadId) throw new Error('Thread ID is required');
     if (!resourceId) throw new Error('Resource ID is required');
+    assertNotPendingSignalThreadId(threadId, 'enqueuePendingSignal');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const createdAt = toUtcISOString(message.createdAt || new Date());
@@ -2479,6 +2486,7 @@ export class MemoryPG extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     const pendingThreadId = pendingSignalThreadId(threadId);
@@ -2524,6 +2532,7 @@ export class MemoryPG extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {
@@ -2557,6 +2566,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    assertNotPendingSignalThreadId(threadId, 'cancelPendingSignals');
     if (ids.length === 0) return [];
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
@@ -2584,6 +2594,7 @@ export class MemoryPG extends MemoryStorage {
   }
 
   async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'listPendingSignals');
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     const messagesTable = getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) });
     try {

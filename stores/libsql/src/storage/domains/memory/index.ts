@@ -52,6 +52,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  isPendingSignalThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
   PENDING_SIGNAL_THREAD_PREFIX,
   pendingSignalThreadId,
@@ -1706,6 +1707,8 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // No thread has a reserved id; deleting by it would remove another thread's pending signals.
+    if (isPendingSignalThreadId(threadId)) return;
     try {
       // Delete messages and pending signals first (child records), then thread, in one write batch: a
       // single request and transaction, not an interactive one held across awaits. A run-scoped
@@ -1913,6 +1916,7 @@ export class MemoryLibSQL extends MemoryStorage {
   // ============================================
 
   async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'setSignalRun');
     try {
       await this.#write('setSignalRun', () =>
         this.#client.execute({
@@ -1926,6 +1930,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    assertNotPendingSignalThreadId(threadId, 'getSignalRun');
     try {
       const result = await this.#client.execute({
         sql: `SELECT "signalRunId" FROM "${TABLE_THREADS}" WHERE id = ?`,
@@ -1947,6 +1952,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }): Promise<'accepted' | 'run-closed' | 'thread-not-found'> {
     if (!message.threadId) throw new Error('Thread ID is required');
     if (!message.resourceId) throw new Error('Resource ID is required');
+    assertNotPendingSignalThreadId(message.threadId, 'enqueuePendingSignal');
 
     const createdAt = message.createdAt || new Date();
     // The row has no resource until the save moves it to its thread.
@@ -2007,6 +2013,7 @@ export class MemoryLibSQL extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'claimPendingSignals');
     const isSignalRun = `EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "signalRunId" = ?)`;
     const pendingThreadId = pendingSignalThreadId(threadId);
     try {
@@ -2046,6 +2053,7 @@ export class MemoryLibSQL extends MemoryStorage {
     runId: string;
     consumedIds: string[];
   }): Promise<void> {
+    assertNotPendingSignalThreadId(threadId, 'closeSignalRun');
     const pendingThreadId = pendingSignalThreadId(threadId);
     try {
       await this.#write('closeSignalRun', () =>
@@ -2077,6 +2085,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    assertNotPendingSignalThreadId(threadId, 'cancelPendingSignals');
     if (ids.length === 0) return [];
     const named = `thread_id = ? AND "signalClaimedBy" IS NULL AND id IN (SELECT value FROM json_each(?))`;
     const args = [pendingSignalThreadId(threadId), JSON.stringify(ids)];
@@ -2098,6 +2107,7 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    assertNotPendingSignalThreadId(threadId, 'listPendingSignals');
     try {
       const result = await this.#client.execute({
         sql: `SELECT id, content, role, type, "createdAt", thread_id, ${THREAD_RESOURCE_ID_COLUMN}
