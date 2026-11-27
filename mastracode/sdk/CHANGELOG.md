@@ -1,5 +1,16 @@
 # @mastra/code-sdk
 
+## 1.22.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`7d16eff`](https://github.com/mastra-ai/mastra/commit/7d16eff54df77d4745d688fa5dc4e91a1b2bd65f), [`4e762e3`](https://github.com/mastra-ai/mastra/commit/4e762e39efee28c70efec215363adaa5aecb8b3d), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`20d88c3`](https://github.com/mastra-ai/mastra/commit/20d88c33385b4cc8b1830eac96bb4c9504efb11e), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+  - @mastra/pg@1.39.0-alpha.1
+  - @mastra/libsql@1.33.0-alpha.2
+  - @mastra/client-js@1.63.0-alpha.5
+  - @mastra/mcp@2.11.1-alpha.0
+
 ## 1.22.0-alpha.4
 
 ### Patch Changes

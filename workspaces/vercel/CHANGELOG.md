@@ -1,5 +1,36 @@
 # @mastra/vercel
 
+## 1.6.5-alpha.0
+
+### Patch Changes
+
+- Added `VercelSandbox.extendTimeout(ms)` to keep a running MicroVM session alive for longer. Call it when a run would otherwise outlive the sandbox timeout created at construction: ([#31767](https://github.com/mastra-ai/mastra/pull/31767))
+
+  ```typescript
+  const sandbox = new VercelSandbox({ timeout: 300_000 });
+  await sandbox.start();
+
+  await sandbox.extendTimeout(600_000);
+  ```
+
+  If the sandbox isn't running yet, `extendTimeout()` starts it first, and repeated calls reuse the same session instead of creating a new one. Vercel's plan-level maximum session duration still applies, and exceeding it rejects with the provider error unchanged.
+
+- `VercelSandbox` now exposes the creation-time controls the `@vercel/sandbox` SDK already supported. Pass `image` to start from a Vercel Container Registry image, `source: { type: 'snapshot', snapshotId }` to restore a filesystem snapshot, and `networkPolicy` to allow, deny or filter outbound traffic, protecting a newly created sandbox from its first command. Creation options apply only when a new sandbox is created, so an existing sandbox resumed by `sandboxName` keeps the configuration and network policy it was created with. ([#31778](https://github.com/mastra-ai/mastra/pull/31778))
+
+  `runtime` now only defaults to `'node24'` when the sandbox starts from a runtime. It is mutually exclusive with `image` and `source`, and the constructor throws a descriptive error if more than one environment is set. `clone()` inherits the selected image or snapshot source and the network policy along with the rest of the configuration.
+
+  ```ts
+  const offline = new VercelSandbox({ runtime: 'node24', networkPolicy: 'deny-all' });
+
+  const fromImage = new VercelSandbox({
+    image: 'my-repo:v1',
+    networkPolicy: { allow: ['registry.npmjs.org'] },
+  });
+  ```
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+
 ## 1.6.4
 
 ### Patch Changes

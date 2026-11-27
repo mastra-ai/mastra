@@ -1,5 +1,34 @@
 # @mastra/client-js
 
+## 1.63.0-alpha.5
+
+### Minor Changes
+
+- Added `client.getFactory(projectId, { basePath })` for reading and moving cards on a Factory board: board phases, card lists, filter options, starters, activity, card create/move/update/delete, decisions and the run queue. `basePath` lets hosts that serve Factory's routes elsewhere point the client at them. ([#31789](https://github.com/mastra-ai/mastra/pull/31789))
+
+  ```ts
+  const factory = client.getFactory('fp-1');
+  const view = await factory.boardPhases(
+    { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} },
+    { cards: true },
+  );
+  const card = view.workItems![0];
+  await factory.transitionWorkItem(card.id, {
+    board: 'work',
+    stage: 'build',
+    expectedRevision: card.revision,
+    requestId: crypto.randomUUID(),
+    cause: 'drag',
+  });
+  ```
+
+### Patch Changes
+
+- Experiment responses now include `scorerVersions`, the stored-scorer versions pinned for the experiment. ([#31550](https://github.com/mastra-ai/mastra/pull/31550))
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+
 ## 1.62.1-alpha.4
 
 ### Patch Changes
