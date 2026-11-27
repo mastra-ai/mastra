@@ -132,7 +132,7 @@ describe('PG transaction deadline (r347 O3 §C‴)', () => {
   it("still reuses the timeouts across the store's own statements", async () => {
     const sent = vi.spyOn(Client.prototype, 'query');
     onTestFinished(() => sent.mockRestore());
-    const { outcome } = await timed(
+    const { outcome, elapsed } = await timed(
       45_000,
       async tx => {
         for (let i = 0; i < 5; i++) await tx.createPage({ parentId: scopeId, name: `reused-${n}-${i}`, provenance });
@@ -142,9 +142,11 @@ describe('PG transaction deadline (r347 O3 §C‴)', () => {
     expect(outcome).toBe('committed');
     const statements = sent.mock.calls.map(([sql]) => String(sql));
     const refreshes = statements.filter(sql => sql.startsWith('SET LOCAL statement_timeout'));
-    // Six page writes of several statements each; at most one refresh per elapsed headroom window.
+    // Six page writes of several statements each. Reuse allows one refresh per started 1,000 ms
+    // headroom window, so the bound grows with how long this run took; exact counts live in the
+    // clock-controlled unit tests.
     expect(statements.length).toBeGreaterThan(30);
-    expect(refreshes.length).toBeLessThanOrEqual(3);
+    expect(refreshes.length).toBeLessThanOrEqual(Math.floor(elapsed / 1_000) + 1);
   });
 
   it('bounds statements inside a nested transaction (savepoint) by the outer deadline', async () => {
