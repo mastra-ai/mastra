@@ -15719,7 +15719,10 @@ export class Agent<
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
+    if (
+      !coldSnapshot &&
+      (options?.requestContext || options?.toolsets || options?.delegation || options?.hooks || droppedStartingUser)
+    ) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
