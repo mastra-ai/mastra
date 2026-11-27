@@ -73,8 +73,11 @@ function interruptedByRun(termination: SpanOutcomeFields): SpanOutcomeFields {
 
 type StepInputPreview = ModelStepInput | undefined;
 
-function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetadata']): number | undefined {
-  const rawCost = providerMetadata?.gateway?.cost;
+function parseGatewayCost(
+  providerMetadata: EndGenerationOptions['providerMetadata'],
+  namespace: 'gateway' | 'mastraGateway',
+): number | undefined {
+  const rawCost = providerMetadata?.[namespace]?.cost;
   const cost =
     typeof rawCost === 'number'
       ? rawCost
@@ -85,18 +88,21 @@ function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetada
   return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
 }
 
-function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptions, 'stepProviderMetadata'>) {
+function getGatewayCostContext(
+  { stepProviderMetadata }: Pick<EndGenerationOptions, 'stepProviderMetadata'>,
+  namespace: 'gateway' | 'mastraGateway' = 'gateway',
+) {
   if (!stepProviderMetadata) {
     return undefined;
   }
 
-  if (!stepProviderMetadata.some(metadata => metadata?.gateway !== undefined)) {
+  if (!stepProviderMetadata.some(metadata => metadata?.[namespace] !== undefined)) {
     return undefined;
   }
 
   const costs: number[] = [];
   for (const metadata of stepProviderMetadata) {
-    const cost = parseGatewayCost(metadata);
+    const cost = parseGatewayCost(metadata, namespace);
     if (cost === undefined) {
       return undefined;
     }
@@ -113,8 +119,8 @@ function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptio
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
-      sdkProvider: 'vercel_ai_gateway',
-      sdkCostField: 'gateway.cost',
+      sdkProvider: namespace === 'gateway' ? 'vercel_ai_gateway' : 'mastra_gateway',
+      sdkCostField: `${namespace}.cost`,
       scope: 'query_total',
       reportedStepCount: costs.length,
     },
@@ -577,7 +583,11 @@ export class ModelSpanTracker {
       spanOptions.attributes?.responseModel ??
       this.#modelSpan?.attributes?.responseModel ??
       this.#modelSpan?.attributes?.model;
-    const providerCostContext = getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }, model);
+    const providerCostContext =
+      getGatewayCostContext(
+        { stepProviderMetadata: stepProviderMetadata ?? (providerMetadata ? [providerMetadata] : undefined) },
+        'mastraGateway',
+      ) ?? getOpenRouterCostContext({ providerMetadata, stepProviderMetadata }, model);
 
     if (providerCostContext && !spanOptions.attributes) {
       spanOptions.attributes = {};

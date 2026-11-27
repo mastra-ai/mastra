@@ -202,6 +202,43 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('provider-reported costs', () => {
+    it('uses the complete customer charge across Gateway calls instead of token prices', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'gateway-generation',
+        attributes: { model: 'gpt-4o', provider: 'openai.chat' },
+      });
+      new ModelSpanTracker(modelSpan).endGeneration({
+        attributes: {},
+        stepProviderMetadata: [{ mastraGateway: { cost: 0.00709 } }, { mastraGateway: { cost: 0 } }],
+      });
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toMatchObject({
+        estimatedCost: 0.00709,
+        costUnit: 'USD',
+        costMetadata: {
+          source: 'provider_reported',
+          sdkProvider: 'mastra_gateway',
+          sdkCostField: 'mastraGateway.cost',
+          reportedStepCount: 2,
+        },
+      });
+    });
+
+    it('does not treat a partial Gateway charge as the whole query charge', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'gateway-generation',
+        attributes: { model: 'gpt-4o', provider: 'openai.chat' },
+      });
+      new ModelSpanTracker(modelSpan).endGeneration({
+        attributes: {},
+        stepProviderMetadata: [{ mastraGateway: { cost: 0.00709 } }, undefined],
+      });
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext?.costMetadata?.source).not.toBe('provider_reported');
+    });
+
     it('sums a BYOK upstream cost across steps, even when the OpenRouter surcharge is zero', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

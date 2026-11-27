@@ -9,6 +9,7 @@ import type {
 import { aiV5PromptToAIV7Prompt } from '../../../../agent/message-list/conversion';
 import { convertToDataContent } from '../../../../stream/aisdk/v5/compat/content';
 import type { MastraLanguageModelV4 } from '../../shared.types';
+import { withGatewayGenerateCost, withGatewayStreamCost } from '../gateway-cost';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV4['doStream']>>;
@@ -237,7 +238,7 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doGenerate(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doGenerate(remapCallOptionsToV4(options));
+    const result = withGatewayGenerateCost(await this.#model.doGenerate(remapCallOptionsToV4(options)));
     const content = untagResponseFileContent(result.content);
     const untaggedResult = content === result.content ? result : { ...result, content };
 
@@ -250,11 +251,11 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
   }
 
   async doStream(options: LanguageModelV4CallOptions) {
-    const result = await this.#model.doStream(remapCallOptionsToV4(options));
+    const result = await this.#model.doStream({ ...remapCallOptionsToV4(options), includeRawChunks: true });
 
     return {
       ...result,
-      stream: untagFileStreamParts(result.stream),
+      stream: untagFileStreamParts(withGatewayStreamCost(result, options.includeRawChunks)),
     };
   }
 

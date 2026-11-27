@@ -2,6 +2,7 @@ import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provid
 import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
 import { hasFreeFormObject } from '../../free-form-object';
 import type { MastraLanguageModelV2 } from '../../shared.types';
+import { withGatewayGenerateCost, withGatewayStreamCost } from '../gateway-cost';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
@@ -143,7 +144,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(applyStrictForV2(options, this.provider));
+    const result = withGatewayGenerateCost(await this.#model.doGenerate(applyStrictForV2(options, this.provider)));
 
     return {
       ...result,
@@ -154,7 +155,8 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(applyStrictForV2(options, this.provider));
+    const result = await this.#model.doStream({ ...applyStrictForV2(options, this.provider), includeRawChunks: true });
+    return { ...result, stream: withGatewayStreamCost(result, options.includeRawChunks) };
   }
 
   /**
