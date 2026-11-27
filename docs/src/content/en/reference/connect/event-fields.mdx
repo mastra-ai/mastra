@@ -10,7 +10,11 @@ packages:
 Connect knows the payload fields of every event type it ships payload types for. Use these functions to filter events by field without hand-written per-provider code, for example when an agent chooses at runtime which events it wants to receive.
 
 ```typescript
-import { connectEventFields, matchesConnectEventFields, unknownConnectEventFields } from '@mastra/connect'
+import {
+  connectEventFields,
+  matchesConnectEventFields,
+  unknownConnectEventFields,
+} from '@mastra/connect'
 
 const filters = { 'repository.full_name': 'acme/app', 'pull_request.number': 12 }
 
@@ -34,7 +38,10 @@ The list covers fields up to three objects deep. An array element counts at its 
 ## connectEventFields()
 
 ```typescript
-connectEventFields(provider: string, eventType: string): readonly string[] | undefined
+declare function connectEventFields(
+  provider: string,
+  eventType: string,
+): readonly string[] | undefined
 ```
 
 Returns the field paths an event type's payload can be filtered on, such as `pull_request.number` or `review.user.login`. Returns `undefined` when Connect has no payload type for the event.
@@ -42,7 +49,11 @@ Returns the field paths an event type's payload can be filtered on, such as `pul
 ## unknownConnectEventFields()
 
 ```typescript
-unknownConnectEventFields(provider: string, eventType: string, filters: ConnectEventFieldFilters): string[]
+declare function unknownConnectEventFields(
+  provider: string,
+  eventType: string,
+  filters: ConnectEventFieldFilters,
+): string[]
 ```
 
 Returns the filter paths the event type's payload doesn't have. It returns an empty array when every path is known, and when Connect has no payload type for the event, since its fields can't be checked.
@@ -50,7 +61,10 @@ Returns the filter paths the event type's payload doesn't have. It returns an em
 ## matchesConnectEventFields()
 
 ```typescript
-matchesConnectEventFields(payload: unknown, filters: ConnectEventFieldFilters): boolean
+declare function matchesConnectEventFields(
+  payload: unknown,
+  filters: ConnectEventFieldFilters,
+): boolean
 ```
 
 Returns whether the payload has every filtered field with one of its values. Filters with no fields match every payload.
