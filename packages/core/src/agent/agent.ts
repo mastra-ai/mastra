@@ -15694,9 +15694,9 @@ export class Agent<
           details: { agentName: this.name, runId },
         });
       }
-      // Checked against the tools the run registered, which the tool-call step executes. A run this
-      // process already executed may rebuild them for this call below, so its check is left to the step.
-      if (current && !(priorExecution && rebuildsRequestTools)) {
+      // Checked against the tools the run registered, which the tool-call step executes. A resume
+      // that rebuilds them for this call below is left to the step.
+      if (current && !rebuildsRequestTools) {
         try {
           await this.#validateToolResumeData({
             snapshot: current,

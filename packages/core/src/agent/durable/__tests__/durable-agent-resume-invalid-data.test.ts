@@ -142,7 +142,6 @@ describe.each(['durable', 'evented'] as const)(
     it.each([
       ['warm', false],
       ['cold', false],
-      ['cold', true],
     ] as const)(
       '%s (untilIdle: %s): rejects without touching the run, and a corrected retry sees the original context',
       async (mode, untilIdle) => {
@@ -167,6 +166,26 @@ describe.each(['durable', 'evented'] as const)(
       await expect(
         run.agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('other', 'denied') }),
       ).rejects.toThrow(FGADeniedError);
+    });
+
+    it('cold untilIdle: leaves a resume whose re-entry rebuilds the tool to the tool-call step', async () => {
+      const run = await suspend(engine);
+      globalRunRegistry.clear();
+      let resolved = 0;
+      const agent = startProcess(engine, run.storage, run.seen, {
+        tools: () => ({
+          confirm:
+            resolved++ === 0 ? confirmTool(run.seen) : confirmTool(run.seen, z.object({ confirmed: z.string() })),
+        }),
+      });
+
+      const result = await agent.resume(
+        run.runId,
+        { confirmed: 'yes' },
+        { untilIdle: true, requestContext: tenant('strict') },
+      );
+      expect(result.runId).toBe(run.runId);
+      result.cleanup();
     });
 
     describe('warm resumes validate the tool the run registered, not the current catalog', () => {
