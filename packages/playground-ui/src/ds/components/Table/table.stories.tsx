@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Badge } from '../Badge';
-import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
+import { Cell, TxtCell } from './Cells';
 import { Table, Thead, Th, Tbody, Row } from './Table';
 import { ActionRow } from '@/ds/components/ActionRow';
 import { Button } from '@/ds/components/Button/Button';
@@ -109,60 +109,6 @@ export const SmallSize: Story = {
             <TxtCell>Item Two</TxtCell>
             <Cell>
               <Badge variant="success">Active</Badge>
-            </Cell>
-          </Row>
-        </Tbody>
-      </Table>
-    </div>
-  ),
-};
-
-export const WithDateTimeCell: Story = {
-  render: () => (
-    <div className="w-150">
-      <Table>
-        <Thead>
-          <Th>Event</Th>
-          <Th>Timestamp</Th>
-        </Thead>
-        <Tbody>
-          <Row>
-            <TxtCell>Agent started</TxtCell>
-            <DateTimeCell dateTime={new Date()} />
-          </Row>
-          <Row>
-            <TxtCell>Workflow completed</TxtCell>
-            <DateTimeCell dateTime={new Date(Date.now() - 3600000)} />
-          </Row>
-          <Row>
-            <TxtCell>Error logged</TxtCell>
-            <DateTimeCell dateTime={new Date(Date.now() - 86400000)} />
-          </Row>
-        </Tbody>
-      </Table>
-    </div>
-  ),
-};
-
-export const WithEntryCell: Story = {
-  render: () => (
-    <div className="w-175">
-      <Table>
-        <Thead>
-          <Th>Agent</Th>
-          <Th>Status</Th>
-        </Thead>
-        <Tbody>
-          <Row>
-            <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<IconRobot />} />
-            <Cell>
-              <Badge variant="success">Online</Badge>
-            </Cell>
-          </Row>
-          <Row>
-            <EntryCell name="Data Analysis Agent" description="Processes analytics data" icon={<IconRobot />} />
-            <Cell>
-              <Badge>Idle</Badge>
             </Cell>
           </Row>
         </Tbody>

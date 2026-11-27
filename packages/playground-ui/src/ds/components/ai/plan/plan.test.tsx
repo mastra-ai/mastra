@@ -13,7 +13,6 @@ import {
   PlanControls,
   PlanCopyButton,
   PlanExpandButton,
-  PlanFile,
   PlanHeader,
   PlanHeaderActions,
   PlanIntro,
@@ -132,21 +131,6 @@ describe('Plan', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('Review migration plan'));
     expect(overrideClick).not.toHaveBeenCalled();
-  });
-
-  it('renders the path fallback when markdown content is unavailable', () => {
-    renderPlan(
-      <Plan>
-        <PlanBody>
-          <PlanTitle>Submitted plan</PlanTitle>
-          <PlanFile>/workspace/.mastra/plans/review.md</PlanFile>
-        </PlanBody>
-      </Plan>,
-    );
-
-    expect(screen.getByText('Submitted plan')).toBeTruthy();
-    expect(screen.getByText('Plan file')).toBeTruthy();
-    expect(screen.getByText('/workspace/.mastra/plans/review.md')).toBeTruthy();
   });
 
   it('renders composed status and action slots', () => {

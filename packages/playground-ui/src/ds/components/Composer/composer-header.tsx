@@ -70,15 +70,3 @@ export function ComposerHeaderContent({ className, ...props }: ComposerHeaderCon
     <div data-slot="composer-header-content" className={cn('min-w-0 flex-1 wrap-anywhere', className)} {...props} />
   );
 }
-
-export type ComposerHeaderActionsProps = ComponentProps<'div'>;
-
-export function ComposerHeaderActions({ className, ...props }: ComposerHeaderActionsProps) {
-  return (
-    <div
-      data-slot="composer-header-actions"
-      className={cn('ml-auto flex max-w-full shrink-0 flex-wrap items-center gap-2', className)}
-      {...props}
-    />
-  );
-}

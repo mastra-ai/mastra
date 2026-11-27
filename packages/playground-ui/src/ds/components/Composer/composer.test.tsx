@@ -6,7 +6,7 @@ import { createRef, useState } from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { Composer, ComposerActions, ComposerAttachments, ComposerBox, ComposerInput, ComposerRing } from './composer';
-import { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
+import { ComposerHeader, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
 
 afterEach(() => {
   cleanup();
@@ -44,11 +44,9 @@ function OptionalContext({ visible }: { visible: boolean }) {
     <>
       <ComposerHeaderRow>
         <ComposerHeaderContent>{owned ? 'You own this session.' : "Sam's session"}</ComposerHeaderContent>
-        <ComposerHeaderActions>
-          <button type="button" onClick={() => setOwned(true)}>
-            Take ownership
-          </button>
-        </ComposerHeaderActions>
+        <button type="button" onClick={() => setOwned(true)}>
+          Take ownership
+        </button>
       </ComposerHeaderRow>
       <ComposerHeaderRow>
         <ComposerHeaderContent>

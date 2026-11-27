@@ -1,33 +1,3 @@
-.composer-tone-label {
-  --composer-tone-color: var(--muted-foreground);
-
-  color: var(--composer-tone-color);
-}
-
-[data-composer-tone='green'] {
-  --composer-tone-color: var(--green-400);
-}
-
-[data-composer-tone='purple'] {
-  --composer-tone-color: var(--purple-300);
-}
-
-[data-composer-tone='orange'] {
-  --composer-tone-color: var(--orange-300);
-}
-
-html.light [data-composer-tone='green'] {
-  --composer-tone-color: var(--green-700);
-}
-
-html.light [data-composer-tone='purple'] {
-  --composer-tone-color: var(--purple-700);
-}
-
-html.light [data-composer-tone='orange'] {
-  --composer-tone-color: var(--orange-800);
-}
-
 /* Radius concentric with the round controls, so the one-line box is a full pill. */
 [data-slot='composer'],
 .composer-ring,

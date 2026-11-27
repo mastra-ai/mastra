@@ -406,14 +406,12 @@ Eight shared ramps (`red`, `orange`, `amber`, `green`, `cyan`, `blue`, `purple`,
 
 The same four suffixes apply to `destructive`, `warning`, and `info`. Backgrounds are opaque. Use `-subtle-foreground` only for text on a `-subtle` surface. Dots, bars, chart marks, and invalid-field borders use `-indicator`. Standalone destructive and warning text and icons use `--destructive-foreground` and `--warning-foreground`, because those indicator fills are too light to read as text in light mode. Success and info text use `-indicator`. The filled destructive button uses `--fill-destructive` and its hover, active, and disabled steps, with `--fill-destructive-foreground` for its text.
 
-Product roles use `--product-{name}` and `--product-{name}-foreground`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon and `ProductBadge` for the icon with its label. Both take a `product` prop and use the matching semantic colors.
+Product roles use `--product-{name}` and `--product-{name}-foreground`. Names are `studio`, `server`, `observability`, `factory`, `workers`, and `persistent-server`. Use `ProductAvatar` for the round icon. It takes a `product` prop and uses the matching semantic colors.
 
 ```tsx
 import { ProductAvatar } from '@mastra/playground-ui/components/ProductAvatar';
-import { ProductBadge } from '@mastra/playground-ui/components/ProductBadge';
 
-<ProductAvatar product="studio" />
-<ProductBadge product="persistent-server" />
+<ProductAvatar product="studio" />;
 ```
 
 Charts use hue-named roles for categories (`--chart-blue`, `--chart-blue-deep`, `--chart-amber`, `--chart-green`, `--chart-purple`, `--chart-orange`, `--chart-pink`, `--chart-red`) and `--chart-sequential-1` through `--chart-sequential-5` for ordered values. Span colors use `--span-agent`, `--span-workflow`, and the other span names. Pastel chart colors are fills, not text colors; keep labels on `--foreground` or `--muted-foreground`.

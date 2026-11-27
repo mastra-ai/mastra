@@ -9,7 +9,6 @@ import {
   PlanControls,
   PlanCopyButton,
   PlanExpandButton,
-  PlanFile,
   PlanHeader,
   PlanHeaderActions,
   PlanIntro,
@@ -128,9 +127,6 @@ export const FileUnavailable: Story = {
           <PlanTitle>Plan file unavailable</PlanTitle>
           <PlanPath>/workspace/.mastracode/plans/missing.md</PlanPath>
         </PlanIntro>
-        <PlanMain>
-          <PlanFile>/workspace/.mastracode/plans/missing.md</PlanFile>
-        </PlanMain>
       </PlanBody>
     </Plan>
   ),

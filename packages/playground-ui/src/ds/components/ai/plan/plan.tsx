@@ -208,23 +208,6 @@ export function PlanContent({ children, ...props }: PlanContentProps) {
   );
 }
 
-export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
-  children: string;
-}
-
-export function PlanFile({ children, className, ...props }: PlanFileProps) {
-  return (
-    <div data-slot="plan-file" className={className} {...props}>
-      <Txt as="p" variant="meta" tone="muted" className="mb-2">
-        Plan file
-      </Txt>
-      <Txt as="p" variant="caption" tone="ink" font="mono" className="break-all">
-        {children}
-      </Txt>
-    </div>
-  );
-}
-
 export type PlanControlsProps = ComponentProps<'div'>;
 
 export function PlanControls({ children, className, ...props }: PlanControlsProps) {

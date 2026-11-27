@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ProductBadge } from '../ProductBadge/ProductBadge';
 import type { Product } from './product-identity';
 import { ProductAvatar } from './ProductAvatar';
 
@@ -18,7 +17,6 @@ export const Overview: Story = {
       {products.map(product => (
         <div key={product} className="flex items-center gap-4">
           <ProductAvatar product={product} />
-          <ProductBadge product={product} />
         </div>
       ))}
     </div>

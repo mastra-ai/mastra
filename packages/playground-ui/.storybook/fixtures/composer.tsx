@@ -1,15 +1,8 @@
 import { useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import {
-  Composer,
-  ComposerActions,
-  ComposerBox,
-  ComposerInput,
-  ComposerToneLabel,
-  ComposerRing,
-} from '@/ds/components/Composer';
-import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
+import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from '@/ds/components/Composer';
+import type { ComposerInputProps } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { IconHammer } from '@/ds/icons/central/IconHammer';
@@ -20,10 +13,10 @@ import { IconStop } from '@/ds/icons/central/IconStop';
 import { IconZap } from '@/ds/icons/central/IconZap';
 
 const modes = [
-  { id: 'build', label: 'Build', Icon: IconHammer, tone: 'green' },
-  { id: 'plan', label: 'Plan', Icon: IconMap, tone: 'purple' },
-  { id: 'fast', label: 'Fast', Icon: IconZap, tone: 'orange' },
-] satisfies { id: string; label: string; Icon: typeof IconHammer; tone: ComposerTone }[];
+  { id: 'build', label: 'Build', Icon: IconHammer },
+  { id: 'plan', label: 'Plan', Icon: IconMap },
+  { id: 'fast', label: 'Fast', Icon: IconZap },
+] satisfies { id: string; label: string; Icon: typeof IconHammer }[];
 
 export interface ComposerPreviewProps {
   mode?: string;
@@ -45,7 +38,6 @@ export function ComposerPreview({
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const modeOption = modes.find(option => option.id === selectedMode);
-  const tone = modeOption?.tone ?? 'default';
 
   function submitMessage() {
     if (disabled || running || !text.trim()) return;
@@ -83,10 +75,10 @@ export function ComposerPreview({
             {controls === 'mode' ? (
               <Select value={selectedMode} onValueChange={setSelectedMode} disabled={disabled}>
                 <SelectTrigger variant="ghost" size="sm" aria-label="Session mode" className="w-auto">
-                  <ComposerToneLabel tone={tone} className="inline-flex items-center gap-1.5">
+                  <span className="inline-flex items-center gap-1.5">
                     {modeOption && <modeOption.Icon size={12} aria-hidden />}
                     {modeOption?.label ?? selectedMode}
-                  </ComposerToneLabel>
+                  </span>
                 </SelectTrigger>
                 <SelectContent>
                   {modes.map(option => (

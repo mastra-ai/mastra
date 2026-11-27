@@ -1,14 +1,4 @@
-export {
-  Card,
-  CardLink,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-  CardIllustration,
-  CardInset,
-} from './Card';
+export { Card, CardLink, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardInset } from './Card';
 export type {
   CardProps,
   CardLinkProps,
@@ -17,7 +7,5 @@ export type {
   CardDescriptionProps,
   CardContentProps,
   CardFooterProps,
-  CardIllustrationProps,
-  CardIllustrationTone,
   CardInsetProps,
 } from './Card';
