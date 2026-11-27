@@ -10,8 +10,10 @@ export type WorkflowStepStartGuard = {
   resumeClaim?: boolean;
   /**
    * A restart's claim of a step it takes over. It takes a `running` record started by
-   * `expectedStartedBy`, so the worker that started it can no longer save it. A record of that
-   * occurrence that already finished is answered `completed`, so its result is kept.
+   * `expectedStartedBy`, so the worker that started it can no longer save it. Any other record of
+   * that occurrence is answered `completed` and left as stored. A saved result is then kept, but a
+   * `suspended` record or a `failed` attempt awaiting its retry is run again by the restart's own
+   * delivery of the step.
    */
   takeover?: boolean;
   /** Prune the predecessor only after this delivery has durably claimed its input. */

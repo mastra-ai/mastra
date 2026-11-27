@@ -1319,8 +1319,11 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // A restart takes over the steps it restarts: before it writes or publishes anything, it claims
     // each one stamped with the occurrence it read, so the worker running that occurrence can no
-    // longer save it. It then updates only the run's header: rewriting the run from what the caller
-    // read would undo results saved since, and would reopen a run that ended since.
+    // longer save it. (On storage v2 a step event of that occurrence delivered again reads the claim
+    // as the occurrence it expects and can take the step back, COR-1666.) It then updates only the
+    // run's header: rewriting the run from what the caller read would undo results saved since, and
+    // would reopen a run that ended since. The run's stored request context is written only by the
+    // claims, so a restart that claims nothing leaves the old one there.
     const takesOver = guardsSteps && !!restart && !completed && !restart.isPreFirstStepRestart && !!header && !!eventId;
     // On stores with step guards, a restart leaves a run that ended or suspended since its caller read
     // it as it is, also where it writes the run whole. A nested run that has not started yet is still
@@ -2870,8 +2873,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       restart: args.restart,
       snapshot,
       stepGuards: store.supportsWorkflowStepGuards(),
-      // A step a restart dispatches is either claimed by it, so running, or it saved its result
-      // before the claim: then this check decides, as it does without guards.
+      // A step a restart dispatches is running when the restart claimed it, and this check then
+      // answers `run`. Otherwise its record is as the restart's claim left it (a result saved before
+      // the claim, a step another restart claimed, a record without an occurrence), and this check
+      // decides as it does without guards.
       guarded:
         deferToGuards &&
         this.#guardsStepStart(store, args, step) &&
