@@ -658,6 +658,155 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // The old worker's step event delivered again, with its own ID, after the restart's copy of the
+    // step finished. Storage v1 refuses it: it expects no occurrence of the step. Storage v2 reads
+    // the restart's result as the occurrence it expects and runs the step again (COR-1666); the next
+    // step, which the restart is running, refuses its continuation.
+    it('handles the old step event delivered again after the restart ran the step', async () => {
+      const wf = chain();
+      await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
+        const run = await wf.workflow.createRun();
+        const oldB = wf.holdAt('b');
+        const started = run.start({ inputData: { n: 0 } });
+        await oldB.entered;
+        const oldDelivery = stepRuns(driver, run.runId, wf.workflow.id, [1])[0]!;
+
+        const restartC = wf.holdAt('c');
+        const restarted = restartRun(wf.workflow, run.runId);
+        await restartC.entered;
+        const restartDelivery = stepRuns(driver, run.runId, wf.workflow.id, [1]).at(-1)!;
+
+        const key = `workflow-step-run:${oldDelivery.runId}:${oldDelivery.id}`;
+        const owner = await driver.pubsub.getLeaseOwner(key);
+        if (owner) await driver.pubsub.releaseLease(key, owner);
+        await driver.redeliverEvent(oldDelivery);
+        // On storage v2 the step it ran again saves in its step end.
+        await expect
+          .poll(async () => (await storedRun(wf.workflow.id, run.runId))?.context.b)
+          .toMatchObject({
+            status: 'success',
+            metadata: { startedBy: storageVersion === 1 ? restartDelivery.id : oldDelivery.id },
+          });
+
+        restartC.release();
+        oldB.release();
+        expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+        await drainHandlers();
+        expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+        expect(wf.calls).toEqual({ a: 1, b: storageVersion === 1 ? 2 : 3, c: 1 });
+      });
+    }, 20_000);
+
+    // #30275 on one worker, on both storage versions: the old worker saved the step's result after
+    // the restart read the run and before its claim, then stopped before the next step. The claim
+    // keeps the result, the restart leaves the run's header as it is, and it continues from the
+    // saved result without running the step again.
+    it('continues from a result saved between the restart read and its claim', async () => {
+      const wf = chain();
+      await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
+        const held = holdPublishes(
+          driver,
+          event =>
+            (event.type === 'workflow.step.end' &&
+              event.data?.workflowId === wf.workflow.id &&
+              JSON.stringify(event.data.executionPath) === '[1]' &&
+              !event.data.restart) ||
+            (isStepRun(event, wf.workflow.id, [2]) && !event.data.restart) ||
+            (event.type === 'workflow.start' && !!event.data?.restart),
+        );
+        try {
+          const run = await wf.workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await held.count(1);
+          const restarted = restartRun(wf.workflow, run.runId);
+          await held.count(2);
+          // b's save lands; the old worker stops before c's event goes out.
+          await held.release(0);
+          await held.count(3);
+          expect((await storedRun(wf.workflow.id, run.runId))?.context.b).toMatchObject({ status: 'success' });
+
+          await held.release(1);
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+          await drainHandlers();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+          expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
+
+    // #30901 on one worker, on both storage versions: branch b saved its result after the restart
+    // read the run and before its claims, and the run went on into d. Every claim finds a saved
+    // result, so the restart leaves the run's header as it is, and its deliveries for the branches
+    // find the run past them.
+    it('does not run a branch again when its result was saved before the claim and the run went on', async () => {
+      const steps = holdableSteps();
+      const workflow = createWorkflow({
+        id: `restart-went-on-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: z.any(),
+      })
+        .parallel([steps.step('a'), steps.step('b')])
+        .then(
+          createStep({
+            id: 'c',
+            inputSchema: z.any(),
+            outputSchema: Num,
+            execute: async ({ inputData }) => {
+              steps.calls.c = (steps.calls.c ?? 0) + 1;
+              return { n: inputData.a.n + inputData.b.n };
+            },
+          }),
+        )
+        .then(steps.step('d'))
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
+        const held = holdPublishes(
+          driver,
+          event =>
+            (event.type === 'workflow.step.end' &&
+              event.data?.workflowId === workflow.id &&
+              JSON.stringify(event.data.executionPath) === '[0,1]' &&
+              !event.data.restart) ||
+            (event.type === 'workflow.start' && !!event.data?.restart),
+        );
+        try {
+          const run = await workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await held.count(1);
+          await expect.poll(async () => (await storedRun(workflow.id, run.runId))?.context.a?.status).toBe('success');
+          const restarted = restartRun(workflow, run.runId);
+          await held.count(2);
+
+          const d = steps.holdAt('d');
+          await held.release(0);
+          await d.entered;
+
+          const from = driver.events.length;
+          await settleDeliveries([await held.release(1)]);
+          const branchRuns = () =>
+            driver.events
+              .slice(from)
+              .filter(
+                event => event.type === 'workflow.step.run' && event.data.restart?.isParallelOrConditionalRestarted,
+              );
+          await expect.poll(() => branchRuns().length).toBe(2);
+          await settleDeliveries(branchRuns());
+          expect(driver.events.slice(from).filter(event => event.type === 'workflow.step.end')).toEqual([]);
+          expect(steps.calls).toEqual({ a: 1, b: 1, c: 1, d: 1 });
+
+          d.release();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+          await drainHandlers();
+          expect(steps.calls).toEqual({ a: 1, b: 1, c: 1, d: 1 });
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
+
     // R4. A branch that saved its result after the restart's caller read the run, but before the
     // restart applied, was overwritten with the running record the caller read, and ran again.
     it('keeps a branch result saved between the restart read and the restart', async () => {
