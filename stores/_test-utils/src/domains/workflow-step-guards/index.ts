@@ -436,30 +436,52 @@ export function createWorkflowStepGuardTests({
         expect(await load()).toEqual(before);
       });
 
-      it.each(['success', 'suspended'] as const)(
-        'keeps a %s record of the expected occurrence and answers with it',
-        async status => {
-          const { a, claim, load } = await setupTakeover(
-            status === 'success'
-              ? { status, payload: {}, output: 1, startedAt: 1, endedAt: 2, metadata: { startedBy: 'old' } }
-              : {
-                  status,
-                  payload: {},
-                  suspendPayload: { why: 1 },
-                  startedAt: 1,
-                  suspendedAt: 2,
-                  metadata: { startedBy: 'old' },
-                },
-          );
-          const before = await load();
-          await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({
-            code: 'WORKFLOW_STEP_CONFLICT',
-            reason: 'completed',
-            storedResult: { status, metadata: { startedBy: 'old' } },
-          });
-          expect(await load()).toEqual(before);
+      // A failed record is an attempt awaiting its retry; a continued one is a result whose next
+      // step has started. The claim leaves each as stored.
+      const finished: Record<string, StepResult<any, any, any, any>> = {
+        success: {
+          status: 'success',
+          payload: {},
+          output: 1,
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old' },
         },
-      );
+        suspended: {
+          status: 'suspended',
+          payload: {},
+          suspendPayload: { why: 1 },
+          startedAt: 1,
+          suspendedAt: 2,
+          metadata: { startedBy: 'old' },
+        },
+        failed: {
+          status: 'failed',
+          error: new Error('Transient failure'),
+          payload: {},
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old' },
+        },
+        continued: {
+          status: 'success',
+          payload: {},
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old', __continuationStarted: true },
+        },
+      };
+      it.each(Object.keys(finished))('keeps a %s record of the expected occurrence and answers with it', async kind => {
+        const stored = finished[kind]!;
+        const { a, claim, load } = await setupTakeover(stored);
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({
+          code: 'WORKFLOW_STEP_CONFLICT',
+          reason: 'completed',
+          storedResult: { status: stored.status, metadata: stored.metadata },
+        });
+        expect(await load()).toEqual(before);
+      });
 
       it('refuses a finished record of another occurrence', async () => {
         const { a, claim, load } = await setupTakeover({
