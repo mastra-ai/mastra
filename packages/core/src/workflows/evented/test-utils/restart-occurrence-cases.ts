@@ -582,6 +582,80 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // The restart claims the parent's nested step, and the old run's nested workflow suspends before
+    // the restart's delivery of that step runs. The suspension is refused at the claimed step, and
+    // the restart's delivery then found the nested run suspended and failed the run as not active.
+    // It now hands the suspension up: the run suspends, and a resume finishes it.
+    it('suspends a run whose nested workflow suspended after a restart claimed its step', async () => {
+      let gateCalls = 0;
+      const entered = deferred();
+      const release = deferred();
+      const gate = createStep({
+        id: 'gate',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (++gateCalls === 1) {
+            entered.resolve();
+            await release.promise;
+          }
+          if (!resumeData) return suspend({ reason: 'approval' });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const child = createWorkflow({
+        id: `restart-suspending-child-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+      })
+        .then(gate)
+        .commit();
+      const workflow = createWorkflow({
+        id: `restart-suspending-parent-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+      })
+        .then(child)
+        .commit();
+      await withHost({ [child.id]: child, [workflow.id]: workflow }, release.resolve, async ({ driver }) => {
+        const held = holdPublishes(driver, event => isStepRun(event, workflow.id, [0]) && !!event.data.restart);
+        try {
+          const run = await workflow.createRun();
+          const started = run.start({ inputData: { n: 0 } });
+          await entered.promise;
+          const restarted = restartRun(workflow, run.runId);
+          await held.count(1);
+          // The old run's nested workflow suspends while the restart's delivery waits.
+          release.resolve();
+          const childRunId = (await storedRun(workflow.id, run.runId))?.context[child.id]?.metadata?.nestedRunId;
+          await expect.poll(async () => (await storedRun(child.id, childRunId))?.status).toBe('suspended');
+          await drainHandlers();
+
+          await settleDeliveries([await held.release(0)]);
+          expect(await within(restarted, 'the restart caller to settle')).toMatchObject({ status: 'suspended' });
+          expect(await started).toMatchObject({ status: 'suspended' });
+          await drainHandlers();
+          expect(await storedRun(workflow.id, run.runId)).toMatchObject({
+            status: 'suspended',
+            context: { [child.id]: { status: 'suspended' } },
+          });
+
+          expect(
+            await (
+              await workflow.createRun({ runId: run.runId })
+            ).resume({
+              step: [child.id, 'gate'],
+              resumeData: { ok: true },
+            }),
+          ).toMatchObject({ status: 'success', result: { n: 1 } });
+          expect(gateCalls).toBe(2);
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
+
     // R3 for a restart with nothing to claim: a sleep's record carries no occurrence. Delivered again,
     // the restart event set the run's cursor back to the sleep and slept again.
     it('keeps the progress of a run restarted in a sleep when the restart event is delivered again', async () => {

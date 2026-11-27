@@ -3909,7 +3909,18 @@ export class WorkflowEventProcessor extends EventProcessor {
           (snapshot.result as StepResult<any, any, any, any> | undefined)?.status === 'success'
             ? (snapshot.result as StepResult<any, any, any, any>)
             : undefined;
-        if (ranForThisStep && (finishedResult || snapshot.status === 'failed')) {
+        // With step guards a restart can claim this step while the old run still drives the nested
+        // run, and that run's suspension is then refused at the claimed step. Hand it up here, as the
+        // nested run's own suspension would have, unless this step is a resume the restart recovers.
+        const suspendedId =
+          snapshot.status === 'suspended' &&
+          this.#guardsSteps(workflowsStore) &&
+          !isResumedRunningRecord(stepResults[leafId])
+            ? Object.keys(snapshot.suspendedPaths ?? {}).find(
+                id => (snapshot.context as Record<string, any>)?.[id]?.status === 'suspended',
+              )
+            : undefined;
+        if (ranForThisStep && (finishedResult || snapshot.status === 'failed' || suspendedId)) {
           const parentContext: ParentWorkflow = {
             stepId: leafId,
             workflowId,
@@ -3939,6 +3950,55 @@ export class WorkflowEventProcessor extends EventProcessor {
               timeTravel,
               perStep,
               outputOptions,
+            });
+            return;
+          }
+          if (suspendedId) {
+            // The same result processWorkflowSuspend hands up: the suspended step's record, with the
+            // nested run's id, the path to the step and its resume labels named for this step.
+            const suspended = (snapshot.context as Record<string, any>)[suspendedId];
+            const meta = suspended.suspendPayload?.__workflow_meta ?? {};
+            const existingPath: string[] = meta.path ?? [];
+            const nestedLabels: Record<string, { foreachIndex?: number }> = meta.resumeLabels ?? {};
+            const resumeLabels = Object.fromEntries(
+              Object.entries(nestedLabels).map(([label, { foreachIndex }]) => [
+                label,
+                { stepId: leafId, foreachIndex },
+              ]),
+            );
+            await this.#pubsub.publish('workflows', {
+              type: 'workflow.step.end',
+              runId,
+              data: {
+                workflowId,
+                runId,
+                executionPath,
+                resumeSteps,
+                stepResults,
+                prevResult: {
+                  ...suspended,
+                  suspendPayload: {
+                    ...suspended.suspendPayload,
+                    __workflow_meta: {
+                      ...meta,
+                      resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
+                      runId: nestedRunId,
+                      path: existingPath[0] === suspendedId ? existingPath : [suspendedId, ...existingPath],
+                    },
+                  },
+                },
+                timeTravel,
+                restart,
+                resumeData,
+                activeStepsPath,
+                requestContext,
+                actor,
+                parentWorkflow,
+                parentContext,
+                state: nestedState,
+                outputOptions,
+                nestedRunId,
+              },
             });
             return;
           }
