@@ -66,6 +66,23 @@ describe('HeldScopesStateProcessor', () => {
     );
   });
 
+  it('lists held scopes only, not scopes a held role reaches, and says so', async () => {
+    const { knowledge, requestContext, processor, args } = harness();
+    // org:acme grants viewer on docs:acme, but the run does not hold docs:acme, so it is not listed.
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'guide', name: 'Guide', body: 'reachable guide' });
+    const tools = knowledge.createTools({ read: true, principals: ['org:acme'] }) as any;
+    const read = await tools.knowledge_read.execute({ page: 'docs:acme#guide' }, {});
+    expect(JSON.stringify(read)).toContain('reachable guide');
+
+    setRunAgentScopes(requestContext, ['org:acme']);
+    const snapshot = (await processor.computeStateSignal(args())) as any;
+    expect(snapshot.value.scopes.map((scope: { address: string }) => scope.address)).not.toContain('docs:acme');
+    const result = processor.processInput({ messages: [], systemMessages: [] } as any) as any;
+    expect(result.systemMessages.at(-1).content).toContain(
+      'The list names the scopes your session holds, not every scope you can reach',
+    );
+  });
+
   it('emits nothing while the held scopes are unchanged and the snapshot is visible', async () => {
     const { requestContext, processor, args, asBase } = harness();
     setRunAgentScopes(requestContext, ['org:acme']);
@@ -110,7 +127,9 @@ describe('HeldScopesStateProcessor', () => {
       { op: 'remove', address: 'org:acme' },
       { op: 'remove', address: 'docs:acme' },
     ]);
-    expect(removed.contents).toBe('\n  - org:acme scope access was removed\n  - docs:acme scope access was removed\n');
+    expect(removed.contents).toBe(
+      '\n  - org:acme was removed from your scopes\n  - docs:acme was removed from your scopes\n',
+    );
   });
 
   it('sends a role change as a change, not a removal', async () => {
@@ -137,7 +156,7 @@ describe('HeldScopesStateProcessor', () => {
       contextWindow: { hasSnapshot: true },
     };
     const cleared = (await processorWithNone.computeStateSignal(args(base))) as any;
-    expect(cleared).toMatchObject({ mode: 'snapshot', contents: '\n  Your session has no Knowledge scopes.\n' });
+    expect(cleared).toMatchObject({ mode: 'snapshot', contents: '\n  Your session holds no Knowledge scopes.\n' });
     expect(await processorWithNone.computeStateSignal(args())).toBeUndefined();
   });
 
@@ -169,5 +188,6 @@ describe('HeldScopesStateProcessor', () => {
     expect(preamble).toContain('<knowledge-scopes-update');
     expect(preamble).toContain('no pages yet');
     expect(preamble).toContain('Viewers can only read; every other role can also write.');
+    expect(preamble).toContain('not every scope you can reach');
   });
 });

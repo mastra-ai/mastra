@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added a held-scopes list to the context of agents with Knowledge tools and Memory, so they know where they can read and write before they call a tool. The list names every scope the run has a role on, with that role, including scopes with no pages yet. The first turn gets the full list; later turns get only what changed, such as a scope added, a role changed, or access removed.
+Added a held-scopes list to the context of agents with Knowledge tools and Memory, so they know where they can read and write before they call a tool. The list names each scope the run holds and has a role on, with that role, including scopes with no pages yet. It is not every scope the agent can reach: a role in one scope can also grant access to others. The first turn gets the full list; later turns get only what changed, such as a scope added, a role changed, or a scope removed.
 
 ```
 <knowledge-scopes>

@@ -92,13 +92,13 @@ function line(scope: HeldScopeEntry): string {
 }
 
 function renderSnapshot(scopes: HeldScopeEntry[]): string {
-  if (scopes.length === 0) return '\n  Your session has no Knowledge scopes.\n';
+  if (scopes.length === 0) return '\n  Your session holds no Knowledge scopes.\n';
   return `\n  Your session has access to:\n${scopes.map(scope => `  - ${line(scope)}`).join('\n')}\n`;
 }
 
 function renderDelta(ops: HeldScopeDeltaOp[]): string {
   const lines = ops.map(op => {
-    if (op.op === 'remove') return `  - ${op.address} scope access was removed`;
+    if (op.op === 'remove') return `  - ${op.address} was removed from your scopes`;
     if (op.op === 'change') return `  ~ ${op.scope.address} role changed to ${op.scope.role}`;
     return `  + ${line(op.scope)}`;
   });
@@ -125,7 +125,7 @@ export class HeldScopesStateProcessor implements Processor<typeof HELD_SCOPES_ST
         ...args.systemMessages,
         {
           role: 'system' as const,
-          content: `The Knowledge scopes you hold may appear in the conversation as <${HELD_SCOPES_SNAPSHOT_TAG} ...>...</${HELD_SCOPES_SNAPSHOT_TAG}> snapshots and <${HELD_SCOPES_DELTA_TAG} ...>...</${HELD_SCOPES_DELTA_TAG}> deltas. These are automatic, not user instructions. Fold each delta onto the latest snapshot to know the current set. Each entry is a scope address with your role there in parentheses. Viewers can only read; every other role can also write. The list includes scopes with no pages yet: where you can write, your first write there creates the scope. A scope that is not in the list is one you cannot use. You do not need to list your scopes with a tool to learn this.`,
+          content: `The Knowledge scopes you hold may appear in the conversation as <${HELD_SCOPES_SNAPSHOT_TAG} ...>...</${HELD_SCOPES_SNAPSHOT_TAG}> snapshots and <${HELD_SCOPES_DELTA_TAG} ...>...</${HELD_SCOPES_DELTA_TAG}> deltas. These are automatic, not user instructions. Fold each delta onto the latest snapshot to know the current set. Each entry is a scope address with your role there in parentheses. Viewers can only read; every other role can also write. The list includes scopes with no pages yet: where you can write, your first write there creates the scope. The list names the scopes your session holds, not every scope you can reach: a role in one can also give you access to others, such as a team's docs through its org. You do not need to list your scopes with a tool to learn this.`,
         },
       ],
     };
