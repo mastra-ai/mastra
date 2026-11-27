@@ -1365,6 +1365,9 @@ export class FactoryDecisionDispatcher {
     const run = invokedSkill(record.decision);
     if (!this.#boardEngine.runFailed || !run || !record.workItemId || failureCode === 'run_incomplete') return;
     try {
+      // The card moved on while the attempt failed: the failure is the old phase's, and a phase the same
+      // role works must not be charged with it.
+      if (await this.#decisionOvertaken(record, run.role)) return;
       await this.#boardEngine.runFailed(
         {
           orgId: record.orgId,

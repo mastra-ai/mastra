@@ -114,9 +114,10 @@ describe('createRunStopMarker', () => {
     expect(aborted).toEqual(['session-1']);
   });
 
-  it('tells the board engine of the stop once the abort succeeded, for each card the session works', async () => {
+  it('tells the board engine of the stop once the abort succeeded, for each card the session was running', async () => {
     const { workItems, binding } = await setupWithBinding();
     const heard: unknown[] = [];
+    let running = false;
     const app = new Hono();
     app.use(
       '*',
@@ -124,11 +125,18 @@ describe('createRunStopMarker', () => {
         auth: signedInToOrg1,
         workItems: () => workItems,
         boardEngine: () => ({ runStopped: async seat => void heard.push(seat) }),
+        runInFlight: async sessionId => running && sessionId === 'session-1',
       }),
     );
     let fails = false;
     app.post(ABORT_ROUTE, c => (fails ? c.json({ error: 'no such session' }, 404) : c.json({ success: true })));
 
+    // Nothing going on the session (a run waiting out its retry): the Stop stops nothing.
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(heard).toEqual([]);
+
+    running = true;
     await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
     await vi.waitFor(() =>
       expect(heard).toEqual([

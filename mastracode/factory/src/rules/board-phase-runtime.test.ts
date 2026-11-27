@@ -827,12 +827,41 @@ describe.each([
   );
 
   /** Planning's model calls never answer: each ends only when its run is aborted. */
-  function blockingPlanner() {
+  /** A person's Stop of the card's session, as Factory's host serves it: the stop is marked, then the session aborts. */
+  async function stopSession(
+    { project, workItems, mastra }: Awaited<ReturnType<typeof startFactory>>,
+    engine: () => FactoryBoardEngine,
+    workItemId: string,
+  ) {
+    const host = new Hono();
+    host.use(
+      '*',
+      createRunStopMarker({
+        auth: { enabled: () => true, ensureUser: async () => undefined, tenant: () => ({ orgId: ORG }) },
+        workItems: () => workItems,
+        boardEngine: engine,
+        runInFlight: async sessionId =>
+          (await mastra.getAgentController('code')?.getSession(sessionId))?.stream.isActive() ?? false,
+      }),
+    );
+    host.post(`/api${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path}`, async c => {
+      const controller = mastra.getAgentController(c.req.param('controllerId') ?? '');
+      (await controller?.getSession(c.req.param('sessionId') ?? ''))?.abort();
+      return c.json({ ok: true });
+    });
+    const [seat] = (await workItems.listRunBindings(ORG, project.id, workItemId)).filter(
+      binding => binding.status === 'active',
+    );
+    return host.request(`/api/agent-controller/code/sessions/${seat!.sessionId}/abort`, { method: 'POST' });
+  }
+
+  function blockingPlanner({ failFirst = false } = {}) {
     const state = { planning: 0, aborted: 0, release: new Set<() => void>() };
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = input instanceof Request ? input.url : String(input);
       if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
       state.planning += 1;
+      if (failFirst && state.planning === 1) throw new Error('The model broke.');
       const signal = input instanceof Request ? input.signal : init?.signal;
       return new Promise<Response>((_resolve, reject) => {
         const abort = () => {
@@ -866,27 +895,7 @@ describe.each([
           }),
         );
 
-        // The session's Stop, as Factory's host serves it: the stop is marked, then the session aborts.
-        const host = new Hono();
-        host.use(
-          '*',
-          createRunStopMarker({
-            auth: { enabled: () => true, ensureUser: async () => undefined, tenant: () => ({ orgId: ORG }) },
-            workItems: () => workItems,
-            boardEngine: () => engine,
-          }),
-        );
-        host.post(`/api${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path}`, async c => {
-          const controller = mastra.getAgentController(c.req.param('controllerId') ?? '');
-          (await controller?.getSession(c.req.param('sessionId') ?? ''))?.abort();
-          return c.json({ ok: true });
-        });
-        const [seat] = (await workItems.listRunBindings(ORG, project.id, feature.id)).filter(
-          binding => binding.status === 'active',
-        );
-        const stop = await host.request(`/api/agent-controller/code/sessions/${seat!.sessionId}/abort`, {
-          method: 'POST',
-        });
+        const stop = await stopSession(runtime, () => engine, feature.id);
         expect(stop.status).toBe(200);
         expect(model.aborted).toBe(1);
         await vi.waitFor(async () =>
@@ -918,6 +927,42 @@ describe.each([
         });
         expect([200, 202], await start.text()).toContain(start.status);
         await vi.waitFor(() => expect(model.planning).toBe(2), { timeout: 15_000 });
+        expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
+          state: 'running',
+          phase: 'planning',
+        });
+      } finally {
+        for (const end of model.release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  it.runIf(engineName === 'workflow')(
+    "leaves a card running when a person's Stop finds its run waiting out a retry, and the retry runs",
+    async () => {
+      const model = blockingPlanner({ failFirst: true });
+      let engine!: FactoryBoardEngine;
+      const runtime = await startFactory(delivery, 'planning', deliverySkills, {
+        boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+      });
+      try {
+        const feature = await runtime.card('the feature stopped between attempts', []);
+        await vi.waitFor(
+          async () =>
+            expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
+              state: 'running',
+              attempts: 1,
+            }),
+          { timeout: 15_000 },
+        );
+        expect(model.planning).toBe(1);
+
+        const stop = await stopSession(runtime, () => engine, feature.id);
+        expect(stop.status).toBe(200);
+        await vi.waitFor(() => expect(model.planning).toBe(2), { timeout: 15_000 });
+        await new Promise(resolve => setTimeout(resolve, 200));
         expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
           state: 'running',
           phase: 'planning',
