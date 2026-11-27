@@ -275,6 +275,58 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // The restart's worker stops after its claims, before its step event goes out. The broker then
+    // delivers the restart event again: its claims find the steps it claimed and take them again, it
+    // publishes its step event, and the step runs once under the restart. The old save is refused.
+    it('recovers a restart whose worker stopped between its claims and its publish', async () => {
+      const wf = chain();
+      await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
+        let dropped = 0;
+        const lost = holdPublishes(
+          driver,
+          event => isStepRun(event, wf.workflow.id, [1]) && !!event.data.restart && !dropped++,
+        );
+        try {
+          const run = await wf.workflow.createRun();
+          const oldB = wf.holdAt('b');
+          const started = run.start({ inputData: { n: 0 } });
+          await oldB.entered;
+          const oldDelivery = stepRuns(driver, run.runId, wf.workflow.id, [1])[0]!;
+
+          const from = driver.events.length;
+          const restarted = restartRun(wf.workflow, run.runId);
+          await lost.count(1);
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.start' && event.runId === run.runId && event.data.restart)!;
+          await settleDeliveries([trigger]);
+          expect((await storedRun(wf.workflow.id, run.runId))?.context.b).toMatchObject({
+            status: 'running',
+            metadata: { startedBy: trigger.id, __restartPending: true },
+          });
+
+          const restartC = wf.holdAt('c');
+          await driver.redeliverEvent(trigger);
+          await restartC.entered;
+          const restartDelivery = stepRuns(driver, run.runId, wf.workflow.id, [1]).at(-1)!;
+          expect(restartDelivery.id).not.toBe(oldDelivery.id);
+          oldB.release();
+          await settleDeliveries([oldDelivery]);
+          restartC.release();
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+          await drainHandlers();
+          expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+          expect(wf.calls).toEqual({ a: 1, b: 2, c: 1 });
+          expect((await storedRun(wf.workflow.id, run.runId))?.context.b).toMatchObject({
+            status: 'success',
+            metadata: { startedBy: restartDelivery.id },
+          });
+        } finally {
+          lost.restore();
+        }
+      });
+    }, 20_000);
+
     // R2. Two restarts that read the run at the same point both forked it, so the restarted step and
     // every step after it ran once per restart. One restart now claims the step; the other finds it
     // claimed and publishes nothing.
