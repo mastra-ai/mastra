@@ -20,7 +20,8 @@ export function pendingQueueThreadId(threadId: string): string {
 }
 
 /**
- * The thread id that holds the signals a run of `threadId` took and has not yet saved or closed.
+ * The thread id that holds the signals a run of `threadId` took, until a run saves them or a close
+ * gives them back.
  * @experimental
  */
 export function takenQueueThreadId(threadId: string): string {

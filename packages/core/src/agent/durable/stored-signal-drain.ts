@@ -112,8 +112,9 @@ export function durableRunSignalsStore({
 /**
  * Close a storage-backed run that ended: the store deletes the taken rows it
  * consumed and, while the run is still the thread's signal run, gives the
- * other taken rows back to pending. Safe to repeat. Returns nothing to wait for when the run's signals
- * are not stored, so other runs end without waiting on it.
+ * other taken rows back to pending. Safe to repeat. Returns nothing to wait
+ * for when the run's signals are not stored, so other runs end without
+ * waiting on it.
  *
  * A failed close doesn't fail the run's ending: the thread keeps the run as
  * its signal run until the thread's next run is prepared.
