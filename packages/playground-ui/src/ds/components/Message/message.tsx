@@ -41,6 +41,9 @@ export function Message({ from, avatar, footer, attachments, pending, children, 
             className={cn(
               'max-w-full min-w-0 text-body break-words',
               isUser && cn(messageSurfaceStyle, 'px-4 py-2'),
+              // The user bubble sizes to its content and is already capped, so a code block may
+              // report its longest line; contained, it reports no width and collapses to the prose.
+              isUser && '[&_[data-slot=code-block]]:[contain:none]',
               isUser && pending && 'border border-dashed border-border',
               !isUser && footer && '[&>:last-child]:mb-0',
             )}
