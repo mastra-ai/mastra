@@ -22,7 +22,7 @@ import type { MastraStorage } from '../../../storage';
 import { createTool } from '../../../tools';
 import type { WorkflowOptions } from '../..';
 import { createStep, createWorkflow as createEventedWorkflow } from '..';
-import { drainHandlers, settleDeliveries } from './redelivery-contract';
+import { drainHandlers, redeliverAndDrain, settleDeliveries } from './redelivery-contract';
 import { RedeliveryDriver } from './redelivery-driver';
 
 const Num = z.object({ n: z.number() });
@@ -423,6 +423,39 @@ export function describeResumeOccurrenceCases({
         }
       });
     }, 20_000);
+
+    // A step after a resume delivered again after it finished, while the run is still in the next
+    // step. The workflow declines running snapshots, so the finished-step check cannot tell and
+    // only the guard decides. With the event's own ID the guard refuses it on both storage
+    // versions. Under a new ID, storage v1 refuses it too, because the event expected no occurrence
+    // of the step; storage v2 reads the expected occurrence from the stored step, so it runs the
+    // step again (COR-1666). The next step still runs once there: its guard refuses the second start.
+    it.each(['expired', 'publish'] as const)(
+      'refuses a late duplicate of a step after a resume (%s)',
+      async mode => {
+        const wf = linearWorkflow({
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+        });
+        await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver }) => {
+          try {
+            const run = await wf.workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+            wf.arm('next');
+            const result = run.resume({ step: 'gate', resumeData: { ok: true } });
+            await wf.entered.next.promise;
+            await redeliverAndDrain(driver, { spec: `${wf.workflow.id}@1`, runId: run.runId }, mode);
+            wf.held.next.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+            await drainHandlers();
+            const rerunsOnV2 = mode === 'publish' && storageVersion === 2;
+            expect(wf.calls).toEqual({ gate: 1, after: rerunsOnV2 ? 2 : 1, next: 1 });
+          } finally {
+            wf.releaseAll();
+          }
+        });
+      },
+      20_000,
+    );
 
     // T4 (T1 after a time travel). Time travel carries its flag on every later step, so without the
     // guards nothing told the two copies of a duplicated step apart and the step after it ran twice.
