@@ -54,7 +54,9 @@ import {
   calculatePagination,
   isPendingSignalThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  PENDING_SIGNAL_STATE,
   PENDING_SIGNAL_THREAD_PREFIX,
+  pendingSignalStateAtEnqueue,
   pendingSignalThreadId,
   threadIdOfPendingSignalRow,
   resolveRunFence,
@@ -101,18 +103,21 @@ import { runPrune, resolveTargets } from '../../retention';
 /**
  * Pending agent signals live in the messages table, under the thread id
  * `pendingSignalThreadId(threadId)` and without a resource id, so they are not part of any thread
- * until `saveMessages` moves them to their thread. These columns are not in core's shared schema,
- * so `init()` adds them here. The thread's `signalRunId` is the only run allowed to insert for a
- * run or to claim.
+ * until a claim or `saveMessages` moves them to their thread. These columns are not in core's
+ * shared schema, so `init()` adds them here. The thread's `signalRunId` is the only run allowed to
+ * insert for a run or to claim.
  */
 const SIGNAL_MESSAGE_COLUMNS = {
   /**
-   * The run that took the signal. It stays after the save moves the row to its thread, until that
-   * run closes. A row under the pending-signal prefix is not part of any thread: every read by
-   * message id must exclude it, and nothing but the save may move it to a real thread.
+   * The run that took the signal, until that run closes. A row under the pending-signal prefix is
+   * not part of any thread: every read by message id must exclude it.
    */
   signalClaimedBy: { type: 'text', nullable: true },
+  /** A `PENDING_SIGNAL_STATE` value: a transient signal, or a row a claim moved that no save wrote. */
+  signalState: { type: 'text', nullable: true },
 } satisfies Record<string, StorageColumn>;
+const TRANSIENT_STATE = `'${PENDING_SIGNAL_STATE.transient}'`;
+const TAKEN_STATE = `'${PENDING_SIGNAL_STATE.taken}'`;
 const SIGNAL_THREAD_COLUMNS = {
   signalRunId: { type: 'text', nullable: true },
 } satisfies Record<string, StorageColumn>;
@@ -976,9 +981,9 @@ export class MemoryLibSQL extends MemoryStorage {
           );
         }
         // Saving a pending signal under its own thread moves the row into the thread, where it is a
-        // message that takes the saved createdAt; a row that already is a message keeps its createdAt.
-        // Both keep the claimant until the claiming run closes. A pending signal saved under another
-        // thread is left alone.
+        // message that takes the saved createdAt, as does the first save of a row a claim moved; any
+        // other message keeps its createdAt. All keep the claimant until the claiming run closes, and
+        // the save clears the signal state. A pending signal saved under another thread is left alone.
         const pendingThreadId = pendingSignalThreadId(message.threadId);
         return {
           sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId") 
@@ -989,7 +994,8 @@ export class MemoryLibSQL extends MemoryStorage {
                     role=excluded.role,
                     type=excluded.type,
                     "resourceId"=excluded."resourceId",
-                    "createdAt"=CASE WHEN thread_id = ? THEN excluded."createdAt" ELSE "createdAt" END
+                    "createdAt"=CASE WHEN thread_id = ? OR "signalState" = ${TAKEN_STATE} THEN excluded."createdAt" ELSE "createdAt" END,
+                    "signalState"=NULL
                   WHERE ${NOT_PENDING_SIGNAL_ROW_CONDITION} OR thread_id = ?
                 `,
           args: [
@@ -1963,15 +1969,16 @@ export class MemoryLibSQL extends MemoryStorage {
       message.role,
       message.type || 'v2',
       createdAt instanceof Date ? createdAt.toISOString() : createdAt,
+      pendingSignalStateAtEnqueue(message),
     ];
     // An existing id, in any thread or state, writes nothing.
-    const insert = `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt")`;
+    const insert = `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "signalState")`;
 
     try {
       if (toRunId === undefined) {
         await this.#write('enqueuePendingSignal', () =>
           this.#client.execute({
-            sql: `${insert} VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
+            sql: `${insert} VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING`,
             args: row,
           }),
         );
@@ -1987,7 +1994,7 @@ export class MemoryLibSQL extends MemoryStorage {
               args: [message.threadId!],
             },
             {
-              sql: `${insert} SELECT ?, ?, ?, ?, ?, ?
+              sql: `${insert} SELECT ?, ?, ?, ?, ?, ?, ?
                     WHERE EXISTS (SELECT 1 FROM "${TABLE_THREADS}" WHERE id = ? AND "resourceId" = ? AND "signalRunId" = ?)
                     ON CONFLICT(id) DO NOTHING`,
               args: [...row, message.threadId!, message.resourceId!, toRunId],
@@ -2021,9 +2028,14 @@ export class MemoryLibSQL extends MemoryStorage {
         this.#client.batch(
           [
             {
-              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = ?
+              // Every row but a transient one moves into the thread with the thread's resource.
+              sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = ?,
+                      thread_id = CASE WHEN "signalState" IS ${TRANSIENT_STATE} THEN thread_id ELSE ? END,
+                      "resourceId" = CASE WHEN "signalState" IS ${TRANSIENT_STATE} THEN NULL
+                        ELSE (SELECT "resourceId" FROM "${TABLE_THREADS}" WHERE id = ?) END,
+                      "signalState" = CASE WHEN "signalState" IS ${TRANSIENT_STATE} THEN "signalState" ELSE ${TAKEN_STATE} END
                     WHERE thread_id = ? AND "signalClaimedBy" IS NULL AND ${isSignalRun}`,
-              args: [runId, pendingThreadId, threadId, runId],
+              args: [runId, threadId, threadId, pendingThreadId, threadId, runId],
             },
             {
               // Taken rows and rows the run saved since. consumedIds can hold every signal a long run
@@ -2060,11 +2072,20 @@ export class MemoryLibSQL extends MemoryStorage {
         this.#client.batch(
           [
             {
-              // Consumed rows still under the pending-signal id were never saved.
+              // Consumed rows still under the pending-signal id, or moved by the claim and not saved
+              // since, were never saved.
               sql: `DELETE FROM "${TABLE_MESSAGES}"
-                    WHERE thread_id = ? AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?
+                    WHERE thread_id IN (?, ?) AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?
+                      AND (thread_id = ? OR "signalState" = ${TAKEN_STATE})
                       AND id IN (SELECT value FROM json_each(?))`,
-              args: [pendingThreadId, runId, JSON.stringify(consumedIds)],
+              args: [threadId, pendingThreadId, runId, pendingThreadId, JSON.stringify(consumedIds)],
+            },
+            {
+              // A row the claim moved that the run neither consumed nor saved is pending again.
+              sql: `UPDATE "${TABLE_MESSAGES}" SET thread_id = ?, "resourceId" = NULL, "signalState" = NULL
+                    WHERE thread_id = ? AND ${CLAIMED_ROW_CONDITION} AND "signalClaimedBy" = ?
+                      AND "signalState" = ${TAKEN_STATE}`,
+              args: [pendingThreadId, threadId, runId],
             },
             {
               sql: `UPDATE "${TABLE_MESSAGES}" SET "signalClaimedBy" = NULL
