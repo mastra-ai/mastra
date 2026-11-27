@@ -14,3 +14,4 @@ export * from './platform-provider-connections';
 export * from './intake-source-groups';
 export * from './provider-intake-cards';
 export * from './provider-intake-status';
+export * from './github-intake-card';
