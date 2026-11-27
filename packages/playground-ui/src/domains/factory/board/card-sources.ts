@@ -1,6 +1,7 @@
 import type { ComponentType, SVGProps } from 'react';
 
-import { GitLabIcon, IncidentIoIcon, JiraIcon, VantaIcon } from './source-icons';
+import { VantaIcon } from '../intake/vanta-icon';
+import { GitLabIcon, IncidentIoIcon, JiraIcon } from './source-icons';
 import { IconPageSearch } from '@/ds/icons/central/IconPageSearch';
 import { IconPullRequest } from '@/ds/icons/central/IconPullRequest';
 import { CircleDotIcon } from '@/ds/icons/CircleDotIcon';
