@@ -10,6 +10,14 @@ describe('requestsChangesVerdict', () => {
     expect(requestsChangesVerdict(body)).toBe(true);
   });
 
+  it('reads the verdict below an attribution that names a plain name or the Factory', () => {
+    for (const actor of ['Mastra Factory', 'Charlie Test']) {
+      expect(requestsChangesVerdict(`> Opened by ${actor}\n\n## Verdict: request changes\nReviewed head: abc`)).toBe(
+        true,
+      );
+    }
+  });
+
   it('does not look past a first line that is not the attribution', () => {
     expect(requestsChangesVerdict('Looks fine to me.\nVerdict: request changes')).toBe(false);
     expect(requestsChangesVerdict('> Opened by @DSchau\n\nThanks, will fix.')).toBe(false);

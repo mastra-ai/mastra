@@ -1930,6 +1930,7 @@ export class MastraFactory {
       resolveReviewedChangeRequest({
         requestContext,
         providers: sourceControlToolProviders,
+        ...(storage.isDomainReady('work-items') ? { workItems: workItemsStorage } : {}),
         boundChangeRequestId: async () => {
           const resolution = await resolveFactorySessionAddress({ requestContext, storage: workItemsStorage });
           if (!resolution) return undefined;
@@ -2190,6 +2191,8 @@ export class MastraFactory {
                 audit: auditDomain,
                 ...(workItemsStorage
                   ? {
+                      // Only read cards for attribution once their storage is up, so a source-control call never fails on it.
+                      ...(storage.isDomainReady('work-items') ? { workItems: workItemsStorage } : {}),
                       workItem: {
                         selfReviewApprovedHead: target =>
                           selfReviewApprovedHead({ requestContext, workItems: workItemsStorage, boards, target }),

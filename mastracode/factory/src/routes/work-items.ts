@@ -259,7 +259,10 @@ function parseStartBody(
   modelScope: EffectiveModelScope,
 ): FactoryStartRequest | null {
   const parsed = FACTORY_ROUTE_CONTRACTS.workItemStart.bodySchema.safeParse(body);
-  return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
+  // The person who asked for the run is credited for what it writes; a body can never name someone else.
+  return parsed.success
+    ? { ...tenant, factoryProjectId, modelScope, ...parsed.data, initiatedBy: tenant.userId }
+    : null;
 }
 
 function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {

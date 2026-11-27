@@ -33,6 +33,11 @@ export interface FactoryStartRequest {
    * sessions it runs, and the move a start makes is still the mover's.
    */
   startedBy?: FactoryRuleActor;
+  /**
+   * The person the run's source-control writes are attributed to, when a person started
+   * it. Attribution only: the session's owner (`userId`) still runs it.
+   */
+  initiatedBy?: string;
   sessionId: string;
   expectedBindingId?: string;
   threadTitle: string;
@@ -353,6 +358,7 @@ export class FactoryStartCoordinator {
       resourceId: memoryResourceId,
       kickoffKey: request.kickoffKey,
       kickoffMessage: null,
+      ...(request.initiatedBy ? { initiatedBy: request.initiatedBy } : {}),
     });
     await session.thread.setSetting({ key: 'factoryWorkItemId', value: prepared.item.id });
 

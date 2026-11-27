@@ -1,8 +1,9 @@
 /**
  * The Platform GitHub proxy prefixes bodies it writes for a session with
- * `> Opened by @<actor>`, which pushes the skill's verdict off the first line.
+ * `> Opened by <actor>`, which pushes the skill's verdict off the first line. The actor is a
+ * `@login`, a plain name or a label such as `Mastra Factory`, so it may contain spaces.
  */
-const ACTOR_ATTRIBUTION_LINE = /^>\s*Opened by\s+\S+$/;
+const ACTOR_ATTRIBUTION_LINE = /^>\s*Opened by\s+.+$/;
 
 /**
  * Normalizes the first non-empty line of a review body so its `Verdict:` line can be read

@@ -1584,11 +1584,12 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         actor: { type: 'system', id: 'forged' },
         userId: 'forged',
         orgId: 'forged',
+        initiatedBy: 'forged',
       }),
     });
 
     expect(res.status).toBe(202);
-    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', userId: 'u1' }));
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org1', userId: 'u1', initiatedBy: 'u1' }));
   });
 
   it('rejects a non-UUID kickoff identity before coordination', async () => {

@@ -218,6 +218,82 @@ describe('WorkItemsStorage', () => {
     expect(second.pendingStart.bindingId).toBe(second.binding.id);
   });
 
+  it('stamps the person who started a role run apart from its owner, and only for that role', async () => {
+    const storage = await makeStorage();
+    const owner = 'factory-project:project1';
+    const start = (role: string, kickoffKey: string, initiatedBy?: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: owner,
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role,
+        session: { sessionId: `session-${role}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
+        resourceId: 'resource-1',
+        kickoffKey,
+        kickoffMessage: null,
+        ...(initiatedBy ? { initiatedBy } : {}),
+      });
+
+    const work = await start('work', 'kickoff-1', 'person-1');
+    expect(work.item.sessions.work).toMatchObject({ startedBy: owner, initiatedBy: 'person-1' });
+
+    // Another role started by nobody keeps the first role's person and credits none itself.
+    const review = await start('review', 'kickoff-2');
+    expect(review.item.sessions.work).toMatchObject({ startedBy: owner, initiatedBy: 'person-1' });
+    expect(review.item.sessions.review).toEqual({
+      sessionId: 'session-review',
+      branch: 'factory/42',
+      threadId: 'thread-kickoff-2',
+      startedBy: owner,
+    });
+
+    // An automatic restart of the role has no person behind it, so the credit goes.
+    const retried = await start('work', 'kickoff-3');
+    expect(retried.item.sessions.work).not.toHaveProperty('initiatedBy');
+
+    // Only a person is ever stamped.
+    const automated = await start('work', 'kickoff-4', 'factory-project:project1');
+    expect(automated.item.sessions.work).not.toHaveProperty('initiatedBy');
+  });
+
+  it('never takes the starter or the credited person from a client', async () => {
+    const storage = await makeStorage();
+    const forged = {
+      sessionId: 'sess-1',
+      branch: 'factory/42',
+      threadId: 'thread-1',
+      startedBy: 'someone-else',
+      initiatedBy: 'someone-else',
+    } as unknown as { sessionId: string; branch: string; threadId: string };
+    const created = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, sessions: { work: forged } },
+    });
+    expect(created.item.sessions.work).toEqual({
+      sessionId: 'sess-1',
+      branch: 'factory/42',
+      threadId: 'thread-1',
+      startedBy: 'user1',
+    });
+
+    const updated = await storage.update({
+      orgId: 'org1',
+      id: created.item.id,
+      userId: 'user2',
+      expectedRevision: created.item.revision,
+      patch: { sessions: { review: forged } },
+    });
+    expect(updated?.item.sessions.review).toEqual({
+      sessionId: 'sess-1',
+      branch: 'factory/42',
+      threadId: 'thread-1',
+      startedBy: 'user2',
+    });
+  });
+
   it("revokes an earlier role's binding when a later role continues in its session", async () => {
     const storage = await makeStorage();
     const start = (role: string, threadId: string) =>

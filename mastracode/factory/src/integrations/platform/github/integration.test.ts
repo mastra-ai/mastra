@@ -642,6 +642,31 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.parse(String((fetchImpl.mock.calls[3]?.[1] as RequestInit).body))).toEqual({ assignees: ['grace'] });
   });
 
+  it("opens an autonomous run's PR as the Factory without looking up a GitHub account for it", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/pulls')) return json(pullRequest);
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const created = await integration.versionControl.createPullRequest({
+      connection: { type: 'app-installation', installationId: 7 },
+      sourceId: 'acme/app',
+      title: 'Ship intake',
+      baseBranch: 'main',
+      headBranch: 'feat/intake',
+      actingUserId: 'factory-project:project-1',
+    });
+
+    expect(created.url).toBeTruthy();
+    expect(fetchImpl.mock.calls.map(call => String(call[0]))).toEqual([
+      'https://platform.example.com/v1/server/github/repos/acme/app/pulls',
+    ]);
+    expect(new Headers((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).get('x-acting-user-id')).toBe(
+      'factory-project:project-1',
+    );
+  });
+
   it('does not claim an assignment when GitHub silently ignores the requested user', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);

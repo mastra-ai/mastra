@@ -23,9 +23,11 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
+import { resolveAttributionUserId } from './run-attribution.js';
 import type { ChangeTarget } from './self-review-gate.js';
 
 type RepositorySessionState = {
@@ -47,6 +49,11 @@ interface SessionTarget {
   repository: SourceControlRepository;
   orgId: string;
   userId: string;
+  /**
+   * Who the session's writes are credited to, sent to the provider as the acting user. It names
+   * a person or the Factory and never changes the repository access or credentials `userId` has.
+   */
+  actingUserId: string;
   /** True when the target is the link the session is filed under, the default. */
   ownRepository: boolean;
 }
@@ -113,10 +120,13 @@ async function resolveProviderSession(
   return matches[0]!;
 }
 
+/** The cards whose runs a session's writes may be credited from. */
+export type AttributionWorkItems = Pick<WorkItemsStorage, 'listRunBindingsForSession' | 'get'>;
+
 async function resolveSessionTarget(
   requestContext: RequestContext,
   providers: readonly SourceControlToolProvider[],
-  options: { repository?: string } = {},
+  options: { repository?: string; workItems?: AttributionWorkItems } = {},
 ): Promise<SessionTarget> {
   const context = requestContext.get('controller') as AgentControllerRequestContext<RepositorySessionState> | undefined;
   const { orgId, userId } = authIdentity(requestContext);
@@ -141,6 +151,13 @@ async function resolveSessionTarget(
   if (state.factoryProjectId && state.factoryProjectId !== ownConnection.factoryProjectId) {
     throw new Error('The active source-control session does not match its Factory project.');
   }
+  const actingUserId = await resolveAttributionUserId({
+    authenticatedUserId: userId,
+    session,
+    factoryProjectId: session.factoryProjectId ?? ownConnection.factoryProjectId,
+    ...(options.workItems ? { workItems: options.workItems } : {}),
+    sessions: provider.storage.sessions,
+  });
 
   if (options.repository !== undefined) {
     const candidates = await resolveSessionRepositories({ sourceControl: provider.storage, session });
@@ -158,6 +175,7 @@ async function resolveSessionTarget(
       repository: match.repository,
       orgId,
       userId,
+      actingUserId,
       ownRepository: match.link.id === ownRepository.id,
     };
   }
@@ -172,6 +190,7 @@ async function resolveSessionTarget(
     repository,
     orgId,
     userId,
+    actingUserId,
     ownRepository: true,
   };
 }
@@ -242,10 +261,13 @@ export async function createSourceControlTools({
   providers,
   audit,
   workItem,
+  workItems,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   audit: AuditAgentEmitter;
+  /** Cards to credit a run's writes from; without them a run's writes are credited to the Factory. */
+  workItems?: AttributionWorkItems;
   /** The session's card, when it is bound to one. */
   workItem?: {
     /**
@@ -273,7 +295,8 @@ export async function createSourceControlTools({
   // Checkout refresh only works in a GitLab merge-request review session.
   const offersCheckoutRefresh =
     sessionMatch?.provider.id === 'gitlab' && mergeRequestNumberFromBranch(sessionMatch.session.branch) !== undefined;
-  const withTarget = (options?: { repository?: string }) => resolveSessionTarget(requestContext, providers, options);
+  const withTarget = (options?: { repository?: string }) =>
+    resolveSessionTarget(requestContext, providers, { ...options, ...(workItems ? { workItems } : {}) });
   const targetFor = (input: { repository?: string }) =>
     withTarget(input.repository !== undefined ? { repository: input.repository } : undefined);
   const reference = async (target: SessionTarget) => ({
@@ -281,7 +304,7 @@ export async function createSourceControlTools({
       orgId: target.orgId,
       repositoryId: target.repository.id,
     })),
-    actingUserId: target.userId,
+    actingUserId: target.actingUserId,
   });
   // Gated by `offersCheckoutRefresh`; execute still checks the binding it resolves at call time.
   const createRefreshCheckoutTool = () =>
@@ -789,20 +812,22 @@ export async function resolveReviewedChangeRequest({
   requestContext,
   providers,
   boundChangeRequestId,
+  workItems,
 }: {
   requestContext: RequestContext;
   providers: readonly SourceControlToolProvider[];
   boundChangeRequestId: () => Promise<string | undefined>;
+  workItems?: AttributionWorkItems;
 }): Promise<ReviewedChangeRequest | undefined> {
   const changeRequestId = await boundChangeRequestId();
   if (changeRequestId === undefined) return undefined;
-  const target = await resolveSessionTarget(requestContext, providers);
+  const target = await resolveSessionTarget(requestContext, providers, workItems ? { workItems } : {});
   const ref = {
     ...(await target.provider.versionControl.getRepositoryTarget({
       orgId: target.orgId,
       repositoryId: target.repository.id,
     })),
-    actingUserId: target.userId,
+    actingUserId: target.actingUserId,
   };
   const read = async () => {
     const pullRequest = await target.provider.versionControl.getPullRequest({ ...ref, pullRequestId: changeRequestId });

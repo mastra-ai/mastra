@@ -9,21 +9,22 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import { createBoardRegistry } from '../boards/registry.js';
 import { selfReviewWorkBoard } from '../boards/test-utils.js';
 import type { VersionControl } from '../capabilities/version-control.js';
+import { PlatformGithubIntegration } from '../integrations/platform/github/integration.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './source-control-tools.js';
 
-function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
+function requestContext({ orgId = 'org-1', userId = 'user-1', sessionId = 'session-1' } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
   requestContext.set('controller', {
     // The session runs under its Factory, so only its session id names the source-control session.
-    sessionId: 'session-1',
+    sessionId,
     resourceId: 'project-1',
     threadId: 'thread-1',
-    session: { id: 'session-1', ownerId: userId },
+    session: { id: sessionId, ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);
   return requestContext;
@@ -223,6 +224,182 @@ describe('createSourceControlTools', () => {
         input: expect.objectContaining({ action: 'factory.agent.pr_opened' }),
       }),
     );
+  });
+
+  describe('who a change request is credited to', () => {
+    const FACTORY = 'factory-project:project-1';
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.unstubAllGlobals();
+    });
+
+    /**
+     * Opens a change request with the real tool through the real Platform GitHub integration and
+     * returns what it sent: the acting user header next to the request's target and credential.
+     */
+    async function openChangeRequest(options: {
+      authenticatedUserId: string;
+      sessionId: string;
+      sessions: { sessionId: string; userId: string; origin?: string }[];
+      /** The session a card's work run is bound to, and who started that run. */
+      run?: { sessionId: string; initiatedBy?: string };
+    }) {
+      vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', 'https://platform.example.com');
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'platform-token');
+      const fetchImpl = vi.fn<typeof fetch>(async input => {
+        const url = String(input);
+        if (url.endsWith('/pulls')) {
+          return new Response(
+            JSON.stringify({
+              number: 34,
+              title: 'Ship it',
+              body: 'Body',
+              state: 'open',
+              htmlUrl: 'https://github.com/acme/repo/pull/34',
+              merged: false,
+              mergeable: true,
+              draft: false,
+              head: { ref: 'factory/issue-1', sha: 'abc123' },
+              base: { ref: 'main', repo: { id: 101, fullName: 'acme/repo' } },
+              user: { login: 'mastra-platform[bot]', avatarUrl: null, htmlUrl: null },
+              createdAt: '2026-07-01T00:00:00Z',
+              updatedAt: '2026-07-01T00:00:00Z',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        // The opener has no connected GitHub account, so the PR is left unassigned.
+        if (url.includes('/user-connection?')) {
+          return new Response(JSON.stringify({ connected: false }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchImpl);
+      const github = new PlatformGithubIntegration();
+
+      const setup = await fixture('github');
+      for (const session of options.sessions) {
+        await setup.storage.sessions.create({
+          sessionId: session.sessionId,
+          projectRepositoryId: 'repo-link-1',
+          factoryProjectId: 'project-1',
+          orgId: 'org-1',
+          userId: session.userId,
+          branch: `factory/${session.sessionId}`,
+          baseBranch: 'main',
+          ...(session.origin ? { origin: { sessionId: session.origin, threadId: 'thread-origin' } } : {}),
+        });
+      }
+      const { workItems } = await createFactoryStorageForTests();
+      if (options.run) {
+        await workItems.prepareRunStart({
+          orgId: 'org-1',
+          userId: FACTORY,
+          factoryProjectId: 'project-1',
+          workItem: { input: { title: 'Card', stages: ['execute'], sessions: {} } },
+          role: 'work',
+          session: { sessionId: options.run.sessionId, branch: 'factory/issue-1', threadId: 'thread-1' },
+          resourceId: 'project-1',
+          kickoffKey: 'kickoff-1',
+          kickoffMessage: null,
+          ...(options.run.initiatedBy ? { initiatedBy: options.run.initiatedBy } : {}),
+        });
+      }
+      const versionControl = {
+        ...github.versionControl,
+        getRepositoryTarget: async () => ({
+          connection: { type: 'app-installation' as const, installationId: 7 },
+          sourceId: 'acme/repo',
+        }),
+      } as VersionControl;
+      const tools = await createSourceControlTools({
+        requestContext: requestContext({ userId: options.authenticatedUserId, sessionId: options.sessionId }),
+        providers: [{ id: 'github', storage: setup.storage, versionControl }],
+        audit: setup.audit,
+        workItems,
+      });
+      await (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it', body: 'Body' });
+
+      const [url, init] = fetchImpl.mock.calls[0]!;
+      const headers = new Headers((init as RequestInit).headers);
+      return {
+        actingUserId: headers.get('x-acting-user-id'),
+        // What decides the repository and the credential, which attribution must never change.
+        target: { url: String(url), authorization: headers.get('authorization') },
+        calls: fetchImpl.mock.calls.map(call => String(call[0])),
+      };
+    }
+
+    const unchangedTarget = {
+      url: 'https://platform.example.com/v1/server/github/repos/acme/repo/pulls',
+      authorization: 'Bearer platform-token',
+    };
+
+    it('credits the person who started a Factory-owned run, which still runs as the Factory', async () => {
+      const sent = await openChangeRequest({
+        authenticatedUserId: FACTORY,
+        sessionId: 'run',
+        sessions: [{ sessionId: 'run', userId: FACTORY }],
+        run: { sessionId: 'run', initiatedBy: 'person-1' },
+      });
+      expect(sent.actingUserId).toBe('person-1');
+      expect(sent.target).toEqual(unchangedTarget);
+    });
+
+    it('credits an autonomous run to the Factory, never its creator or connector, and assigns nobody', async () => {
+      const sent = await openChangeRequest({
+        authenticatedUserId: FACTORY,
+        sessionId: 'run',
+        sessions: [{ sessionId: 'run', userId: FACTORY }],
+        run: { sessionId: 'run' },
+      });
+      expect(sent.actingUserId).toBe(FACTORY);
+      expect(sent.actingUserId).not.toBe('user-1');
+      expect(sent.target).toEqual(unchangedTarget);
+      expect(sent.calls).toEqual([unchangedTarget.url]);
+    });
+
+    it("credits a person chatting in the Factory's run, and a person's own session, to them", async () => {
+      const chatting = await openChangeRequest({
+        authenticatedUserId: 'person-2',
+        sessionId: 'run',
+        sessions: [{ sessionId: 'run', userId: FACTORY }],
+        run: { sessionId: 'run', initiatedBy: 'person-1' },
+      });
+      expect(chatting.actingUserId).toBe('person-2');
+      expect(chatting.target).toEqual(unchangedTarget);
+
+      const own = await openChangeRequest({ authenticatedUserId: 'user-1', sessionId: 'session-1', sessions: [] });
+      expect(own.actingUserId).toBe('user-1');
+      expect(own.target).toEqual(unchangedTarget);
+    });
+
+    it('credits a side session, and a woken run, to the person who started the run', async () => {
+      const side = await openChangeRequest({
+        authenticatedUserId: FACTORY,
+        sessionId: 'side',
+        sessions: [
+          { sessionId: 'run', userId: FACTORY },
+          { sessionId: 'side', userId: FACTORY, origin: 'run' },
+        ],
+        run: { sessionId: 'run', initiatedBy: 'person-1' },
+      });
+      expect(side.actingUserId).toBe('person-1');
+
+      // A wake runs as the session row's owner; the credit comes from the card, not the wake.
+      const woken = await openChangeRequest({
+        authenticatedUserId: FACTORY,
+        sessionId: 'run',
+        sessions: [{ sessionId: 'run', userId: FACTORY }],
+        run: { sessionId: 'run', initiatedBy: 'person-1' },
+      });
+      expect(woken.actingUserId).toBe('person-1');
+      expect(woken.target).toEqual(unchangedTarget);
+    });
   });
 
   describe('self-review gate', () => {

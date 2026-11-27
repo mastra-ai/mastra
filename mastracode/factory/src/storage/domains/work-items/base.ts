@@ -26,6 +26,7 @@ import {
 import type { LegacyWatermark, WorkItemSplitReport } from '../../../work-items/split-migration.js';
 import { AnnouncedLists } from '../../announced-lists.js';
 import { ensureLegacyCollections } from '../../legacy-collections.js';
+import { isHumanActorId } from '../audit/actors.js';
 import {
   BoardScopes,
   bumpBoardVersions,
@@ -158,6 +159,12 @@ export interface WorkItemSessionRef {
   branch: string;
   threadId: string;
   startedBy: string;
+  /**
+   * The person who started this role's run, when one did. Attribution only: it labels
+   * what the run writes to source control and never grants authority, picks credentials
+   * or changes who owns the session (`startedBy`). Stamped server-side.
+   */
+  initiatedBy?: string;
 }
 
 export interface CommitFactoryRuleEvaluationInput {
@@ -524,6 +531,8 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
+  /** The person who started the run; stamped on the role's session for attribution only. */
+  initiatedBy?: string;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -926,8 +935,27 @@ export function applyStageTransition(
   return next;
 }
 
-export function stampSessions(sessions: Record<string, WorkItemSessionInput>, by: string): WorkItemSessions {
-  return Object.fromEntries(Object.entries(sessions).map(([role, session]) => [role, { ...session, startedBy: by }]));
+/**
+ * Stamp who started each session. Only the ref's own fields are kept, so a client can never
+ * supply `startedBy` or `initiatedBy` itself; `initiatedBy` is kept only for a person.
+ */
+export function stampSessions(
+  sessions: Record<string, WorkItemSessionInput>,
+  by: string,
+  initiatedBy?: string,
+): WorkItemSessions {
+  return Object.fromEntries(
+    Object.entries(sessions).map(([role, { sessionId, branch, threadId }]) => [
+      role,
+      {
+        sessionId,
+        branch,
+        threadId,
+        startedBy: by,
+        ...(isHumanActorId(initiatedBy) ? { initiatedBy } : {}),
+      },
+    ]),
+  );
 }
 
 function applyUpdate({
@@ -935,11 +963,13 @@ function applyUpdate({
   userId,
   input,
   now = new Date(),
+  initiatedBy,
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
   now?: Date;
+  initiatedBy?: string;
 }): Partial<WorkItemDbRow> {
   const metadata = input.metadata ? { ...input.metadata } : input.metadata;
   const reconciliation = current.metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
@@ -964,7 +994,7 @@ function applyUpdate({
         }
       : {}),
     ...(input.sessions !== undefined
-      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId) } }
+      ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId, initiatedBy) } }
       : {}),
     ...(metadata !== undefined
       ? { metadata: metadata === null ? null : { ...(current.metadata ?? {}), ...metadata } }
@@ -3908,6 +3938,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               userId: input.userId,
               input: { sessions: { [input.role]: input.session } },
               now,
+              initiatedBy: input.initiatedBy,
             });
           });
           item = toRow(row!);
@@ -3936,7 +3967,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             description: create.description ?? null,
             stages: create.stages ?? [],
             stage_history: applyStageTransition([], [], create.stages ?? [], input.userId, now),
-            sessions: stampSessions({ [input.role]: input.session }, input.userId),
+            sessions: stampSessions({ [input.role]: input.session }, input.userId, input.initiatedBy),
             metadata: create.metadata ?? null,
             revision: 1,
             created_at: now,
