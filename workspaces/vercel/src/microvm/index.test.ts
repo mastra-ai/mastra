@@ -532,6 +532,32 @@ describe('VercelSandbox', () => {
       expect(text).not.toContain('Filesystem mounting (FUSE) is not supported');
     });
 
+    it('describes Amazon Linux 2023 and dnf for a runtime-managed sandbox', () => {
+      const text = new VercelSandbox({ runtime: 'node24' }).getInstructions!();
+      expect(text).toContain('running Amazon Linux 2023');
+      expect(text).toContain('install packages via dnf');
+    });
+
+    it('makes no OS or package-manager claim for a custom image sandbox', () => {
+      const text = new VercelSandbox({ image: 'my-repo:v1' }).getInstructions!();
+      expect(text).toContain('Image: my-repo:v1');
+      // An arbitrary image can hold any filesystem, so the default instructions
+      // must not promise Amazon Linux 2023 or `dnf`.
+      expect(text).not.toContain('Amazon Linux');
+      expect(text).not.toContain('dnf');
+      expect(text).toContain('Runs as the vercel-sandbox user with sudo access.');
+    });
+
+    it('makes no OS or package-manager claim for a snapshot sandbox', () => {
+      const text = new VercelSandbox({
+        source: { type: 'snapshot', snapshotId: 'snap_7' },
+      }).getInstructions!();
+      expect(text).toContain('Filesystem restored from snapshot snap_7');
+      expect(text).not.toContain('Amazon Linux');
+      expect(text).not.toContain('dnf');
+      expect(text).toContain('Runs as the vercel-sandbox user with sudo access.');
+    });
+
     it('honors a string override', () => {
       const sandbox = new VercelSandbox({ instructions: 'custom only' });
       expect(sandbox.getInstructions!()).toBe('custom only');

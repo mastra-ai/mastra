@@ -14,7 +14,7 @@ Run commands in isolated Vercel environments with either persistent Sandbox micr
 
 ## Vercel sandbox
 
-Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
+Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM. Sandboxes created from a runtime run Amazon Linux 2023. Sandboxes created from a custom image or a snapshot use the filesystem that image or snapshot contains. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 :::note
 
@@ -130,6 +130,8 @@ Both callbacks are optional and can be used independently.
 
 Start from a Vercel Container Registry image or a filesystem snapshot, and restrict outbound traffic at creation time. The environment selection is mutually exclusive: pass at most one of `runtime`, `image` or `source`.
 
+Sandboxes started from a custom `image` or a snapshot aren't assumed to run Amazon Linux 2023. Their default agent instructions make no operating-system or package-manager claim.
+
 ```typescript
 // From a container image (no runtime is sent with the request)
 const fromImage = new VercelSandbox({ image: 'my-repo:v1' })
@@ -151,7 +153,9 @@ const restricted = new VercelSandbox({
 })
 ```
 
-The network policy is fixed for the lifetime of the sandbox and applies from its first command.
+Creation options apply when a new sandbox is created. A `networkPolicy` protects that new sandbox from its first command.
+
+When `sandboxName` matches a sandbox that already exists, starting resumes it unchanged: it keeps the configuration and network policy it was created with, so a stricter policy passed here doesn't restrict it. To change the policy of a running sandbox, update it through the underlying SDK (`await sandbox.sandbox.update({ networkPolicy: 'deny-all' })`). Mastra doesn't manage that.
 
 ### Constructor parameters
 
@@ -167,7 +171,8 @@ The network policy is fixed for the lifetime of the sandbox and applies from its
   {
     name: 'sandboxName',
     type: 'string',
-    description: 'Optional name passed to the Vercel API. Auto-generated if omitted.',
+    description:
+      'Optional name passed to the Vercel API. Auto-generated if omitted. A name is an identity: starting resumes an existing sandbox with that name without applying creation options, so an existing sandbox keeps the configuration and network policy it was created with.',
     isOptional: true,
   },
   {
@@ -214,7 +219,7 @@ The network policy is fixed for the lifetime of the sandbox and applies from its
     name: 'networkPolicy',
     type: "'allow-all' | 'deny-all' | NetworkPolicy",
     description:
-      "Outbound network policy applied at creation. Pass 'deny-all' to block all egress, 'allow-all' (the platform default) for full internet access, or an object with `allow` domain rules and `subnets` CIDR lists. The policy is enforced from the sandbox's first command and cannot be changed after creation.",
+      "Outbound network policy applied at creation. Pass 'deny-all' to block all egress, 'allow-all' (the platform default) for full internet access, or an object with `allow` domain rules and `subnets` CIDR lists. A newly created sandbox is protected from its first command; an existing sandbox resumed by `sandboxName` keeps its current policy.",
     isOptional: true,
     defaultValue: "'allow-all'",
   },

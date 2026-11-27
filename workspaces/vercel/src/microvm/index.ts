@@ -2,8 +2,10 @@
  * Vercel Sandbox (MicroVM) Provider
  *
  * Wraps the official `@vercel/sandbox` SDK, which provisions ephemeral
- * Firecracker MicroVMs (Amazon Linux 2023) with a persistent in-session
- * filesystem, command execution, background processes, and exposed ports.
+ * Firecracker MicroVMs with a persistent in-session filesystem, command
+ * execution, background processes, and exposed ports. Runtime-managed
+ * sandboxes run Amazon Linux 2023; sandboxes started from a custom image or a
+ * snapshot use whatever filesystem that image or snapshot contains.
  *
  * This is distinct from the `VercelServerlessSandbox` provider in this package, which
  * runs commands as Vercel serverless Functions and is stateless.
@@ -48,7 +50,14 @@ export type VercelSandboxRuntime = 'node24' | 'node22' | 'node26' | 'python3.13'
 export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance. */
   id?: string;
-  /** Optional sandbox name passed to the Vercel API. Auto-generated if omitted. */
+  /**
+   * Optional sandbox name passed to the Vercel API. Auto-generated if omitted.
+   *
+   * A name is an identity: starting resumes the sandbox with this name when one
+   * already exists, so creation options (including `networkPolicy`) apply only
+   * when a new sandbox is created. An existing named sandbox keeps the
+   * configuration it was created with.
+   */
   sandboxName?: string;
   /** Vercel API token. Falls back to the `VERCEL_TOKEN` env var. */
   token?: string;
@@ -85,8 +94,10 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
    * platform default) for full internet access, or an object with `allow`
    * domain rules and `subnets` CIDR lists.
    *
-   * Policy is enforced from the sandbox's first command and cannot be changed
-   * after creation.
+   * A newly created sandbox is protected by the policy from its first command.
+   * It is not applied to an existing sandbox resumed by `sandboxName`. The SDK
+   * can change the policy of a running sandbox through
+   * `sandbox.sandbox.update({ networkPolicy })`; this adapter does not.
    */
   networkPolicy?: NetworkPolicy;
   /**
@@ -329,6 +340,9 @@ export class VercelSandbox extends MastraSandbox {
     // Named sandboxes are an identity: get-or-create resumes the existing
     // sandbox (snapshot restore) if one with this name exists, otherwise
     // creates a fresh one with the name. Unnamed sandboxes always create.
+    // The SDK does not apply creation parameters to a sandbox it finds, so
+    // every creation option above (including `networkPolicy`) only takes
+    // effect when a new sandbox is created.
     this._sandbox = this._sandboxName
       ? await Sandbox.getOrCreate({ ...params, name: this._sandboxName })
       : await Sandbox.create(params);
@@ -512,13 +526,21 @@ export class VercelSandbox extends MastraSandbox {
   }
 
   private _getDefaultInstructions(): string {
+    // Only runtime-managed sandboxes are known to run Amazon Linux 2023 with
+    // `dnf`. A custom image or a restored snapshot can hold any filesystem, so
+    // those sandboxes get no OS or package-manager claims.
+    const runtimeManaged = this._image === undefined && this._source === undefined;
     return [
-      'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.',
+      runtimeManaged
+        ? 'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.'
+        : 'Vercel Sandbox: an ephemeral Firecracker MicroVM.',
       `- ${this._environmentLabel()}. Working directory defaults to /vercel/sandbox.`,
       this._sandboxName
         ? '- Persistent filesystem: stopping snapshots the filesystem and the named sandbox resumes it on the next start. Processes do not survive a stop.'
         : '- Persistent filesystem within the session; state is lost when the sandbox stops.',
-      '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).',
+      runtimeManaged
+        ? '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).'
+        : '- Runs as the vercel-sandbox user with sudo access.',
       `- The sandbox auto-terminates after ${Math.round(this._timeout / 1000)} seconds.`,
       ...(this._ports?.length
         ? [`- Exposed ports: ${this._ports.join(', ')} (reachable via public HTTPS domains).`]

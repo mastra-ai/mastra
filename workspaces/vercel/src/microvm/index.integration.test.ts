@@ -65,8 +65,8 @@ describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
   });
 
   it('blocks the first outbound request when created with a deny-all network policy', async () => {
-    // A dedicated sandbox: the network policy is fixed at creation and cannot
-    // be changed, so it must not share the unrestricted sandbox above.
+    // A dedicated sandbox: the SDK applies the policy only when it creates a
+    // sandbox, so this must not share the unrestricted sandbox above.
     const restricted = new VercelSandbox({
       ...credentialOptions(),
       timeout: 300_000,
