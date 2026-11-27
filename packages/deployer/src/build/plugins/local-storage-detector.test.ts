@@ -125,31 +125,23 @@ describe('localStorageDetector', () => {
     });
   });
 
-  it('emits defaults for optional worker configuration that is absent or dynamic', () => {
-    const { workersConfig } = runPlugin([
-      {
-        id: '/project/src/mastra/index.ts',
-        code: `const enabled = process.env.WORKERS === 'true';
+  it.each([
+    [
+      'emits defaults for optional worker configuration that is absent or dynamic',
+      `const enabled = process.env.WORKERS === 'true';
           export const mastra = new Mastra({ storage, pubsub, backgroundTasks: { enabled } });`,
-      },
-    ]);
-
-    expect(workersConfig).toEqual({
-      version: 1,
-      orchestration: { enabled: true },
-      scheduler: { enabled: true },
-      backgroundTasks: { enabled: false },
-      custom: [],
-    });
-  });
-
-  it('emits worker topology when a MastraFactory prepare result is spread into Mastra', () => {
-    const { workersConfig } = runPlugin([
-      {
-        id: '/project/src/mastra/index.ts',
-        code: `const factory = new MastraFactory({ storage, pubsub });
+    ],
+    [
+      'emits worker topology when a MastraFactory prepare result is spread into Mastra',
+      `const factory = new MastraFactory({ storage, pubsub });
           const preparedArgs = await factory.prepare();
           export const mastra = new Mastra({ ...preparedArgs });`,
+    ],
+  ] as const)('%s', (_title, code) => {
+    const { workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code,
       },
     ]);
 
@@ -401,62 +393,44 @@ describe('localStorageDetector', () => {
       expect(metadata.localPaths[0]!.guardedBy).toBe('TURSO_DATABASE_URL');
     });
 
-    it('records guardedBy for `process.env.X ?? literal`', () => {
+    it.each([
+      [
+        'records guardedBy for `process.env.X ?? literal`',
+        `const url = process.env.TURSO_DATABASE_URL ?? "file:./.mastra-demo.db";`,
+      ],
+      [
+        'records guardedBy for bracket-notation env reads',
+        `const url = process.env["TURSO_DATABASE_URL"] || "file:./.mastra-demo.db";`,
+      ],
+      [
+        'records guardedBy for chained fallbacks (`a || b || literal`)',
+        `const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./.mastra-demo.db";`,
+      ],
+    ] as const)('%s', (_title, code) => {
       const { metadata } = runPlugin([
         {
           id: '/project/src/constants.ts',
-          code: `const url = process.env.TURSO_DATABASE_URL ?? "file:./.mastra-demo.db";`,
+          code,
         },
       ]);
 
       expect(metadata.localPaths[0]!.guardedBy).toBe('TURSO_DATABASE_URL');
     });
 
-    it('records guardedBy for bracket-notation env reads', () => {
-      const { metadata } = runPlugin([
-        {
-          id: '/project/src/constants.ts',
-          code: `const url = process.env["TURSO_DATABASE_URL"] || "file:./.mastra-demo.db";`,
-        },
-      ]);
-
-      expect(metadata.localPaths[0]!.guardedBy).toBe('TURSO_DATABASE_URL');
-    });
-
-    it('records guardedBy for chained fallbacks (`a || b || literal`)', () => {
-      const { metadata } = runPlugin([
-        {
-          id: '/project/src/constants.ts',
-          code: `const url = process.env.TURSO_DATABASE_URL || process.env.DATABASE_URL || "file:./.mastra-demo.db";`,
-        },
-      ]);
-
-      expect(metadata.localPaths[0]!.guardedBy).toBe('TURSO_DATABASE_URL');
-    });
-
-    it('does not record guardedBy for a bare literal', () => {
-      const { metadata } = runPlugin([{ id: '/project/src/db.ts', code: `const url = "file:./a.db";` }]);
-
-      expect(metadata.localPaths).toHaveLength(1);
-      expect(metadata.localPaths[0]!.guardedBy).toBeUndefined();
-    });
-
-    it('does not record guardedBy when the same value also appears unguarded', () => {
-      const { metadata } = runPlugin([
-        {
-          id: '/project/src/db.ts',
-          code: `const a = process.env.TURSO_DATABASE_URL || "file:./a.db"; const b = "file:./a.db";`,
-        },
-      ]);
-
-      expect(metadata.localPaths).toHaveLength(1);
-      expect(metadata.localPaths[0]!.guardedBy).toBeUndefined();
-    });
-
-    it('falls back to unguarded detection when the module fails to parse', () => {
-      const { metadata } = runPlugin([
-        { id: '/project/src/broken.ts', code: `const url = 'file:./a.db'; this is not { valid js` },
-      ]);
+    it.each([
+      ['does not record guardedBy for a bare literal', '/project/src/db.ts', `const url = "file:./a.db";`],
+      [
+        'does not record guardedBy when the same value also appears unguarded',
+        '/project/src/db.ts',
+        `const a = process.env.TURSO_DATABASE_URL || "file:./a.db"; const b = "file:./a.db";`,
+      ],
+      [
+        'falls back to unguarded detection when the module fails to parse',
+        '/project/src/broken.ts',
+        `const url = 'file:./a.db'; this is not { valid js`,
+      ],
+    ] as const)('%s', (_title, id, code) => {
+      const { metadata } = runPlugin([{ id, code }]);
 
       expect(metadata.localPaths).toHaveLength(1);
       expect(metadata.localPaths[0]!.guardedBy).toBeUndefined();

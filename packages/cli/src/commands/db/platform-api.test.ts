@@ -106,24 +106,24 @@ describe('attachDatabase', () => {
     expect(JSON.parse(init.body)).toEqual({ kind: 'turso', name: 'my-app-db', environmentId: 'env-1' });
   });
 
-  it('throws a clear admin-role message on 403', async () => {
-    mockPlatformFetch.mockResolvedValue(jsonResponse(403, { detail: 'Forbidden' }));
-
-    const { attachDatabase } = await import('./platform-api.js');
-    await expect(attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db' })).rejects.toThrow(
+  it.each([
+    [
+      'throws a clear admin-role message on 403',
+      403,
+      'Forbidden',
       'You need the admin role in this organization to manage databases.',
-    );
-  });
-
-  it('surfaces the server detail on 409 env var collision', async () => {
-    mockPlatformFetch.mockResolvedValue(
-      jsonResponse(409, { detail: 'TURSO_DATABASE_URL is already set on this project' }),
-    );
+    ],
+    [
+      'surfaces the server detail on 409 env var collision',
+      409,
+      'TURSO_DATABASE_URL is already set on this project',
+      'TURSO_DATABASE_URL is already set on this project',
+    ],
+  ] as const)('%s', async (_title, input, detail, expected) => {
+    mockPlatformFetch.mockResolvedValue(jsonResponse(input, { detail }));
 
     const { attachDatabase } = await import('./platform-api.js');
-    await expect(attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db' })).rejects.toThrow(
-      'TURSO_DATABASE_URL is already set on this project',
-    );
+    await expect(attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db' })).rejects.toThrow(expected);
   });
 
   it('surfaces field-level validation errors on 400 (e.g. bad --region)', async () => {

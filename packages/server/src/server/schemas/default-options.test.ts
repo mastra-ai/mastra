@@ -7,19 +7,14 @@ describe('defaultOptionsSchema toolCallConcurrency', () => {
     expect(defaultOptionsSchema.safeParse({ toolCallConcurrency: 8 }).success).toBe(true);
   });
 
-  it('accepts concurrency options', () => {
+  it.each([
+    ['accepts concurrency options', 'called', true],
+    ['rejects an unknown concurrency strategy', 'unknown', false],
+  ] as const)('%s', (_title, strategy, expected) => {
     expect(
       defaultOptionsSchema.safeParse({
-        toolCallConcurrency: { limit: 8, strategy: 'called' },
+        toolCallConcurrency: { limit: 8, strategy },
       }).success,
-    ).toBe(true);
-  });
-
-  it('rejects an unknown concurrency strategy', () => {
-    expect(
-      defaultOptionsSchema.safeParse({
-        toolCallConcurrency: { limit: 8, strategy: 'unknown' },
-      }).success,
-    ).toBe(false);
+    ).toBe(expected);
   });
 });

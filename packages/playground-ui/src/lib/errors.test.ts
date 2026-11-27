@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { parseError } from './errors';
 
 describe('parseError', () => {
-  it('reads the `error` field', () => {
-    expect(parseError(new Error('HTTP error! status: 500 - {"error":"boom"}')).error).toBe('boom');
+  it.each([
+    ['reads the `error` field', 'HTTP error! status: 500 - {"error":"boom"}', 'boom'],
+    [
+      'falls back to `message` when there are no issues',
+      'HTTP error! status: 409 - {"message":"Cursor conflict"}',
+      'Cursor conflict',
+    ],
+    ['uses the plain message when the body is not JSON', 'network down', 'network down'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(parseError(new Error(input)).error).toBe(expected);
   });
 
   it('reads trace-query validation issues', () => {
@@ -15,15 +23,5 @@ describe('parseError', () => {
     expect(parseError(new Error(`HTTP error! status: 422 - ${body}`)).error).toBe(
       'The time range cannot exceed 31 days',
     );
-  });
-
-  it('falls back to `message` when there are no issues', () => {
-    expect(parseError(new Error('HTTP error! status: 409 - {"message":"Cursor conflict"}')).error).toBe(
-      'Cursor conflict',
-    );
-  });
-
-  it('uses the plain message when the body is not JSON', () => {
-    expect(parseError(new Error('network down')).error).toBe('network down');
   });
 });

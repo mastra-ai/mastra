@@ -652,20 +652,13 @@ describe('openingView', () => {
     expect(openingView([view(), view()], 5)).toBe(0);
   });
 
-  it('opens on the openWhen view while its rows load', () => {
-    expect(openingView(views, 'loading')).toBe(0);
-  });
-
-  it('opens on the openWhen view once it has minRows rows', () => {
-    expect(openingView(views, 2)).toBe(0);
-  });
-
-  it('passes over the openWhen view with fewer than minRows rows', () => {
-    expect(openingView(views, 1)).toBe(1);
-  });
-
-  it("passes over the openWhen view when it can't count its rows", () => {
-    expect(openingView(views, 'uncountable')).toBe(1);
+  it.each([
+    ['opens on the openWhen view while its rows load', 'loading', 0],
+    ['opens on the openWhen view once it has minRows rows', 2, 0],
+    ['passes over the openWhen view with fewer than minRows rows', 1, 1],
+    ["passes over the openWhen view when it can't count its rows", 'uncountable', 1],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(openingView(views, input)).toBe(expected);
   });
 
   it('opens on the first view when a passed-over openWhen view is last', () => {

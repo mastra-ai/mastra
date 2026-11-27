@@ -99,41 +99,19 @@ describe('Swagger UI and OpenAPI documentation warning', () => {
     );
   });
 
-  it('should not warn when both swaggerUI and openAPIDocs are enabled in production', async () => {
+  it.each([
+    ['should not warn when both swaggerUI and openAPIDocs are enabled in production', true, true, false],
+    ['should not warn when swaggerUI is disabled in production', false, false, false],
+    ['should not warn in development mode even if openAPIDocs is disabled', true, false, true],
+  ] as const)('%s', async (_title, swaggerUI, openAPIDocs, isDev) => {
     vi.mocked(mockMastra.getServer).mockReturnValue({
       build: {
-        swaggerUI: true,
-        openAPIDocs: true,
+        swaggerUI,
+        openAPIDocs,
       },
     });
 
-    await createHonoServer(mockMastra, { tools: {}, isDev: false });
-
-    expect(mockWarn).not.toHaveBeenCalled();
-  });
-
-  it('should not warn when swaggerUI is disabled in production', async () => {
-    vi.mocked(mockMastra.getServer).mockReturnValue({
-      build: {
-        swaggerUI: false,
-        openAPIDocs: false,
-      },
-    });
-
-    await createHonoServer(mockMastra, { tools: {}, isDev: false });
-
-    expect(mockWarn).not.toHaveBeenCalled();
-  });
-
-  it('should not warn in development mode even if openAPIDocs is disabled', async () => {
-    vi.mocked(mockMastra.getServer).mockReturnValue({
-      build: {
-        swaggerUI: true,
-        openAPIDocs: false,
-      },
-    });
-
-    await createHonoServer(mockMastra, { tools: {}, isDev: true });
+    await createHonoServer(mockMastra, { tools: {}, isDev });
 
     expect(mockWarn).not.toHaveBeenCalled();
   });

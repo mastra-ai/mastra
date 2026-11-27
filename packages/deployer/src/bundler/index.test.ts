@@ -399,20 +399,13 @@ describe('applySourceDependencyRange', () => {
     expect(dependencyInfo).toEqual({ version: '3.25.76' });
   });
 
-  it('keeps the resolved version when a resolution field pins the package', () => {
+  it.each([
+    ['keeps the resolved version when a resolution field pins the package', 'zod'],
+    ['keeps the resolved version when a resolution field pins the package a subpath import resolves to', 'zod/v4'],
+  ] as const)('%s', (_title, input) => {
     expect(
       applySourceDependencyRange(
-        'zod',
-        { version: '4.3.6' },
-        constraints({ dependencies: { zod: '^3.0.0' }, pinned: ['zod'] }),
-      ),
-    ).toEqual({ version: '4.3.6' });
-  });
-
-  it('keeps the resolved version when a resolution field pins the package a subpath import resolves to', () => {
-    expect(
-      applySourceDependencyRange(
-        'zod/v4',
+        input,
         { version: '4.3.6' },
         constraints({ dependencies: { zod: '^3.0.0' }, pinned: ['zod'] }),
       ),

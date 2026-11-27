@@ -708,7 +708,10 @@ describe('Memory Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Memory is not initialized' }));
     });
 
-    it('should throw error when messages are not provided', async () => {
+    it.each([
+      ['should throw error when messages are not provided', undefined, 'Messages are required'],
+      ['should throw error when messages is not an array', 'not-an-array', 'Messages should be an array'],
+    ] as const)('%s', async (_title, value, message) => {
       const mastra = new Mastra({
         logger: false,
         agents: {
@@ -719,25 +722,9 @@ describe('Memory Handlers', () => {
         SAVE_MESSAGES_ROUTE.handler({
           ...createTestServerContext({ mastra }),
           agentId: 'test-agent',
-          messages: undefined as unknown as MastraDBMessage[],
+          messages: value as unknown as MastraDBMessage[],
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Messages are required' }));
-    });
-
-    it('should throw error when messages is not an array', async () => {
-      const mastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': mockAgent,
-        },
-      });
-      await expect(
-        SAVE_MESSAGES_ROUTE.handler({
-          ...createTestServerContext({ mastra }),
-          agentId: 'test-agent',
-          messages: 'not-an-array' as unknown as MastraDBMessage[],
-        }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Messages should be an array' }));
+      ).rejects.toThrow(new HTTPException(400, { message }));
     });
 
     it('should save messages successfully', async () => {

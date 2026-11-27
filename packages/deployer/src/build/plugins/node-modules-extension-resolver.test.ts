@@ -135,7 +135,10 @@ describe('nodeModulesExtensionResolver', () => {
       },
     );
 
-    it('handles .mjs extension', async () => {
+    it.each([
+      ['handles .mjs extension', '/project/node_modules/lodash/fp/get.mjs', 'lodash/fp/get.mjs'],
+      ['handles .cjs extension', '/project/node_modules/lodash/fp/get.cjs', 'lodash/fp/get.cjs'],
+    ] as const)('%s', async (_title, id, input) => {
       const pkgJson = { name: 'lodash' };
       vi.mocked(getPackageInfo).mockResolvedValue({
         name: 'lodash',
@@ -146,34 +149,13 @@ describe('nodeModulesExtensionResolver', () => {
       });
       vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
 
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.mjs' });
+      mockNodeResolveHandler.mockResolvedValue({ id });
 
-      const result = await resolveId('lodash/fp/get.mjs', '/project/src/index.ts');
-
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.mjs',
-      });
-    });
-
-    it('handles .cjs extension', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
-
-      const result = await resolveId('lodash/fp/get.cjs', '/project/src/index.ts');
+      const result = await resolveId(input, '/project/src/index.ts');
 
       expect(result).toMatchObject({
         external: true,
-        id: 'lodash/fp/get.cjs',
+        id: input,
       });
     });
   });

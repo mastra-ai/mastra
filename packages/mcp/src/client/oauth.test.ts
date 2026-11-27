@@ -16,7 +16,11 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server as HttpServer, IncomingMessage, ServerResponse } from 'node:http';
 import { exchangeAuthorization, refreshAuthorization } from '@modelcontextprotocol/client';
-import { CLIENT_CAPABILITIES_META_KEY, CLIENT_INFO_META_KEY, PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
+import {
+  CLIENT_CAPABILITIES_META_KEY,
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
+} from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 
 import type { OAuthMiddlewareResult } from '../server/oauth-middleware.js';
@@ -189,7 +193,12 @@ describe('MCPOAuthClientProvider', () => {
   it('rejects a metadata document URL that is not an HTTPS URL with a path', () => {
     for (const clientMetadataUrl of ['http://client.example.com/metadata.json', 'https://client.example.com/']) {
       expect(
-        () => new MCPOAuthClientProvider({ redirectUrl: 'http://localhost:3000/callback', clientMetadata, clientMetadataUrl }),
+        () =>
+          new MCPOAuthClientProvider({
+            redirectUrl: 'http://localhost:3000/callback',
+            clientMetadata,
+            clientMetadataUrl,
+          }),
       ).toThrow();
     }
   });
@@ -325,7 +334,10 @@ describe('MCPOAuthClientProvider', () => {
     });
     const issuer = { issuer: 'https://auth-race.example.com' };
 
-    const save = provider.saveTokens({ access_token: 'racing-token', token_type: 'Bearer', issuer: issuer.issuer }, issuer);
+    const save = provider.saveTokens(
+      { access_token: 'racing-token', token_type: 'Bearer', issuer: issuer.issuer },
+      issuer,
+    );
     await scopedWriteDidStart;
     const invalidate = provider.invalidateCredentials!('all');
     await new Promise(resolve => setImmediate(resolve));
@@ -658,32 +670,15 @@ describe('createIntrospectionValidator', () => {
     vi.restoreAllMocks();
   });
 
-  it('should return empty scopes array for empty scope string', async () => {
+  it.each([
+    ['should return empty scopes array for empty scope string', ''],
+    ['should return empty scopes array for whitespace-only scope string', '   '],
+  ] as const)('%s', async (_title, scope) => {
     vi.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
       json: async () => ({
         active: true,
-        scope: '',
-        sub: 'user-123',
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      }),
-    } as Response);
-
-    const validator = createIntrospectionValidator('https://auth.example.com/introspect');
-    const result = await validator('test-token', 'https://example.com');
-
-    expect(result.valid).toBe(true);
-    if (result.valid) {
-      expect(result.scopes).toEqual([]);
-    }
-  });
-
-  it('should return empty scopes array for whitespace-only scope string', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        active: true,
-        scope: '   ',
+        scope,
         sub: 'user-123',
         exp: Math.floor(Date.now() / 1000) + 3600,
       }),
