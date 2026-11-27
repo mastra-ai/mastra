@@ -43,7 +43,8 @@
     "pino-pretty": "13.2.0",
     "read-excel-file": "9.3.12",
     "unicorn-magic": "0.4.0",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "ts-source-lib": "file:../../vendor/ts-source-lib"
   },
   "devDependencies": {
     "mastra": "e2e-test",

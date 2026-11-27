@@ -223,3 +223,32 @@ export async function removeOutputDir(path: string) {
     }
   }
 }
+
+// ts-source-lib ships raw TypeScript from outside the workspace globs, so the app only boots when
+// bundler.transpilePackages is honored (#19380). The route also imports a subpath of the package,
+// which has no exports map.
+export const transpiledRouteSource = `import { registerApiRoute } from '@mastra/core/server';
+import { greet } from 'ts-source-lib';
+import { shout } from 'ts-source-lib/src/shout.ts';
+
+export const transpiledRoute = registerApiRoute('/transpiled', {
+  method: 'GET',
+  handler: async c => c.json({ value: shout(greet({ name: 'transpilePackages' })) }),
+});
+`;
+
+export function withTranspiledRoute(mastraConfig: string): string {
+  const updated = mastraConfig
+    .replace(
+      "import { testRoute } from '@/api/route/test';",
+      "import { testRoute } from '@/api/route/test';\nimport { transpiledRoute } from '@/api/route/transpiled';",
+    )
+    .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, transpiledRoute,')
+    .replace(/bundler: \{/, "bundler: {\n    transpilePackages: ['ts-source-lib'],");
+  if (!updated.includes("transpilePackages: ['ts-source-lib']") || !updated.includes('transpiledRoute,')) {
+    throw new Error('Failed to add the transpilePackages route to the Mastra config');
+  }
+  return updated;
+}
+
+export const transpiledRouteValue = 'HELLO TRANSPILEPACKAGES FROM NODE_MODULES';

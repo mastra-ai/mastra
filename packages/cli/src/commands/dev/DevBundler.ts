@@ -127,6 +127,7 @@ export class DevBundler extends Bundler {
       },
       {
         sourcemap: sourcemapEnabled,
+        transpilePackages: bundlerOptions?.transpilePackages,
         analysisEntries: [entryFile, devServerAnalysisEntry, ...Object.values(toolsInputOptions)],
         outputDir: join(outputDirectory, this.analyzeOutputDir),
         configEntryFile: this.getConfigEntryFile(entryFile),

@@ -11,7 +11,7 @@ import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-r
 import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { workspaceDepsWatcher } from './plugins/workspace-deps-watcher';
 import type { BundlerOptions } from './types';
-import { getPackageName, slash } from './utils';
+import { getPackageName, isDependencyPartOfPackage, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
 export async function getInputOptions(
@@ -20,7 +20,8 @@ export async function getInputOptions(
   env?: Record<string, string>,
   {
     sourcemap = false,
-    bundlerOptions = {
+    transpilePackages = [],
+    bundlerOptions: bundlerOptionsInput = {
       enableSourcemap: false,
       // `mastra dev` never minifies — readable output matters more than size here.
       enableMinify: false,
@@ -32,6 +33,8 @@ export async function getInputOptions(
     configEntryFile,
   }: {
     sourcemap?: boolean;
+    /** User `bundler.transpilePackages`: non-workspace packages to transpile instead of leaving external */
+    transpilePackages?: string[];
     bundlerOptions?: BundlerOptions;
     analysisEntries?: string[];
     outputDir?: string;
@@ -39,6 +42,7 @@ export async function getInputOptions(
     configEntryFile?: string;
   } = {},
 ) {
+  const bundlerOptions: BundlerOptions = { ...bundlerOptionsInput, transpilePackages };
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
@@ -63,7 +67,7 @@ export async function getInputOptions(
   const deps = /* @__PURE__ */ new Map();
   for (const [dep, metadata] of analyzeEntryResult.dependencies.entries()) {
     const pkgName = getPackageName(dep);
-    if (pkgName && workspaceMap.has(pkgName)) {
+    if (pkgName && (workspaceMap.has(pkgName) || transpilePackages.some(p => isDependencyPartOfPackage(dep, p)))) {
       deps.set(dep, metadata);
     }
   }

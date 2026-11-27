@@ -16,6 +16,9 @@ import {
   twoUsageCallsReportedAtShutdown,
   activeProcesses,
   removeOutputDir,
+  transpiledRouteSource,
+  transpiledRouteValue,
+  withTranspiledRoute,
 } from './helpers';
 
 describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
@@ -335,7 +338,8 @@ console.log(JSON.stringify({ reads, routes: server.apiRoutes.map(route => route.
           )
           .replace('bundler: {', 'bundler: {\n    sourcemap: true,');
         await Promise.all([
-          writeFile(mastraIndexPath, mastraIndex),
+          writeFile(mastraIndexPath, withTranspiledRoute(mastraIndex)),
+          writeFile(join(inputFile, 'src', 'mastra', 'api', 'route', 'transpiled.ts'), transpiledRouteSource),
           writeFile(
             join(inputFile, 'src', 'mastra', 'api', 'route', 'versionless.ts'),
             `import { registerApiRoute } from '@mastra/core/server';
@@ -446,6 +450,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/versionless`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'versionless-workspace-package' });
+    });
+
+    it('should transpile a node_modules TypeScript package listed in transpilePackages (#19380)', async () => {
+      const res = await fetch(`http://localhost:${port}/transpiled`);
+      expect(res.status, 'mastra dev ignored bundler.transpilePackages (#19380)').toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: transpiledRouteValue });
     });
 
     it('should load an api route that imports a raw TypeScript workspace package (#26540)', async () => {
@@ -777,8 +787,12 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
 `,
         );
         await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'transpiled.ts'),
+          transpiledRouteSource,
+        );
+        await writeFile(
           mastraConfigPath,
-          originalMastraConfig
+          withTranspiledRoute(originalMastraConfig)
             .replace(
               "externals: ['bcrypt', '@inner/subpath-only']",
               "externals: ['bcrypt', '@inner/subpath-only', 'unicorn-magic']",
@@ -852,6 +866,12 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
         });
       });
     }, timeout);
+
+    it('should transpile a node_modules TypeScript package listed in transpilePackages (#19380)', async () => {
+      const res = await fetch(`http://localhost:${port}/transpiled`);
+      expect(res.status, 'mastra build ignored bundler.transpilePackages (#19380)').toBe(200);
+      await expect(res.json()).resolves.toEqual({ value: transpiledRouteValue });
+    });
 
     it('should resolve tsconfig paths with TypeScript 7 installed', async () => {
       const appDir = join(fixturePath, 'apps', 'custom');

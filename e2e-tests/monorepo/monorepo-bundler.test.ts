@@ -5,7 +5,7 @@ import { chmod, mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } fro
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
-import { timeout, activeProcesses } from './helpers';
+import { timeout, activeProcesses, transpiledRouteSource, transpiledRouteValue, withTranspiledRoute } from './helpers';
 
 describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   beforeAll(() => {
@@ -408,7 +408,7 @@ assert.equal(subpathOnlyValue, 'c');`,
     );
 
     it(
-      'should build a workspace subpath imported transitively when the app imports the package root',
+      'should build a workspace subpath imported transitively when the app imports the package root and bundle transpilePackages (#19380)',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
         await setupMonorepo(isolatedFixturePath, pkgManager);
@@ -428,7 +428,16 @@ assert.equal(subpathOnlyValue, 'c');`,
         let proc: ReturnType<typeof execaNode> | undefined;
 
         try {
-          await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
+          // `externals: true` is what `mastra build` uses when the project sets no externals, so a listed
+          // package must still be bundled instead of left external (#19380).
+          await writeFile(
+            join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'transpiled.ts'),
+            transpiledRouteSource,
+          );
+          await writeFile(
+            mastraConfigPath,
+            withTranspiledRoute(originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true')),
+          );
 
           const buildResult = await execa(pkgManager, ['build'], {
             cwd: join(isolatedFixturePath, 'apps', 'custom'),
@@ -480,6 +489,10 @@ assert.equal(subpathOnlyValue, 'c');`,
             root: 'external-workspace-root-implementation-marker',
             app: 'App value is BEFORE.',
           });
+
+          const transpiledRes = await fetch(`http://localhost:${port}/transpiled`);
+          expect(transpiledRes.status, 'mastra build ignored bundler.transpilePackages (#19380)').toBe(200);
+          await expect(transpiledRes.json()).resolves.toEqual({ value: transpiledRouteValue });
         } finally {
           if (proc) {
             try {

@@ -782,11 +782,11 @@ export const mastra = new Mastra({
 **Type:** `string[]`\
 **Default:** `[]`
 
-List of packages whose source code should be transpiled through esbuild during the build process. Use this for dependencies that contain TypeScript or other code that needs compilation before bundling.
+List of packages whose source code Mastra transpiles and bundles in `mastra dev` and `mastra build`, instead of leaving them as external dependencies. Use this for installed dependencies that ship uncompiled TypeScript.
 
 You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
 
-Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
+Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you only need to specify packages installed from outside your workspace.
 
 Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
 
