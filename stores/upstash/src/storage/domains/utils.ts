@@ -15,11 +15,13 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, any
     // For messages, use threadId as the primary key component
     key = getKey(tableName, { threadId: record.threadId, id: record.id });
   } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+    // Snapshots are keyed by run identity only. A run's resourceId is kept in
+    // the record but never in the key, so persist, update and delete all reach
+    // the same record (legacy resource-suffixed keys are migrated on write).
     key = getKey(tableName, {
       namespace: record.namespace || 'workflows',
       workflow_name: record.workflow_name,
       run_id: record.run_id,
-      ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
   } else if (tableName === TABLE_SCORERS) {
     key = getKey(tableName, { id: record.id });

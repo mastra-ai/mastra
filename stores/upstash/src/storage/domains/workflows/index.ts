@@ -74,6 +74,32 @@ function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
   return { ...run, snapshot: snapshot as unknown as WorkflowRunState };
 }
 
+/** The namespace every workflow snapshot is stored under. */
+const WORKFLOW_NAMESPACE = 'workflows';
+
+/**
+ * The key a snapshot is stored under. It is derived from the run identity only:
+ * a run's resourceId is stored in the record, not the key, so persist, update
+ * and delete all reach the same record.
+ */
+function canonicalSnapshotKey(namespace: string, workflowName: string, runId: string): string {
+  return getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId });
+}
+
+/**
+ * The pre-canonical key shape, which suffixed a run's snapshot with its
+ * resourceId. Still read so records written by older releases keep working; a
+ * resource-suffixed record is migrated to {@link canonicalSnapshotKey} on write.
+ */
+function legacySnapshotKey(namespace: string, workflowName: string, runId: string, resourceId: string): string {
+  return getKey(TABLE_WORKFLOW_SNAPSHOT, {
+    namespace,
+    workflow_name: workflowName,
+    run_id: runId,
+    resourceId,
+  });
+}
+
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
   #db: UpstashDB;
@@ -198,16 +224,15 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     workflowName?: string;
   }) {
     if (workflowName) {
-      const keyVariants: Array<Record<string, string>> = [
-        ...(resourceId ? [{ namespace, workflow_name: workflowName, run_id: runId, resourceId }] : []),
-        { namespace, workflow_name: workflowName, run_id: runId },
-      ];
+      // Canonical first: when both a canonical and a legacy copy exist, the
+      // canonical one is the source of truth.
+      const keyVariants: string[] = [canonicalSnapshotKey(namespace, workflowName, runId)];
+      if (resourceId) {
+        keyVariants.push(legacySnapshotKey(namespace, workflowName, runId, resourceId));
+      }
 
-      for (const keys of keyVariants) {
-        const data = await this.#db.get<WorkflowRunRecord>({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          keys,
-        });
+      for (const key of keyVariants) {
+        const data = await this.client.get<WorkflowRunRecord>(key);
         if (data) return data;
       }
     }
@@ -249,11 +274,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const check = this.#runFenceCheck(fence, runId, 'updateWorkflowResults');
     try {
-      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-        namespace: 'workflows',
-        workflow_name: workflowName,
-        run_id: runId,
-      });
+      // Snapshots are canonical; derive the exact legacy candidate (if this run
+      // was written by an older release) so the atomic write below can migrate it.
+      const canonicalKey = canonicalSnapshotKey('workflows', workflowName, runId);
+      const existing = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
+      const legacyKey = existing?.resourceId
+        ? legacySnapshotKey('workflows', workflowName, runId, existing.resourceId)
+        : canonicalKey;
 
       const now = new Date().toISOString();
 
@@ -261,7 +288,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // This ensures concurrent updates don't overwrite each other
       // The script returns the updated full record as JSON string
       const luaScript = `
-        local key = KEYS[1]
+        local canonicalKey = KEYS[1]
+        local legacyKey = KEYS[2]
         local stepId = ARGV[1]
         local resultJson = ARGV[2]
         local requestContextJson = ARGV[3]
@@ -272,8 +300,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local timestamp = tonumber(ARGV[8])
         local stateJson = ARGV[9]
 
-        -- Get existing data
-        local existing = redis.call('GET', key)
+        -- Read the canonical record first, then a legacy resource-suffixed copy.
+        local existing = redis.call('GET', canonicalKey)
+        if not existing and legacyKey ~= canonicalKey then
+          existing = redis.call('GET', legacyKey)
+        end
         local data
         local snapshot
 
@@ -335,8 +366,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         data.snapshot = snapshot
         data.updatedAt = now
 
-        -- Save back
-        redis.call('SET', key, cjson.encode(data))
+        -- Save back to the canonical key and drop any legacy copy.
+        redis.call('SET', canonicalKey, cjson.encode(data))
+        if legacyKey ~= canonicalKey then
+          redis.call('DEL', legacyKey)
+        end
 
         -- Return the full updated data
         return cjson.encode(data)
@@ -345,7 +379,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const resultJson = await evalFenced(
         this.client,
         luaScript,
-        [key],
+        [canonicalKey, legacyKey],
         [
           stepId,
           JSON.stringify(result),
@@ -397,24 +431,30 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     const check = this.#runFenceCheck(fence, runId, 'updateWorkflowState');
     try {
-      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-        namespace: 'workflows',
-        workflow_name: workflowName,
-        run_id: runId,
-      });
+      // Canonical key plus the exact legacy candidate, so a run written by an
+      // older release is migrated to the canonical key by the atomic write.
+      const canonicalKey = canonicalSnapshotKey('workflows', workflowName, runId);
+      const existing = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
+      const legacyKey = existing?.resourceId
+        ? legacySnapshotKey('workflows', workflowName, runId, existing.resourceId)
+        : canonicalKey;
 
       const now = new Date().toISOString();
 
       // Use Lua script for atomic read-modify-write operation
       // This ensures concurrent updates don't overwrite each other
       const luaScript = `
-        local key = KEYS[1]
+        local canonicalKey = KEYS[1]
+        local legacyKey = KEYS[2]
         local optsJson = ARGV[1]
         local now = ARGV[2]
         local expectedStatusJson = ARGV[3]
 
-        -- Get existing data
-        local existing = redis.call('GET', key)
+        -- Read the canonical record first, then a legacy resource-suffixed copy.
+        local existing = redis.call('GET', canonicalKey)
+        if not existing and legacyKey ~= canonicalKey then
+          existing = redis.call('GET', legacyKey)
+        end
 
         if not existing then
           return nil
@@ -456,8 +496,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         data.snapshot = snapshot
         data.updatedAt = now
 
-        -- Save back
-        redis.call('SET', key, cjson.encode(data))
+        -- Save back to the canonical key and drop any legacy copy.
+        redis.call('SET', canonicalKey, cjson.encode(data))
+        if legacyKey ~= canonicalKey then
+          redis.call('DEL', legacyKey)
+        end
 
         -- Return the full updated data
         return cjson.encode(data)
@@ -472,7 +515,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const resultJson = await evalFenced(
         this.client,
         luaScript,
-        [key],
+        [canonicalKey, legacyKey],
         [JSON.stringify(state), now, expectedStatusJson],
         check,
       );
@@ -519,12 +562,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
       const now = new Date();
-      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-        namespace,
-        workflow_name: workflowName,
-        run_id: runId,
-        ...(resourceId ? { resourceId } : {}),
-      });
+      // Snapshots live under the canonical key; a legacy resource-suffixed key,
+      // if present, is removed in the same atomic write.
+      const canonicalKey = canonicalSnapshotKey(namespace, workflowName, runId);
+      const legacyKey = resourceId ? legacySnapshotKey(namespace, workflowName, runId, resourceId) : canonicalKey;
 
       const record = {
         namespace,
@@ -539,18 +580,31 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       await evalFenced(
         this.client,
         `
-        local existing = redis.call("GET", KEYS[1])
+        local canonicalKey = KEYS[1]
+        local legacyKey = KEYS[2]
         local next = cjson.decode(ARGV[1])
+
+        -- Preserve metadata from the canonical record, else from a legacy copy.
+        local existing = redis.call("GET", canonicalKey)
+        if not existing and legacyKey ~= canonicalKey then
+          existing = redis.call("GET", legacyKey)
+        end
         if existing then
           local current = cjson.decode(existing)
           if current["createdAt"] then
             next["createdAt"] = current["createdAt"]
           end
+          if next["resourceId"] == nil and current["resourceId"] then
+            next["resourceId"] = current["resourceId"]
+          end
         end
-        redis.call("SET", KEYS[1], cjson.encode(next))
+        redis.call("SET", canonicalKey, cjson.encode(next))
+        if legacyKey ~= canonicalKey then
+          redis.call("DEL", legacyKey)
+        end
         return 1
         `,
-        [key],
+        [canonicalKey, legacyKey],
         [JSON.stringify(record)],
         check,
       );
@@ -638,15 +692,16 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }): Promise<void> {
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
-      const record = await this.getWorkflowRunRecord({ namespace: 'workflows', runId, workflowName });
-      const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-        namespace: 'workflows',
-        workflow_name: workflowName,
-        run_id: runId,
-        ...(record?.resourceId ? { resourceId: record.resourceId } : {}),
-      });
+      // Delete the canonical key and every legacy resource-suffixed copy for
+      // this run, so no orphaned record is left behind.
+      const canonicalKey = canonicalSnapshotKey('workflows', workflowName, runId);
+      const legacyKeys = await this.#db.scanKeys(`${canonicalKey}:resourceId:*`);
+
       const batch = writeBatch(this.client, check);
-      batch.del(key);
+      batch.del(canonicalKey);
+      for (const key of legacyKeys) {
+        batch.del(key);
+      }
       await batch.exec();
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
@@ -708,17 +763,39 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       keys.forEach(key => pipeline.get(key));
       const results = await pipeline.exec();
 
-      // Filter and transform results - handle undefined results
-      let runs = results
-        .map((result: any) => result as Record<string, any> | null)
-        .filter(
-          (record): record is Record<string, any> =>
-            record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
-        )
+      // Pair each record with the key it was read from, so a run that still has
+      // both a canonical and a legacy copy can be collapsed to one entry.
+      const entries: Array<{ key: string; record: Record<string, any> }> = [];
+      keys.forEach((key, index) => {
+        const record = results[index] as Record<string, any> | null;
+        if (record && typeof record === 'object' && 'workflow_name' in record) {
+          entries.push({ key, record });
+        }
+      });
+
+      // Collapse duplicate copies of the same run, preferring the canonical key.
+      // This runs before filtering so neither listings nor counts double-count a
+      // run whose legacy copy has not been migrated yet.
+      const canonicalKeyOf = (record: Record<string, any>) =>
+        canonicalSnapshotKey(record.namespace ?? 'workflows', record.workflow_name, record.run_id);
+
+      const byRun = new Map<string, { key: string; record: Record<string, any> }>();
+      for (const entry of entries) {
+        const { record } = entry;
+        const identity = `${record.namespace ?? 'workflows'}:${record.workflow_name}:${record.run_id}`;
+        const kept = byRun.get(identity);
+        if (!kept || (kept.key !== canonicalKeyOf(kept.record) && entry.key === canonicalKeyOf(record))) {
+          byRun.set(identity, entry);
+        }
+      }
+
+      // Filter and transform results
+      let runs = [...byRun.values()]
+        .map(({ record }) => record)
         // Only filter by workflowName if it was specifically requested
         .filter(record => !workflowName || record.workflow_name === workflowName)
         .filter(record => !resourceId || record.resourceId === resourceId)
-        .map(w => this.parseWorkflowRun(w!))
+        .map(record => this.parseWorkflowRun(record))
         .filter(w => {
           if (fromDate && w.createdAt < fromDate) return false;
           if (toDate && w.createdAt > toDate) return false;
