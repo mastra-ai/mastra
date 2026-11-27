@@ -432,6 +432,11 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
+      // An edit can change whether the card matches a search or filter; only the server knows.
+      void queryClient.invalidateQueries({
+        queryKey: factoryKeys.boardPhases(factoryProjectId, boardIdOf(item)),
+        predicate: query => !isUnnarrowedBoardView(query.queryKey),
+      });
       void queryClient.invalidateQueries({ queryKey: factoryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });

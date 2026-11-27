@@ -10,7 +10,8 @@ const view = await factory.boardPhases(
   { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} },
   { cards: true },
 );
-await factory.transitionWorkItem(view.workItems![0].id, {
-  board: 'work', stage: 'build', expectedRevision: 1, requestId: crypto.randomUUID(), cause: 'drag',
+const card = view.workItems![0];
+await factory.transitionWorkItem(card.id, {
+  board: 'work', stage: 'build', expectedRevision: card.revision, requestId: crypto.randomUUID(), cause: 'drag',
 });
 ```

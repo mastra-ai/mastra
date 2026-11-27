@@ -85,7 +85,8 @@ export function factoryDecisionHistoryQueryOptions(
   DecisionCursor
 > {
   return infiniteQueryOptions({
-    queryKey: factoryKeys.decisions(factory?.factoryProjectId, statusKey),
+    // The key names the filter the pages were read under, so two filters never share pages.
+    queryKey: factoryKeys.decisions(factory?.factoryProjectId, `${statusKey}:${statuses?.join(',') ?? 'all'}`),
     queryFn: factory
       ? ({ pageParam, signal }: { pageParam: DecisionCursor; signal: AbortSignal }) =>
           factory.decisions({ statuses, before: pageParam, limit: 25 }, { signal })
