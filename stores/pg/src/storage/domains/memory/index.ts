@@ -2264,7 +2264,8 @@ export class MemoryPG extends MemoryStorage {
 
         if (setClauses.length > 0) {
           values.push(id);
-          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex}`;
+          // The read above holds no lock: the id may have become a pending signal since.
+          const sql = `UPDATE ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} SET ${setClauses.join(', ')} WHERE id = $${paramIndex} AND ${NOT_PENDING_SIGNAL_ROW}`;
           queries.push(t.none(sql, values));
         }
       }
