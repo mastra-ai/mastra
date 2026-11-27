@@ -687,6 +687,11 @@ export function describeResumeOccurrenceCases({
           status: 'success',
           result: { n: 1 },
         });
+        // The run stored for the child's guards goes once the child ends, as the child declined it.
+        const childRunId = (await storedSteps(parent.id, run.runId))?.[child.id]?.metadata?.nestedRunId;
+        expect(childRunId).toEqual(expect.any(String));
+        const store = (await storage.getStore('workflows'))!;
+        await expect.poll(() => store.loadWorkflowSnapshot({ workflowName: child.id, runId: childRunId })).toBeNull();
       });
     }, 20_000);
 
