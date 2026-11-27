@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
-import type { MCPServerSkills, SkillSource } from './skills';
+import type { MCPServerSkills, SkillFiles, SkillSource } from './skills';
 
 vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 });
 
@@ -584,6 +584,108 @@ describe('MCPServer skills edge cases', () => {
         await expect(client.readResource({ uri: 'skill://demo/references/NOTES.md' })).rejects.toThrow();
         const [after] = (await skillsClient.list()).skills;
         expect(Array.isArray(after!.resources) && after!.resources.map(r => r.uri)).toEqual(['skill://demo/SKILL.md']);
+      } finally {
+        await client.close();
+      }
+    } finally {
+      await served.close();
+    }
+  });
+
+  it('lists the skills afresh after a listed file or its folder is replaced by the other kind', async () => {
+    const swaps = {
+      // The file becomes a folder of the same name.
+      'file-to-folder': async (root: string) => {
+        await unlink(join(root, 'demo', 'references', 'NOTES.md'));
+        await mkdir(join(root, 'demo', 'references', 'NOTES.md'));
+      },
+      // The file's folder becomes a file of the same name.
+      'folder-to-file': async (root: string) => {
+        await rm(join(root, 'demo', 'references'), { recursive: true });
+        await writeFile(join(root, 'demo', 'references'), 'not a folder');
+      },
+    };
+    for (const [name, swap] of Object.entries(swaps)) {
+      const root = await skillsFolder(name, {
+        'demo/SKILL.md': skillMd('demo', 'Demo'),
+        'demo/references/NOTES.md': 'notes',
+      });
+      const served = await serveHTTP(createServer({ files: new LocalFilesystem({ basePath: root }) }));
+      try {
+        const client = await connectClient(served.url);
+        try {
+          const skillsClient = new SkillsClient(client);
+          await skillsClient.list();
+          await swap(root);
+          await expect(client.readResource({ uri: 'skill://demo/references/NOTES.md' })).rejects.toThrow();
+          const [after] = (await skillsClient.list()).skills;
+          expect(Array.isArray(after!.resources) && after!.resources.map(r => r.uri), name).not.toContain(
+            'skill://demo/references/NOTES.md',
+          );
+        } finally {
+          await client.close();
+        }
+      } finally {
+        await served.close();
+      }
+    }
+  });
+
+  it('keeps a newer catalog when a read of an older one finds its file missing', async () => {
+    const inner = memorySkillFiles({ 'demo/SKILL.md': skillMd('demo', 'Demo'), 'demo/notes.md': 'notes' });
+    let builds = 0;
+    let failNotesOnce = false;
+    let changeSkill = false;
+    let hold: { started: () => void; released: Promise<void> } | undefined;
+    const files: SkillFiles = {
+      list: async dir => {
+        if (dir === '') builds++;
+        const entries = await inner.list(dir);
+        if (dir === 'demo' && hold) {
+          // The missing-file check of the failed read: pause it, then report the file gone.
+          const { started, released } = hold;
+          hold = undefined;
+          started();
+          await released;
+          return entries.filter(entry => entry.name !== 'notes.md');
+        }
+        return entries;
+      },
+      read: async path => {
+        if (path === 'demo/notes.md' && failNotesOnce) {
+          failNotesOnce = false;
+          throw new Error('notes.md is gone');
+        }
+        if (path === 'demo/SKILL.md' && changeSkill) return new TextEncoder().encode(skillMd('demo', 'Changed'));
+        return inner.read(path);
+      },
+    };
+    const served = await serveHTTP(createServer({ files }));
+    try {
+      const client = await connectClient(served.url);
+      try {
+        const skillsClient = new SkillsClient(client);
+        await skillsClient.list();
+        expect(builds).toBe(1);
+
+        let started!: () => void;
+        const checking = new Promise<void>(resolve => (started = resolve));
+        let release!: () => void;
+        hold = { started, released: new Promise<void>(resolve => (release = resolve)) };
+        failNotesOnce = true;
+        const staleRead = client.readResource({ uri: 'skill://demo/notes.md' });
+        await checking;
+
+        // While that check is pending, a changed SKILL.md drops the catalog and the next listing rebuilds it.
+        changeSkill = true;
+        await expect(client.readResource({ uri: 'skill://demo/SKILL.md' })).rejects.toThrow(/changed since/);
+        await skillsClient.list();
+        expect(builds).toBe(2);
+
+        release();
+        await expect(staleRead).rejects.toThrow(/notes\.md is gone/);
+        await skillsClient.list();
+        expect(builds).toBe(2);
       } finally {
         await client.close();
       }

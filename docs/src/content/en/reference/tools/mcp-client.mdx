@@ -1000,7 +1000,7 @@ console.log(reference.text)
 
 - `list()`: The skills of every configured server, keyed by server name. A server without the extension lists none.
 - `get(serverName, uri)`: One skill by the URI of its `SKILL.md`, such as `skill://git-workflow/SKILL.md`.
-- `read(serverName, skill, ref?)`: Reads and verifies one file. `ref` is a path relative to the skill, or an absolute `skill://` URI. Without it, reads the skill's `SKILL.md`. Returns `{ uri, mimeType, bytes, text, verified, frontmatter, body }`. `frontmatter` and `body` are set only for `SKILL.md`.
+- `read(serverName, skill, ref?)`: Reads one file, and verifies it when the skill lists its files. `verified` in the result says whether it was checked. `ref` is a path relative to the skill, or an absolute `skill://` URI. Without it, reads the skill's `SKILL.md`. Returns `{ uri, mimeType, bytes, text, verified, frontmatter, body }`. `frontmatter` and `body` are set only for `SKILL.md`.
 - `readDirectory(serverName, uri)`: The files and folders directly inside a skill folder, such as `skill://git-workflow/references`. The server must support directory reads.
 
 The client only reads skills. Deciding which skills an agent uses, and asking a user before loading one, is up to your application.

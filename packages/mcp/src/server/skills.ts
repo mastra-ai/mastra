@@ -368,15 +368,18 @@ function page<T>(
 }
 
 /**
- * Whether `path` is confirmed gone: the nearest ancestor folder that can still be listed doesn't hold the
- * next segment. If nothing can be listed, the failure may be transient, so it isn't confirmed.
+ * Whether the file at `path` is confirmed gone: the nearest ancestor folder that can still be listed doesn't
+ * hold the next segment with the expected kind (a file for the last segment, a folder before it). If nothing
+ * can be listed, the failure may be transient, so it isn't confirmed.
  */
 async function isMissing(files: SkillFiles, path: string): Promise<boolean> {
   const segments = path.split('/');
-  for (let depth = segments.length - 1; depth >= 0; depth--) {
+  const last = segments.length - 1;
+  for (let depth = last; depth >= 0; depth--) {
     try {
       const entries = await files.list(segments.slice(0, depth).join('/'));
-      return !entries.some(entry => entry.name === segments[depth]);
+      const kind = depth === last ? 'file' : 'directory';
+      return !entries.some(entry => entry.name === segments[depth] && entry.kind === kind);
     } catch {
       // This folder may be gone as well; check its parent.
     }
@@ -448,7 +451,8 @@ function catalogSource(config: MCPServerSkillFiles, warn: (message: string) => v
         bytes = await files.read(file.path);
       } catch (error) {
         // A deleted file drops out of the next listing; other failures may be transient and keep the catalog.
-        if (built === current && (await isMissing(files, file.path))) built = undefined;
+        // Check the catalog after the await too: a newer catalog may have replaced it in the meantime.
+        if (built === current && (await isMissing(files, file.path)) && built === current) built = undefined;
         throw error;
       }
       if (bytes.byteLength !== file.size || (await sha256(bytes)) !== file.digest) {

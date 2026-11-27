@@ -686,8 +686,10 @@ To fix this you have three different options:
    */
   /**
    * Agent Skills served by the configured servers over the MCP Skills extension (SEP-2640).
-   * Every file read is checked against the size and digest the server listed for it; a file
-   * that fails the check throws a `SkillVerificationError`. Loading a skill into an agent,
+   * When a skill lists its files, every file read is checked against the size and digest the
+   * server listed for it, and a file that fails the check throws a `SkillVerificationError`.
+   * A skill with `resources: 'dynamic'` lists no files, so its reads come back with
+   * `verified: false`. Loading a skill into an agent,
    * and asking a user before doing so, is up to the caller.
    *
    * @example
@@ -735,7 +737,8 @@ To fix this you have three different options:
       get: (serverName: string, uri: string): Promise<Skill> =>
         call('MCP_CLIENT_GET_SKILL_FAILED', serverName, { uri }, async client => (await client.skills.get(uri)).skill),
       /**
-       * Reads and verifies one file of a skill. `ref` is a path relative to the skill
+       * Reads one file of a skill, verified when the skill lists its files (`verified` says
+       * which). `ref` is a path relative to the skill
        * (`references/API.md`) or an absolute URI; the default is its `SKILL.md`, returned
        * with its parsed `frontmatter` and `body`.
        */
