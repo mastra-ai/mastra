@@ -70,12 +70,15 @@ export interface GatewayModel {
  */
 export class GatewayManager {
   readonly gateways: MastraModelGatewayInterface[];
+  /** Gateways turned off by `shouldEnable()`, kept only to explain why their model ids have no auth. */
+  readonly #disabledGateways: MastraModelGatewayInterface[];
 
   constructor(gateways: MastraModelGatewayInterface[] = []) {
     // Filter disabled gateways and deduplicate by gateway ID (first wins).
     // Callers pass custom gateways before default gateways, so first-wins
     // preserves custom-over-default precedence in a single place.
     const seen = new Set<string>();
+    this.#disabledGateways = gateways.filter(gateway => !shouldEnableGateway(gateway));
     this.gateways = gateways.filter(gateway => {
       if (!shouldEnableGateway(gateway)) return false;
       const id = getGatewayId(gateway);
@@ -164,10 +167,27 @@ export class GatewayManager {
       };
     }
 
-    return {
-      apiKey: await gateway.getApiKey(routerId),
-      source: 'legacy',
-    };
+    try {
+      return {
+        apiKey: await gateway.getApiKey(routerId),
+        source: 'legacy',
+      };
+    } catch (error) {
+      await this.#throwDisabledGatewayAuthError(routerId, error);
+      throw error;
+    }
+  }
+
+  /**
+   * A gateway turned off for missing credentials (e.g. `mastra` without `MASTRA_GATEWAY_API_KEY`)
+   * no longer routes its ids, so they reach models.dev, which doesn't know the provider. When that
+   * happens, surface the disabled gateway's own `getApiKey()` error, which names what to set.
+   */
+  async #throwDisabledGatewayAuthError(routerId: string, error: unknown): Promise<void> {
+    if (!(error instanceof Error) || !/^Could not find config for provider /.test(error.message)) return;
+    const owner = this.#disabledGateways.find(g => routerId.startsWith(`${getGatewayId(g)}/`));
+    // getApiKey() throws its missing-credentials error; if it unexpectedly resolves, keep the original error.
+    await owner?.getApiKey(routerId);
   }
 
   /**
