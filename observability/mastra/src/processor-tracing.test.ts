@@ -1662,6 +1662,7 @@ describe('Processor Tracing Tests', () => {
             endedProcessorSpans.push(structuredClone(event.exportedSpan));
           }
         },
+        async flush() {},
         async shutdown() {},
       } as ObservabilityExporter;
       const agent = new Agent({
@@ -1683,11 +1684,13 @@ describe('Processor Tracing Tests', () => {
       expect(await stream.object).toEqual({ answer: 'Mock response' });
       await testExporter.finalExpectations();
 
-      const usage = endedProcessorSpans
-        .filter(span => span.name === 'output stream processor: Structured Output')
-        .map(span => span.attributes?.internalUsage)
-        .filter(Boolean);
+      const structuredOutputSpans = endedProcessorSpans.filter(
+        span => span.name === 'output stream processor: Structured Output',
+      );
+      const usage = structuredOutputSpans.map(span => span.attributes?.internalUsage).filter(Boolean);
       expect(usage).toEqual([expect.objectContaining({ inputTokens: 100, outputTokens: 7 })]);
+      // Each step's span counts only that step's chunks.
+      expect(structuredOutputSpans.map(span => (span.output as { totalChunks: number }).totalChunks)).toEqual([3, 6]);
     });
   });
 

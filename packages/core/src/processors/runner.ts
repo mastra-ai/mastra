@@ -112,6 +112,8 @@ function getProcessableResponseMessages(messageList: MessageList): MastraDBMessa
  */
 export class ProcessorState<OUTPUT = undefined> {
   private inputAccumulatedText = '';
+  /** Stream parts that arrived before the current span opened. */
+  private inputChunkOffset = 0;
   private outputAccumulatedText = '';
   private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
@@ -160,6 +162,15 @@ export class ProcessorState<OUTPUT = undefined> {
       return;
     }
 
+    // A span opened for a later step reports only that step's chunks and hook time.
+    if (this.span) {
+      this.inputChunkOffset = this.streamParts.length;
+      this.inputAccumulatedText = '';
+      this.outputChunkCount = 0;
+      this.outputAccumulatedText = '';
+      this.hookDurationMs = 0;
+    }
+
     const processor = options.processor;
     const currentSpan = options.tracingContext?.currentSpan;
     const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
@@ -192,7 +203,7 @@ export class ProcessorState<OUTPUT = undefined> {
 
     if (this.span) {
       this.span.input = {
-        totalChunks: this.streamParts.length,
+        totalChunks: this.streamParts.length - this.inputChunkOffset,
         accumulatedText: this.inputAccumulatedText,
       };
     }
