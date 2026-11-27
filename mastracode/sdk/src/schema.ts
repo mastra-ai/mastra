@@ -96,6 +96,8 @@ export interface MastraCodeState {
   cavemanObservations: boolean;
   observeAttachments: 'auto' | boolean;
   omScope?: 'thread' | 'resource';
+  /** Keep this thread's memory to itself: thread-scoped observations, and recall that cannot reach other threads. */
+  isolatedMemory?: boolean;
   /** Ordered host-supplied model and account fallback route for this thread. */
   modelRoute?: ModelRoute;
   /** One-hop fallback intent written by account rotation and consumed by the host. */
@@ -222,6 +224,8 @@ export const stateSchema = z
     observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
     // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
     omScope: z.enum(['thread', 'resource']).optional(),
+    // Zero cross-thread recall for this thread: forces thread-scoped OM and thread-scoped recall search.
+    isolatedMemory: z.boolean().optional(),
     // Thinking level for model reasoning effort. Optional: absent means "no
     // session override" — the effective level is resolved from settings
     // (per-mode defaults, then the global preference) at request time.

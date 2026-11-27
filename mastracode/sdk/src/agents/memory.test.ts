@@ -616,6 +616,44 @@ describe('getDynamicMemory', () => {
     expect(config.options.observationalMemory.scope).toBe('thread');
   });
 
+  it('keeps an isolated thread to its own memory, even when the project shares memory across threads', async () => {
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project', isolatedMemory: true }, 'resource');
+
+    expect(getOmScopeMock).not.toHaveBeenCalled();
+    expect(config.options.observationalMemory.scope).toBe('thread');
+    expect(config.options.observationalMemory.retrieval).toEqual({ vector: false, scope: 'thread' });
+  });
+
+  it('never serves an isolated thread the memory built for an ordinary one, or the reverse', async () => {
+    vi.resetModules();
+    memoryConstructorMock.mockClear();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const resolve = getDynamicMemory({ storage: true } as never, undefined);
+    const retrievalFor = (state: Record<string, unknown>) =>
+      (resolve({ requestContext: createRequestContext(state) as never }) as unknown as { config: MemoryConfig }).config
+        .options.observationalMemory.retrieval;
+
+    expect(retrievalFor({ projectPath: '/tmp/project' })).toBe(true);
+    expect(retrievalFor({ projectPath: '/tmp/project', isolatedMemory: true })).toEqual({
+      vector: false,
+      scope: 'thread',
+    });
+    expect(retrievalFor({ projectPath: '/tmp/project' })).toBe(true);
+    expect(memoryConstructorMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps vector recall for an isolated thread but limits it to that thread', async () => {
+    const { config } = await createMemoryConfig(
+      { projectPath: '/tmp/project', omScope: 'resource', isolatedMemory: true },
+      'resource',
+      { vector: true },
+    );
+
+    expect(config.options.observationalMemory.scope).toBe('thread');
+    expect(config.options.observationalMemory.retrieval).toEqual({ vector: true, scope: 'thread' });
+  });
+
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',

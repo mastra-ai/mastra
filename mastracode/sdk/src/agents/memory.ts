@@ -285,7 +285,10 @@ export function getDynamicMemory(
     // hand every run the others' work and invalidate their prompt caches. Recall
     // search still reaches the whole resource. Neither session state, the env
     // var, nor a repository's database.json can switch it.
-    const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
+    // An isolated thread starts with zero memory from other threads, so both its
+    // observations and its recall search stay inside the thread.
+    const isolated = state?.isolatedMemory === true;
+    const omScope = isFactory || isolated ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
     const isResourceScope = omScope === 'resource';
 
     // The Factory row is authoritative and read per invocation, so a stored
@@ -316,7 +319,7 @@ export function getDynamicMemory(
       factorySettings !== undefined ? (factorySettings?.observeAttachments ?? 'auto') : state?.observeAttachments;
     // Factory sessions get a factory-only config, so the cache key carries
     // Factory presence to keep those configs from cross-serving.
-    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}`;
+    const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}:${isFactory ? 1 : 0}:${isolated ? 1 : 0}`;
     if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
@@ -374,7 +377,7 @@ export function getDynamicMemory(
                 canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
-                retrieval: vector ? { vector: true } : true,
+                retrieval: isolated ? { vector: !!vector, scope: 'thread' } : vector ? { vector: true } : true,
                 scope: omScope,
                 // The main agent writes Anthropic cache entries with this TTL; 'auto' can't see it.
                 activateAfterIdle: { default: 'auto', anthropic: ANTHROPIC_PROMPT_CACHE_TTL },
