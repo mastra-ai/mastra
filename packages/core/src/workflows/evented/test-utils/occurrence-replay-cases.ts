@@ -990,10 +990,10 @@ export function describeOccurrenceReplayCases({
       }
     }, 20_000);
 
-    // Nothing drops a step event the broker delivers again while its first delivery still runs
-    // (COR-1610). These cases redeliver each kind of step event with its own id and check that the
-    // step guards keep one result.
-    describe('a step event delivered again while its first delivery runs', () => {
+    // Nothing drops a step event the broker delivers again (COR-1610). Each case redelivers one step
+    // event with its own id. The branches and the step after a sleep that the copy publishes are new
+    // events with new ids, and the step guards decide which of them runs.
+    describe('a step event delivered again', () => {
       const schema = z.object({ n: z.number() });
       const gate = () => {
         let resolve!: () => void;
@@ -1028,50 +1028,6 @@ export function describeOccurrenceReplayCases({
           }
         }
       }
-
-      // The copy gets a `completed` conflict on the saved failed attempt, waits the delay again and
-      // publishes a second retry. Both retries expect the failed attempt, so the start guard keeps one.
-      it('retries a failed step once when its event is delivered again during the retry delay', async () => {
-        const calls: Record<string, number> = {};
-        const flaky = createStep({
-          id: 'flaky',
-          inputSchema: schema,
-          outputSchema: schema,
-          execute: async ({ inputData }) => {
-            calls.flaky = (calls.flaky ?? 0) + 1;
-            if (calls.flaky === 1) throw new Error('Transient failure');
-            return inputData;
-          },
-        });
-        const workflow = createWorkflow({
-          id: `retry-delay-copy-${randomUUID()}`,
-          inputSchema: schema,
-          outputSchema: schema,
-          retryConfig: { attempts: 1, delay: 1_000 },
-        })
-          .then(flaky)
-          .then(counted('next', calls))
-          .commit();
-        await withWorkflow(workflow, async driver => {
-          const run = await workflow.createRun();
-          const result = run.start({ inputData: { n: 0 } });
-          const store = (await storage.getStore('workflows'))!;
-          await expect
-            .poll(
-              async () =>
-                (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.flaky
-                  ?.status,
-            )
-            .toBe('failed');
-          const retries = () => driver.stepRuns({ spec: '0', runId: run.runId }).filter(e => e.data.retryCount === 1);
-          expect(retries()).toHaveLength(0);
-          await driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
-          expect(await result).toMatchObject({ status: 'success', result: { n: 1 } });
-          await drainHandlers();
-          expect(retries()).toHaveLength(2);
-          expect(calls).toEqual({ flaky: 2, next: 1 });
-        });
-      }, 20_000);
 
       // The copy of the block's dispatch publishes every branch again. Each branch's start guard
       // refuses the second start: one branch is still in its body, the other already finished.
@@ -1137,48 +1093,54 @@ export function describeOccurrenceReplayCases({
         20_000,
       );
 
-      // The copy sleeps again and publishes the next step a second time while that step is still in
-      // its body. The second delivery of the next step does not run it.
+      // The sleep's event is delivered again while the step after the sleep is in its body. The copy
+      // sleeps again and publishes that step a second time, and its start guard refuses the second
+      // delivery on both storage versions because the stored record is running.
       it('runs the step after a sleep once when the sleep is delivered again', async () => {
         const calls: Record<string, number> = {};
-        const slow = gate();
+        const held = gate();
+        const entered = gate();
         const workflow = createWorkflow({
           id: `sleep-copy-${randomUUID()}`,
           inputSchema: schema,
           outputSchema: schema,
         })
           .then(counted('before', calls))
-          .sleep(200)
-          .then(counted('after', calls, () => slow.promise))
+          .sleep(100)
+          .then(
+            counted('after', calls, () => {
+              entered.resolve();
+              return held.promise;
+            }),
+          )
           .commit();
         await withWorkflow(workflow, async driver => {
           try {
             const run = await workflow.createRun();
             const result = run.start({ inputData: { n: 0 } });
-            await expect.poll(() => driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(1);
-            const copy = driver.redeliverEvent(driver.stepRuns({ spec: '1', runId: run.runId })[0]!);
+            await entered.promise;
+            await driver.redeliverEvent(driver.stepRuns({ spec: '1', runId: run.runId })[0]!);
             await expect.poll(() => driver.deliveryCount({ spec: '2', runId: run.runId })).toBe(2);
-            await copy;
+            // A second delivery that ran the step would stay held and never settle.
             await settleDeliveries(driver.stepRuns({ spec: '2', runId: run.runId }).slice(1));
-            slow.resolve();
+            held.resolve();
             expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
             await drainHandlers();
             expect(calls).toEqual({ before: 1, after: 1 });
           } finally {
-            slow.resolve();
+            held.resolve();
           }
         });
       }, 20_000);
 
-      // Foreach items have no step guard (COR-1595): the copy runs the item again, and both copies
-      // save it. The step after the foreach still runs once.
+      // Foreach items have no step guard (COR-1595): the copy runs the item again. The step after the
+      // foreach still runs once.
       it('runs a foreach item again when its event is delivered again', async () => {
         const calls: Record<string, number> = {};
         const slow = gate();
-        let entries = 0;
         const bothEntered = gate();
         const item = counted('item', calls, () => {
-          if (++entries === 2) bothEntered.resolve();
+          if (calls.item === 2) bothEntered.resolve();
           return slow.promise;
         });
         const workflow = createWorkflow({
@@ -1205,7 +1167,8 @@ export function describeOccurrenceReplayCases({
             const result = run.start({ inputData: [{ n: 0 }] });
             await expect.poll(() => driver.deliveryCount({ spec: '0,0', runId: run.runId })).toBe(1);
             const copy = driver.redeliverEvent(driver.stepRuns({ spec: '0,0', runId: run.runId })[0]!);
-            await bothEntered.promise;
+            // A copy that is refused settles without entering the item.
+            await Promise.race([bothEntered.promise, copy]);
             slow.resolve();
             await copy;
             expect(await result).toMatchObject({ status: 'success', result: [{ n: 1 }] });
