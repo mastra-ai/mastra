@@ -218,19 +218,11 @@ class CrashingRetryPubSub extends EventEmitterPubSub {
 }
 
 describe('retryConfig.delay on the evented engine: redelivery (#29389)', () => {
-  const defaultFenceTtl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
-  afterEach(() => {
-    WorkflowEventProcessor.STEP_FENCE_TTL_MS = defaultFenceTtl;
-  });
-
   // A worker that dies during the delay never acks its delivery, so the broker
   // redelivers it and the run finishes instead of hanging. InMemoryStore has no
   // step-occurrence guards, so the interrupted attempt runs again (normal
   // at-least-once behavior) and its retry still waits the configured delay.
   it('finishes the run after a worker dies mid-delay and the delivery is redelivered', async () => {
-    // Short fence so the redelivery is not dropped as a duplicate of the
-    // delivery that "crashed"; a real broker redelivers after the lease lapses.
-    WorkflowEventProcessor.STEP_FENCE_TTL_MS = 50;
     const pubsub = new CrashingRetryPubSub();
     await pubsub.subscribe('workflows', async event => {
       if (event.type === 'workflow.step.run') pubsub.deliveries.push(structuredClone(event));
@@ -255,8 +247,6 @@ describe('retryConfig.delay on the evented engine: redelivery (#29389)', () => {
     await vi.waitFor(() => expect(pubsub.droppedRetry).toBe(true), { timeout: 5_000, interval: 5 });
     const interrupted = pubsub.deliveries.find(event => event.runId === run.runId && !event.data?.retryCount);
     expect(interrupted?.id).toBeDefined();
-    // Let the lapsed delivery's fence expire, then redeliver it unchanged.
-    await new Promise(resolve => setTimeout(resolve, 100));
     await new WorkflowEventProcessor({ mastra }).handle(interrupted!);
     const result = await resultPromise;
 

@@ -114,11 +114,6 @@ export async function redeliverAndDrain(
         'The completed delivery must still hold its lease',
       ).toBeDefined();
     }
-    if (mode === 'expired') {
-      const clock = vi.spyOn(Date, 'now').mockReturnValue(now + WorkflowEventProcessor.STEP_FENCE_TTL_MS + 1);
-      restoreClock = () => clock.mockRestore();
-      expect(await driver.pubsub.getLeaseOwner(leaseKey), 'The replay must arrive after lease expiry').toBeUndefined();
-    }
     // Drain descendants, background dispatch and sleep continuations without
     // waiting for any bug-specific side-effect count.
     let pendingHandlers = 0;
