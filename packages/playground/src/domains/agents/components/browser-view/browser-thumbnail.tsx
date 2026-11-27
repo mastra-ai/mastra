@@ -1,9 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
-import { IconChevronTopMedium } from '@mastra/playground-ui/icons/central/IconChevronTopMedium';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 import { IconStudioDisplay } from '@mastra/playground-ui/icons/central/IconStudioDisplay';
@@ -138,11 +137,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
         {/* Expand/collapse indicator */}
         <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
-          {isExpanded ? (
-            <IconChevronDownMedium className="size-icon-lg" />
-          ) : (
-            <IconChevronTopMedium className="size-icon-lg" />
-          )}
+          <DisclosureChevron direction="up" open={isExpanded} className="size-icon-lg" />
         </div>
       </button>
 
