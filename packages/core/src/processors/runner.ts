@@ -124,6 +124,8 @@ export class ProcessorState<OUTPUT = undefined> {
    * share of that window.
    */
   public hookDurationMs = 0;
+  /** Set when the run's `finish` chunk ended the span, so no later chunk opens another. */
+  public finished = false;
 
   constructor(
     options?: {
@@ -147,12 +149,14 @@ export class ProcessorState<OUTPUT = undefined> {
   /**
    * Opens the output stream span. A state can be created before there is a
    * span to parent it (a data chunk sent before the first model step), so the
-   * runner calls this again once the stream has one.
+   * runner calls this again once the stream has one. The state lives for the
+   * whole run, but each model step's stream ends the span when it closes, so
+   * the runner also opens a new one when a later step's chunks arrive.
    */
   startSpan(options?: ConstructorParameters<typeof ProcessorState>[0]): void {
     // Only create span if explicitly requested (legacy processors)
     // Workflow processors handle span creation in workflow.ts
-    if (this.span || !options?.createSpan || !options.processorName) {
+    if ((this.span && !this.span.endTime) || this.finished || !options?.createSpan || !options.processorName) {
       return;
     }
 
@@ -1081,7 +1085,7 @@ export class ProcessorRunner {
               state = new ProcessorState<OUTPUT>();
               processorStates.set(processor.id, state);
             }
-            if (!state.span && observabilityContext?.tracingContext?.currentSpan) {
+            if ((!state.span || state.span.endTime) && observabilityContext?.tracingContext?.currentSpan) {
               state.startSpan({
                 processorName: processor.name ?? processor.id,
                 ...observabilityContext,
@@ -1153,6 +1157,7 @@ export class ProcessorRunner {
       // If this was a finish chunk, end all processor spans AFTER processing
       if (isFinishChunk) {
         for (const state of processorStates.values()) {
+          state.finished = true;
           if (state.span) {
             // Set output with accumulated text and chunk count from processor's output
             state.span.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });
