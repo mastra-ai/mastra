@@ -93,4 +93,30 @@ describe('AgentController notification signals', () => {
     const [, signalOptions] = agent.sendNotificationSignal.mock.calls[0] as [unknown, any];
     expect(await signalOptions.ifIdle.streamOptions.requireToolApproval({ toolName: 'execute_command' })).toBe(false);
   });
+
+  it('denies unconfigured tools when defaultToolApprovalPolicy is deny', async () => {
+    const agent = createAgentMock();
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-deny',
+      resourceId: 'resource-deny',
+      maxSteps: 100,
+      defaultToolApprovalPolicy: 'deny',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session-deny', ownerId: 'test-owner' });
+
+    await session.sendNotificationSignal({
+      source: 'mastracode',
+      kind: 'manual',
+      priority: 'high',
+      summary: 'Check this notification',
+    });
+
+    expect(session.resolveToolApproval('execute_command')).toBe('deny');
+    const [, signalOptions] = agent.sendNotificationSignal.mock.calls[0] as [unknown, any];
+    // A 'deny' tool still reaches the approval gate, where the run engine declines it.
+    expect(await signalOptions.ifIdle.streamOptions.requireToolApproval({ toolName: 'execute_command' })).toBe(true);
+  });
 });
