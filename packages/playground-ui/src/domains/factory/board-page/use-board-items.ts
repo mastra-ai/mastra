@@ -1,10 +1,10 @@
-import { boardLoop, boardOf, itemBoard, pullRequestMayEnter } from '@mastra/playground-ui/domains/factory';
-import { useRef, useState } from 'react';
-
-import { useBoardCatalog, useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '@mastra/react/hooks/factory';
-import type { DragPayload } from '../boardDrag';
-import type { BoardKind, BoardStageId } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
+import { useBoardCatalog, useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '@mastra/react/hooks/factory';
+
+import { useRef, useState } from 'react';
+import type { BoardKind, BoardStageId } from '..';
+import type { DragPayload } from '../board';
+import { boardLoop, boardOf, itemBoard, pullRequestMayEnter } from '../card';
 
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */

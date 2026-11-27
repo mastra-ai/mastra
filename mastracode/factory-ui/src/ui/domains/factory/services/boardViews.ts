@@ -5,10 +5,8 @@
  */
 
 import { boardPath } from '../boardCatalog';
-import { BOARD_FILTER_FIELDS } from '../boardFilters';
+import { BOARD_FILTER_FIELDS, BOARD_VIEW_QUERY, BOARD_SORT_QUERY } from '@mastra/playground-ui/domains/factory';
 import { BOARD_LAYOUT_QUERY } from '../boardLayout';
-import { BOARD_VIEW_QUERY } from '../boardSavedViews';
-import { BOARD_SORT_QUERY } from '../boardSort';
 
 const BOARD_VIEWS_KEY = 'mastracode.boardViews';
 const MAX_BOARDS = 50;

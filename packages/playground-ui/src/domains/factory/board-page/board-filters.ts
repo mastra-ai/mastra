@@ -1,5 +1,5 @@
 import { BOARD_PERSON_FIELDS } from '@internal/factory-contract';
-import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
+import type { FilterBarItem } from '@/ds/components/FilterBar';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
 export const BOARD_FILTER_FIELDS = [

@@ -6,7 +6,7 @@ import type { FactoryProject } from '../../domains/workspaces/services/github';
 import { useBoardFilterSources } from '../../domains/factory/hooks/useBoardFilterSources';
 import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
 import { useBoardRepository } from '../../domains/factory/hooks/useBoardRepository';
-import type { BoardHost } from './BoardContent';
+import type { BoardHost } from '@mastra/playground-ui/domains/factory';
 
 /** Factory's answers to what the board needs from its host. */
 export function useBoardHost(factory: FactoryProject, definition: InstalledBoardInfo): BoardHost {

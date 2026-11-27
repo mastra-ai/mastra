@@ -1,3 +1,4 @@
+import type { BoardIntakeSetup } from '@mastra/playground-ui/domains/factory';
 import { useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { DEFAULT_BOARD_ID, placesArrivals } from '@internal/factory-contract';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -15,8 +16,6 @@ import type { InstalledBoardInfo } from '../../../../api/types';
  * The board shows cards only. The server files every new issue and pull request of a connected
  * source as a card, through the project's intake rules, so no provider's list is read here.
  */
-export type BoardIntakeSetup = ReturnType<typeof useBoardIntakeSetup>;
-
 export function useBoardIntakeSetup({
   factoryProjectId,
   repositories,
@@ -26,7 +25,7 @@ export function useBoardIntakeSetup({
   /** Every linked repository; the first decides between GitHub and GitLab. */
   repositories: readonly LinkedRepositoryPayload[];
   definition: InstalledBoardInfo;
-}) {
+}): BoardIntakeSetup {
   const kind = definition.id;
   const defaultBoard = kind === DEFAULT_BOARD_ID;
   const gitlabRepository = repositories[0]?.provider === 'gitlab';

@@ -1,40 +1,34 @@
-import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
-import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import type { LucideIcon } from 'lucide-react';
 import { factoryParticipantId, PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
+import type { LucideIcon } from 'lucide-react';
+import { BOARD_FILTER_OPERATORS, boardFilterOptions, boardFilterSummary } from '../board';
+import type { BoardFilterField as SharedBoardFilterField, BoardFilterOption } from '../board';
 
-import { boardFilterFieldIds } from '../boardFilters';
-import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
-import type { BoardParticipant } from '../boardPeople';
-import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
-import type { LinearProject } from '../services/linear';
+import { boardFilterFieldIds } from './board-filters';
+import type { BoardFilterFieldId, BoardFilterState } from './board-filters';
+import type { BoardParticipant } from './board-people';
+import { BOARD_SOURCE_OPTIONS } from './board-source-filters';
+
+import { BoardSourceIcon } from './board-source-icon';
+import { Avatar } from '@/ds/components/Avatar';
+import type { FilterBarOption } from '@/ds/components/FilterBar';
+import { IconElectrocardiogram } from '@/ds/icons/central/IconElectrocardiogram';
+import { IconInboxEmpty } from '@/ds/icons/central/IconInboxEmpty';
+import { IconKanbanView } from '@/ds/icons/central/IconKanbanView';
+import { IconPersona } from '@/ds/icons/central/IconPersona';
+import { IconPullRequest } from '@/ds/icons/central/IconPullRequest';
+import { IconShieldCheck } from '@/ds/icons/central/IconShieldCheck';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconUserAdded } from '@/ds/icons/central/IconUserAdded';
+
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
+import { IconUserEdit } from '@/ds/icons/central/IconUserEdit';
 
 /** Which issue sources the host has connected, so the board only offers filters that can match. */
 export interface BoardFilterSources {
   connectedSources: ReadonlySet<string>;
-  linearProjects?: readonly LinearProject[];
+  linearProjects?: readonly { id: string; name: string }[];
 }
-import { BoardSourceIcon } from './BoardSourceIcon';
-import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';
-import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
-import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
-import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconUserAdded } from '@mastra/playground-ui/icons/central/IconUserAdded';
-import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
-import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
-import { IconPersona } from '@mastra/playground-ui/icons/central/IconPersona';
-import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
-import { IconShieldCheck } from '@mastra/playground-ui/icons/central/IconShieldCheck';
-
-import { BOARD_FILTER_OPERATORS, boardFilterOptions, boardFilterSummary } from '@mastra/playground-ui/domains/factory';
-import type {
-  BoardFilterField as SharedBoardFilterField,
-  BoardFilterOption,
-} from '@mastra/playground-ui/domains/factory';
-
-export { BOARD_FILTER_OPERATORS, boardFilterOptions, boardFilterSummary };
-export type { BoardFilterOption };
-export type BoardFilterField = SharedBoardFilterField<BoardFilterFieldId>;
+export type FactoryBoardFilterField = SharedBoardFilterField<BoardFilterFieldId>;
 
 const FIELD_PRESENTATION: Record<BoardFilterFieldId, { label: string; icon: LucideIcon }> = {
   source: { label: 'Intake source', icon: IconInboxEmpty },
@@ -73,7 +67,7 @@ interface BoardFilterFieldsOptions {
   availableLabels: readonly string[];
   currentUserId?: string;
   connectedSources?: ReadonlySet<string>;
-  linearProjects?: readonly LinearProject[];
+  linearProjects?: readonly { id: string; name: string }[];
 }
 
 export function boardFilterFields({
@@ -84,7 +78,7 @@ export function boardFilterFields({
   currentUserId,
   connectedSources,
   linearProjects = [],
-}: BoardFilterFieldsOptions): BoardFilterField[] {
+}: BoardFilterFieldsOptions): FactoryBoardFilterField[] {
   const people = peopleOptions(participants, currentUserId);
   const suggestions: Record<BoardFilterFieldId, FilterBarOption[]> = {
     // Keep already-picked sources so saved views still label and edit them after a provider disconnects.

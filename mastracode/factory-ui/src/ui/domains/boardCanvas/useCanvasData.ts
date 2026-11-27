@@ -1,9 +1,7 @@
 import { useIntakeDryRunQuery } from '../../../hooks/useIntakeDryRun';
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../hooks/useIntakeOrder';
 import { useBoardCatalog, useBoardPhasesQuery, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
-import { boardFiltersFromParams } from '../factory/boardFilters';
-import { boardPhasesRequest } from '../factory/boardPhasesRequest';
-import { DEFAULT_BOARD_SORT } from '../factory/boardSort';
+import { boardFiltersFromParams, boardPhasesRequest, DEFAULT_BOARD_SORT } from '@mastra/playground-ui/domains/factory';
 import type { RuleSkips } from './canvasModel';
 
 /** No filter picked, as the board page first opens. */

@@ -1,14 +1,14 @@
 import { boardSource, matchesSourceFilters } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
-import { boardFilterFields } from './components/boardFilterFields';
 import {
+  boardFilterFields,
   boardFilterItems,
   boardFilterParams,
   boardFilterStateFromItems,
   boardFiltersFromParams,
   withBoardFilterValues,
-} from './boardFilters';
-import { BOARD_SOURCE_OPTIONS } from './boardSourceFilters';
+  BOARD_SOURCE_OPTIONS,
+} from '@mastra/playground-ui/domains/factory';
 import { CARD_SOURCES } from './cardSources';
 import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 

@@ -34,12 +34,16 @@ import { sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import { threadMessagesQueryOptions } from '../hooks/useAgentControllerThreadMessages';
 import { userSessionQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
-import { boardPhasesRequest } from './domains/factory/boardPhasesRequest';
-import { boardFiltersFromParams } from './domains/factory/boardFilters';
-import { BOARD_VIEW_QUERY } from './domains/factory/boardSavedViews';
-import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/factory/boardSort';
-import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
-import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
+import {
+  boardPhasesRequest,
+  boardFiltersFromParams,
+  BOARD_VIEW_QUERY,
+  BOARD_SORT_QUERY,
+  DEFAULT_BOARD_SORT,
+  isBoardSort,
+  boardDecisionsQueryOptions,
+  BOARD_SEARCH_QUERY,
+} from '@mastra/playground-ui/domains/factory';
 import { linkedSessionRepository } from './domains/factory/hooks/useSessionRepository';
 import { activityDepth, DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';

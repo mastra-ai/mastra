@@ -11,3 +11,4 @@ export * from './session';
 export * from './activity';
 export * from './rules';
 export * from './card';
+export * from './board-page';

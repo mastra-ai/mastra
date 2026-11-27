@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardFiltersFromParams } from './boardFilters';
-import { boardParticipants, boardPersonIdentity, withPeopleFolded, withPeopleUnfolded } from './boardPeople';
+import {
+  boardFiltersFromParams,
+  boardParticipants,
+  boardPersonIdentity,
+  withPeopleFolded,
+  withPeopleUnfolded,
+} from '@mastra/playground-ui/domains/factory';
 import type { AuditEventPage } from '@mastra/playground-ui/domains/factory';
 
 const activityPage: AuditEventPage = {

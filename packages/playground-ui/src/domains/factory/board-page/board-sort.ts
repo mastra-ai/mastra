@@ -1,4 +1,4 @@
-import type { BoardPhasesSort } from '../../../api/types';
+import type { BoardPhasesSort } from '@internal/factory-contract';
 
 /** The orders the server lists a phase in. */
 export type BoardSort = BoardPhasesSort;

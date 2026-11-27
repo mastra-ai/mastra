@@ -6,9 +6,12 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useRunQueue } from '@mastra/react/hooks/factory';
 import type { FactoryProject } from '../../workspaces/services/github';
-import { currentItemStage, cardControls } from '@mastra/playground-ui/domains/factory';
-import { useBoardDecisions } from '../hooks/useBoardDecisions';
-import { useBoardItems } from '../hooks/useBoardItems';
+import {
+  currentItemStage,
+  cardControls,
+  useBoardDecisions,
+  useBoardItems,
+} from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 export function CardDraftActions({

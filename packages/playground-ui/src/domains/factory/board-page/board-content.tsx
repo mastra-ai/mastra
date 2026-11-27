@@ -1,5 +1,13 @@
 import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
-import type { ProviderPerson, WorkItem } from '@internal/factory-contract';
+import type { ProviderPerson, WorkItem, InstalledBoardInfo } from '@internal/factory-contract';
+import {
+  useRecentAuditEvents,
+  useRunQueue,
+  useBoardPhasesQuery,
+  useWorkItemFilterOptionsQuery,
+  useCardSessions,
+} from '@mastra/react/hooks/factory';
+import { useMemo, useState } from 'react';
 import {
   BoardPhaseSetup,
   BoardPhaseSetupHoverCard,
@@ -12,45 +20,36 @@ import {
   canMoveTo,
   relatedWorkItemIndex,
   WorkItemCard,
-} from '@mastra/playground-ui/domains/factory';
-import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { useMemo, useState } from 'react';
-import type { InstalledBoardInfo } from '../../../api/types';
-
+} from '..';
+import type { DragPayload } from '../board';
 import {
-  useRecentAuditEvents,
-  useRunQueue,
-  useBoardPhasesQuery,
-  useWorkItemFilterOptionsQuery,
-  useCardSessions,
-} from '@mastra/react/hooks/factory';
-import { shownBoardPhases } from '../../domains/factory/boardPhases';
-import type { ShownPhase } from '../../domains/factory/boardPhases';
-import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
-import type { BoardKind } from '@mastra/playground-ui/domains/factory';
-import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
-import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
-import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
-import { LoadMoreSentinel } from '../../domains/factory/components/LoadMoreSentinel';
-import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
-import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
-import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
-import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
-import type { BoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
-import type { BoardFilterSources } from '../../domains/factory/components/boardFilterFields';
-import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
-import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
-import { boardFiltersActive } from '../../domains/factory/boardFilters';
-import { useBoardView } from '../../domains/factory/hooks/useBoardView';
-import type { DragPayload } from '../../domains/factory/boardDrag';
-import type { FactoryProject } from '../../domains/workspaces/services/github';
+  BoardItemsSkeleton,
+  BoardStageCards,
+  LoadMoreSentinel,
+  VirtualBoardItems,
+  InlineWorkItemComposer,
+  BoardStages,
+} from '../board';
 
-import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
-import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
-import { BoardStages } from './BoardStages';
+import type { BoardKind } from '../card';
+import type { BoardFilterSources } from './board-filter-fields';
+import { boardFiltersActive } from './board-filters';
+import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from './board-people';
+import { shownBoardPhases } from './board-phases';
+import type { ShownPhase } from './board-phases';
+import { boardPhasesRequest, deeperPhaseWindow } from './board-phases-request';
+import { FactoryBoardViewControls } from './board-view-controls';
+import { useBoardComposer } from './use-board-composer';
+import { useBoardDecisions } from './use-board-decisions';
+import { useBoardDeepLink } from './use-board-deep-link';
+import { useBoardItems } from './use-board-items';
+import { useBoardView } from './use-board-view';
+import { useCollapsedStages } from './use-collapsed-stages';
+import { createHoverCardHandle } from '@/ds/components/HoverCard';
+
+import { Notice } from '@/ds/components/Notice';
+import { toast } from '@/ds/components/Toaster';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const NO_CARDS: WorkItem[] = [];
 const NO_WINDOWS: Readonly<Record<string, number>> = {};
@@ -61,6 +60,14 @@ const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: 
 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
+
+/** Whether anything files cards onto the board, so its first column can say how to start. */
+export interface BoardIntakeSetup {
+  fed: boolean;
+  unrouted: boolean;
+  failure?: { message: string; retry: () => void };
+  isPending: boolean;
+}
 
 /** What the host app knows that the board can't fetch itself: who is looking, and the project's connections. */
 export interface BoardHost {
@@ -358,7 +365,7 @@ export function BoardContent({
         totalTaskCount={totalTaskCount}
         onDrop={drop}
         toolbar={
-          <BoardViewControls
+          <FactoryBoardViewControls
             reviewsPullRequests={reviewsPullRequests}
             view={boardView}
             participants={participants}

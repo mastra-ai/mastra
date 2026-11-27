@@ -5,8 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { releaseBoard } from '../../e2e/ui/board-catalog';
 import { server } from '../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle } from '../../e2e/ui/render';
-import { useBoardComposer } from '../ui/domains/factory/hooks/useBoardComposer';
-import { useBoardItems } from '../ui/domains/factory/hooks/useBoardItems';
+import { useBoardComposer, useBoardItems } from '@mastra/playground-ui/domains/factory';
 import { factoryAttentionTargetPath } from '../ui/domains/factory/services/attention';
 import type { WorkItem } from '@internal/factory-contract';
 

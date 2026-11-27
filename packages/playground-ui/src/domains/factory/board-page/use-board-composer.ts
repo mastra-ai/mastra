@@ -1,14 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import type { InstalledBoardInfo, WorkItem } from '@internal/factory-contract';
 
 import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
 } from '@mastra/react/hooks/factory';
-import type { InstalledBoardInfo } from '../../../../api/types';
-import { itemBoard } from '@mastra/playground-ui/domains/factory';
-import type { WorkItem } from '@internal/factory-contract';
-import type { BoardStageId } from '@mastra/playground-ui/domains/factory';
+import { useEffect, useRef, useState } from 'react';
+import type { BoardStageId } from '../board';
+import { itemBoard } from '../card';
 
 /** The inline "new card" composer: which lane owns it, where focus returns, and what a submit files. */
 export function useBoardComposer(factoryProjectId: string, board: InstalledBoardInfo, currentUserId?: string) {
