@@ -6,6 +6,7 @@ import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button/Button';
 import { Input } from '../Input/input';
 import { Kbd } from '../Kbd/kbd';
+import { Steps } from '../Steps';
 import { Switch } from '../Switch/switch';
 import { Txt } from '../Txt/Txt';
 import { FormFrame } from './form-frame';
@@ -79,6 +80,7 @@ const meta = {
         'isLoading',
         'LinkComponent',
         'aside',
+        'asidePlacement',
         'children',
       ],
     },
@@ -114,6 +116,7 @@ const meta = {
     title: { control: 'text' },
     aside: { control: false },
     breadcrumbs: { control: false },
+    asidePlacement: { control: 'inline-radio', options: ['end', 'start'] },
     children: { control: false },
     LinkComponent: { control: false },
   },
@@ -209,7 +212,7 @@ export const WithAside: Story = {
   },
 };
 
-/** Onboarding: a multi-step create flow whose way back is the breadcrumb bar instead of a back link. */
+/** Onboarding: the breadcrumb bar is the way back, and the steps sit on the start side of the form. */
 export const OnboardingForm: Story = {
   args: {
     backHref: undefined,
@@ -225,6 +228,15 @@ export const OnboardingForm: Story = {
       </Breadcrumb>
     ),
     title: 'New agent',
+    asidePlacement: 'start',
+    aside: (
+      <Steps headingLevel={2}>
+        <Steps.Step title="Basics" description="Kit, GPT-5 mini" done />
+        <Steps.Step title="Instructions" description="Coding agent template" />
+        <Steps.Step title="Tools" description="Optional" />
+        <Steps.Step title="Review" description="Check and create" />
+      </Steps>
+    ),
     children: (
       <>
         <SettingsGroup>

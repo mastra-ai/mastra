@@ -14,6 +14,7 @@ export interface FormFrameProps {
   isLoading?: boolean;
   LinkComponent?: LinkComponent;
   aside?: ReactNode;
+  asidePlacement?: 'start' | 'end';
   children: ReactNode;
 }
 
@@ -26,11 +27,14 @@ export function FormFrame({
   isLoading = false,
   LinkComponent: Link = 'a',
   aside,
+  asidePlacement = 'end',
   children,
 }: FormFrameProps) {
   const hasAside = Boolean(aside);
+  const asideStart = hasAside && asidePlacement === 'start';
 
   return (
+    // A form shows one way back: breadcrumbs (multi-step create flows) replace the back link, never both.
     <PageFrame breadcrumbs={breadcrumbs}>
       <div className="@container grid min-h-full">
         <div
@@ -39,10 +43,12 @@ export function FormFrame({
             'mx-auto grid w-full max-w-160 min-w-0 grid-cols-1 gap-8 pt-6',
             !hasAside
               ? 'grid-rows-[auto_1fr]'
-              : 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10',
+              : asideStart
+                ? 'grid-rows-[auto_auto_1fr] @4xl:max-w-226 @4xl:grid-cols-[--spacing(56)_minmax(0,--spacing(160))] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10'
+                : 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10',
           )}
         >
-          <PageHeader className="@4xl:col-start-1">
+          <PageHeader className={asideStart ? '@4xl:col-span-2' : '@4xl:col-start-1'}>
             {!breadcrumbs && backHref !== undefined && backLabel !== undefined && (
               <PageHeader.Eyebrow>
                 <Link href={backHref} aria-label={`Back to ${backLabel}`}>
@@ -58,13 +64,20 @@ export function FormFrame({
             </PageHeader.Title>
           </PageHeader>
           {hasAside && (
-            <div data-slot="form-layout-aside" className="min-w-0 @4xl:col-start-2 @4xl:row-start-2">
+            <div
+              data-slot="form-layout-aside"
+              data-placement={asidePlacement}
+              className={cn('min-w-0 @4xl:row-start-2', asideStart ? '@4xl:col-start-1' : '@4xl:col-start-2')}
+            >
               <div className="@4xl:sticky @4xl:top-6">{aside}</div>
             </div>
           )}
           <div
             data-slot="form-layout-content"
-            className="grid min-w-0 grid-cols-1 content-start gap-6 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch @4xl:col-start-1 @4xl:row-start-2"
+            className={cn(
+              'grid min-w-0 grid-cols-1 content-start gap-6 has-[>[data-slot=empty-state-fill]:only-child]:content-stretch @4xl:row-start-2',
+              asideStart ? '@4xl:col-start-2' : '@4xl:col-start-1',
+            )}
           >
             {children}
           </div>

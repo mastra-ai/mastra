@@ -23,8 +23,8 @@ tester.run('page-layout-props', plugin.rules['page-layout-props'], {
       code: '<><PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>{panels}</PageLayout><PageLayout variant="settings" breadcrumbs={crumbs} title="General">{body}</PageLayout><PageLayout variant="form" backHref="/" backLabel="Agents" title="New">{body}</PageLayout></>;',
     },
     {
-      name: 'allows breadcrumbs on a multi-step create form',
-      code: '<PageLayout variant="form" breadcrumbs={crumbs} title="New agent">{body}</PageLayout>;',
+      name: 'allows breadcrumbs and a start-side aside on a multi-step create form',
+      code: '<PageLayout variant="form" breadcrumbs={crumbs} title="New agent" aside={steps} asidePlacement="start">{body}</PageLayout>;',
     },
     { name: 'allows a variant forwarded from a wrapper', code: '<PageLayout variant={variant}>{body}</PageLayout>;' },
     { name: 'allows props spread from a wrapper', code: '<PageLayout {...props}>{body}</PageLayout>;' },

@@ -55,8 +55,10 @@ interface PageLayoutFormBaseProps {
   isLoading?: boolean;
   /** The app's router link, so the back link navigates without a reload. It renders an `<a>` otherwise. */
   LinkComponent?: LinkComponent;
-  /** A live preview beside the form when the column is wide enough, above the fields otherwise. */
+  /** Content beside the form when the column is wide enough, above the fields otherwise: a live preview or a step list. */
   aside?: ReactNode;
+  /** Which side of the form `aside` sits on when there is room. `end` (default) suits a preview, `start` a step list. */
+  asidePlacement?: 'start' | 'end';
   /** Sections (`SettingsGroup`s), 24px apart. */
   children: ReactNode;
 }

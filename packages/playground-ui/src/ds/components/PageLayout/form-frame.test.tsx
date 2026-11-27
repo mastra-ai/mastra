@@ -120,4 +120,32 @@ describe('PageLayout variant="form"', () => {
     expect(main.contains(nav)).toBe(false);
     expect(screen.queryByRole('link', { name: /^Back to/ })).toBeNull();
   });
+
+  it('puts the aside on the start side when asked, still above the fields in the markup', () => {
+    render(
+      <PageLayout variant="form" title="New agent" aside={<p>Steps</p>} asidePlacement="start">
+        <label>
+          Name
+          <input />
+        </label>
+      </PageLayout>,
+    );
+
+    const aside = screen.getByText('Steps');
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(aside.closest('[data-slot="form-layout-aside"]')?.getAttribute('data-placement')).toBe('start');
+    expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('puts the aside on the end side by default', () => {
+    render(
+      <PageLayout variant="form" title="New alert" aside={<p>Backtest</p>}>
+        <section>Conditions</section>
+      </PageLayout>,
+    );
+
+    expect(
+      screen.getByText('Backtest').closest('[data-slot="form-layout-aside"]')?.getAttribute('data-placement'),
+    ).toBe('end');
+  });
 });
