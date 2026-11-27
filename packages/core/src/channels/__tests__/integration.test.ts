@@ -627,9 +627,11 @@ describe('reaction guidance reaches the model only with the reaction tool', () =
 describe('generative UI through the agent loop', () => {
   it('gives the model render_card and posts the card it calls with', async () => {
     const posted: any[] = [];
+    // A render context as it lives on the request context: it carries the chat drivers, so it is never a JSON husk.
     const render = {
       platform: 'slack',
       generativeUI: true,
+      wrapStream: (stream: unknown) => stream,
       chatThread: {
         post: async (card: unknown) => {
           posted.push(card);
