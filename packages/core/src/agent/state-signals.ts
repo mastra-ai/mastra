@@ -1,5 +1,6 @@
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import { isQueueThreadId } from '../storage/domains/memory/queue-thread';
 import type { MessageList } from './message-list';
 import type { MastraDBMessage } from './message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from './signals';
@@ -94,7 +95,7 @@ export function dbMessagesToStateSignals(
 ): ActiveStateSignal[] {
   return sortStateSignals(
     messages
-      .filter(message => message.role === 'signal')
+      .filter(message => message.role === 'signal' && !isQueueThreadId(message.threadId))
       .map(message => {
         try {
           return mastraDBMessageToSignal(message);
