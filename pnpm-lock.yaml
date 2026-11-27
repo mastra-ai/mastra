@@ -1340,6 +1340,9 @@ importers:
         specifier: ^3.7.0
         version: 3.7.0
     devDependencies:
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config

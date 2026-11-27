@@ -49,7 +49,7 @@ export default defineConfig(options => ({
     neverBundle: [/^@mastra\/core/, /^@tanstack\/react-query/],
   },
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@internal/factory-contract']));
     await rewritePathAliases(process.cwd());
   },
 }));
