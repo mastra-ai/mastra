@@ -129,47 +129,184 @@ export class PlatformProjects {
   }
 }
 
+export type PlatformEnvironmentType = 'production' | 'staging' | 'preview';
+
 export interface PlatformEnvironment {
   id: string;
   projectId: string;
   name: string;
   slug: string;
-  type: 'production' | 'staging' | 'preview';
+  type: PlatformEnvironmentType;
   branch: string | null;
+  region: string | null;
+  /** Where the environment's deployed server answers, once it has been deployed. */
+  instanceUrl: string | null;
+  customServerUrl: string | null;
+  /**
+   * The environment's variables. Where the project keeps secrets encrypted, a secret's value reads as
+   * `__mastra_secret__`; sending that value back keeps the stored secret.
+   */
+  envVars: Record<string, string> | null;
+  /** Names of the variables the project's databases add at deploy time. Their values are never returned. */
+  managedEnvVarNames?: string[];
   [field: string]: unknown;
 }
 
 export interface CreatePlatformEnvironmentInput {
   name: string;
-  type: 'production' | 'staging' | 'preview';
+  type: PlatformEnvironmentType;
+  /** Git branch that deploys to this environment on push. */
   branch?: string;
   region?: string;
+  customServerUrl?: string;
+  envVars?: Record<string, string>;
 }
 
-/** A project's environments. Databases and file systems can be scoped to one. */
+export interface UpdatePlatformEnvironmentInput {
+  name?: string;
+  /** Git branch that deploys to this environment on push. `null` unbinds it. */
+  branch?: string | null;
+  customServerUrl?: string | null;
+  /** Replaces all of the environment's variables. Use `setVars()` and `unsetVars()` to change some. */
+  envVars?: Record<string, string>;
+}
+
+export interface DeletedPlatformEnvironment {
+  deletedAt?: string;
+  /** Until when `restore()` can bring the environment back. `null` for an immediate delete. */
+  undoUntil: string | null;
+  /** Set when an environment that was already deleted is torn down immediately. */
+  teardownAfter?: string;
+}
+
+export type PlatformDeployStatus =
+  | 'queued'
+  | 'uploading'
+  | 'starting'
+  | 'building'
+  | 'deploying'
+  | 'running'
+  | 'sleeping'
+  | 'stopped'
+  | 'failed'
+  | 'crashed'
+  | 'cancelled'
+  | 'unknown';
+
+export interface PlatformDeploy {
+  id: string;
+  environmentId: string;
+  status: PlatformDeployStatus;
+  instanceUrl: string | null;
+  mastraVersion: string | null;
+  error: string | null;
+  createdAt: string | null;
+  githubBranch: string | null;
+  githubCommitSha: string | null;
+  [field: string]: unknown;
+}
+
+/**
+ * A project's environments: their variables, deploys, and lifecycle. Databases, file systems,
+ * sandboxes and browsers run in one.
+ */
 export class PlatformEnvironments {
   constructor(
     private readonly api: PlatformApi,
     private readonly projectId: string,
   ) {}
 
+  #path(environmentId?: string, rest = '') {
+    const base = `/v1/projects/${id(this.projectId)}/environments`;
+    return environmentId === undefined ? base : `${base}/${id(environmentId)}${rest}`;
+  }
+
   async list(): Promise<PlatformEnvironment[]> {
-    return (
-      await this.api.request<{ environments: PlatformEnvironment[] }>(
-        'GET',
-        `/v1/projects/${id(this.projectId)}/environments`,
-      )
-    ).environments;
+    return (await this.api.request<{ environments: PlatformEnvironment[] }>('GET', this.#path())).environments;
   }
 
   async create(input: CreatePlatformEnvironmentInput): Promise<PlatformEnvironment> {
+    return (await this.api.request<{ environment: PlatformEnvironment }>('POST', this.#path(), input)).environment;
+  }
+
+  async get(environmentId: string): Promise<PlatformEnvironment> {
+    return (await this.api.request<{ environment: PlatformEnvironment }>('GET', this.#path(environmentId))).environment;
+  }
+
+  async update(environmentId: string, input: UpdatePlatformEnvironmentInput): Promise<PlatformEnvironment> {
+    const { environment } = await this.api.request<{ environment: PlatformEnvironment | null }>(
+      'PATCH',
+      this.#path(environmentId),
+      input,
+    );
+    if (!environment) {
+      throw new MastraPlatformError(`Environment ${environmentId} was deleted during the update`, 404, null);
+    }
+    return environment;
+  }
+
+  /**
+   * Sets variables, keeping the others. Reads the variables and writes them all back, so a change
+   * someone else saves in between is overwritten. Takes effect on the next deploy or `restart()`.
+   */
+  async setVars(environmentId: string, vars: Record<string, string>): Promise<PlatformEnvironment> {
+    const { envVars } = await this.get(environmentId);
+    return this.update(environmentId, { envVars: { ...envVars, ...vars } });
+  }
+
+  /** Removes variables, keeping the others. Same caveats as `setVars()`. */
+  async unsetVars(environmentId: string, names: string[]): Promise<PlatformEnvironment> {
+    const envVars = { ...(await this.get(environmentId)).envVars };
+    for (const name of names) delete envVars[name];
+    return this.update(environmentId, { envVars });
+  }
+
+  /**
+   * Deletes the environment. It can be restored until `undoUntil`; `immediate` skips that window
+   * and tears it down on the next pass.
+   */
+  async delete(environmentId: string, options: { immediate?: boolean } = {}): Promise<DeletedPlatformEnvironment> {
+    const query = options.immediate ? '?immediate=true' : '';
+    const { success: _, ...deleted } = await this.api.request<DeletedPlatformEnvironment & { success: true }>(
+      'DELETE',
+      this.#path(environmentId, query),
+    );
+    return deleted;
+  }
+
+  /** Brings back an environment deleted within its undo window. */
+  async restore(environmentId: string): Promise<PlatformEnvironment> {
     return (
-      await this.api.request<{ environment: PlatformEnvironment }>(
-        'POST',
-        `/v1/projects/${id(this.projectId)}/environments`,
-        input,
-      )
+      await this.api.request<{ environment: PlatformEnvironment }>('POST', this.#path(environmentId, '/undelete'))
     ).environment;
+  }
+
+  /** Restarts the deployed server, so saved variables take effect without a deploy. */
+  async restart(environmentId: string): Promise<{ id: string; status: string }> {
+    return this.api.request('POST', this.#path(environmentId, '/restart'));
+  }
+
+  /** The environment's deploys, newest first. */
+  async listDeploys(environmentId: string): Promise<PlatformDeploy[]> {
+    return (await this.api.request<{ deploys: PlatformDeploy[] }>('GET', this.#path(environmentId, '/deploys')))
+      .deploys;
+  }
+
+  async getDeploy(environmentId: string, deployId: string): Promise<PlatformDeploy> {
+    return (
+      await this.api.request<{ deploy: PlatformDeploy }>('GET', this.#path(environmentId, `/deploys/${id(deployId)}`))
+    ).deploy;
+  }
+
+  /** A deploy's build and runtime logs. */
+  async deployLogs(environmentId: string, deployId: string): Promise<string> {
+    return (await this.api.request<{ logs: string }>('GET', this.#path(environmentId, `/deploys/${id(deployId)}/logs`)))
+      .logs;
+  }
+
+  /** Cancels a deploy that is still queued or uploading. */
+  async cancelDeploy(environmentId: string, deployId: string): Promise<{ id: string; status: PlatformDeployStatus }> {
+    return this.api.request('POST', this.#path(environmentId, `/deploys/${id(deployId)}/cancel`));
   }
 }
 

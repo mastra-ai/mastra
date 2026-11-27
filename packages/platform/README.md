@@ -111,6 +111,26 @@ const files = await project.filesystems.create({ environmentId: production.id, n
 
 Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
 
+### Environments
+
+`project.environments` manages a project's environments: their variables, deploys, and lifecycle.
+
+```ts
+const staging = await project.environments.create({ name: 'Staging', type: 'staging', branch: 'develop' });
+
+// Change some variables and keep the rest. They take effect on the next deploy or restart.
+await project.environments.setVars(staging.id, { LOG_LEVEL: 'debug', OPENAI_API_KEY: process.env.OPENAI_API_KEY! });
+await project.environments.unsetVars(staging.id, ['LEGACY_FLAG']);
+await project.environments.restart(staging.id);
+
+const [latest] = await project.environments.listDeploys(staging.id);
+console.log(latest.status, await project.environments.deployLogs(staging.id, latest.id));
+
+await project.environments.delete(staging.id); // restore() brings it back until `undoUntil`
+```
+
+Where the project keeps secrets encrypted, a secret reads back as `__mastra_secret__`. `setVars` and `unsetVars` send it back as is, which keeps the stored secret. They read the variables and write them all back, so a change someone else saves in between is lost. Deploying is done with `mastra deploy`.
+
 ### Hosted browser
 
 Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.
