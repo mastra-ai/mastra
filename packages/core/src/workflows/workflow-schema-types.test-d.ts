@@ -2,9 +2,10 @@ import { describe, expectTypeOf, it } from 'vitest';
 import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 import { createWorkflow } from './create';
-import { createStep as createEventedStep } from './evented';
+import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from './evented';
 import type { Step } from './step';
 import { createStep } from './workflow';
 
@@ -420,6 +421,19 @@ describe('Workflow schema type inference', () => {
       mapped.dountil(needsName, async () => true);
       // @ts-expect-error - { wrong: number } is not assignable to { name: string }
       mapped.dowhile(needsName, async () => false);
+    });
+
+    it('keeps an engine workflow with a non-array output registrable on Mastra', () => {
+      const schema = z.object({ n: z.number() });
+      const step = createEventedStep({
+        id: 'evented-step',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => inputData,
+      });
+      const workflow = createEventedWorkflow({ id: 'evented-wf', inputSchema: schema, outputSchema: schema });
+      workflow.then(step).commit();
+      new Mastra({ workflows: { workflow } });
     });
 
     it('checks each mapped array element against a foreach step', () => {

@@ -3140,7 +3140,7 @@ export class Workflow<
             ? TElement extends TStepInputSchema
               ? TStepInputSchema
               : TElement
-            : never,
+            : any,
           TSchemaOut,
           any,
           any,
