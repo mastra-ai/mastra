@@ -323,6 +323,7 @@ export type McE2eStartMastraCodeAppOptions = {
       | 'inlineQuestions'
       | 'processMemoryDiagnostics'
       | 'resumeThreadId'
+      | 'startNewThread'
       | 'verbose'
     >
   >;

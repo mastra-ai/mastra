@@ -260,6 +260,35 @@ describe('AgentController.createSession — cross-session isolation', () => {
     expect(restarted.thread.requireId()).toBe(first.thread.requireId());
   });
 
+  it('skips the latest thread when resumeLatestThread is false', async () => {
+    const storage = new InMemoryStore();
+    const projectPath = '/tmp/mastra-project';
+    const firstController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await firstController.init();
+    const first = await firstController.createSession();
+    const savedThreadId = first.thread.requireId();
+
+    const restartedController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await restartedController.init();
+    const deferred = await restartedController.createSession({ createInitialThread: false, resumeLatestThread: false });
+    expect(deferred.thread.getId()).toBeNull();
+
+    const eagerController = createController(storage, {
+      resourceId: 'current-resource',
+      initialState: { projectPath },
+    });
+    await eagerController.init();
+    const eager = await eagerController.createSession({ resumeLatestThread: false });
+    expect(eager.thread.requireId()).not.toBe(savedThreadId);
+    expect((await eager.thread.list()).map(thread => thread.id)).toContain(savedThreadId);
+  });
+
   it('binds request-context thread setting writes to the originating thread', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();

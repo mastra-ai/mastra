@@ -11,8 +11,8 @@ export type StartupResumeIssue =
 
 /** `mastracode --new`: leave the session pending a new thread instead of resuming the latest one. */
 export async function startNewThreadOnStartup(state: TUIState): Promise<void> {
-  if (state.local) await startPendingNewThread(state, state.local);
-  else state.pendingNewThread = true;
+  if (state.local && state.session.thread.getId()) await startPendingNewThread(state, state.local);
+  state.pendingNewThread = true;
 }
 
 /**

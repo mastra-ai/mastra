@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "User: Reply with the new thread phrase.",
+        "systemMessage": "you will generate a short title",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC new thread title"
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Reply with the new thread phrase.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC new thread response"
+      }
+    }
+  ]
+}

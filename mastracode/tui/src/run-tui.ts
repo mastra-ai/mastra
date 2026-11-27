@@ -216,6 +216,7 @@ async function bootLocal(
     subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
+    ...(startNewThread ? { resumeLatestThread: false } : {}),
     ...launcherConfig,
   });
   controller = result.controller;
@@ -606,6 +607,12 @@ async function main() {
     process.exit(1);
   };
 
+  const rejectNewThreadFlag = (reason: string) => {
+    if (!newThreadFlag.startNewThread) return;
+    process.stderr.write(`--new starts the interactive TUI; ${reason}\n`);
+    process.exit(1);
+  };
+
   let resumeThreadId: string | undefined;
   try {
     resumeThreadId = parseResumeThreadId(tuiArgv.slice(2));
@@ -622,12 +629,16 @@ async function main() {
 
   const headless = hasHeadlessFlag(process.argv);
   if (shouldRunHeadless(process.argv, resumeThreadId, headless)) {
-    if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
+    if (headless) {
+      rejectInitialPromptFlag('use --prompt for headless runs');
+      rejectNewThreadFlag('headless runs already start a new thread unless --continue or --thread is passed');
+    }
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
   if (process.argv.includes('--acp')) {
     rejectInitialPromptFlag('it cannot be combined with --acp');
+    rejectNewThreadFlag('it cannot be combined with --acp');
     const { acpMain } = await import('@mastra/code-sdk/acp/index');
     return acpMain({
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
@@ -674,6 +685,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       rejectInitialPromptFlag('no TTY is available, so use --prompt for headless runs');
+      rejectNewThreadFlag('no TTY is available');
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }

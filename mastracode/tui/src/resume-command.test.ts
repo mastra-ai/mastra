@@ -22,6 +22,10 @@ describe('resume command', () => {
       argv: ['node', 'mastracode'],
       startNewThread: true,
     });
+    expect(takeNewThreadFlag(['node', 'mastracode', '--prompt', '--new'])).toEqual({
+      argv: ['node', 'mastracode', '--prompt', '--new'],
+      startNewThread: false,
+    });
     expect(takeNewThreadFlag(['node', 'mastracode', 'resume', 'thread-123'])).toEqual({
       argv: ['node', 'mastracode', 'resume', 'thread-123'],
       startNewThread: false,

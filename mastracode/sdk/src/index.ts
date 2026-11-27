@@ -419,6 +419,8 @@ export interface MastraCodeConfig {
   }) => readonly ModelFallback[] | Promise<readonly ModelFallback[]>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
   createInitialThread?: boolean;
+  /** Bind the latest thread for this project during local boot. Set false to start a new conversation. Default: true */
+  resumeLatestThread?: boolean;
   /** Trusted host instructions resolved outside mutable session state. */
   hostInstructions?:
     | string
@@ -2239,6 +2241,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
     id: sessionId,
     ownerId,
     createInitialThread: config?.createInitialThread,
+    resumeLatestThread: config?.resumeLatestThread,
   });
   await wireSessionConcerns(base, session);
   // Knowledge is opt-in: only touch Knowledge storage when a runtime is configured, and never let

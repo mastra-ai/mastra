@@ -8,9 +8,9 @@ export function parseResumeThreadId(args: string[]): string | undefined {
   return threadId;
 }
 
-/** Removes `--new` from argv and reports whether it was passed. */
+/** Removes `--new` from argv and reports whether it was passed. A `--new` that is the `--prompt` text stays. */
 export function takeNewThreadFlag(argv: string[]): { argv: string[]; startNewThread: boolean } {
-  const rest = argv.filter(arg => arg !== '--new');
+  const rest = argv.filter((arg, index) => arg !== '--new' || ['--prompt', '-p'].includes(argv[index - 1] ?? ''));
   return { argv: rest, startNewThread: rest.length < argv.length };
 }
 
