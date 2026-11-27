@@ -232,7 +232,8 @@ describe('ModalSandbox lifecycle', () => {
     const sandbox = new ModalSandbox({});
     await sandbox._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    const params = createParams();
+    if (!params) throw new Error('sandboxes.create() was not called with params');
     expect(params.env).toBeUndefined();
   });
 
@@ -300,7 +301,9 @@ describe('ModalSandbox volumes', () => {
     const sandbox = new ModalSandbox({ id: 'test-sb', volumes: {} });
     await sandbox._start();
 
-    expect(mockSandboxes.create.mock.calls[0]![2].volumes).toBeUndefined();
+    const params = createParams();
+    if (!params) throw new Error('sandboxes.create() was not called with params');
+    expect(params.volumes).toBeUndefined();
   });
 
   it('carries volumes over to clones', async () => {

@@ -161,7 +161,7 @@ export class ModalSandbox extends MastraSandbox {
    * whole second and capped at Modal's 24-hour maximum. If the template set
    * `timeoutMs`, it stays the clone's hard lifetime, raised to the idle window
    * when shorter. Otherwise the clone gets Modal's 24-hour maximum, so the idle
-   * timeout does the teardown and active commands are not cut off. A value of 0
+   * timeout does the teardown; that 24-hour cap still ends longer commands. A value of 0
    * or less turns the idle timeout off and keeps the inherited `timeoutMs`.
    * `options.sandboxId` is ignored because Modal reconnects by logical `id`.
    */
