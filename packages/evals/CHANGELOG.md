@@ -1,5 +1,14 @@
 # @mastra/evals
 
+## 1.10.13-alpha.1
+
+### Patch Changes
+
+- Fixed trajectory scorers scoring a correct tool call as wrong when its arguments had the same values but the keys came in a different order. A repeated tool call whose arguments differ only in key order is now reported as redundant. ([#31713](https://github.com/mastra-ai/mastra/pull/31713))
+
+- Updated dependencies [[`6af07e7`](https://github.com/mastra-ai/mastra/commit/6af07e76acda2c15c9b85675a428baab774d8606), [`116f675`](https://github.com/mastra-ai/mastra/commit/116f6755907feea0c97d78c0b9d22fe0df436823), [`5af764a`](https://github.com/mastra-ai/mastra/commit/5af764a61c49ccb7587ab45afc82e8c65830f419), [`a414673`](https://github.com/mastra-ai/mastra/commit/a414673fc9f725e40ec24cfc83eb84554ed514a2), [`237add3`](https://github.com/mastra-ai/mastra/commit/237add377a4006b02336800155140ccfb9cd86d3), [`cfa1aea`](https://github.com/mastra-ai/mastra/commit/cfa1aea7e917c810c21705fa197af7c832d0b951), [`afdf069`](https://github.com/mastra-ai/mastra/commit/afdf069f29d34a2d51b7e458b071c42d23e6b2c4), [`d890f2d`](https://github.com/mastra-ai/mastra/commit/d890f2dacbb5f62fe809ed165e42278810eb66bd), [`5793d03`](https://github.com/mastra-ai/mastra/commit/5793d03b44a6e59a8a63873ed2a0ddc1b9a20a4d), [`b5755a5`](https://github.com/mastra-ai/mastra/commit/b5755a5e10386f424c3ec76663ea6a57543c648a)]:
+  - @mastra/core@1.87.0-alpha.4
+
 ## 1.10.13-alpha.0
 
 ### Patch Changes

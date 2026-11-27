@@ -1,5 +1,125 @@
 # @mastra/factory
 
+## 0.32.0-alpha.4
+
+### Minor Changes
+
+- A person's move now interrupts a running phase on workflow boards. With `createWorkflowBoardEngine`, dragging a card whose phase's run is going into another phase that runs work used to be refused with `card_busy`. The engine now stops the card's runs, waits up to two minutes for them to end, and commits the move. A run that is still going after that, that another Factory process holds, or that runs in someone else's private session keeps the `card_busy` refusal. The default engine still refuses it. ([#31633](https://github.com/mastra-ai/mastra/pull/31633))
+
+  Deleting a card now ends its `factory-board` run. Custom engines can hear of a delete through the new optional `cardDeleted`, and reach a card's runs through the new optional `runs` on the engine context:
+
+  ```ts
+  const boardEngine: FactoryBoardEngineFactory = context => {
+    const inner = createDispatcherBoardEngine(context);
+    return {
+      ...inner,
+      requestMove: request => inner.requestMove(request),
+      requestPlacement: placement => inner.requestPlacement(placement),
+      runEnded: (binding, engine) => inner.runEnded(binding, engine),
+      cardDeleted: async card => console.log('deleted', card.workItemId),
+    };
+  };
+  ```
+
+- Added a later answer for board moves on the workflow board engine. `POST /work-items/:id/transition` now answers `202` with an `inputId` once the move passes its first checks, and the move's answer follows on the project's feed stream as a `move` event with the same `inputId`. The board keeps the card moving until that event arrives and shows the reason when the move was refused. Moves that fail the first checks still answer `409` or `422`, and the default board engine still answers `200` with the result. ([#31636](https://github.com/mastra-ai/mastra/pull/31636))
+
+  Board engines can opt in with the new optional `submitMove`:
+
+  ```ts
+  const engine: FactoryBoardEngine = {
+    ...inner,
+    submitMove: async request => ({ inputId: crypto.randomUUID(), settled: inner.requestMove(request) }),
+  };
+  ```
+
+- Platform Linear now runs on Mastra Connect. `PlatformLinearIntegration` reads every workspace through its project-linked `linear` connection, reads Linear's webhooks from each connection's platform event log through the shared Connect event poller, and reconciles hourly. ([#30365](https://github.com/mastra-ai/mastra/pull/30365))
+
+  - Workspaces connected before this change hold their tokens on the platform. Factory moves them onto Mastra Connect on its own, at boot and whenever the hourly check finds one left. Their sources, routing and cards carry over unchanged. Until a workspace has moved, its status reads `migration_required`; there is no fallback to the old platform routes.
+  - Before upgrading, grant the Factory's Platform credential the `integrations:write` permission; moving a workspace and linking its connection to the project both need it. The move covers the whole organization and can't be undone. Factory deployments in the organization that haven't been upgraded keep serving moved workspaces through the platform's older Linear routes, so deployments can be upgraded in any order.
+  - Each workspace is moved once and becomes a single Connect connection. A workspace that has already moved is never moved again, even when its connection isn't linked to this Factory's project; the status and diagnostics list it under `migration.notLinked`, and an admin links it in the platform.
+  - **Settings → Work Intake** shows a move in progress, a stalled move and any skipped workspaces. Organization admins can retry it with **Retry now**, or with a request made as an organization admin:
+
+    ```bash
+    curl -X POST "$FACTORY_URL/web/integrations/platform/linear/migrate"
+    ```
+
+  - A Linear webhook updates only cards that already track its issue, and only in the organization that owns the connection it came through. Where that can't be told (an org-level connection on a deployment serving several organizations), only cards that know the issue's Linear id are updated, never one matched by its identifier alone.
+  - On a Platform server, Linear connects in a Mastra Connect window instead of redirecting away from Factory, in Settings, onboarding and the create-Factory wizard. Reconnecting a workspace starts a fresh connection.
+  - The `platform-linear-events` worker and the `/auth/linear/*` routes are gone from Platform Linear. Self-managed `LinearIntegration` is unchanged.
+
+- Added step states to the workflow board engine. A card's `factory-board` run now records what the card is doing (`resting`, `awaiting_start`, `running`, `probing`, `awaiting_approval`, `needs_attention`, `terminal`), with its phase, how many runs ended there without an outcome, and the last outcome. Read it with the engine's new optional `describe`: ([#31630](https://github.com/mastra-ai/mastra/pull/31630))
+
+  ```ts
+  const engine = createWorkflowBoardEngine(context);
+  const doing = await engine.describe({ workItemId });
+  // { state: 'probing', phase: 'execute', probes: 1 }
+  ```
+
+  A run that ends without an outcome is run once more, and after a second such end the card needs attention, with a reason; a run that ends that way with no retry left flags the card at once. A Factory host answers 404 for Mastra's workflow routes on the board engine's workflows and leaves them out of its built-in MCP endpoint, so one organization can't read another's cards there. A session waiting on a person (a submitted plan, a held tool call) leaves its card awaiting approval; custom engines can hear of it through the new optional `runPaused(binding, 'approval')`. The default engine behaves as before.
+
+- Redesigned board settings in the Factory UI as one canvas. Before, phases, rules and card moves each had their own page. Now the board's name and description head the page as its title, edited where they're shown, with Reset and Delete in the menu beside the name. Below, the board's phases run top to bottom, and each rule sits beside the phase it files items into, with a line into that phase's card and how many items it filed in the last 30 days. Clicking a phase or a rule opens it in a side panel. Phases and the side panel are wide enough to read rule names and moves in full, and the links between cards meet at ports on their edges and round their corners. The links stay quiet in dark mode, and the Routing tab draws its links the same way. The canvas centers on the page and glides aside only as far as it must when the side panel opens, so it no longer scrolls sideways when it fits. The panel slides in and out, stays in place when you switch from a phase to a rule, and eases to its new height. A condition eases open when you click it to edit it, and closed again. ([#31649](https://github.com/mastra-ai/mastra/pull/31649))
+
+  **Rules**
+
+  - A rule's panel shows its trigger, its conditions and where it sends items as editable cells, plus the order it's checked in with the other rules on that trigger. Arrows beside each rule in that order move it earlier or later.
+  - Each condition offers "+ And" and "+ Or", and the word between two conditions switches its group between all must match and any can match.
+  - The canvas dims a rule that a rule above it always beats, and marks a phase no rule leads to. If the rules don't load, it says so.
+  - Pointing at a rule lists its conditions. On a numbered rule, it also lights the other rules on its trigger and names the rules checked before it.
+  - A rule from another board that moves cards here shows Off when it's switched off. One that names a phase this board no longer has is listed under "Into a removed phase".
+  - A new rule waits for you to pick a phase instead of defaulting to the board's first one.
+  - Add a rule from the "+ Rule" that shows beside a phase when you point at it. The rule starts out filing items into that phase.
+  - The Routing tab orders the boards for new items and lists what wasn't routed. Each board there links to all its rules. A Not routed item says when no board's rules match it, and Route again says to change a board's rules first.
+  - At the top of the canvas, a "New issues and pull requests" card says where the board stands in the intake order. A line runs from it to every trigger new items arrive on, so you see which rules they reach and in which phases they land. Triggers wear the same icons on the canvas and in the Routing tab.
+
+  **Phases**
+
+  - Phase edits share one draft with a save bar. Leaving with unsaved changes asks first. The phase panel shows its sections as steps joined by a line, in the order a card goes through them.
+  - A phase's "Only when" conditions for starting and approving use the same condition cells as rules, and say why a condition can't be saved. The JSON editor for them is gone.
+  - Instructions and goal are written in a markdown editor.
+  - A phase card flags a skill the project doesn't have or can't load, and the first phase says new cards start there. The phase panel links to all skills and, when you can edit them, to a new one.
+  - Screen readers hear that Alt+Up and Alt+Down move a phase, and where it landed.
+  - Dragging a phase, or a board in the Routing tab, moves the others aside as you drag, so you see the new order before you drop.
+  - Add a phase from the "+ Phase" button that shows halfway along the link between two phases when you point at it, or below the last one. You name it in a card right where it will stand, in place of the old dialog.
+
+  **Testing**
+
+  - Paste an issue or pull request URL into the bar at the bottom. The canvas lights the rules and phases it went through, and the side panel explains each step. Until there's a result, the panel says which links it can read.
+
+  **On a phone**
+
+  - The canvas runs in one column as wide as the screen. Each phase's rules sit above its card, and the links run down the left edge. The view tabs scroll away with the flow.
+  - A phase, a rule or a test opens in a bottom sheet over the toolbar. Swipe it down to close it.
+  - "+ Rule" and "+ Phase" always show, since there's no pointer to bring them up.
+  - The Routing tab stacks its sources above the intake order.
+
+  Links to the old rules and card-move pages now open the canvas. The Cards tab goes back to the board view you last used.
+
+### Patch Changes
+
+- The Factory now links each of the organization's Jira, incident.io, GitLab and Vanta connections to its Mastra platform project at most once. ([#30365](https://github.com/mastra-ai/mastra/pull/30365))
+
+  - A connection you remove from the project, on its **Connect** page in Mastra Platform, stays removed when the Factory restarts. A connection created at the organization level later is linked on the next startup.
+  - `POST /web/integrations/platform/:provider/link-connections` also links again connections that were removed from the project. Connections removed from the project are listed under `detached` in the integration's diagnostics and connections listing. As an organization admin:
+
+    ```bash
+    curl -X POST "$FACTORY_URL/web/integrations/platform/jira/link-connections"
+    ```
+
+  - If the Factory can't read which connections the project has had, it links nothing that startup and tries again on the next one.
+  - While a Vanta connection is removed from the project, the Vanta sync waits rather than read its vulnerabilities as resolved.
+
+- Factory agents still recover a sandbox that stopped responding with `factory_recreate_sandbox`. The tool now warns that anything not saved outside the sandbox may be lost, instead of assuming a git checkout. ([#31668](https://github.com/mastra-ai/mastra/pull/31668))
+
+- Dates and times in Factory now follow the browser's locale and clock. Session timelines used to force 24-hour times, and activity chart hours had no minutes in 24-hour browsers (`9 – 15` is now `09:00 – 15:00`). ([#31293](https://github.com/mastra-ai/mastra/pull/31293))
+
+- Moved Skills into Settings in the Factory UI. Settings › Skills lists every skill in the project with the board phases that run it, and each phase links to its place on the board's canvas. A skill and the new skill form open in Settings too. Opening a skill from a phase keeps your place, so Back to app returns to that phase. Old skill links beside a board redirect to Settings. ([#31655](https://github.com/mastra-ai/mastra/pull/31655))
+
+- Updated dependencies [[`6af07e7`](https://github.com/mastra-ai/mastra/commit/6af07e76acda2c15c9b85675a428baab774d8606), [`116f675`](https://github.com/mastra-ai/mastra/commit/116f6755907feea0c97d78c0b9d22fe0df436823), [`5af764a`](https://github.com/mastra-ai/mastra/commit/5af764a61c49ccb7587ab45afc82e8c65830f419), [`dbcd013`](https://github.com/mastra-ai/mastra/commit/dbcd013833a593ef3d1f258b48569c12527fc144), [`a414673`](https://github.com/mastra-ai/mastra/commit/a414673fc9f725e40ec24cfc83eb84554ed514a2), [`237add3`](https://github.com/mastra-ai/mastra/commit/237add377a4006b02336800155140ccfb9cd86d3), [`cfa1aea`](https://github.com/mastra-ai/mastra/commit/cfa1aea7e917c810c21705fa197af7c832d0b951), [`afdf069`](https://github.com/mastra-ai/mastra/commit/afdf069f29d34a2d51b7e458b071c42d23e6b2c4), [`d890f2d`](https://github.com/mastra-ai/mastra/commit/d890f2dacbb5f62fe809ed165e42278810eb66bd), [`5793d03`](https://github.com/mastra-ai/mastra/commit/5793d03b44a6e59a8a63873ed2a0ddc1b9a20a4d), [`b5755a5`](https://github.com/mastra-ai/mastra/commit/b5755a5e10386f424c3ec76663ea6a57543c648a), [`ca62f91`](https://github.com/mastra-ai/mastra/commit/ca62f91089f167ebc497b418d3a152c45f4dcf4c)]:
+  - @mastra/core@1.87.0-alpha.4
+  - @mastra/code-sdk@1.22.0-alpha.4
+  - @mastra/auth-workos@1.7.1-alpha.0
+  - @mastra/mcp@2.11.0
+
 ## 0.32.0-alpha.3
 
 ### Minor Changes
