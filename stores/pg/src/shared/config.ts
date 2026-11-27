@@ -72,6 +72,13 @@ export interface PostgresBaseConfig {
    * apply them. See {@link RetentionConfig}.
    */
   retention?: RetentionConfig;
+  /**
+   * For transactions with a deadline: how long, in ms, a transaction may reuse the statement and
+   * lock timeouts it set instead of setting them before every statement. It saves a round trip
+   * per statement; a statement may stop up to this much earlier than its deadline allows. See
+   * `TransactionTimeoutOptions`. @default 0 @experimental
+   */
+  transactionTimeoutHeadroomMs?: number;
 }
 
 /**
