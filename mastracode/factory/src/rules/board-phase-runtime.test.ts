@@ -283,7 +283,19 @@ async function startFactory(
   const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
   const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
-  return { project, workItems, card, read, decisionsFor, close, storage, mastra, send, projectRepository };
+  return {
+    project,
+    workItems,
+    card,
+    read,
+    decisionsFor,
+    close,
+    storage,
+    mastra,
+    send,
+    projectRepository,
+    sourceControl,
+  };
 }
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -586,6 +598,66 @@ describe.each([
         expect(history.filter(stage => stage === 'building')).toHaveLength(1);
         expect(history.filter(stage => stage === 'planning')).toHaveLength(1);
         expect(planning).toBe(1);
+      } finally {
+        for (const end of release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  it.runIf(engineName === 'workflow')(
+    "refuses a person's move as busy, stopping nothing, when the phase's run is in another person's private session",
+    async () => {
+      let planning = 0;
+      let aborted = 0;
+      const release = new Set<() => void>();
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
+        planning += 1;
+        const signal = input instanceof Request ? input.signal : init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => (aborted += 1), { once: true });
+          release.add(() => reject(new Error('The test ended.')));
+        });
+      });
+      const runtime = await startFactory(delivery, 'planning', deliverySkills, { boardEngine });
+      try {
+        const { project, card, read, send, workItems, sourceControl } = runtime;
+        const feature = await card('the private feature', []);
+        await vi.waitFor(() => expect(planning).toBeGreaterThan(0), { timeout: 15_000 });
+        // The run's session is someone else's, and private: the person dragging may not drive it.
+        const [seat] = (await workItems.listRunBindings(ORG, project.id, feature.id)).filter(
+          binding => binding.status === 'active',
+        );
+        const session = (await sourceControl.sessions.getBySessionId(seat!.sessionId))!;
+        await sourceControl.sessions.transferOwner({
+          sessionId: session.sessionId,
+          expectedUserId: session.userId,
+          toUserId: 'someone-else',
+        });
+        const hidden = await sourceControl.sessions.setVisibility({
+          sessionId: session.sessionId,
+          visibility: 'private',
+          expectedUserId: 'someone-else',
+        });
+        expect(hidden).toMatchObject({ userId: 'someone-else', visibility: 'private' });
+
+        const drag = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
+          board: 'delivery',
+          stage: 'building',
+          expectedRevision: (await read(feature)).revision,
+          requestId: randomUUID(),
+          cause: 'A person dragged the card',
+        });
+        const answer = await drag.json();
+
+        expect(drag.status, JSON.stringify(answer)).toBe(422);
+        expect(answer.result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+        expect((await read(feature)).stages).toEqual(['planning']);
+        expect(aborted).toBe(0);
+        expect((await workItems.listRunBindings(ORG, project.id, feature.id))[0]?.stopRequestedAt ?? null).toBeNull();
       } finally {
         for (const end of release) end();
         await runtime.close();

@@ -108,16 +108,18 @@ describe('the workflow board engine', () => {
   /** A card whose planning run is going until it is stopped, or forever when `ends` is false. */
   function goingRun(ends: boolean, reached = true) {
     const calls: string[] = [];
+    const stoppedFor: string[] = [];
     let inFlight = true;
     const runs: FactoryCardRuns = {
       inFlight: async () => inFlight,
-      stop: async () => {
+      stop: async (_card, by) => {
         calls.push('stop');
+        stoppedFor.push(by.userId);
         if (ends) setTimeout(() => (inFlight = false), 20);
         return reached;
       },
     };
-    return { calls, runs };
+    return { calls, runs, stoppedFor, again: () => (inFlight = true) };
   }
 
   it('stops the run on a card a person moves into another phase that runs, and commits the move once it ended', async () => {
@@ -138,6 +140,22 @@ describe('the workflow board engine', () => {
     ]);
     expect(kept).toContain('execute');
     expect(kept).not.toContain('interruptedRun');
+  });
+
+  it('stops no run for a move it already answered, asked again as another move', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs, stoppedFor, again } = goingRun(true);
+    const { engine } = replica(storage, runsUrl, undefined, runs);
+    const first = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+    expect(stoppedFor).toEqual(['user-1']);
+
+    // Building's run is going when the same request id comes back, asking for a move the board allows.
+    again();
+    const repeated = await engine.requestMove(await personMove(storage, item.id, 'planning', 'drag-1')());
+
+    expect(repeated).toEqual(first);
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
   });
 
   it.each(['workflow', 'dispatcher'] as const)(

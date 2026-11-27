@@ -3308,18 +3308,26 @@ export class FactoryDecisionDispatcher {
   /**
    * Stops the runs this process holds on the card's active seats, as a person's Stop does: the stop
    * is recorded on the seat first, so its run settles as stopped and isn't run again. A run another
-   * process holds is left alone. Answers whether any run was stopped.
+   * process holds is left alone, and so is a session busy with another thread than the seat's.
+   * `mayStop` says whether whoever asks may drive a seat's session; with one run they may not stop,
+   * none is stopped. Answers whether any run was stopped.
    */
-  async stopRunsOnCard(card: { orgId: string; factoryProjectId: string; workItemId: string }): Promise<boolean> {
-    let stopped = false;
+  async stopRunsOnCard(
+    card: { orgId: string; factoryProjectId: string; workItemId: string },
+    mayStop: (sessionId: string) => Promise<boolean> = async () => true,
+  ): Promise<boolean> {
+    const running: { sessionId: string; abort: () => void }[] = [];
     for (const binding of await this.#activeBindings(card)) {
       const session = await this.#controller.getSession(binding.sessionId);
-      if (!session?.stream.isActive()) continue;
-      await this.#storage.requestRunBindingStop({ orgId: card.orgId, sessionId: binding.sessionId, at: new Date() });
-      session.abort();
-      stopped = true;
+      if (!session?.stream.isActive() || session.thread.getId() !== binding.threadId) continue;
+      if (!(await mayStop(binding.sessionId))) return false;
+      running.push({ sessionId: binding.sessionId, abort: () => session.abort() });
     }
-    return stopped;
+    for (const run of running) {
+      await this.#storage.requestRunBindingStop({ orgId: card.orgId, sessionId: run.sessionId, at: new Date() });
+      run.abort();
+    }
+    return running.length > 0;
   }
 
   async #activeBindings(card: { orgId: string; factoryProjectId: string; workItemId: string }) {

@@ -93,7 +93,7 @@ export interface FactoryBoardEngineContext {
   /** Factory's governed stage-transition service, with every board check and commit hook installed. */
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   /** Reads the card a run ended on, with the outcome its session reported. */
-  workItems: Pick<WorkItemsStorage, 'get'>;
+  workItems: Pick<WorkItemsStorage, 'get'> & Partial<Pick<WorkItemsStorage, 'getTransitionResultByIngress'>>;
   /** The boards cards are filed on, built in and stored. */
   boards: BoardRegistry | ProjectBoardSource;
   /** The runs on a card's sessions, for an engine that stops them when a person moves the card. */
@@ -106,10 +106,11 @@ export interface FactoryCardRuns {
   /** Whether a run is in flight on any of the card's sessions. */
   inFlight(card: CardAddress): Promise<boolean>;
   /**
-   * Stops the runs in flight on the card's sessions, as a person's Stop does; they end on their own
-   * time. Answers whether it stopped any: a run another process holds is out of its reach.
+   * Stops the runs in flight on the card's sessions for the person `by`, as that person's Stop
+   * does; they end on their own time. Answers whether it stopped any: a run another process holds
+   * is out of its reach, and with a run on a session that person may not drive, it stops none.
    */
-  stop(card: CardAddress): Promise<boolean>;
+  stop(card: CardAddress, by: { userId: string }): Promise<boolean>;
 }
 
 export type FactoryBoardEngineFactory = (context: FactoryBoardEngineContext) => FactoryBoardEngine;

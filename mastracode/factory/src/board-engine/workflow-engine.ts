@@ -187,8 +187,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   /**
    * Stops the run in flight on a card a person moves into another phase that runs, and waits for it
    * to end: the person's move wins over the run, instead of being refused while the card is busy.
-   * A run that hasn't ended in time is given up on, and the move goes ahead. A move the board
-   * wouldn't take anyway (another revision, no such edge) stops nothing.
+   * A run that hasn't ended in time keeps its record and its card, and the move is refused as
+   * busy, and so is a move by a person who may not drive the run's session. A move the board
+   * wouldn't take anyway (another revision, no such edge) or already answered stops nothing.
    */
   async #interrupts(request: FactoryTransitionRequest): Promise<boolean> {
     const runs = this.#context.runs;
@@ -204,9 +205,16 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     if (!board || !Object.prototype.hasOwnProperty.call(board.phases, request.stage)) return false;
     if (from === request.stage ? request.reenter !== true : !board.allowsTransition(from, request.stage)) return false;
     if (!phaseMayStartRun(board.phaseKind(request.stage)) || !(await runs.inFlight(request))) return false;
-    // A run another process holds isn't stopped from here, so the move is refused as busy at once
-    // instead of after the wait.
-    if (!(await runs.stop(request))) return false;
+    // A request already answered is answered the same again, whatever it asks now: it moves nothing.
+    const answered = await this.#context.workItems.getTransitionResultByIngress?.(
+      request.orgId,
+      request.factoryProjectId,
+      request.ingress.identity,
+    );
+    if (answered) return false;
+    // A run another process holds, or one on a session the person may not drive, isn't stopped
+    // from here, so the move is refused as busy at once instead of after the wait.
+    if (!(await runs.stop(request, { userId: request.actor.id }))) return false;
     const deadline = Date.now() + this.#interruptWaitMs;
     for (let wait = 50; await runs.inFlight(request); wait = Math.min(wait * 2, 1_000)) {
       // Still going: the run keeps its record and its card, and the move is refused as busy.
