@@ -496,6 +496,28 @@ export function rebindProcessorTools<T extends Record<string, unknown>>(tools: T
   return rebound as T;
 }
 
+/**
+ * Rebuilds a suspended step's tools for the caller resuming it, so nothing built for an earlier
+ * caller runs for this one. Tools a processor added are rebuilt for `requestContext` (#27544).
+ * Every other tool is replaced by the caller's own, or dropped when the caller's build lacks it.
+ * Tools the step did not offer stay out: the model already chose its call.
+ */
+export function refreshStepToolsForCaller<T extends Record<string, unknown>>(
+  stepTools: T,
+  callerTools: Record<string, unknown>,
+  requestContext: RequestContext,
+): T {
+  const next: Record<string, unknown> = {};
+  for (const [name, tool] of Object.entries(stepTools)) {
+    const rebind = (tool as { [rebindToRequestContext]?: (rc: RequestContext) => unknown } | undefined)?.[
+      rebindToRequestContext
+    ];
+    if (rebind) next[name] = rebind(requestContext);
+    else if (name in callerTools) next[name] = callerTools[name];
+  }
+  return next as T;
+}
+
 export function makeCoreToolV5(
   originalTool: ToolToConvert,
   options: ToolOptions,

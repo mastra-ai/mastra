@@ -18,6 +18,7 @@ import type {
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
+import { refreshStepToolsForCaller } from '../../../utils';
 import type { Workspace } from '../../../workspace';
 import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
@@ -130,33 +131,49 @@ export interface ResolveRuntimeOptions {
 
 export { restoreRequestContext };
 
-/** Rebuild a hydrated entry's starting tools for the caller of the segment now running. */
-async function rebuildToolsForSegment(
+/**
+ * Rebuild an entry's tools for the caller of the segment now running: the suspended step's tools,
+ * so an approved call runs with this caller, and the tools later steps start from.
+ */
+export async function rebuildToolsForSegment(
   mastra: Mastra,
   entry: RunRegistryEntry,
   {
     runId,
     agentId,
-    input,
+    agentVersionId,
+    state,
+    options,
     requestContext,
-  }: { runId: string; agentId: string; input: DurableAgenticWorkflowInput; requestContext: RequestContext },
+  }: {
+    runId: string;
+    agentId: string;
+    agentVersionId?: string;
+    state: Pick<DurableAgenticWorkflowInput['state'], 'threadId' | 'resourceId' | 'memoryConfig'>;
+    options?: DurableAgenticWorkflowInput['options'];
+    requestContext: RequestContext;
+  },
 ): Promise<Record<string, CoreTool>> {
-  const resolved = await resolveRunAgent(mastra, agentId, runId, input.agentVersionId);
+  const resolved = await resolveRunAgent(mastra, agentId, runId, agentVersionId);
   const agent = isDurableAgentLike(resolved) && resolved.agent !== resolved ? resolved.agent : resolved;
-  entry.baseTools = await agent.getToolsForExecution({
+  const callerTools = await agent.getToolsForExecution({
     runId,
-    threadId: input.state.threadId,
-    resourceId: input.state.resourceId,
+    threadId: state.threadId,
+    resourceId: state.resourceId,
     requestContext,
-    memoryConfig: input.state.memoryConfig,
-    autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
-    clientTools: input.options?.clientTools as ToolsInput | undefined,
+    memoryConfig: state.memoryConfig,
+    autoResumeSuspendedTools: options?.autoResumeSuspendedTools,
+    clientTools: options?.clientTools as ToolsInput | undefined,
     delegation: entry.delegation,
     methodType: entry.methodType ?? 'stream',
     backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
-    backgroundTaskPolicy: input.options?.backgroundTaskPolicy,
+    backgroundTaskPolicy: options?.backgroundTaskPolicy,
     model: entry.model,
   });
+  entry.tools = refreshStepToolsForCaller(entry.tools ?? {}, callerTools, requestContext);
+  entry.baseTools = callerTools;
+  // The rebuilt tools close over this context and write to it (e.g. the delegation bail flag).
+  entry.toolsRequestContext = requestContext;
   return entry.baseTools;
 }
 
@@ -405,7 +422,9 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       tools = await rebuildToolsForSegment(mastra, globalEntry, {
         runId,
         agentId,
-        input,
+        agentVersionId: input.agentVersionId,
+        state: input.state,
+        options: input.options,
         requestContext: restoreRequestContext(input.requestContextEntries, options.requestContext),
       });
       globalEntry.toolsSegment = stepSegment;

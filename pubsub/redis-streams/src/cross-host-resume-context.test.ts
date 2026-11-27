@@ -120,12 +120,17 @@ describe('evented resume claimed by another host', () => {
       expect(resumed.every(entry => entry.host === 'A' && entry.pid === process.pid)).toBe(true);
 
       const toolExecution = resumed.find(entry => entry.event === 'tool-execute');
-      // COR-1660: tool execution still uses the starting caller's live context on this host.
-      expect(toolExecution).toMatchObject({ user: 'alice', controllerState: 'A', closureResult: 'A' });
+      // The approved tool runs with tools rebuilt for the resuming caller, so the starting caller's
+      // live handles do not reach it. Ordinary keys come from the run snapshot, as in finalization.
+      expect(toolExecution).toMatchObject({ user: 'bob' });
+      expect(toolExecution?.controllerState).toBeUndefined();
+      expect(toolExecution?.closurePresent).toBe(false);
 
-      const resumedSteps = resumed.filter(entry => entry.event !== 'tool-execute');
+      // The resumed segment acts as the resuming caller under the resume's own claim, never as the
+      // caller who started the run.
+      expect(resumed.some(entry => entry.event === 'tool-execute')).toBe(true);
       const initialExecutions = new Set(initial.flatMap(entry => entry.executionIds));
-      for (const entry of resumedSteps) {
+      for (const entry of resumed) {
         expect(entry.user, entry.event).toBe('bob');
         expect(
           entry.executionIds.some(id => initialExecutions.has(id)),
@@ -135,7 +140,7 @@ describe('evented resume claimed by another host', () => {
       // The LLM-step processors see the resume's own values. Finalization restores ordinary keys from the
       // run snapshot by design, so the output processor is only checked for identity above.
       expect(
-        resumedSteps
+        resumed
           .filter(entry => entry.event === 'input-step' || entry.event === 'llm-request')
           .map(({ event, marker }) => ({ event, marker })),
       ).toEqual([
@@ -260,6 +265,10 @@ describe('evented resume claimed by another host', () => {
         expect(entry.controllerState).toBeUndefined();
         expect(entry.closurePresent).toBe(false);
       }
+      // The approved tool runs as the resuming caller too.
+      const executions = resumed.filter(entry => entry.event === 'tool-execute');
+      expect(executions.length).toBeGreaterThan(0);
+      for (const entry of executions) expect(entry.user).toBe('bob');
       // The model step after the approved tool is offered the resuming caller's tools only.
       expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
       expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);

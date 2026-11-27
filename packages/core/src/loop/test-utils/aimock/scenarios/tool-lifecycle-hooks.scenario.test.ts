@@ -675,7 +675,7 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       expect(seen).toEqual(['second']);
     });
 
-    it('refreshes a tool on a later resume that an earlier resume did not rebuild', async () => {
+    it("rebuilds a call-time toolset tool with each resume's hooks", async () => {
       const llm = getMock();
       const firstResume = vi.fn();
       const secondResume = vi.fn();
@@ -702,11 +702,11 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
       });
       expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
 
-      // The first resume omits the toolsets, so tool_b keeps its first-call build.
+      // A resume rebuilds the run's tools from what it passes, so each resume passes the toolsets again.
       await drain(
         await shared.agent.resumeStream(
           { approved: true },
-          { runId: output.runId, hooks: { beforeToolCall: firstResume } },
+          { runId: output.runId, toolsets: { extra: { tool_b: toolB } }, hooks: { beforeToolCall: firstResume } },
         ),
       );
       expect(firstResume).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'tool_a' }));
