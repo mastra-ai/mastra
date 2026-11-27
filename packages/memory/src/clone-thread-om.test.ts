@@ -100,9 +100,10 @@ describe('cloneThread – Observational Memory', () => {
         observedMessageIds: ['msg-src-thread-1-0', 'msg-src-thread-1-1', 'msg-src-thread-1-2'],
       });
 
-      // Clone the thread
+      // Clone the thread, asking for every message so the observed ones are copied too
       const { thread: clonedThread, messageIdMap } = await memory.cloneThread({
         sourceThreadId: 'src-thread-1',
+        options: { messageFilter: {} },
       });
 
       // Verify cloned OM exists on the new thread
@@ -526,7 +527,7 @@ describe('cloneThread – Observational Memory', () => {
       expect(clonedOM!.observedMessageIds!.every(id => clonedMessageIds.includes(id))).toBe(true);
     });
 
-    it('carries the observations into another resource with none of the old messages', async () => {
+    it('carries the observations into another resource with none of the observed messages', async () => {
       // The controller keeps its thread rows in the same store the memory uses, as Mastra Code does.
       const storage = new InMemoryStore();
       memory = new Memory({ storage });
@@ -537,9 +538,15 @@ describe('cloneThread – Observational Memory', () => {
         title: 'OM Test Thread',
         metadata: { projectPath: '/old/home', sandboxAllowedPaths: ['/old/home/worktrees'] },
       });
+      // Memory has observed all three messages, so none of them is in the context window any more.
       await seedThreadScopedOM(memoryStore, 'src-thread-memory-only', {
         activeObservations: '* The old member learned the deploy order',
-        observedMessageIds: ['msg-src-thread-memory-only-0', 'msg-src-thread-memory-only-1'],
+        lastObservedAt: new Date('2024-01-01T10:02:00Z'),
+        observedMessageIds: [
+          'msg-src-thread-memory-only-0',
+          'msg-src-thread-memory-only-1',
+          'msg-src-thread-memory-only-2',
+        ],
       });
 
       const controller = new AgentController({
@@ -569,7 +576,6 @@ describe('cloneThread – Observational Memory', () => {
         expectedResourceId: resourceId,
         expectedProjectPath: '/old/home',
         metadata: { projectPath: '/new/home' },
-        options: { messageFilter: { startDate: new Date('2025-01-01T00:00:00Z') } },
       });
 
       expect(clonedThread.resourceId).toBe('new-team-resource');
@@ -583,7 +589,154 @@ describe('cloneThread – Observational Memory', () => {
       expect((await memoryStore.listMessages({ threadId: 'src-thread-memory-only' })).messages).toHaveLength(3);
       expect(
         (await memoryStore.getObservationalMemory('src-thread-memory-only', resourceId))!.observedMessageIds,
-      ).toHaveLength(2);
+      ).toHaveLength(3);
+    });
+  });
+
+  describe('copies only the messages in the context window', () => {
+    // seedThread writes message i at 10:0i. Memory observed messages 0 and 1, so the context window
+    // holds the observations plus messages 2 and 3.
+    const lastObservedAt = new Date('2024-01-01T10:01:00Z');
+
+    const textsOf = async (threadId: string, resource = resourceId) =>
+      (await (await getMemoryStore(memory)).listMessages({ threadId, resourceId: resource })).messages.map(m =>
+        m.content.parts.map(p => (p.type === 'text' ? p.text : '')).join(''),
+      );
+
+    it('a thread with observational memory copies only the messages after lastObservedAt', async () => {
+      await seedThread('ctx-thread', 4);
+      const memoryStore = await getMemoryStore(memory);
+      await seedThreadScopedOM(memoryStore, 'ctx-thread', {
+        activeObservations: '* Observed messages 0 and 1',
+        lastObservedAt,
+        observedMessageIds: ['msg-ctx-thread-0', 'msg-ctx-thread-1'],
+      });
+
+      const { thread, clonedMessages, messageIdMap } = await memory.cloneThread({ sourceThreadId: 'ctx-thread' });
+
+      // Message 1 sits exactly on lastObservedAt: memory has observed it, so it stays behind.
+      expect(clonedMessages.map(m => m.content.parts[0])).toEqual([
+        { type: 'text', text: 'Message 2' },
+        { type: 'text', text: 'Message 3' },
+      ]);
+      expect(Object.keys(messageIdMap ?? {}).sort()).toEqual(['msg-ctx-thread-2', 'msg-ctx-thread-3']);
+      const clonedOM = await memoryStore.getObservationalMemory(thread.id, resourceId);
+      expect(clonedOM!.activeObservations).toBe('* Observed messages 0 and 1');
+      expect(clonedOM!.observedMessageIds).toEqual([]);
+      // The source keeps everything.
+      expect(await textsOf('ctx-thread')).toHaveLength(4);
+    });
+
+    it('copyThread, which subagent forks use, copies the same messages', async () => {
+      await seedThread('ctx-copy', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-copy', {
+        activeObservations: '* obs',
+        lastObservedAt,
+      });
+
+      const { thread } = await memory.copyThread({ sourceThreadId: 'ctx-copy' });
+
+      expect(await textsOf(thread.id)).toEqual(['Message 2', 'Message 3']);
+    });
+
+    it('a thread without observational memory still copies every message', async () => {
+      await seedThread('ctx-no-om', 4);
+
+      const { clonedMessages } = await memory.cloneThread({ sourceThreadId: 'ctx-no-om' });
+
+      expect(clonedMessages).toHaveLength(4);
+    });
+
+    it('observational memory that has not observed anything yet copies every message', async () => {
+      await seedThread('ctx-unobserved', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-unobserved', { activeObservations: '' });
+
+      const { clonedMessages } = await memory.cloneThread({ sourceThreadId: 'ctx-unobserved' });
+
+      expect(clonedMessages).toHaveLength(4);
+    });
+
+    it("the caller's own message filter wins over the default", async () => {
+      await seedThread('ctx-explicit', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-explicit', {
+        activeObservations: '* obs',
+        lastObservedAt,
+      });
+
+      const everything = await memory.cloneThread({ sourceThreadId: 'ctx-explicit', options: { messageFilter: {} } });
+      const observedOnly = await memory.cloneThread({
+        sourceThreadId: 'ctx-explicit',
+        options: { messageFilter: { messageIds: ['msg-ctx-explicit-0'] } },
+      });
+      const lastThree = await memory.cloneThread({ sourceThreadId: 'ctx-explicit', options: { messageLimit: 3 } });
+
+      expect(everything.clonedMessages).toHaveLength(4);
+      expect(await textsOf(observedOnly.thread.id)).toEqual(['Message 0']);
+      expect(await textsOf(lastThree.thread.id)).toEqual(['Message 1', 'Message 2', 'Message 3']);
+    });
+
+    it('messages held in buffered chunks that are not activated yet are copied, with the chunk ids remapped', async () => {
+      await seedThread('ctx-buffered', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-buffered', {
+        activeObservations: '* obs',
+        lastObservedAt,
+        bufferedObservationChunks: [
+          {
+            id: 'chunk-pending',
+            cycleId: 'cycle-pending',
+            observations: '* buffered, not activated',
+            tokenCount: 5,
+            messageIds: ['msg-ctx-buffered-2', 'msg-ctx-buffered-3'],
+            messageTokens: 20,
+            lastObservedAt: new Date('2024-01-01T10:03:00Z'),
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+        ],
+      });
+
+      const { thread, messageIdMap } = await memory.cloneThread({ sourceThreadId: 'ctx-buffered' });
+
+      expect(await textsOf(thread.id)).toEqual(['Message 2', 'Message 3']);
+      const clonedOM = await (await getMemoryStore(memory)).getObservationalMemory(thread.id, resourceId);
+      expect(clonedOM!.bufferedObservationChunks![0]!.messageIds).toEqual([
+        messageIdMap!['msg-ctx-buffered-2'],
+        messageIdMap!['msg-ctx-buffered-3'],
+      ]);
+    });
+
+    it('a clone into another resource copies only the messages after lastObservedAt', async () => {
+      await seedThread('ctx-cross', 4);
+      await seedThreadScopedOM(await getMemoryStore(memory), 'ctx-cross', {
+        activeObservations: '* obs',
+        lastObservedAt,
+      });
+
+      const { thread } = await memory.cloneThread({ sourceThreadId: 'ctx-cross', resourceId: 'ctx-other-resource' });
+
+      expect(thread.resourceId).toBe('ctx-other-resource');
+      expect(await textsOf(thread.id, 'ctx-other-resource')).toEqual(['Message 2', 'Message 3']);
+      const clonedOM = await (await getMemoryStore(memory)).getObservationalMemory(thread.id, 'ctx-other-resource');
+      expect(clonedOM!.activeObservations).toBe('* obs');
+    });
+
+    it("resource-scoped memory uses the resource's lastObservedAt, in the same resource", async () => {
+      await seedThread('ctx-res-same', 4);
+      await seedResourceScopedOM(await getMemoryStore(memory), { activeObservations: '* shared', lastObservedAt });
+
+      const { thread } = await memory.cloneThread({ sourceThreadId: 'ctx-res-same' });
+
+      expect(await textsOf(thread.id)).toEqual(['Message 2', 'Message 3']);
+    });
+
+    it("resource-scoped memory uses the resource's lastObservedAt, into another resource", async () => {
+      await seedThread('ctx-res-cross', 4);
+      await seedResourceScopedOM(await getMemoryStore(memory), { activeObservations: '* shared', lastObservedAt });
+
+      const { thread } = await memory.cloneThread({ sourceThreadId: 'ctx-res-cross', resourceId: 'ctx-res-other' });
+
+      expect(await textsOf(thread.id, 'ctx-res-other')).toEqual(['Message 2', 'Message 3']);
+      const clonedOM = await (await getMemoryStore(memory)).getObservationalMemory(null, 'ctx-res-other');
+      expect(clonedOM!.activeObservations).toBe('* shared');
     });
   });
 });
