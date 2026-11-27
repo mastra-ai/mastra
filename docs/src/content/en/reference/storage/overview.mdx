@@ -66,16 +66,14 @@ The schema definitions below cover the built-in database-backed tables documente
     name: 'thread_id',
     type: 'text',
     description:
-      'Parent thread reference. Postgres and libSQL store `mastra-pending-signals:<threadId>` while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which message reads never return.',
-    constraints: [
-      { type: 'foreignKey', value: 'threads.id' },
-      { type: 'nullable', value: false },
-    ],
+      'Parent thread reference (`threads.id`). Postgres and libSQL store `mastra-pending-signals:<threadId>` instead while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which no message read returns, so that value matches no thread.',
+    constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'resourceId',
     type: 'text',
-    description: 'ID of the resource that owns this message',
+    description:
+      'ID of the resource that owns this message. Postgres and libSQL store `NULL` while the row is a pending signal.',
     constraints: [{ type: 'nullable', value: true }],
   },
   {

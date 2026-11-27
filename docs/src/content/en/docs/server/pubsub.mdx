@@ -129,7 +129,7 @@ The backends that redeliver are marked **Yes** in the [Choosing a backend](#choo
 
 Messages and other signals sent to an evented agent's active run wait until a model request of the run takes them. Where they wait depends on the storage of the agent's [memory](/docs/memory/overview):
 
-- **Storage that keeps pending signals**: Each signal is a hidden row of the memory messages table until the run takes it, and message reads skip it. When the run saves its messages, the row becomes the message the signal would have been. A transient signal is deleted instead. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep pending signals.
+- **Storage that keeps pending signals**: Each signal waits as a row of the memory messages table under the reserved thread ID `mastra-pending-signals:<threadId>`, with no resource ID, and no message read returns it. When the run saves its messages, the row becomes the message the signal would have been. A transient signal is deleted instead. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep pending signals.
 - **Storage that shares pending signals across processes**: Every process of the deployment reads and writes the same pending signals. A stored signal then reaches the run's next model request in whichever process executes it.
 
 | Storage adapter | Keeps pending signals | Shares them across processes |
