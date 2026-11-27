@@ -940,7 +940,8 @@ export function describeRestartOccurrenceCases({
               .filter(
                 event => event.type === 'workflow.step.run' && event.data.restart?.isParallelOrConditionalRestarted,
               );
-          await expect.poll(() => branchRuns().length).toBe(2);
+          // The dispatch that publishes the branches is its own delivery, with storage reads before it.
+          await expect.poll(() => branchRuns().length, { timeout: 10_000 }).toBe(2);
           await settleDeliveries(branchRuns());
           expect(driver.events.slice(from).filter(event => event.type === 'workflow.step.end')).toEqual([]);
           expect(steps.calls).toEqual({ a: 1, b: 1, c: 1, d: 1 });
