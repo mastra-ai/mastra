@@ -157,7 +157,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'inFlightTimeoutMs',
     type: 'number',
     description:
-      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+      "How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. Keep it above the orchestration worker's heartbeat interval (`leaseRenewIntervalMs`, 10 seconds by default), because below it an evented workflow step that's still running is delivered again each time the timeout passes and the run fails once the delivery limit is reached. `0` disables it.",
     isOptional: true,
     defaultValue: '0',
   },
