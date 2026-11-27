@@ -90,7 +90,7 @@ If some spans haven't reached Mastra when an alert checks, the alert judges an i
 Take a 5-minute window from 10:00 to 10:05:
 
 - Without a wait
-  - The alert checks 10:00 to 10:05 at 10:05. If spans from 10:03 and 10:04 are still in flight, the alert judges the window using only 3 minutes of data. A single error can spike the error rate on that smaller sample, firing an alert that resolves itself once the remaining spans land.
+  - The alert checks 10:00 to 10:05 at 10:05. If spans from 10:03 and 10:04 are still in flight, the alert judges the window using only 3 minutes of data. A single error can spike the error rate on that smaller sample, so the alert fires and then resolves at a later check, after the remaining spans arrive.
 - With a 2-minute wait
   - The alert checks that same 10:00 to 10:05 window at 10:07, once all 5 minutes of data have filled in. Checks run on the same schedule and windows keep the same length, but alerts fire later by the wait amount. The trade-off is that alerts fire, and resolve, later by the same amount.
 
@@ -99,12 +99,12 @@ Take a 5-minute window from 10:00 to 10:05:
 Spans usually arrive within seconds of finishing, so most alerts don't need a wait. Late spans mainly happen in two cases:
 
 - Serverless environments: A function can pause after returning a response, before it finishes sending its spans.
-- Long agent runs or workflows: Spans are placed into windows based on when they started, not when they arrived. Because the root span for a full run isn't sent until the run finishes, a 3-minute run starting at 10:04 arrives at 10:07 and misses the 10:05 check. (Inner spans like model and tool calls are still sent as each one finishes.)
+- Long agent runs or workflows: Spans are placed into windows based on when they started. Because the root span for a full run isn't sent until the run finishes, a 3-minute run starting at 10:04 arrives at 10:07 and misses the 10:05 check. (Inner spans like model and tool calls are still sent as each one finishes.)
 
 #### How much wait time to set
 
 - No wait for most alerts, so you hear about problems as fast as possible.
-- 1 to 2 minutes if you run on serverless, have low or bursty traffic, or see alerts fire and quickly resolve themselves.
+- 1 to 2 minutes if you run on serverless, have low or bursty traffic, or see alerts fire and resolve within a few minutes without any change on your side.
 - The length of a typical run when alerting on full agent runs or workflows, so runs finish before their window is checked.
 
 ## Related

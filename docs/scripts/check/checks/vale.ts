@@ -6,6 +6,7 @@ import { toPosix, walkMdx } from '../content'
 import { finding } from '../finding'
 import { slugifyRuleName } from '../rules'
 import type { Check, CheckResult, Finding, Severity } from '../types'
+import { VALE_VERSION } from '../../vale/version.mjs'
 import { manifestPath } from './external-docs'
 import { isFormattedFile } from './format'
 
@@ -31,6 +32,15 @@ async function findVale(rootDir: string): Promise<string | undefined> {
   try {
     await execFileAsync('vale', ['--version'])
     return 'vale'
+  } catch {
+    return undefined
+  }
+}
+
+async function valeVersion(vale: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync(vale, ['--version'])
+    return stdout.match(/vale version (\S+)/)?.[1]
   } catch {
     return undefined
   }
@@ -106,6 +116,20 @@ export const valeCheck: Check = {
     const vale = await findVale(ctx.rootDir)
     if (!vale) return unavailable('Vale is not installed, so prose was not checked')
 
+    // Vale releases change how rules match, so a stale local binary reports findings CI doesn't, and the reverse.
+    const versionFinding = valeVersion(vale).then(version =>
+      version && version !== VALE_VERSION
+        ? [
+            finding(
+              'mastra/vale-version',
+              `Vale ${version} is installed, but CI uses ${VALE_VERSION}, so prose findings can differ from CI`,
+              {},
+              { suggestion: 'Run `pnpm vale:download`' },
+            ),
+          ]
+        : [],
+    )
+
     let stdout: string
     try {
       ;({ stdout } = await execFileAsync(vale, ['--output=JSON', '--minAlertLevel=warning', ...files], {
@@ -120,6 +144,6 @@ export const valeCheck: Check = {
       }
       stdout = err.stdout
     }
-    return { findings: valeFindings(ctx.rootDir, JSON.parse(stdout || '{}')) }
+    return { findings: [...(await versionFinding), ...valeFindings(ctx.rootDir, JSON.parse(stdout || '{}'))] }
   },
 }
