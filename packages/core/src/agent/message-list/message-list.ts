@@ -59,6 +59,11 @@ import type {
 } from './state';
 import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
+import {
+  hasServerModelOutput,
+  MODEL_OUTPUT_ORIGIN_KEY,
+  withoutModelOutputOriginInMessage,
+} from './utils/model-output-origin';
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
@@ -196,7 +201,29 @@ function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): Mas
       errorText,
       approval: approval ?? storedCall.toolInvocation.approval,
     };
-    return [{ type: 'tool-invocation' as const, toolInvocation }];
+    const outcomePart: MastraToolInvocationPart = { type: 'tool-invocation' as const, toolInvocation };
+    // applyClientToolModelOutput caches the server-computed toModelOutput projection on
+    // this live part. That mapping is server-generated, not a client rendering, so it
+    // must survive — but only these fields, only on a result, and only when the live part
+    // carries the server stamp (addOne removed any client-sent one) for the stored call's
+    // own tool. Any other client-supplied metadata stays untrusted and is dropped.
+    const liveMastra = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
+    if (
+      state === 'result' &&
+      liveMastra &&
+      hasServerModelOutput(part) &&
+      part.toolInvocation.toolName === storedCall.toolInvocation.toolName
+    ) {
+      const { modelOutput, modelOutputComputed } = liveMastra;
+      outcomePart.providerMetadata = {
+        mastra: {
+          ...(modelOutputComputed ? { modelOutputComputed } : {}),
+          ...(modelOutput != null ? { modelOutput } : {}),
+          [MODEL_OUTPUT_ORIGIN_KEY]: liveMastra[MODEL_OUTPUT_ORIGIN_KEY],
+        },
+      } as unknown as MastraToolInvocationPart['providerMetadata'];
+    }
+    return [outcomePart];
   });
   return { ...live, content: { format: 2, parts } };
 }
@@ -2732,7 +2759,13 @@ export class MessageList {
       });
     }
 
-    const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    let messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
+    // Client-facing sources can never carry the server's model-output stamp: remove it before
+    // the message can merge, reconcile, reach a processor or be saved. Copies on change, since
+    // conversion may return the caller's own object.
+    if (messageSource === 'input' || messageSource === 'context') {
+      messageV2 = withoutModelOutputOriginInMessage(messageV2);
+    }
     if (messageDeclaresAuthoredTurn(message) && messageV2.role === 'user' && !messageDeclaresAuthoredTurn(messageV2)) {
       const metadata = messageV2.content.metadata ?? {};
       const mastra =

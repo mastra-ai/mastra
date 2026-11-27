@@ -77,6 +77,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list/state/types';
+import { stampServerModelOutput, withoutModelOutputOrigin } from '../../../message-list/utils/model-output-origin';
 import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
@@ -2591,7 +2592,7 @@ export function createDurableToolCallStep() {
               const existingMastra = (providerMetadata as any)?.mastra;
               providerMetadata = {
                 ...providerMetadata,
-                mastra: { ...existingMastra, modelOutput },
+                mastra: stampServerModelOutput({ ...existingMastra, modelOutput }),
               };
             }
           } catch (mappingError) {
@@ -2721,7 +2722,7 @@ export function createDurableToolCallStep() {
             // The mapped output came from the unprocessed value; the model must not read it either.
             if (providerMetadata?.mastra && 'modelOutput' in providerMetadata.mastra) {
               const { modelOutput: _unprocessed, ...mastra } = providerMetadata.mastra;
-              providerMetadata = { ...providerMetadata, mastra };
+              providerMetadata = { ...providerMetadata, mastra: withoutModelOutputOrigin(mastra) };
             }
           }
 

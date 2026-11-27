@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
 import type { MessageList, MessageListInput } from '../../message-list';
+import { hasServerModelOutput, stampServerModelOutput } from '../../message-list/utils/model-output-origin';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
 type ToolCall = { toolCallId: string; toolName: string };
@@ -126,6 +127,53 @@ export async function fireClientToolOutputHooks({
   }
 }
 
+function stripModelOutputMarkers(part: { providerMetadata?: unknown }): void {
+  const mastra = (part.providerMetadata as { mastra?: unknown } | undefined)?.mastra;
+  if (!mastra || typeof mastra !== 'object' || !('modelOutput' in mastra || 'modelOutputComputed' in mastra)) return;
+  const {
+    modelOutput: _untrustedOutput,
+    modelOutputComputed: _untrustedMarker,
+    modelOutputOrigin: _untrustedOrigin,
+    ...restMastra
+  } = mastra as Record<string, unknown>;
+  part.providerMetadata = { ...(part.providerMetadata as object), mastra: restMastra };
+}
+
+const isClientTool = (tool: CoreTool) => !tool.execute && tool.type !== 'provider-defined';
+
+/**
+ * Legacy rule for projections without provenance: drop an UNSTAMPED mapping on
+ * a result of a client tool that defines no `toModelOutput`.
+ *
+ * Stamped mappings (see `model-output-origin.ts`) were computed by the server
+ * and are never judged here. An unstamped one predates the stamp or came from
+ * a client; releases before the input strip could persist a client forgery on
+ * a tool the server never maps. History can enter the MessageList late
+ * (memory processors load it in the loop), so the loop calls this right
+ * before every prompt build. It can be deleted once pre-stamp history is
+ * migrated.
+ */
+export function dropUnmappedClientToolMarkers({
+  messageList,
+  tools,
+}: {
+  messageList: MessageList;
+  tools?: Record<string, unknown>;
+}): void {
+  const isUnmapped = (tool: CoreTool | undefined) =>
+    !!tool && isClientTool(tool) && typeof tool.toModelOutput !== 'function';
+  // Look tools up by name only: enumerating them on every step would rescan the caller's tool set.
+  if (!tools) return;
+  for (const message of messageList.get.all.db()) {
+    if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      if (hasServerModelOutput(part)) continue;
+      if (isUnmapped(tools[part.toolInvocation.toolName] as CoreTool | undefined)) stripModelOutputMarkers(part);
+    }
+  }
+}
+
 /**
  * Apply a server-defined `toModelOutput` to client-supplied tool results.
  *
@@ -136,14 +184,21 @@ export async function fireClientToolOutputHooks({
  * `providerMetadata.mastra.modelOutput` — the exact contract the execution
  * path writes — so prompt conversion restores it with no downstream changes.
  *
- * Only this request's input messages are walked: results in memory-recalled
+ * Only this request's input messages are mapped: results in memory-recalled
  * history either already carry the cached mapping from the request that
  * ingested them, or predate it and stay raw — re-mapping them here would
- * re-run user code on every request without ever persisting.
+ * re-run user code on every request without ever persisting. Their stored
+ * mappings on tools that define none are dropped by `dropUnmappedClientToolMarkers`.
  *
  * Mutates the MessageList's stored messages in place on purpose: prompt
  * building reads these same part objects, and messages saved to memory carry
- * the enrichment so reloads are cheap and idempotent.
+ * the enrichment so memory reloads restore it without recomputing.
+ *
+ * Mapping markers found on wire-delivered results of client tools are NOT
+ * trusted: a client could forge `mastra.modelOutput` to inject arbitrary
+ * prompt content, so they are stripped and the mapping is recomputed from the
+ * raw result. Only parts carrying the server stamp keep their markers; the
+ * MessageList removes the stamp from every client-supplied part on add.
  */
 export async function applyClientToolModelOutput({
   messageList,
@@ -155,11 +210,9 @@ export async function applyClientToolModelOutput({
   logger?: Pick<IMastraLogger, 'error'>;
 }): Promise<void> {
   if (!tools) return;
-  const isClientMappedTool = (
-    tool: CoreTool,
-  ): tool is CoreTool & { toModelOutput: NonNullable<CoreTool['toModelOutput']> } =>
-    !tool.execute && tool.type !== 'provider-defined' && typeof tool.toModelOutput === 'function';
-  if (!Object.values(tools).some(isClientMappedTool)) return;
+  if (!Object.values(tools).some(isClientTool)) return;
+
+  dropUnmappedClientToolMarkers({ messageList, tools });
 
   for (const message of messageList.get.input.db()) {
     if (message.role !== 'assistant' || message.content?.format !== 2 || !message.content.parts) continue;
@@ -167,23 +220,29 @@ export async function applyClientToolModelOutput({
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
 
-      const mastraMetadata = part.providerMetadata?.mastra;
-      // Idempotency: skip parts already mapped (retries, durable replays, and
-      // messages reloaded from DB that were enriched on a previous request).
-      if (
-        mastraMetadata &&
-        typeof mastraMetadata === 'object' &&
-        ('modelOutput' in mastraMetadata || mastraMetadata.modelOutputComputed)
-      ) {
-        continue;
-      }
-
       const { toolName, toolCallId } = part.toolInvocation;
       const tool = tools[toolName];
       // Client-side tools only: tools WITH execute get toModelOutput applied at
       // execution time by the tool-call step, and provider-executed tools are
-      // mapped by the provider round trip, not by us.
-      if (!tool || !isClientMappedTool(tool)) continue;
+      // mapped by the provider round trip, not by us. Their stored mapping is
+      // left alone: it cannot be recomputed here, and conversation history
+      // passed back as input (e.g. `response.messages`) relies on it.
+      if (!tool || !isClientTool(tool)) continue;
+
+      // Trust boundary: `mastra.modelOutput` / `modelOutputComputed` are
+      // server-computed markers. A client could forge them on its input to
+      // smuggle arbitrary content into the prompt past the idempotency skip
+      // below, so markers on wire-delivered parts are stripped and the
+      // mapping is recomputed from the raw result. Only server-stamped parts
+      // (mapped by this hook on a previous run) keep their markers.
+      if (hasServerModelOutput(part)) continue;
+      stripModelOutputMarkers(part);
+
+      // The server never stores a mapping for a client tool without one.
+      const toModelOutput = tool.toModelOutput;
+      if (typeof toModelOutput !== 'function') continue;
+
+      const mastraMetadata = part.providerMetadata?.mastra;
 
       // Live ingestion pre-normalizes documented AI SDK wrappers, so an error
       // variant sent by the client usually arrives here as a plain value and is
@@ -193,11 +252,11 @@ export async function applyClientToolModelOutput({
       if (normalized.isError) continue;
 
       try {
-        const modelOutput = normalizeModelOutput(await tool.toModelOutput(normalized.output));
-        const nextMastra: Record<string, unknown> = {
+        const modelOutput = normalizeModelOutput(await toModelOutput(normalized.output));
+        const nextMastra: Record<string, unknown> = stampServerModelOutput({
           ...(typeof mastraMetadata === 'object' ? mastraMetadata : undefined),
           modelOutputComputed: true,
-        };
+        });
         // A nullish return means "no special mapping needed" — keep the raw
         // result but still mark the part computed.
         if (modelOutput != null) nextMastra.modelOutput = modelOutput;

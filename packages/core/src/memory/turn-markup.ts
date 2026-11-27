@@ -1,3 +1,5 @@
+import { withoutModelOutputOriginInMessage } from '../agent/message-list/utils/model-output-origin';
+
 const TURN_TAG = /<\/?turn\b[^>]*>/gi;
 
 export interface TurnSpeaker {
@@ -72,7 +74,11 @@ function withoutUserTurn(metadata: unknown): unknown {
   return { ...record, mastra: rest };
 }
 
-/** Drop a client-supplied authored-turn mark. In-process `asUserTurn` calls are not passed through this. */
+/**
+ * Drop client-supplied trust marks: the authored-turn mark and the
+ * `mastra.modelOutputOrigin` stamp on message parts. In-process
+ * `asUserTurn` calls are not passed through this.
+ */
 export function stripClientAuthoredTurnMarks(messages: unknown): void {
   if (!Array.isArray(messages)) return;
   for (let index = 0; index < messages.length; index++) {
@@ -90,7 +96,7 @@ export function stripClientAuthoredTurnMarks(messages: unknown): void {
         next = { ...next, content: { ...contentRecord, metadata: contentMetadata } };
       }
     }
-    messages[index] = next;
+    messages[index] = withoutModelOutputOriginInMessage(next);
   }
 }
 

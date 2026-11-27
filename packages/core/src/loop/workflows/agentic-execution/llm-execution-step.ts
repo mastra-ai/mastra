@@ -10,6 +10,7 @@ import { startRunStep } from '../../../agent/run-lease-fence';
 import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
+import { dropUnmappedClientToolMarkers } from '../../../agent/workflows/prepare-stream/client-tool-output-hooks';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
@@ -2044,6 +2045,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           model: currentStep.model,
         });
 
+        // Memory processors may have loaded history this step; scrub it before the prompt is built.
+        // Judge against the request's tools, which computed the mappings, not this step's substitutes.
+        dropUnmappedClientToolMarkers({ messageList, tools });
         const messageListPromptArgs = await buildLlmPromptArgs({
           model: currentStep.model,
           downloadRetries,

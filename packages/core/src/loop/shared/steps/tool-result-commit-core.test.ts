@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { MessageList } from '../../../agent/message-list';
 import { markAgentWorkflowTool } from '../../../tools/toolchecks';
-import { commitToolResult, computeModelOutputProviderMetadata } from './tool-result-commit-core';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+  resolveModelOutputAfterToolResultProcessors,
+} from './tool-result-commit-core';
 
 function makeMessageList() {
   const messageList = new MessageList();
@@ -85,7 +89,7 @@ describe('computeModelOutputProviderMetadata workflow tool marker', () => {
 
     await expect(
       computeModelOutputProviderMetadata({ tool: workflowTool, toolName: 'workflow-weather', result: { ok: true } }),
-    ).resolves.toEqual({ mastra: { modelOutput: 'mapped', workflowTool: true } });
+    ).resolves.toEqual({ mastra: { modelOutput: 'mapped', modelOutputOrigin: 'server', workflowTool: true } });
   });
 
   it('adds no marker for another tool', async () => {
@@ -100,5 +104,41 @@ describe('computeModelOutputProviderMetadata workflow tool marker', () => {
     await expect(
       computeModelOutputProviderMetadata({ tool: {}, toolName: 'getWeather', result: { ok: true } }),
     ).resolves.toBeUndefined();
+  });
+});
+
+describe('resolveModelOutputAfterToolResultProcessors', () => {
+  it('does not stamp a recalled mapping that reuses the call id', async () => {
+    const messageList = new MessageList();
+    messageList.add(
+      {
+        id: 'stored-1',
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'test-tool', args: {}, result: 'old' },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'FORGED' } } },
+            },
+          ],
+        },
+      } as MastraDBMessage,
+      'memory',
+    );
+    const mapped = { mastra: { modelOutput: { type: 'text', value: 'fresh' }, modelOutputOrigin: 'server' } };
+
+    await expect(
+      resolveModelOutputAfterToolResultProcessors({
+        messageList,
+        tool: undefined,
+        toolName: 'test-tool',
+        toolCallId: 'call-1',
+        resultBeforeProcessors: 'new',
+        providerMetadata: mapped,
+      }),
+    ).resolves.toBe(mapped);
   });
 });
