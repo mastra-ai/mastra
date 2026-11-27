@@ -97,9 +97,9 @@ describe('Knowledge sequence reads through the agent tools', () => {
       },
     });
     expect(rest.sequence.items.map((e: Result) => e.externalId)).toEqual(['reply']);
-    expect(rest.sequence.items[0].thread).toBe('root');
+    expect(rest.sequence.items[0].parent).toBe('root');
 
-    const thread = await acme()('knowledge_read', { page: 'general', sequence: { thread: 'root', order: 'asc' } });
+    const thread = await acme()('knowledge_read', { page: 'general', sequence: { parent: 'root', order: 'asc' } });
     expect(thread.sequence.items.map((e: Result) => e.externalId)).toEqual(['root', 'reply']);
 
     await expect(acme()('knowledge_read', { page: 'general', sequence: { since: 'yesterday' } })).rejects.toThrow(
@@ -107,6 +107,78 @@ describe('Knowledge sequence reads through the agent tools', () => {
     );
     await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Plain', body: 'Not a sequence.' });
     await expect(acme()('knowledge_read', { page: 'Plain', sequence: {} })).rejects.toThrow(/not a sequence/);
+  });
+
+  it("shows an item's title, type, links and properties, and leaves out a body it hasn't", async () => {
+    const id = await sequence('org:acme', 'deploys');
+    await sequences.upsertItem({
+      sequenceId: id,
+      externalId: 'd1',
+      occurredAt: at(1),
+      title: 'Deploy 1.2.0',
+      type: 'deploy',
+      links: [{ url: 'https://ci.example.com/runs/1', title: 'CI run' }],
+      properties: { env: 'prod', ok: true },
+      writtenBy: importer,
+    });
+
+    const [item] = (await acme()('knowledge_read', { page: 'deploys' })).sequence.items;
+    expect(item).toMatchObject({
+      externalId: 'd1',
+      title: 'Deploy 1.2.0',
+      type: 'deploy',
+      links: [{ url: 'https://ci.example.com/runs/1', title: 'CI run' }],
+      properties: { env: 'prod', ok: true },
+    });
+    expect(item).not.toHaveProperty('body');
+    expect(item).not.toHaveProperty('position');
+  });
+
+  it('reads a position sequence first-by-position, with its child pages as items, and refuses a time range', async () => {
+    const written = await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Runbook', body: 'Steps.' });
+    await sequences.markSequence({ pageId: written.page.id, orderBy: 'position' });
+    await sequences.upsertItem({ sequenceId: written.page.id, externalId: 's1', title: 'Drain', writtenBy: importer });
+    const child = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: written.page.ref,
+      name: 'Restart the workers',
+      body: 'Run the restart script.',
+    });
+    await sequences.upsertItem({ sequenceId: written.page.id, externalId: 's3', title: 'Verify', writtenBy: importer });
+
+    const read = await acme()('knowledge_read', { page: 'Runbook', sequence: {} });
+    expect(read.sequence.items.map((item: Result) => item.title)).toEqual(['Drain', 'Restart the workers', 'Verify']);
+    expect(read.sequence.items[0].position).toEqual(expect.any(String));
+    expect(read.sequence.items[1].page).toBe(child.page.ref);
+    expect(read.sequence.items[0]).not.toHaveProperty('page');
+
+    const whole = await acme()('knowledge_read', { page: 'Runbook' });
+    expect(whole.sequence.items.map((item: Result) => item.title)).toEqual(['Drain', 'Restart the workers', 'Verify']);
+    expect(whole.more.join('\n')).toContain('by position');
+
+    await expect(
+      acme()('knowledge_read', { page: 'Runbook', sequence: { since: at(1).toISOString() } }),
+    ).rejects.toThrow(/position/);
+  });
+
+  it('reads and searches items of some types, or untyped ones', async () => {
+    const id = await sequence('org:acme', 'builds');
+    await post(id, 'b1', 1, 'build failed on main', { type: 'build' });
+    await post(id, 'd1', 2, 'deploy failed on prod', { type: 'deploy' });
+    await post(id, 'n1', 3, 'note: failed twice today');
+
+    const ids = (read: Result) => read.sequence.items.map((item: Result) => item.externalId);
+    expect(ids(await acme()('knowledge_read', { page: 'builds', sequence: { types: ['build'] } }))).toEqual(['b1']);
+    expect(ids(await acme()('knowledge_read', { page: 'builds', sequence: { untyped: true } }))).toEqual(['n1']);
+    expect(
+      ids(await acme()('knowledge_read', { page: 'builds', sequence: { types: ['deploy'], untyped: true } })),
+    ).toEqual(['n1', 'd1']);
+
+    const found = await acme()('knowledge_search', { query: 'failed', in: 'builds', types: ['deploy', 'build'] });
+    expect(found.results.map((hit: Result) => hit.item.externalId)).toEqual(['d1', 'b1']);
+    const untyped = await acme()('knowledge_search', { query: 'failed', untyped: true });
+    expect(untyped.results.map((hit: Result) => hit.item?.externalId)).toEqual(['n1']);
   });
 
   it('reads one item back by its ref, and nothing through an unreadable sequence', async () => {
