@@ -633,6 +633,11 @@ export const experimentResponseSchema = z.object({
   targetType: z.enum(['agent', 'workflow', 'scorer', 'processor']).nullable(),
   targetId: z.string().nullable(),
   scorerIds: z.array(z.string()).nullable().optional(),
+  scorerVersions: z
+    .record(z.string(), z.string())
+    .nullable()
+    .optional()
+    .describe('Stored-scorer version IDs pinned for this experiment, keyed by scorer ID'),
   name: z.string().optional(),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),

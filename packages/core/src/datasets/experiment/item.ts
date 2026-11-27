@@ -122,8 +122,9 @@ export async function executeExperimentItem(args: ExecuteExperimentItemArgs): Pr
 
   // Scorer precedence: experiment scorerIds → item scorerIds → dataset scorerIds → none.
   // Every level loads stored scorers on demand: this may run in a process that never hydrated them.
-  // A scorer that can't be resolved fails only this item.
-  const resolveScorerEntries = createScorerResolver(mastra);
+  // A scorer that can't be resolved fails only this item. Stored scorers pinned on the experiment
+  // load their pinned version, so editing a scorer mid-run doesn't change how later items are scored.
+  const resolveScorerEntries = createScorerResolver(mastra, experiment.scorerVersions);
   let scorers: MastraScorer<any, any, any, any>[];
   let scorerConfigError: ExecutionResult['error'] = null;
   if (item.scorerIds !== undefined && experiment.scorerIds == null) {
