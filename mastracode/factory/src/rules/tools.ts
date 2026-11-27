@@ -1,7 +1,8 @@
+import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from '@internal/factory-contract';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import {
   boardFlow,
   boardForWorkItem,
@@ -22,7 +23,6 @@ import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress, setFactoryToolsRole } from './binding-context.js';
 import { phaseGrantsTool } from './phase-tools.js';
-import { SELF_REVIEW_ROUND_LIMIT, workItemSource } from './types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from './validation.js';
 
 const MAX_REASON_LENGTH = 1_000;

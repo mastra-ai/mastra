@@ -4,7 +4,7 @@ import type { CoreMessage } from '@mastra/core/llm';
 
 import { isSystemReminderMessage } from '../../system-reminders';
 import { stripEphemeralAnchorIds } from './anchor-ids';
-import { isTemporalGapMarker, resolveTimeZone } from './date-utils';
+import { getDateTimeFormat, isTemporalGapMarker, resolveTimeZone } from './date-utils';
 import type { Extractor } from './extractor';
 import {
   buildExtractorOutputSections,
@@ -666,8 +666,7 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
 
 function formatObserverDate(createdAt: Date | undefined, timeZone: string | undefined): string {
   if (!createdAt) return '';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
+  const parts = getDateTimeFormat('observer-date', timeZone, {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -678,12 +677,11 @@ function formatObserverDate(createdAt: Date | undefined, timeZone: string | unde
 
 function formatObserverTime(createdAt: Date | undefined, timeZone: string | undefined): string {
   return createdAt
-    ? createdAt.toLocaleTimeString('en-US', {
-        timeZone,
+    ? getDateTimeFormat('observer-time', timeZone, {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
-      })
+      }).format(createdAt)
     : '';
 }
 

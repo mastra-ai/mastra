@@ -45,9 +45,9 @@ describe('factory_recreate_sandbox', () => {
     expect(resetSandbox).toHaveBeenCalledWith({ sourceControl, orgId: 'org-1', sessionId: 'session-1' });
   });
 
-  it('warns the agent that uncommitted and unpushed work is lost', () => {
+  it('warns the agent that unsaved work is lost', () => {
     const { tool } = recreateTool('reset');
-    expect(tool.description).toContain('not committed and pushed is lost');
+    expect(tool.description).toContain('not saved elsewhere may be lost');
   });
 
   it.each([

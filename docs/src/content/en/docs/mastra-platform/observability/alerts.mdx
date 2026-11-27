@@ -1,0 +1,113 @@
+---
+title: "Alerts | Mastra platform"
+description: "Get notified in Slack, email, PagerDuty, and other destinations when agents fail, tools break, costs grow, or a Mastra platform deploy or service fails."
+---
+
+# Alerts
+
+Alerts notify your team when something in your Mastra projects needs attention. When an alert's condition is met, the alert opens and Mastra sends a notification to the destinations you chose, such as a Slack channel, an email group, or PagerDuty. When the condition clears, or someone closes the alert, Mastra sends a notification that it closed.
+
+Observability alerts and platform alerts both send to the same destinations, but they watch different things:
+
+| Kind | Watches | Opens when |
+| - | - | - |
+| Observability alert | Traces, spans, scores, and custom metrics that your application sends to [Mastra Platform Observability](/docs/mastra-platform/observability/overview) | A measured value, such as an error rate or a day's cost, crosses a threshold you set |
+| Platform alert | Deploys, services, and usage of projects that run on Mastra platform | An event happens, such as a failed production deploy or too many requests to your server returning 5xx errors |
+
+To be told about both an agent's error rate and a failed deploy, create one alert of each kind and point both at the same destination.
+
+This page explains the settings that decide whether an alert is useful or noisy.
+
+## Before you begin
+
+- Use an organization admin account. Members and viewers can see alerts and destinations, but only admins can create, change, close, or delete them.
+- Use a Starter plan or higher. On the Free plan, creating an alert prompts you to upgrade. See [pricing](https://mastra.ai/pricing).
+- For observability alerts, send traces to [Mastra Platform Observability](/docs/mastra-platform/observability/overview). The backtest needs a day or two of data to show whether a threshold is useful.
+
+## How alerts run
+
+Mastra checks every enabled observability alert every five minutes. Each check measures a window that ends at the time of the check. For example: with a one-hour window, a check at 10:15 measures 09:15 to 10:15. The window sets how much data each check averages over. It doesn't change how often Mastra checks. A short window reacts faster to a spike, and a longer window ignores brief bumps. A since-midnight window measures from the start of the day instead. Its value grows through the day and resets at midnight, which suits a daily budget.
+
+An alert is open when the latest check crossed the threshold and someone should act. It's closed when the value recovered, or when someone closed it by hand. It stays closed while the value stays past the threshold. It can open again only after a check finds the value back on the safe side of the threshold, or past the recovery level if you set one. To stop checking an alert instead, turn off the switch next to its name.
+
+Mastra notifies each destination once when an alert opens and once when it closes, and observability alerts don't send reminders in between. Platform alerts can resend while an incident stays open, at most as often as their **"Repeat"** setting allows. This setting only limits notifications. It doesn't make Mastra check less often.
+
+### Watch every project with one alert
+
+An alert belongs to the organization or to one project. Create it on the organization's Alerts page, and it covers every project. You don't need to open each project and repeat the same alert there. Combined with a separate alert for each tool, one organization alert finds a failing tool in whichever project it runs. Organization alerts can also split by project.
+
+## Choose what to watch
+
+Inside an Observability alert, the **"Watch"** field decides what each check counts. Picking the right one matters more than any other setting.
+
+| Watch | Counts | Use it for |
+| - | - | - |
+| Traces | One item per request, described by its root span, usually the agent or workflow run that handled the request | Whether requests complete, and what each request costs in time, tokens, and money |
+| Spans | Every step inside a request: agent runs, model calls, tool calls, processors, workflow steps. Filter by span type to pick one kind. | Whether one part of your system, such as a tool or a model, is slow or failing |
+| Scores | Results from your scorers | Quality regressions, such as an eval score dropping |
+| [Custom metrics](/docs/observability/metrics/overview#emit-custom-metrics) | Metrics that your application records | Anything else you measure yourself |
+
+The difference between traces and spans matters most for errors. A failed tool call is a failed span, but the agent can often recover: it retries, uses another tool, or answers without it. A failed trace means the request itself didn't complete. Alert on traces, or on spans of type `agent_run`, when users are affected. Alert on spans of type `tool_call` to find a tool that breaks, even when agents work around it.
+
+## Split or combine
+
+The setting **"Alert for"** decides whether Mastra measures everything together or measures each agent, tool, model, or resource on its own.
+
+Measuring everything together hides outliers. If nine tools succeed thousands of times and one tool fails on most of its calls, the combined error rate stays low, and a single alert for all traffic never opens. With a separate alert for each tool, the broken tool opens the alert. If the backtest finds a group that crossed the threshold while all traffic combined didn't, the form shows a warning with a button to switch.
+
+Mastra checks up to 50 groups for each alert, starting with those closest to the threshold. All groups of one alert share one incident.
+
+**"Alert for"** offers only the choices that can open more than one alert. If your filters narrow the alert to one agent, there's nothing to split, and the agent choice disappears. For custom metrics, the choices are the metric's labels.
+
+### Watch only some agents or tools
+
+To alert on a few critical tools, add a filter on **"Primitive name"** with **is any of** and choose the tools. A separate alert for each tool still applies to the tools you kept. The same works for agents. To leave out test traffic instead, filter with **is none of**, for example on environment or user.
+
+### Ignore quiet groups
+
+With a separate alert for each agent, tool, or model, a group with little traffic can cross a rate threshold by chance. An agent that ran twice and failed once has a 50% error rate. Under **"Advanced"**, **"Skip agents with fewer than"**, or the same setting for tools or models, sets a minimum number of runs in the window before a group is checked.
+
+## Tune an observability alert
+
+An alert that opens too often gets ignored. An alert that never opens misses problems. These settings decide which one you get.
+
+### Pick a threshold with the backtest
+
+The backtest chart runs your alert against past data and shows when it would have opened and closed. It doesn't send notifications. Change the threshold, window, or grouping and watch the chart update. Aim for an alert that would have opened only at times when you'd have wanted someone to act.
+
+The 6h, 1d, and 2d ranges replay every five-minute check and are the most accurate. Longer ranges, such as 7d, plot the measured value as a line against the threshold instead, so use them to see trends, not to count how often the alert would open.
+
+### Stop an alert from flapping
+
+A value that hovers around the threshold opens and closes the alert on every few checks. Under **"Advanced"**, **"Recovers below"** or **"Recovers above"** sets a separate level for closing. Left empty, it equals the threshold.
+
+For example, an alert opens when the error rate is above 5%. With a recovery level of 2%, it stays open at 4% and 3%, and closes only when a check measures less than 2%. Set a recovery level when the backtest shows the alert opening and closing several times in a short period.
+
+### Wait for late data
+
+If some spans haven't reached Mastra when an alert checks, the alert judges an incomplete window. It can fire even when nothing is wrong. **"Wait for late data"** prevents this by checking each window a little after it closes, giving in-flight spans time to arrive.
+
+Take a 5-minute window from 10:00 to 10:05:
+
+- Without a wait
+  - The alert checks 10:00 to 10:05 at 10:05. If spans from 10:03 and 10:04 are still in flight, the alert judges the window using only 3 minutes of data. A single error can spike the error rate on that smaller sample, so the alert fires and then resolves at a later check, after the remaining spans arrive.
+- With a 2-minute wait
+  - The alert checks that same 10:00 to 10:05 window at 10:07, once all 5 minutes of data have filled in. Checks run on the same schedule and windows keep the same length, but alerts fire later by the wait amount. The trade-off is that alerts fire, and resolve, later by the same amount.
+
+#### When late data happens
+
+Spans usually arrive within seconds of finishing, so most alerts don't need a wait. Late spans mainly happen in two cases:
+
+- Serverless environments: A function can pause after returning a response, before it finishes sending its spans.
+- Long agent runs or workflows: Spans are placed into windows based on when they started. Because the root span for a full run isn't sent until the run finishes, a 3-minute run starting at 10:04 arrives at 10:07 and misses the 10:05 check. (Inner spans like model and tool calls are still sent as each one finishes.)
+
+#### How much wait time to set
+
+- No wait for most alerts, so you hear about problems as fast as possible.
+- 1 to 2 minutes if you run on serverless, have low or bursty traffic, or see alerts fire and resolve within a few minutes without any change on your side.
+- The length of a typical run when alerting on full agent runs or workflows, so runs finish before their window is checked.
+
+## Related
+
+- [Alert webhooks](/docs/mastra-platform/api#alert-webhooks)
+- [Observability on Mastra platform](/docs/mastra-platform/observability/overview)

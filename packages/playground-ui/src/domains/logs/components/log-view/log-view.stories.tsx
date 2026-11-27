@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { fn } from 'storybook/test';
 import type { LogLevel, LogRecord, LogViewLine } from '../../types';
-import type { LogViewOrder } from '../log-view-list';
+import type { LogViewNextPage, LogViewOrder } from '../log-view-list';
 import { LogView, filterLogsByFields } from './index';
 import type { LogViewHeight } from './index';
 import type { FilterBarItem } from '@/ds/components/FilterBar';
@@ -65,6 +65,7 @@ const logs: SandboxLine[] = [
 interface CompositionProps {
   logs: SandboxLine[];
   order?: LogViewOrder;
+  nextPage?: LogViewNextPage;
   wrap?: boolean;
   search?: boolean;
   fieldChips?: boolean;
@@ -200,6 +201,62 @@ export const Loading: Story = {
 export const LoadingOlder: Story = {
   args: { hasNextPage: true, isFetchingNextPage: true },
   parameters: describe('The loading line sits at the older end and keeps its height between pages.'),
+};
+
+export const LoadingNewer: Story = {
+  args: {
+    logs: Array.from({ length: 8 }, () => logs.map(log => ({ ...log }))).flat(),
+    order: 'oldest-first',
+    nextPage: 'newer',
+    hasNextPage: true,
+    isFetchingNextPage: true,
+  },
+  parameters: describe(
+    'nextPage="newer" for an API that pages forward in time: the list opens at the top and newer logs load at the bottom.',
+  ),
+};
+
+const PAGE_COUNT = 3;
+
+function PagingNewerExample() {
+  const [pages, setPages] = useState(1);
+  const [isFetching, setIsFetching] = useState(false);
+  const lines = Array.from({ length: pages * 5 }, () => logs.map(log => ({ ...log }))).flat();
+  const ids = new Map(lines.map((line, index) => [line, `paging-${index}`]));
+  const fetchNextPage = () => {
+    setIsFetching(true);
+    setTimeout(() => {
+      setPages(count => count + 1);
+      setIsFetching(false);
+    }, 800);
+  };
+
+  return (
+    <LogView>
+      <LogView.Header>
+        <LogView.Title />
+        <LogView.Actions>
+          <LogView.Count count={lines.length} />
+        </LogView.Actions>
+      </LogView.Header>
+      <LogView.List
+        order="oldest-first"
+        nextPage="newer"
+        logs={lines}
+        logIdMap={ids}
+        hasNextPage={pages < PAGE_COUNT}
+        isFetchingNextPage={isFetching}
+        onFetchNextPage={fetchNextPage}
+      />
+    </LogView>
+  );
+}
+
+export const PagingNewer: Story = {
+  render: () => <PagingNewerExample />,
+  parameters: describe(
+    'Scroll to the bottom and the next page loads, starting a little before the end comes into view, three pages in all.',
+  ),
 };
 
 export const Empty: Story = {

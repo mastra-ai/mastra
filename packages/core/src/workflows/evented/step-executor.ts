@@ -1,6 +1,8 @@
+import { DurableStepIds } from '../../agent/durable/constants';
 import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
 import { AGENT_STREAM_TOPIC } from '../../agent/streams/constants';
 import { TripWire } from '../../agent/trip-wire';
+import { CONTROLLER_RUN_BINDING_KEY, controllerRunBindingSchema } from '../../agent-controller/worker-run-binding';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
 import { InMemoryServerCache } from '../../cache/inmemory';
@@ -185,7 +187,8 @@ export class StepExecutor extends MastraBase {
     /** The run's storage version. Defaults to the dispatch's. */
     storageVersion?: 1 | 2;
   }): Promise<StepResult<any, any, any, any>> {
-    const { entry, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
+    const { entry, stepResults, runId, retryCount = 0, perStep } = params;
+    let { requestContext } = params;
     const stepId = getEntryId(entry);
     const errorAttemptId = `${runId}:${stepId}:${params.foreachIdx ?? ''}:attempt:${retryCount}`;
     const schemas = getEntrySchemas(entry, this.mastra);
@@ -288,6 +291,38 @@ export class StepExecutor extends MastraBase {
     try {
       if (validationError) {
         throw validationError;
+      }
+      if (params.workflowId === DurableStepIds.AGENTIC_LOOP || params.workflowId === DurableStepIds.AGENTIC_EXECUTION) {
+        const live = requestContext.get('controller') as { getState?: unknown } | undefined;
+        const initial = stepResults.input as
+          | {
+              agentId?: string;
+              runId?: string;
+              state?: { threadId?: string; resourceId?: string };
+              requestContextEntries?: Record<string, unknown>;
+            }
+          | undefined;
+        // After a handoff, the controller can arrive without its methods. Use the binding captured at run
+        // preparation, not the incoming step context, to restore it for the same agent and thread.
+        const binding = initial?.requestContextEntries?.[CONTROLLER_RUN_BINDING_KEY];
+        if (initial && binding !== undefined && typeof live?.getState !== 'function') {
+          const parsed = controllerRunBindingSchema.parse(binding);
+          if (
+            initial.agentId !== parsed.agentId ||
+            initial.state?.threadId !== parsed.threadId ||
+            initial.state.resourceId !== parsed.resourceId
+          ) {
+            throw new Error('Controller binding does not match this durable run');
+          }
+          const controller = this.mastra?.getAgentControllerById(parsed.controllerId);
+          if (!controller) throw new Error('Controller is not registered on this worker');
+          requestContext = await controller.__restoreWorkerRequestContext(
+            requestContext,
+            parsed,
+            abortController.signal,
+            initial.runId,
+          );
+        }
       }
 
       const callId = globalThis.crypto.randomUUID();

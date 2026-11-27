@@ -1,5 +1,5 @@
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ListRowLabels, ListRowLinks, ListRowStatus, ListRowTitle } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -10,7 +10,7 @@ import { sourceCreatedAt, sourceMetadata } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
 import type { AuditActorProfile } from '../services/audit';
 import { workItemShortReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
 import {
@@ -85,39 +85,29 @@ export function WorkItemListRow({
       cells={{
         icon: <WorkItemSourceIcon item={item} />,
         title: (
-          <Txt as="span" variant="label" tone="ink" className="truncate font-[550] tracking-tight">
+          <ListRowTitle>
             <SourceTitle source={item.source} title={item.title} />
-          </Txt>
+          </ListRowTitle>
         ),
         links: (
-          <>
-            {nativeKey !== undefined && (
-              <Txt as="span" variant="meta" tone="faint" className="truncate">
-                {nativeKey}
-              </Txt>
-            )}
+          <ListRowLinks nativeKey={nativeKey}>
             {upstreamLinks}
             {relatedLinks}
-          </>
+          </ListRowLinks>
         ),
         labels: (
-          <span className="flex items-center gap-2">
-            {item.workItem?.author && (
-              <Txt as="span" variant="meta" tone="faint">
-                {item.workItem.author}
-              </Txt>
-            )}
+          <ListRowLabels author={item.workItem?.author}>
             <SourceStateBadge item={item} />
             <MetadataLabels metadata={sourceMetadata(item)} />
-          </span>
+          </ListRowLabels>
         ),
         status: (status.kind !== 'idle' || hasSession || verdict || rework) && (
-          <span className="flex min-w-0 items-center gap-2">
+          <ListRowStatus>
             <CardStatus status={status} compact />
             {hasSession && <SessionBadge />}
             {verdict && <ReviewVerdictBadge verdict={verdict} />}
             {rework && <ReworkLine rework={rework} />}
-          </span>
+          </ListRowStatus>
         ),
         action: <CardActions actions={actions} />,
         activity: <WorkItemActivity activity={activity} actors={actors} board={board} showName={false} />,

@@ -43,6 +43,8 @@
     "accounts/fireworks/models/minimax-m3",
     "accounts/fireworks/models/minimax-m3p1-flash",
     "accounts/fireworks/models/muse-spark-open",
+    "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
+    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
     "accounts/fireworks/models/qwen3p8-2p4t-a95b",
     "accounts/fireworks/models/qwen3p8-max",
     "accounts/fireworks/models/qwen4-max",
@@ -79,6 +81,8 @@
     "accounts/fireworks/models/minimax-m3",
     "accounts/fireworks/models/minimax-m3p1-flash",
     "accounts/fireworks/models/muse-spark-open",
+    "accounts/fireworks/models/nemotron-3-ultra-nvfp4",
+    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
     "accounts/fireworks/models/qwen3p8-2p4t-a95b",
     "accounts/fireworks/models/qwen3p8-max",
     "accounts/fireworks/models/qwen4-max",
@@ -107,7 +111,19 @@
     "accounts/fireworks/routers/qwen-max-latest"
   ],
   "reasoning": {
-    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
+    "accounts/fireworks/models/nemotron-3-ultra-nvfp4": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "accounts/fireworks/models/ultramarine-1-flash-us": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/deepseek-v4p1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -116,40 +132,114 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-5p3-flash-flex": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/glm-flash-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-flash-latest": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/qwen-max-latest": [
+    "accounts/fireworks/models/qwen3p8-max": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "accounts/fireworks/routers/kimi-k3p1-pro-us": [
+    "accounts/fireworks/models/inkling-2-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "accounts/fireworks/models/deepseek-v4p1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/minimax-m3p1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "accounts/fireworks/models/glm-5p3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/glm-5p3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/kimi-k3p1-pro": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/inkling-2-small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "accounts/fireworks/models/minimax-m3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "accounts/fireworks/models/ember-1": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/models/hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "accounts/fireworks/models/qwen4-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
+      }
+    ],
+    "accounts/fireworks/models/kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "accounts/fireworks/routers/kimi-k3p1-pro-ultrafast": [
@@ -161,10 +251,34 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/minimax-latest": [
+    "accounts/fireworks/routers/deepseek-v4p1-flash-us": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-us": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-fast-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-flash-flex": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "accounts/fireworks/routers/deepseek-v4p1-flash-1017-ultrafast": [
@@ -176,24 +290,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/kimi-fast-latest": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-k3-fast": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
     "accounts/fireworks/routers/deepseek-v4p1-flash-1017-flex": [
       {
         "type": "toggle"
@@ -203,10 +299,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-5p3-spot": [
+    "accounts/fireworks/routers/kimi-k3-us": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
     "accounts/fireworks/routers/glm-5p3-flex": [
@@ -224,28 +323,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-latest": [
+    "accounts/fireworks/routers/glm-5p3-fast": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-us": [
+    "accounts/fireworks/routers/minimax-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "accounts/fireworks/routers/kimi-k3p1-pro-us": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-fast-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-us": [
+    "accounts/fireworks/routers/deepseek-v4p1-flash-1017-spot": [
       {
         "type": "toggle"
       },
@@ -260,21 +359,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/routers/glm-5p3-fast": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/routers/kimi-k3-us": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
     "accounts/fireworks/routers/kimi-latest": [
       {
         "type": "toggle"
@@ -284,22 +368,7 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/qwen4-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/models/hy4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "accounts/fireworks/models/kimi-k3p1-pro": [
+    "accounts/fireworks/routers/kimi-k3-fast": [
       {
         "type": "toggle"
       },
@@ -308,100 +377,46 @@
         "values": ["low", "medium", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/glm-5p3": [
+    "accounts/fireworks/routers/deepseek-flash-latest": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/qwen3p8-max": [
+    "accounts/fireworks/routers/kimi-fast-latest": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/glm-5p3-spot": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "accounts/fireworks/routers/qwen-max-latest": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "accounts/fireworks/models/deepseek-v4p1-flash": [
-      {
-        "type": "toggle"
-      },
+    "accounts/fireworks/routers/glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "accounts/fireworks/models/ember-1": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/minimax-m3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "accounts/fireworks/models/inkling-2-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "accounts/fireworks/models/ultramarine-1-flash-us": [
+    "accounts/fireworks/routers/glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/glm-5p3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/deepseek-v4p1-flash-1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/inkling-2-small": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "accounts/fireworks/models/qwen3p8-2p4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "accounts/fireworks/models/minimax-m3p1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "accounts/fireworks/models/kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "accounts/fireworks/models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }

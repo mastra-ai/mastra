@@ -1,7 +1,7 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { Link } from 'react-router';
 
-import { boardRulesPath } from '../../boardConfig/boardConfigPaths';
+import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import type { IntakeSetup } from './BoardColumnEmptyState';
 
@@ -39,7 +39,10 @@ export function BoardEmptyStateActions({
         </Link>
       )}
       {intakeSetup === 'route' && (
-        <Link to={boardRulesPath(factoryId, boardId)} className={buttonVariants({ size: 'sm' })}>
+        <Link
+          to={boardConfigPath(factoryId, boardId, undefined, { newRule: {} })}
+          className={buttonVariants({ size: 'sm' })}
+        >
           Add intake rule
         </Link>
       )}

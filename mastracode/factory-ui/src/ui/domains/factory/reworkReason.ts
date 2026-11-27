@@ -1,9 +1,8 @@
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
-import type { AuditActorType } from '@mastra/factory/storage/domains/audit/actors';
+import { isHumanActorId } from '@internal/factory-contract';
+import type { AuditActorType, WorkItem } from '@internal/factory-contract';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { AuditEvent } from './services/audit';
-import type { WorkItem } from './services/workItems';
 
 const STAGE_MOVED_ACTION = 'factory.work_item.stage_moved';
 /** Actor id prefix of a session agent moving the card through Factory's tools, not the bound transition tool. */

@@ -1675,12 +1675,15 @@ describe('FilterBar', () => {
       key('Enter');
     };
 
-    it('adds a second value to the same field as "is any of" on the existing chip', async () => {
-      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is', value: 'running' }]} />);
+    it.each([
+      ['adds a second value to the same field as "is any of" on the existing chip', 'is', 'Status in Running, Error'],
+      ['replaces the value when the operators cannot be combined', 'is-not', 'Status is Error'],
+    ] as const)('%s', async (_title, operatorId, value) => {
+      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId, value: 'running' }]} />);
 
       await addStatus(0, 'err');
 
-      expect(chipLabels()).toEqual(['Status in Running, Error']);
+      expect(chipLabels()).toEqual([value]);
     });
 
     it('adds to an existing "is any of" chip without repeating values', async () => {
@@ -1726,14 +1729,6 @@ describe('FilterBar', () => {
       fireEvent.click(screen.getByText('Pick another view'));
 
       await waitFor(() => expect(chipLabels()).toEqual([]));
-    });
-
-    it('replaces the value when the operators cannot be combined', async () => {
-      render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is-not', value: 'running' }]} />);
-
-      await addStatus(0, 'err');
-
-      expect(chipLabels()).toEqual(['Status is Error']);
     });
 
     it('replaces the value when the field takes a single value', async () => {

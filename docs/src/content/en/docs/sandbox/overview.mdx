@@ -340,6 +340,26 @@ The backend decides what `stop()` and `destroy()` do. For example, stopping may 
 
 Sandboxes returned by a resolver are owned by your application. `workspace.destroy()` and `mastra.shutdown()` clear cached references but don't destroy resolved sandboxes. Application lifecycle code must keep track of them, call `destroy()` when their user, thread, or session ends, and then call `workspace.clearSandboxCache(cacheKey)`. This prevents unused compute from continuing to run and later requests from reusing a stale sandbox.
 
+### Recover a sandbox that stopped responding
+
+Sometimes an environment hangs. The backend still reports it running, but commands time out. Give the agent `createRecreateSandboxTool()` so it can replace the environment itself. The tool calls the sandbox's [`_reset()`](/reference/workspace/sandbox#_resetoptions), which destroys the environment and leaves the workspace usable. The next command starts a fresh one.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { createRecreateSandboxTool } from '@mastra/core/workspace'
+
+const agent = new Agent({
+  id: 'coder',
+  name: 'Coder',
+  instructions: 'You write and run code.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace,
+  tools: { recreate_sandbox: createRecreateSandboxTool() },
+})
+```
+
+Anything in the old environment that isn't saved elsewhere is lost. To run your own recovery, such as clearing state you keep about the sandbox, pass `reset`. It receives the agent's `reason` and the tool's execution context, and should end in `_reset()` on the sandbox the run holds. Pass `id` to change the tool's name.
+
 ### Persistence
 
 Persistence is backend-specific. Files and processes aren't guaranteed to survive when a sandbox stops or the application restarts. An idle timeout may also discard them. Some backends reconnect by sandbox ID or preserve snapshots and volumes. Others create a fresh environment.

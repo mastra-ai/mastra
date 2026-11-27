@@ -1,6 +1,6 @@
+import { pullRequestSourceNumber, pullRequestSources, workingPullRequest } from '@internal/factory-contract';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { pullRequestSourceNumber, pullRequestSources, workingPullRequest } from '../work-items/change-requests.js';
 
 /**
  * Records the head a pull request or merge request was observed at, so a

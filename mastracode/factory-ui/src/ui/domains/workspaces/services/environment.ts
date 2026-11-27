@@ -1,6 +1,8 @@
 import type {
   EnvironmentBuild,
   EnvironmentBuildState,
+  EnvironmentBuildTriggers,
+  EnvironmentBuildTriggersPatch,
   EnvironmentLastBuild,
 } from '@mastra/playground-ui/components/EnvironmentBuild';
 
@@ -38,16 +40,7 @@ export interface FactoryEnvironmentSandbox {
 }
 
 /** When the environment builds on its own; present only when the sandbox can build. */
-export interface FactoryEnvironmentBuildTriggers {
-  schedule: {
-    enabled: boolean;
-    cron: string | null;
-    timezone: string | null;
-    /** False when the host's storage has no schedules domain; the cron trigger cannot be enabled then. */
-    scheduleAvailable: boolean;
-  };
-  push: { enabled: boolean; debounceMinutes: number };
-}
+export type FactoryEnvironmentBuildTriggers = EnvironmentBuildTriggers;
 
 export interface FactoryEnvironmentBuildStart {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
@@ -87,10 +80,7 @@ export interface FactoryEnvironmentPatch {
   settings?: Record<string, unknown | null>;
   workspaceSetupCommand?: string | null;
   /** Only accepted when the sandbox can build. */
-  buildTriggers?: {
-    schedule?: { enabled: boolean; cron?: string; timezone?: string };
-    push?: { enabled?: boolean; debounceMinutes?: number };
-  };
+  buildTriggers?: EnvironmentBuildTriggersPatch;
   /** Positions, when given, must be a permutation of 1..n over the listed repositories. */
   repositories?: FactoryEnvironmentRepositoryPatch[];
 }

@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
+import type { FactoryDecisionSummary } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';

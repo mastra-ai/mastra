@@ -19,6 +19,7 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import type { KnowledgeRole } from './declarations';
 import { moveKnowledgePageAndRelink } from './host-writes';
 import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
@@ -214,6 +215,36 @@ async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[], cache: M
   const summaries = [];
   for (const note of notes) summaries.push(noteSummary(note, await noteMentions(run, note, cache)));
   return summaries;
+}
+
+/** What a run can do in a scope it holds: contributors and up can write, viewers only read. */
+type HeldScopeAccess = 'write' | 'read' | 'none';
+
+/** A scope the run holds, whether or not it has a scope page yet. */
+type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | null; can: HeldScopeAccess };
+
+/**
+ * Every scope the run holds, in principal order, with its role and what it can do there. A held scope
+ * gets its page on the first write, so before that its role comes from the declarations and the parent
+ * that write would link it under: without it a model sees no scopes on its first turn and concludes it
+ * has nowhere to write. A stored scope it can't read keeps only its address.
+ */
+async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
+  const stored = await run.storage.getScopesByAddress(run.principals);
+  return Promise.all(
+    run.principals.map(async address => {
+      const found = stored.find(scope => scope.address === address);
+      const page = found && knowledgeScopeReadable(found, run.read) ? found : undefined;
+      const role = found
+        ? await run.roleOn(found)
+        : knowledgeRoleOn(run.runtime.compiled, run.principals, {
+            address,
+            parentAddress: run.runtime.firstWriteParentAddress(address, run.principals),
+          });
+      const can: HeldScopeAccess = !role ? 'none' : knowledgeRoleAtLeast(role, 'contributor') ? 'write' : 'read';
+      return { address, ...(page ? { page } : {}), role, can };
+    }),
+  );
 }
 
 /** Scope pages for addresses the run names; each must be readable. */
@@ -542,7 +573,7 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
   return createTool({
     id: 'knowledge_read',
     description:
-      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
+      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no page this run can read yet (`empty`). ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
@@ -648,15 +679,15 @@ function readTool(host: KnowledgePageToolHost, canEdit: boolean) {
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
-        const held = await run.storage.getScopesByAddress(run.principals);
         return {
-          scopes: held
-            .filter(scope => knowledgeScopeReadable(scope, run.read))
-            .map(scope => ({
-              address: scope.address,
-              name: scope.name,
-              ...(scope.description ? { description: scope.description } : {}),
-            })),
+          scopes: (await heldScopes(run)).map(({ address, page, role, can }) => ({
+            address,
+            name: page?.name ?? address,
+            ...(page?.description ? { description: page.description } : {}),
+            ...(role ? { role } : {}),
+            can,
+            ...(page ? {} : { empty: true as const }),
+          })),
         };
       }
 
@@ -821,6 +852,12 @@ export interface ListEntry {
   /** Readable child pages, plus readable child scopes for a scope. */
   children: number;
   scope?: true;
+  /** Held scopes only (a listing without `from`): the run's role there, if any. */
+  role?: KnowledgeRole;
+  /** Held scopes only: what the run can do there. */
+  can?: HeldScopeAccess;
+  /** Held scopes only: no page there this run can read yet. */
+  empty?: true;
 }
 
 /** A child's ref built from its parent's: `<scope>#<key>` under a scope, `<parent ref>/<key>` deeper, else its id. */
@@ -899,19 +936,18 @@ export async function listKnowledgeTree(
   const scopeOffset = cursor?.startsWith('s') ? Number(cursor.slice(1)) || 0 : 0;
   const pageCursor = cursor?.startsWith('p') ? cursor.slice(1) || undefined : undefined;
   let originRef: string | undefined;
-  let scopes: KnowledgePage[] = [];
+  // Without `from`: every scope the run holds, those without a readable page yet included.
+  let scopes: Array<{ page?: KnowledgePage; held?: HeldScope }> = [];
   if (!origin) {
     if (cursor?.startsWith('p')) throw new Error('knowledge_list: a page cursor needs the `from` it came from.');
-    const held = await run.storage.getScopesByAddress(run.principals);
-    const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
-    scopes = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
+    scopes = (await heldScopes(run)).map(held => ({ ...(held.page ? { page: held.page } : {}), held }));
   } else {
     originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
-    if (origin.isScope && !cursor?.startsWith('p')) scopes = await childScopes(origin.id);
+    if (origin.isScope && !cursor?.startsWith('p')) scopes = (await childScopes(origin.id)).map(page => ({ page }));
   }
   // A scope's readable child scopes come first, then its child pages; both count against `limit`.
   const shownScopes = scopes.slice(scopeOffset, scopeOffset + limit);
-  let roots: KnowledgePage[] = shownScopes;
+  let roots: Array<{ page?: KnowledgePage; held?: HeldScope }> = shownScopes;
   let nextCursor: string | undefined;
   if (scopeOffset + shownScopes.length < scopes.length) {
     nextCursor = `s${scopeOffset + shownScopes.length}`;
@@ -919,14 +955,14 @@ export async function listKnowledgeTree(
     const room = limit - shownScopes.length;
     if (room > 0) {
       const pages = await childPages(origin.id, room, pageCursor);
-      roots = [...shownScopes, ...pages.pages];
+      roots = [...shownScopes, ...pages.pages.map(page => ({ page }))];
       if (pages.nextCursor) nextCursor = `p${pages.nextCursor}`;
     } else if ((await run.storage.countChildPages({ parentIds: [origin.id], read: run.read }))[origin.id]) {
       nextCursor = 'p';
     }
   }
 
-  type Node = { page: KnowledgePage; ref: string; depth: number; children: number; below: Node[] };
+  type Node = { page?: KnowledgePage; held?: HeldScope; ref: string; depth: number; children: number; below: Node[] };
   const nodeOf = (page: KnowledgePage, ref: string, level: number): Node => ({
     page,
     ref,
@@ -934,12 +970,17 @@ export async function listKnowledgeTree(
     children: 0,
     below: [],
   });
-  const top = roots.map(page =>
-    nodeOf(page, origin && originRef ? childRef(origin, originRef, page) : (page.address ?? page.id), 1),
+  const top: Node[] = roots.map(({ page, held }) =>
+    page
+      ? {
+          ...nodeOf(page, origin && originRef ? childRef(origin, originRef, page) : (page.address ?? page.id), 1),
+          ...(held ? { held } : {}),
+        }
+      : { held, ref: held!.address, depth: 1, children: 0, below: [] },
   );
   let budget = Math.max(limit - top.length, 0);
   let truncated = false;
-  let level = top;
+  let level = top.filter(node => node.page) as Array<Node & { page: KnowledgePage }>;
   for (let current = 1; current <= depth && level.length; current++) {
     const parentIds = level.map(node => node.page.id);
     const scopeParents = level.filter(node => node.page.isScope).map(node => node.page.id);
@@ -953,7 +994,7 @@ export async function listKnowledgeTree(
       node.children = (pageCounts[node.page.id] ?? 0) + (scopeCounts[node.page.id] ?? 0);
     }
     if (current === depth) break;
-    const nextLevel: Node[] = [];
+    const nextLevel: Array<Node & { page: KnowledgePage }> = [];
     for (const node of level) {
       if (!node.children) continue;
       if (budget <= 0) {
@@ -964,9 +1005,13 @@ export async function listKnowledgeTree(
       budget -= scopes.length;
       const pages = budget > 0 ? (await childPages(node.page.id, budget)).pages : [];
       budget -= pages.length;
-      node.below = [...scopes, ...pages].map(child => nodeOf(child, childRef(node.page, node.ref, child), current + 1));
-      if (node.below.length < node.children) truncated = true;
-      nextLevel.push(...node.below);
+      const below = [...scopes, ...pages].map(child => ({
+        ...nodeOf(child, childRef(node.page, node.ref, child), current + 1),
+        page: child,
+      }));
+      node.below = below;
+      if (below.length < node.children) truncated = true;
+      nextLevel.push(...below);
     }
     level = nextLevel;
   }
@@ -974,13 +1019,17 @@ export async function listKnowledgeTree(
   const entries: ListEntry[] = [];
   const flatten = (nodes: Node[]) => {
     for (const node of nodes) {
+      const { page, held } = node;
       entries.push({
         ref: node.ref,
-        name: node.page.name,
-        ...(descriptions && node.page.description ? { description: node.page.description } : {}),
+        name: page?.name ?? node.ref,
+        ...(descriptions && page?.description ? { description: page.description } : {}),
         depth: node.depth,
         children: node.children,
-        ...(node.page.isScope ? { scope: true as const } : {}),
+        ...(!page || page.isScope ? { scope: true as const } : {}),
+        ...(held?.role ? { role: held.role } : {}),
+        ...(held ? { can: held.can } : {}),
+        ...(page ? {} : { empty: true as const }),
       });
       flatten(node.below);
     }
@@ -996,7 +1045,7 @@ function listTool(host: KnowledgePageToolHost) {
     id: 'knowledge_list',
     description:
       'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name and how many children it has. Pass `descriptions: true` to include page descriptions too. ' +
-      'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading. ' +
+      'Without `from`, lists every scope this run holds, with its role and whether it can read or write there, including scopes with no page this run can read yet (`empty`). Use it to find your way around a scope before searching or reading. ' +
       `One result holds at most \`limit\` entries and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
     inputSchema: {
       type: 'object',

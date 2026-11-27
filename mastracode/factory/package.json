@@ -1,7 +1,7 @@
 {
   "name": "@mastra/factory",
-  "version": "0.32.0-alpha.3",
-  "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory — storage domains, integrations, and surfaces for agent-powered software delivery",
+  "version": "0.32.0-alpha.4",
+  "description": "Mastra Software Factory module: the server core behind the Mastra Software Factory \u2014 storage domains, integrations, and surfaces for agent-powered software delivery",
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -80,6 +80,7 @@
   },
   "devDependencies": {
     "@copilotkit/aimock": "^1.46.0",
+    "@internal/factory-contract": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace": "workspace:*",

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createTool } from '@mastra/core/tools';
+import { SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 import { CLIENT_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -309,6 +310,35 @@ describe('MCPClient tool discovery retries', () => {
     const toolset = { getWeather: {} as any };
     const internalClient = {
       tools: vi.fn().mockRejectedValueOnce(new Error('Connection closed')).mockResolvedValueOnce(toolset),
+    } as any;
+
+    vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);
+    const reconnectSpy = vi.spyOn(client, 'reconnectServer').mockResolvedValue();
+
+    const result = await client.listToolsWithErrors();
+
+    expect(result).toEqual({
+      tools: {
+        weather_getWeather: toolset.getWeather,
+      },
+      errors: {},
+      errorDetails: {},
+    });
+    expect(internalClient.tools).toHaveBeenCalledTimes(2);
+    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+    expect(reconnectSpy).toHaveBeenCalledWith('weather');
+  });
+
+  it('retries listToolsWithErrors once when the SDK reports HTTP 404 only in structured data', async () => {
+    const client = createClient();
+    const toolset = { getWeather: {} as any };
+    const transportError = new SdkHttpError(
+      SdkErrorCode.ClientHttpNotImplemented,
+      'Error POSTing to endpoint: Session not found',
+      { status: 404 },
+    );
+    const internalClient = {
+      tools: vi.fn().mockRejectedValueOnce(transportError).mockResolvedValueOnce(toolset),
     } as any;
 
     vi.spyOn(client as any, 'getConnectedClientForServer').mockResolvedValue(internalClient);

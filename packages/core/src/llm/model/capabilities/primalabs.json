@@ -19,10 +19,9 @@
     "primalabs-ai/Nemotron-3.5-Super-VL-NVFP4"
   ],
   "reasoning": {
-    "primalabs-ai/GLM-5.3-Flash": [
+    "primalabs-ai/MiMo-V2.6-Pro": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "primalabs-ai/Nemotron-3.5-Super-VL-NVFP4": [
@@ -36,7 +35,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "primalabs-ai/MiMo-V2.6-Pro": [
+    "primalabs-ai/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "primalabs-ai/Nemotron-3.5-Lightning-NVFP4": [
       {
         "type": "toggle"
       }
@@ -45,11 +50,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "primalabs-ai/Nemotron-3.5-Lightning-NVFP4": [
-      {
-        "type": "toggle"
       }
     ]
   }

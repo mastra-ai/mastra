@@ -1,13 +1,15 @@
+import { factoryKeys, moveAnswered, moveAnswersMayBeMissed } from '@mastra/react/hooks/factory';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Query, QueryKey } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
-import { cardMoveMutationKey, queryKeys } from '../../../../api/keys';
+import { queryKeys } from '../../../../api/keys';
 import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { streamFeedEvents } from '../services/feedEvents';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
+import { MastraClientError } from '@mastra/client-js';
 import { RequestError } from '../services/request';
 
 const RETRY_MS = 3_000;
@@ -56,11 +58,14 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
     const reading = new Map<string, { again: boolean }>();
     const reread = (boardKey: QueryKey, query: Query) => {
       // A card read taken mid-move puts the card back in the column it is leaving; the move re-reads the cards when it lands.
-      if (boardKey === cardsKey && queryClient.isMutating({ mutationKey: cardMoveMutationKey(factoryProjectId) }) > 0) {
+      if (
+        boardKey === cardsKey &&
+        queryClient.isMutating({ mutationKey: factoryKeys.cardMove(factoryProjectId) }) > 0
+      ) {
         return;
       }
       // A server that predates these reads answers 404 for good: asking again on every frame cannot change it.
-      if (boardKey === factsKey && query.state.error instanceof RequestError && query.state.error.status === 404) {
+      if (boardKey === factsKey && query.state.error instanceof MastraClientError && query.state.error.status === 404) {
         return;
       }
       // Only an open subscription moves: a busy board must not re-read a settled or unfollowed pull request on every frame.
@@ -104,8 +109,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: refreshBoard,
+          onMove: moveAnswered,
           onConnected: () => {
             streaming = true;
+            // So was the answer to a move submitted before the stream dropped.
+            moveAnswersMayBeMissed();
             // Whatever landed while this tab held no stream was never announced.
             refreshBoard();
           },

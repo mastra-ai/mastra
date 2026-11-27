@@ -1,3 +1,4 @@
+import { SLACK_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
 import type {
   SessionActivityResponse,
   SessionRow,
@@ -5,7 +6,6 @@ import type {
   SessionRowsResponse,
 } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { SLACK_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import {
   SESSION_ROW_ALL_OWNERS,
   SESSION_ROW_MY_SESSIONS,

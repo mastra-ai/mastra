@@ -431,7 +431,13 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "include",
-        "type": "(\"web_search_call.results\" | \"file_search_call.results\" | \"message.output_text.logprobs\" | \"reasoning.encrypted_content\")[] | null | undefined",
+        "type": "(\"reasoning.encrypted_content\" | \"file_search_call.results\" | \"web_search_call.results\" | \"message.output_text.logprobs\")[] | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "includeWebSearchSources",
+        "type": "boolean | undefined",
         "description": "",
         "isOptional": true
     },
@@ -479,7 +485,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "promptCacheOptions",
-        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
+        "type": "{ mode?: \"implicit\" | \"explicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -497,7 +503,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "reasoningEffortUpdate",
-        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "type": "\"none\" | \"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
         "description": "",
         "isOptional": true
     },
@@ -569,12 +575,24 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "systemMessageMode",
-        "type": "\"remove\" | \"system\" | \"developer\" | undefined",
+        "type": "\"developer\" | \"system\" | \"remove\" | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "forceReasoning",
+        "type": "boolean | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "contextManagement",
+        "type": "{ type: \"compaction\"; compactThreshold: number; }[] | null | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "compactionTrigger",
         "type": "boolean | undefined",
         "description": "",
         "isOptional": true

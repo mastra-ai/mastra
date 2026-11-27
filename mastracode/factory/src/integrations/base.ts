@@ -17,6 +17,7 @@
  * sandbox machine's `derive()` gate).
  */
 
+import type { AuditEventRow } from '@internal/factory-contract';
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
 import type { AgentChannels, AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -24,8 +25,8 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
-import type { FactorySandbox } from '@mastra/core/workspace';
 
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -35,7 +36,6 @@ import type { RouteAuth } from '../routes/route.js';
 import type { NotRoutedLookup } from '../rules/event-rules.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
-import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';

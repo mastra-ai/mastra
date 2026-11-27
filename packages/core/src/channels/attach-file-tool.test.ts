@@ -7,6 +7,9 @@ type AttachFile = {
   execute: (input: { path: string }, ctx: Record<string, unknown>) => Promise<unknown>;
 };
 
+/** A render context as it lives on the request context: it carries the chat drivers, so it is never a JSON husk. */
+const liveRender = (fields: Record<string, unknown>) => ({ wrapStream: (stream: unknown) => stream, ...fields });
+
 async function setup({
   size = 12,
   type = 'file' as 'file' | 'directory',
@@ -20,7 +23,7 @@ async function setup({
   };
   const requestContext = new RequestContext();
   requestContext.set('channel', { platform: 'slack', isDM: true });
-  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { platform: 'slack', chatThread: { post } });
+  requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender({ platform: 'slack', chatThread: { post } }));
   requestContext.set('controller', { workspace: { filesystem: fs } });
   const tool = createChannelAttachFileTool(requestContext).attach_file as AttachFile;
   return { tool, post, fs };
@@ -99,7 +102,7 @@ describe('attach_file', () => {
   it('fails clearly when the session has no workspace', async () => {
     const post = vi.fn();
     const requestContext = new RequestContext();
-    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { chatThread: { post } });
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, liveRender({ chatThread: { post } }));
     const tool = createChannelAttachFileTool(requestContext).attach_file as AttachFile;
     await expect(tool.execute({ path: '/x' }, {})).rejects.toThrow(/No workspace filesystem/);
     expect(post).not.toHaveBeenCalled();

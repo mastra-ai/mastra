@@ -186,7 +186,10 @@ describe('PropertyFilterApplied — editing a text pill', () => {
     expect(onTokensChange).toHaveBeenCalledWith([{ fieldId: 'entityId', value: 'weather-agent' }]);
   });
 
-  it('says nothing on Enter when the trimmed draft is already stored', () => {
+  it.each([
+    ['says nothing on Enter when the trimmed draft is already stored', 'Enter'],
+    ['leaves other keys to the input', 'a'],
+  ] as const)('%s', (_title, key) => {
     const onTokensChange = vi.fn();
     render(
       <PropertyFilterApplied
@@ -196,7 +199,7 @@ describe('PropertyFilterApplied — editing a text pill', () => {
       />,
     );
 
-    fireEvent.keyDown(screen.getByDisplayValue('weather'), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByDisplayValue('weather'), { key });
 
     expect(onTokensChange).not.toHaveBeenCalled();
   });
@@ -215,21 +218,6 @@ describe('PropertyFilterApplied — editing a text pill', () => {
     fireEvent.keyDown(input, { key: 'Escape' });
 
     expect((input as HTMLInputElement).value).toBe('weather');
-  });
-
-  it('leaves other keys to the input', () => {
-    const onTokensChange = vi.fn();
-    render(
-      <PropertyFilterApplied
-        fields={FIELDS}
-        tokens={[{ fieldId: 'entityId', value: 'weather' }]}
-        onTokensChange={onTokensChange}
-      />,
-    );
-
-    fireEvent.keyDown(screen.getByDisplayValue('weather'), { key: 'a' });
-
-    expect(onTokensChange).not.toHaveBeenCalled();
   });
 
   it('takes Enter for itself so it never submits a surrounding form', () => {
@@ -545,30 +533,20 @@ describe('PropertyFilterApplied — a locked pill', () => {
     ).toBeTruthy();
   });
 
-  it('reads a locked pick-multi selection by its option labels', () => {
+  it.each([
+    ['reads a locked pick-multi selection by its option labels', 'workflow_run', 'Agent, Workflow'],
+    ['falls back to the raw value for an option it does not offer', 'mystery', 'Agent, mystery'],
+  ] as const)('%s', (_title, value, input) => {
     render(
       <PropertyFilterApplied
         fields={FIELDS}
-        tokens={[{ fieldId: 'rootEntityType', value: ['agent', 'workflow_run'] }]}
+        tokens={[{ fieldId: 'rootEntityType', value: ['agent', value] }]}
         lockedFieldIds={['rootEntityType']}
         onTokensChange={vi.fn()}
       />,
     );
 
-    expect(screen.getByText('Agent, Workflow')).toBeTruthy();
-  });
-
-  it('falls back to the raw value for an option it does not offer', () => {
-    render(
-      <PropertyFilterApplied
-        fields={FIELDS}
-        tokens={[{ fieldId: 'rootEntityType', value: ['agent', 'mystery'] }]}
-        lockedFieldIds={['rootEntityType']}
-        onTokensChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText('Agent, mystery')).toBeTruthy();
+    expect(screen.getByText(input)).toBeTruthy();
   });
 
   it('reads a locked empty selection as Any', () => {

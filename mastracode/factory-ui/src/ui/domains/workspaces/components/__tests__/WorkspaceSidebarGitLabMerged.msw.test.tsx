@@ -7,7 +7,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
-import type { WorkItemSessionRef } from '../../../factory/services/workItems';
+import type { WorkItemSessionRef } from '@internal/factory-contract';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';

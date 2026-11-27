@@ -1,5 +1,5 @@
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
-import type { WorkItem } from '../../../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { ListedFactoryProjectPayload } from '../../../services/github';
 import type { FactoryUserSession } from '../../../services/user-sessions';
 

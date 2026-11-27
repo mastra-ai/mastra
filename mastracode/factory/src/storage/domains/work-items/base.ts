@@ -1,3 +1,10 @@
+import { createHash } from 'node:crypto';
+import {
+  FACTORY_DISPATCH_FAILURE_CODES,
+  externalSourceForWorkItem,
+  FACTORY_TRIAGE_TYPES,
+  primarySource,
+} from '@internal/factory-contract';
 /**
  * Factory work-items storage domain.
  *
@@ -8,13 +15,17 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
-import { createHash } from 'node:crypto';
-
+import type {
+  FactoryDispatchFailureCode,
+  ExternalWorkItemSource,
+  FactoryTriageType,
+  WorkItemRow as ProviderWorkItemRow,
+  WorkItemSource,
+  WorkItemSourceRow,
+} from '@internal/factory-contract';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
-import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
-import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
 import {
   copyLegacyRows,
@@ -48,14 +59,8 @@ import {
   releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
-import type {
-  WorkItemRow as ProviderWorkItemRow,
-  WorkItemDbRecord,
-  WorkItemSourceDbRecord,
-  WorkItemSourceRow,
-} from './work-item-schema.js';
+import type { WorkItemDbRecord, WorkItemSourceDbRecord } from './work-item-schema.js';
 import {
-  primarySource,
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
@@ -105,19 +110,6 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'detail-finding' ||
     value === 'manual'
   );
-}
-
-export interface ExternalWorkItemSource {
-  integrationId: string;
-  type: string;
-  /**
-   * The tenant on the platform, never ours: a Slack team (`T0ABC…`), a Discord
-   * guild. Scopes the key, because a platform id such as a channel or a message
-   * `ts` is only unique inside the workspace that issued it.
-   */
-  workspaceId?: string;
-  externalId: string;
-  url?: string;
 }
 
 /** Dispatcher upsert idempotency token — server bookkeeping, dropped from the read wire. */
@@ -221,34 +213,6 @@ export type FactoryDispatchStatus =
   | 'succeeded'
   | 'failed';
 
-const FACTORY_DISPATCH_FAILURE_CODES = [
-  'session_unavailable',
-  'source_control_missing',
-  'source_repository_missing',
-  'source_repository_ambiguous',
-  'unsupported_provider_item',
-  'notification_delivery_failed',
-  'run_terminal_event_missing',
-  'run_incomplete',
-  'skill_delivery_ambiguous',
-  'run_overdue',
-  'repository_git_missing',
-  'repository_sandbox_unresponsive',
-  'repository_egress_blocked',
-  'repository_clone_failed',
-  'repository_pull_failed',
-  'repository_push_failed',
-  'repository_commit_failed',
-  'repository_cli_missing',
-  'repository_pr_failed',
-  'run_configuration_invalid',
-  'run_credentials_unavailable',
-  'run_user_unauthenticated',
-  'factory_org_key_missing',
-  'run_failed',
-  'unknown',
-] as const;
-
 /** Written until a pause stopped counting as a failure; stored rows still read through them. */
 const RETIRED_FACTORY_DISPATCH_FAILURE_CODES = ['plan_awaiting_approval', 'run_awaiting_input'] as const;
 
@@ -257,7 +221,6 @@ const STORED_FACTORY_DISPATCH_FAILURE_CODES = [
   ...RETIRED_FACTORY_DISPATCH_FAILURE_CODES,
 ] as const;
 
-export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
 export type StoredFactoryDispatchFailureCode = (typeof STORED_FACTORY_DISPATCH_FAILURE_CODES)[number];
 
 function isStoredFactoryDispatchFailureCode(value: unknown): value is StoredFactoryDispatchFailureCode {

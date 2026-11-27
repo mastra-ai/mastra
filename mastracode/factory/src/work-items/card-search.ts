@@ -1,5 +1,5 @@
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { workItemNumber } from './card-number.js';
 import { searchableCard } from './search-terms.js';
 import type { SearchableCard } from './search-terms.js';

@@ -1,12 +1,22 @@
+import {
+  isHumanActorId,
+  legacyGithubWorkItemBranch,
+  pullRequestBranch,
+  workItemBranch,
+  workItemBranchSource,
+  workItemSource,
+  workItemThreadTitle,
+} from '@internal/factory-contract';
+import type { FactoryRuleActor, WorkItemBranchSource, FactoryDispatchFailureCode } from '@internal/factory-contract';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+
 import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
-
 import { createDispatcherBoardEngine } from '../board-engine/engine.js';
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
@@ -31,8 +41,6 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { NotRoutedLookup } from '../rules/event-rules.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { workItemSource } from '../rules/types.js';
-import type { FactoryRuleActor } from '../rules/types.js';
 import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
@@ -45,7 +53,6 @@ import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../s
 import type { LiveSessions } from '../session/live-sessions.js';
 import { repositoryChosenByRun, resolveRunRepositoryFromIntake } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
-import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -66,15 +73,7 @@ import {
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import {
-  legacyGithubWorkItemBranch,
-  pullRequestBranch,
-  workItemBranch,
-  workItemBranchSource,
-  workItemThreadTitle,
-} from '../work-item-branch.js';
-import type { WorkItemBranchSource } from '../work-item-branch.js';
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
@@ -184,6 +183,11 @@ export interface FactoryApiRoutesDeps {
   renameThread?: (input: { threadId: string; title: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
+  /** Tells a project's open boards how a move answered `202` ended. */
+  announceMove?: (
+    scope: { orgId: string; factoryProjectId: string },
+    move: import('../feed-events.js').FeedMove,
+  ) => void;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     boardEngine: FactoryBoardEngine;
@@ -1051,6 +1055,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           boardEngine,
+          announceMove: deps.announceMove,
           startCoordinator,
           ...(sourceControlRegistrations.length > 0
             ? {

@@ -101,21 +101,13 @@ describe('template-utils', () => {
       },
     ];
 
-    it('should find template by exact slug match', async () => {
+    it.each([
+      ['should find template by exact slug match', 'template-browsing-agent'],
+      ['should find template by slug without template- prefix', 'browsing-agent'],
+      ['should find template by case-insensitive name match', 'browsing agent'],
+    ] as const)('%s', async (_title, input) => {
       const { findTemplateByName } = await import('./template-utils');
-      const result = findTemplateByName(mockTemplates, 'template-browsing-agent');
-      expect(result).toEqual(mockTemplates[0]);
-    });
-
-    it('should find template by slug without template- prefix', async () => {
-      const { findTemplateByName } = await import('./template-utils');
-      const result = findTemplateByName(mockTemplates, 'browsing-agent');
-      expect(result).toEqual(mockTemplates[0]);
-    });
-
-    it('should find template by case-insensitive name match', async () => {
-      const { findTemplateByName } = await import('./template-utils');
-      const result = findTemplateByName(mockTemplates, 'browsing agent');
+      const result = findTemplateByName(mockTemplates, input);
       expect(result).toEqual(mockTemplates[0]);
     });
 

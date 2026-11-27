@@ -1094,6 +1094,39 @@ describe('MastraMCPClient - tool-execution errors vs reconnection', () => {
 
     await client.disconnect().catch(() => {});
   });
+
+  it('reconnects and retries once for an SDK HTTP 404 carried only in structured data', async () => {
+    const client = new InternalMastraMCPClient({ name: 'structured-404-client', server: { url: testServer.baseUrl } });
+    await client.connect();
+
+    const sdkClient = (client as any).client as Client;
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [{ name: 'fetch', description: 'Fetches data', inputSchema: { type: 'object' as const } }],
+    });
+
+    // SDK 2 stores the status on `data.status`; the message never quotes it, so only the
+    // structured metadata marks this as a reconnectable pre-dispatch 4xx.
+    const transportError = new SdkHttpError(
+      SdkErrorCode.ClientHttpNotImplemented,
+      'Error POSTing to endpoint: Session not found',
+      { status: 404 },
+    );
+    const successResult: CallToolResult = { content: [{ type: 'text', text: 'ok' }] };
+    const callToolSpy = vi
+      .spyOn(sdkClient, 'callTool')
+      .mockRejectedValueOnce(transportError)
+      .mockResolvedValueOnce(successResult);
+    const reconnectSpy = vi.spyOn(client as any, 'reconnectAfterTransportFailure').mockResolvedValue(undefined);
+
+    const tools = await client.tools();
+    // A retry that succeeds proves the call did not fall into MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN.
+    await expect(tools['fetch'].execute?.({})).resolves.toEqual(successResult);
+
+    expect(callToolSpy).toHaveBeenCalledTimes(2);
+    expect(reconnectSpy).toHaveBeenCalledTimes(1);
+
+    await client.disconnect().catch(() => {});
+  });
 });
 
 describe('MastraMCPClient - no outputSchema', () => {

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import type { FactoryStageRuleContext } from '@internal/factory-contract';
 
-import type { FactoryStageRuleContext } from '../rules/types.js';
+import { describe, expect, it } from 'vitest';
 import { defineBoard } from './define-board.js';
 import { phaseRunDecision } from './phase-runner.js';
 

@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryTriageType } from '@internal/factory-contract';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { FactoryTriageType } from '../../../rules/types.js';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { HELD_CARD_SWEEP_ACTOR, WorkItemsStorage } from './base.js';
 import type { Card } from './base.js';

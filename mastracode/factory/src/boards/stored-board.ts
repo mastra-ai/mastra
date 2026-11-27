@@ -1,6 +1,6 @@
-import { z } from 'zod';
+import { cardRuleGroupSchema } from '@internal/factory-contract';
 
-import { cardRuleGroupSchema } from '../rules/rule-group.js';
+import { z } from 'zod';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { BoardDefinitionError, compileBoardDefinition, declarationOf, FACTORY_PHASE_TOOLS } from './define-board.js';
 import type { AnyBoardConfig, BoardPhase, BoardPhaseDefinition } from './define-board.js';

@@ -80,7 +80,7 @@ class TestIntersectionObserver implements IntersectionObserver {
   }
 }
 
-const scrollOlderEdgeIntoView = () => observers.forEach(observer => observer.intersect());
+const scrollPageEdgeIntoView = () => observers.forEach(observer => observer.intersect());
 
 beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', TestIntersectionObserver);
@@ -174,7 +174,7 @@ describe('LogViewList', () => {
       render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
       expect(onFetchNextPage).not.toHaveBeenCalled();
 
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
@@ -183,7 +183,7 @@ describe('LogViewList', () => {
       const onFetchNextPage = vi.fn();
       render(<LogViewList {...props} logs={[]} onFetchNextPage={onFetchNextPage} />);
 
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });
@@ -227,6 +227,35 @@ describe('LogViewList', () => {
     });
   });
 
+  describe('oldest first, paging forward to newer logs', () => {
+    const props = {
+      order: 'oldest-first',
+      nextPage: 'newer',
+      logs: sandboxLines,
+      logIdMap: idMap,
+      onLogClick: vi.fn(),
+      hasNextPage: true,
+    } as const;
+
+    it('loads newer logs once the bottom scrolls into view', () => {
+      const onFetchNextPage = vi.fn();
+      render(<LogViewList {...props} onFetchNextPage={onFetchNextPage} />);
+
+      scrollPageEdgeIntoView();
+
+      expect(onFetchNextPage).toHaveBeenCalledOnce();
+    });
+
+    it('shows that newer logs are loading below the lines', () => {
+      render(<LogViewList {...props} isFetchingNextPage onFetchNextPage={vi.fn()} />);
+
+      const status = screen.getByRole('status');
+      expect(status.textContent).toBe('Loading newer logs');
+      const lastLine = screen.getByRole('button', { name: /Process.Start stream ended/ });
+      expect(status.compareDocumentPosition(lastLine)).toBe(Node.DOCUMENT_POSITION_PRECEDING);
+    });
+  });
+
   describe('newest first, like an audit log', () => {
     it('loads older logs once the bottom scrolls into view, but not while a page is loading', () => {
       const onFetchNextPage = vi.fn();
@@ -238,12 +267,12 @@ describe('LogViewList', () => {
         onFetchNextPage,
       } as const;
       const { rerender } = render(<LogViewList {...props} isFetchingNextPage />);
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
       expect(onFetchNextPage).not.toHaveBeenCalled();
       expect(scrollToIndex).not.toHaveBeenCalled();
 
       rerender(<LogViewList {...props} />);
-      scrollOlderEdgeIntoView();
+      scrollPageEdgeIntoView();
 
       expect(onFetchNextPage).toHaveBeenCalledOnce();
     });

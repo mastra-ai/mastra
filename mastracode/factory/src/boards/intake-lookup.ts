@@ -1,4 +1,4 @@
-import type { RuleFacts } from '../rules/rule-group.js';
+import type { RuleFacts } from '@internal/factory-contract';
 import type { StoredBoardScope } from '../storage/domains/boards/base.js';
 
 /** What one provider's lookup found for a URL. */

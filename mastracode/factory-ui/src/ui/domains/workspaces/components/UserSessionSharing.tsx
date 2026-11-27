@@ -1,4 +1,4 @@
-import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
+import { SLACK_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';

@@ -4,7 +4,7 @@ import { KnowledgeStorage } from '@mastra/core/storage';
 import type { KnowledgePageStore, KnowledgeTransactionOptions } from '@mastra/core/storage';
 import { defaults as pgDefaults } from 'pg';
 
-import { TransactionClient, TransactionDeadlineError } from '../../client';
+import { TransactionClient, TransactionDeadlineError, trustedTransactionClient } from '../../client';
 import type { TxClient } from '../../client';
 import type { DbClient, PgDomainConfig } from '../../db';
 import { resolvePgConfig } from '../../db';
@@ -84,14 +84,17 @@ export function getPgKnowledgeIsolationKey(config: PgKnowledgeIsolationConfig): 
  * A `DbClient` over one open transaction, for a {@link KnowledgePG} transaction view. Every query runs
  * on the transaction; `tx` opens a savepoint, so a store method that fails undoes only its own
  * statements and leaves the transaction usable. Savepoints nest, so calls on a view are awaited one
- * at a time, as on a single connection.
+ * at a time, as on a single connection. Its statements are this package's own SQL, so they may
+ * reuse the transaction's timeouts; see `TransactionTimeoutOptions`.
  */
 class TransactionDbClient implements DbClient {
+  readonly #raw: TxClient;
   readonly #tx: TxClient;
   #savepoints = 0;
 
   constructor(tx: TxClient) {
-    this.#tx = tx;
+    this.#raw = tx;
+    this.#tx = trustedTransactionClient(tx);
   }
 
   get $pool(): never {
@@ -111,13 +114,13 @@ class TransactionDbClient implements DbClient {
   query: DbClient['query'] = (query, values) => this.#tx.query(query, values);
 
   tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
-    const tx = this.#tx;
+    const tx = this.#raw;
     if (!(tx instanceof TransactionClient)) {
       return Promise.reject(
         new Error('Knowledge transactions need a client from @mastra/pg (a pool, connection string or PoolAdapter).'),
       );
     }
-    return tx.savepoint(`knowledge_sp_${++this.#savepoints}`, () => callback(tx));
+    return tx.savepoint(`knowledge_sp_${++this.#savepoints}`, () => callback(this.#tx));
   }
 }
 
@@ -309,6 +312,12 @@ export class KnowledgePG extends KnowledgeStorage {
 
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pages.getPage(input);
+  }
+
+  override getPageParents(
+    input: Parameters<KnowledgeStorage['getPageParents']>[0],
+  ): ReturnType<KnowledgeStorage['getPageParents']> {
+    return this.#pages.getPageParents(input);
   }
 
   override getPageByPath(

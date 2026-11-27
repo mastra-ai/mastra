@@ -1,6 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-
-import { InlineText } from '../InlineText';
+import { InlineText } from '@mastra/playground-ui/domains/factory';
 
 export function SkillDescription({
   value,

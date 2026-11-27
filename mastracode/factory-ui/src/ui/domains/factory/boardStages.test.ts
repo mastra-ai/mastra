@@ -1,5 +1,5 @@
 import { workBoard } from '@mastra/factory/boards';
-import type { WorkItemSourceRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import type { WorkItemSourceRow, WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 
 import { describe, expect, it } from 'vitest';
 
@@ -10,7 +10,6 @@ import {
   itemStageOptions,
   pullRequestMayEnter,
 } from './boardStages';
-import type { WorkItem, WorkItemSource } from './services/workItems';
 import { selfReviewWorkBoardInfo, shipBoard, workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
 import { BOARD_STAGES } from './stages';
 

@@ -1,10 +1,11 @@
 import { http } from 'msw';
 
+import type { MoveAnswer } from '@mastra/react/hooks/factory';
 import { TEST_BASE_URL } from './render';
 
 /**
  * A pushable feed stream, overriding the ambient silent one. `push` writes a
- * `feed` frame; `ping` writes the server's keepalive; `close` ends the stream
+ * `feed` frame; `move` writes the answer to a move the server took on; `ping` writes the server's keepalive; `close` ends the stream
  * so the provider takes its retry path. `open` is true while a page holds it.
  */
 export function pushableFeedStream(factoryProjectId: string) {
@@ -37,6 +38,9 @@ export function pushableFeedStream(factoryProjectId: string) {
     },
     push() {
       controller?.enqueue(encoder.encode('event: feed\ndata: {}\n\n'));
+    },
+    move(answer: MoveAnswer) {
+      controller?.enqueue(encoder.encode(`event: move\ndata: ${JSON.stringify(answer)}\n\n`));
     },
     ping() {
       controller?.enqueue(encoder.encode(': ping\n\n'));

@@ -1,5 +1,3 @@
-import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
-
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useGitLabIssueDetail, useGitLabMergeRequestDetail } from '../../../../hooks/useGitLabData';
 import { useIncidentioIssueDetail } from '../../../../hooks/useIncidentioData';
@@ -14,7 +12,7 @@ import {
   linearIdentifierForItem,
   linearIssueIdForItem,
 } from '../boardItems';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
 type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'workItem' | 'metadata'>;
@@ -84,20 +82,4 @@ export function useSourceDescription(
     : { issue, pull, gitlab, 'gitlab-pr': gitlabPull, linear, jira, incidentio }[source];
 }
 
-export function SourceDescriptionLines() {
-  return (
-    <div aria-hidden className="px-2">
-      <SkeletonText line="text-caption" className="w-full motion-reduce:before:animate-none" />
-      <SkeletonText line="text-caption" className="w-4/5 motion-reduce:before:animate-none" />
-      <SkeletonText line="text-caption" className="w-2/3 motion-reduce:before:animate-none" />
-    </div>
-  );
-}
-
-export function SourceDescriptionLoading() {
-  return (
-    <div role="status" aria-label="Loading description">
-      <SourceDescriptionLines />
-    </div>
-  );
-}
+export { SourceDescriptionLines, SourceDescriptionLoading } from '@mastra/playground-ui/domains/factory';

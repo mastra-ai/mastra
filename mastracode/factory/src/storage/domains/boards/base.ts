@@ -1,20 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
+import {
+  arrivalKinds,
+  currentRuleGroup,
+  DEFAULT_ROUTE_EVENTS,
+  deriveIntakeOrder,
+  kindsTakenWhole,
+  reconcileIntakeOrder,
+  routeEventsProblem,
+} from '@internal/factory-contract';
+import type { ArrivalKind, RouteArrivals, RouteEvent, RuleGroup } from '@internal/factory-contract';
+
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
-
-import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
-import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
-import { deriveIntakeOrder, kindsTakenWhole, reconcileIntakeOrder } from '../../../boards/intake-order.js';
 import {
   DEFAULT_INTAKE_ROUTES,
   LINKED_PULL_REQUEST_ROUTE_KEY,
   RETIRED_JOIN_ROUTE,
 } from '../../../boards/work-routes.js';
-import { currentRuleGroup } from '../../../rules/rule-group.js';
-import type { RuleGroup } from '../../../rules/rule-group.js';
 import type { RetiredAutomationSettings } from '../projects/base.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,

@@ -9,10 +9,7 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "deepseek-v4-1-flash": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -24,13 +21,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4-1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

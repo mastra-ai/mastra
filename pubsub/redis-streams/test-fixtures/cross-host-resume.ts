@@ -9,12 +9,37 @@ import { PostgresStore } from '@mastra/pg';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from '../src/index';
 
+class SessionController {
+  constructor(readonly sessionId: string) {}
+
+  getState() {
+    return this.sessionId;
+  }
+}
+
+export function addContextProbes(requestContext: RequestContext, sessionId: string) {
+  requestContext.set('session-controller', new SessionController(sessionId));
+  requestContext.set('read-session', () => sessionId);
+}
+
 export function contextSnapshot(requestContext: RequestContext | undefined) {
   const user = requestContext?.get('mastra__user') as { id?: string } | undefined;
   const executions = requestContext?.get('mastra__durableExecutions') as
     | Record<string, { executionId?: string }>
     | undefined;
+  const controller = requestContext?.get('session-controller');
+  const readSession = requestContext?.get('read-session');
   return {
+    controller,
+    controllerState:
+      controller &&
+      typeof controller === 'object' &&
+      'getState' in controller &&
+      typeof controller.getState === 'function'
+        ? controller.getState()
+        : undefined,
+    closurePresent: requestContext?.has('read-session') ?? false,
+    closureResult: typeof readSession === 'function' ? readSession() : undefined,
     marker: requestContext?.get('resume-marker'),
     user: user?.id,
     executionIds: Object.values(executions ?? {}).map(claim => claim.executionId),

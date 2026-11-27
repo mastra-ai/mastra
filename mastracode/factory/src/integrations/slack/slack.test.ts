@@ -1,3 +1,4 @@
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import { AgentChannels, ChannelSessionRejectedError, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -7,7 +8,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
-import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 

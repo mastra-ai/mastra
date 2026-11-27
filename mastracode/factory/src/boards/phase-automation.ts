@@ -1,5 +1,5 @@
-import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { FactoryCommitDecision } from '../rules/types.js';
+import { evaluateRuleGroup } from '@internal/factory-contract';
+import type { FactoryCommitDecision } from '@internal/factory-contract';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 import type { BoardRegistry } from './registry.js';

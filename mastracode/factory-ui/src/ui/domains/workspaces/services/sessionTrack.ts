@@ -1,10 +1,10 @@
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+import { isHumanActorId } from '@internal/factory-contract';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { differenceInCalendarDays } from 'date-fns';
 
 import type { AuditEvent } from '../../factory/services/audit';
 import { stageMoves, stageStays } from '../../factory/stageStays';
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 export interface RunInterval {
   startedAt: number;

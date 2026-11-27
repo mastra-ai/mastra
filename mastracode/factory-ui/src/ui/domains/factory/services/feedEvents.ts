@@ -1,5 +1,7 @@
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';
+import { parseMoveAnswer } from '@mastra/react/hooks/factory';
+import type { MoveAnswer } from '@mastra/react/hooks/factory';
 
 /** The server pings every 25 s, so a stream this quiet has nobody on the other end and never ends on its own. */
 const FEED_SILENCE_LIMIT_MS = 60_000;
@@ -7,7 +9,7 @@ const FEED_SILENCE_LIMIT_MS = 60_000;
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: () => void; onConnected: () => void },
+  handlers: { onEvent: () => void; onConnected: () => void; onMove?: (answer: MoveAnswer) => void },
   signal: AbortSignal,
 ): Promise<void> {
   const silence = new AbortController();
@@ -35,6 +37,10 @@ export async function streamFeedEvents(
     });
     await readSSE(response.body.pipeThrough(heardBytes, { signal: closedOrSilent }), (event, data) => {
       if (event === 'feed') handlers.onEvent();
+      if (event === 'move') {
+        const answer = parseMoveAnswer(data);
+        if (answer) handlers.onMove?.(answer);
+      }
     });
   } finally {
     clearTimeout(silenceTimer);

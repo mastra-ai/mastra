@@ -4,11 +4,11 @@
  * as having a pull request, and relate to the card that holds it, without holding it themselves.
  */
 
+import { closedWorkItemIds, pullRequestSources } from '@internal/factory-contract';
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { cardFacts } from './card-facts.js';
 import { cardSearch } from './card-search.js';
-import { closedWorkItemIds, pullRequestSources } from './change-requests.js';
 import type { SearchableCard } from './search-terms.js';
 
 export interface ClosingLinks {

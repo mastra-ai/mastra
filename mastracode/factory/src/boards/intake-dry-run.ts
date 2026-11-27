@@ -5,8 +5,7 @@
  * under `intake-order` would do. A project still on `route-list` files differently.
  */
 
-import type { RuleFacts } from '../rules/rule-group.js';
-import type { FactoryCommitDecision } from '../rules/types.js';
+import type { FactoryCommitDecision, RuleFacts } from '@internal/factory-contract';
 import type { StoredIntakeDecisionRecord, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';

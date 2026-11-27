@@ -1,3 +1,5 @@
+import { CLOSES_WORK_ITEM_IDS_KEY } from '@internal/factory-contract';
+import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler, WorkItemSourceRow } from '@internal/factory-contract';
 import {
   isPullRequestCard,
   isOpenPullRequestSource,
@@ -16,9 +18,6 @@ import {
   routedOnly,
   unreviewedPullRequestCard,
 } from '../../rules/event-rules.js';
-import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
-import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
-import { CLOSES_WORK_ITEM_IDS_KEY } from '../../work-items/change-requests.js';
 
 export type GitLabRuleOverrides = Partial<
   Record<FactoryGitLabEventName, FactoryRuleHandler<FactoryGitLabRuleContext> | null | undefined>

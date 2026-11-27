@@ -2,8 +2,10 @@
  * Vercel Sandbox (MicroVM) Provider
  *
  * Wraps the official `@vercel/sandbox` SDK, which provisions ephemeral
- * Firecracker MicroVMs (Amazon Linux 2023) with a persistent in-session
- * filesystem, command execution, background processes, and exposed ports.
+ * Firecracker MicroVMs with a persistent in-session filesystem, command
+ * execution, background processes, and exposed ports. Runtime-managed
+ * sandboxes run Amazon Linux 2023; sandboxes started from a custom image or a
+ * snapshot use whatever filesystem that image or snapshot contains.
  *
  * This is distinct from the `VercelServerlessSandbox` provider in this package, which
  * runs commands as Vercel serverless Functions and is stateless.
@@ -24,6 +26,7 @@ import type {
   SandboxNetworking,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
+import type { NetworkPolicy } from '@vercel/sandbox';
 import { Sandbox } from '@vercel/sandbox';
 import type { SandboxMounts, SandboxRegion } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
@@ -48,7 +51,14 @@ export type VercelSandboxRuntime = 'node24' | 'node22' | 'node26' | 'python3.13'
 export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Unique identifier for this sandbox instance. */
   id?: string;
-  /** Optional sandbox name passed to the Vercel API. Auto-generated if omitted. */
+  /**
+   * Optional sandbox name passed to the Vercel API. Auto-generated if omitted.
+   *
+   * A name is an identity: starting resumes the sandbox with this name when one
+   * already exists, so creation options (including `networkPolicy`) apply only
+   * when a new sandbox is created. An existing named sandbox keeps the
+   * configuration it was created with.
+   */
   sandboxName?: string;
   /** Vercel API token. Falls back to the `VERCEL_TOKEN` env var. */
   token?: string;
@@ -56,8 +66,41 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   teamId?: string;
   /** Vercel project ID. Falls back to the `VERCEL_PROJECT_ID` env var. */
   projectId?: string;
-  /** Sandbox runtime. @default 'node24' */
+  /**
+   * Sandbox runtime. Ignored (and rejected if set explicitly) when `image` or
+   * `source` is provided.
+   * @default 'node24'
+   */
   runtime?: VercelSandboxRuntime;
+  /**
+   * Vercel Container Registry (VCR) image to start the sandbox from, such as
+   * `my-repo`, `my-repo:v1`, or a fully-qualified `vcr.vercel.com/...` URL.
+   *
+   * Mutually exclusive with `runtime` and `source`. When set, the sandbox is
+   * created from the image and no default runtime is sent.
+   */
+  image?: string;
+  /**
+   * Start the sandbox from an existing filesystem snapshot. Only the snapshot
+   * source form is supported; git and tarball sources are not exposed.
+   *
+   * Mutually exclusive with `runtime` and `image`. When set, the sandbox is
+   * created from the snapshot and no default runtime is sent.
+   */
+  source?: { type: 'snapshot'; snapshotId: string };
+  /**
+   * Network policy for the sandbox, applied at creation time.
+   *
+   * Use `'deny-all'` to block all outbound traffic, `'allow-all'` (the
+   * platform default) for full internet access, or an object with `allow`
+   * domain rules and `subnets` CIDR lists.
+   *
+   * A newly created sandbox is protected by the policy from its first command.
+   * It is not applied to an existing sandbox resumed by `sandboxName`. The SDK
+   * can change the policy of a running sandbox through
+   * `sandbox.sandbox.update({ networkPolicy })`; this adapter does not.
+   */
+  networkPolicy?: NetworkPolicy;
   /**
    * Timeout in milliseconds before the sandbox auto-terminates.
    * @default 300_000 // 5 minutes
@@ -158,7 +201,10 @@ export class VercelSandbox extends MastraSandbox {
   private readonly _token?: string;
   private readonly _teamId?: string;
   private readonly _projectId?: string;
-  private readonly _runtime: VercelSandboxRuntime;
+  private readonly _runtime?: VercelSandboxRuntime;
+  private readonly _image?: string;
+  private readonly _source?: { type: 'snapshot'; snapshotId: string };
+  private readonly _networkPolicy?: NetworkPolicy;
   private readonly _timeout: number;
   private readonly _vcpus?: number;
   private readonly _ports?: number[];
@@ -177,12 +223,29 @@ export class VercelSandbox extends MastraSandbox {
       processes: new VercelSandboxProcessManager(),
     });
 
+    const { runtime, image, source } = options;
+    if (runtime !== undefined && image !== undefined) {
+      throw new Error(`${LOG_PREFIX} 'runtime' and 'image' are mutually exclusive; provide only one.`);
+    }
+    if (runtime !== undefined && source !== undefined) {
+      throw new Error(`${LOG_PREFIX} 'runtime' and 'source' are mutually exclusive; provide only one.`);
+    }
+    if (image !== undefined && source !== undefined) {
+      throw new Error(`${LOG_PREFIX} 'image' and 'source' are mutually exclusive; provide only one.`);
+    }
+
     this.id = options.id ?? `vercel-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this._sandboxName = options.sandboxName;
     this._token = options.token ?? process.env.VERCEL_TOKEN;
     this._teamId = options.teamId ?? process.env.VERCEL_TEAM_ID;
     this._projectId = options.projectId ?? process.env.VERCEL_PROJECT_ID;
-    this._runtime = options.runtime ?? 'node24';
+    // The legacy `node24` default applies only to a runtime-based sandbox;
+    // image and snapshot sources reject an accompanying runtime, so they leave
+    // it unset and `start()` sends no runtime key.
+    this._runtime = runtime ?? (image !== undefined || source !== undefined ? undefined : 'node24');
+    this._image = image;
+    this._source = source;
+    this._networkPolicy = options.networkPolicy;
     this._timeout = options.timeout ?? 300_000;
     this._vcpus = options.resources?.vcpus;
     this._ports = options.ports;
@@ -281,11 +344,22 @@ export class VercelSandbox extends MastraSandbox {
       return;
     }
 
-    this.logger.debug(`${LOG_PREFIX} Creating sandbox...`, { runtime: this._runtime, timeout: this._timeout });
+    this.logger.debug(`${LOG_PREFIX} Creating sandbox...`, {
+      environment: this._environmentLabel(),
+      timeout: this._timeout,
+    });
 
     const params = {
-      runtime: this._runtime,
+      // Exactly one environment selection is sent. The SDK's parameter union
+      // rejects a runtime alongside image or snapshot source, so each is spread
+      // only when selected rather than passed as an explicit `undefined`.
+      ...(this._image !== undefined
+        ? { image: this._image }
+        : this._source !== undefined
+          ? { source: this._source }
+          : { runtime: this._runtime }),
       timeout: this._timeout,
+      ...(this._networkPolicy !== undefined ? { networkPolicy: this._networkPolicy } : {}),
       ...(this._vcpus ? { resources: { vcpus: this._vcpus } } : {}),
       ...(this._ports?.length ? { ports: this._ports } : {}),
       // `region`/`failoverRegions`/`mounts` are forwarded only when configured,
@@ -301,6 +375,9 @@ export class VercelSandbox extends MastraSandbox {
     // Named sandboxes are an identity: get-or-create resumes the existing
     // sandbox (snapshot restore) if one with this name exists, otherwise
     // creates a fresh one with the name. Unnamed sandboxes always create.
+    // The SDK does not apply creation parameters to a sandbox it finds, so
+    // every creation option above (including `networkPolicy`) only takes
+    // effect when a new sandbox is created.
     this._sandbox = this._sandboxName
       ? await Sandbox.getOrCreate({ ...params, name: this._sandboxName })
       : await Sandbox.create(params);
@@ -353,6 +430,20 @@ export class VercelSandbox extends MastraSandbox {
     assertModesUnsupported(files, 'Vercel');
     await this.ensureRunning();
     await this.sandbox.writeFiles(files.map(f => ({ path: f.path, content: f.content })));
+  }
+
+  /**
+   * Extend the running sandbox's lifetime by `ms` milliseconds.
+   *
+   * Lazily starts the sandbox if it is not running yet — a stopped sandbox has
+   * no live session to extend, and the SDK's `extendTimeout` only applies to a
+   * running instance. Repeated calls reuse the same sandbox rather than
+   * creating a new one. The SDK enforces the provider's maximum timeout and
+   * any rejection is surfaced unchanged.
+   */
+  async extendTimeout(ms: number): Promise<void> {
+    await this.ensureRunning();
+    await this.sandbox.extendTimeout(ms);
   }
 
   // ---------------------------------------------------------------------------
@@ -476,14 +567,29 @@ export class VercelSandbox extends MastraSandbox {
     return this._instructionsOverride({ defaultInstructions, requestContext: opts?.requestContext });
   }
 
+  /** One-line description of what the sandbox is created from, for instructions. */
+  private _environmentLabel(): string {
+    if (this._image !== undefined) return `Image: ${this._image}`;
+    if (this._source !== undefined) return `Filesystem restored from snapshot ${this._source.snapshotId}`;
+    return `Runtime: ${this._runtime}`;
+  }
+
   private _getDefaultInstructions(): string {
+    // Only runtime-managed sandboxes are known to run Amazon Linux 2023 with
+    // `dnf`. A custom image or a restored snapshot can hold any filesystem, so
+    // those sandboxes get no OS or package-manager claims.
+    const runtimeManaged = this._image === undefined && this._source === undefined;
     return [
-      'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.',
-      `- Runtime: ${this._runtime}. Working directory defaults to /vercel/sandbox.`,
+      runtimeManaged
+        ? 'Vercel Sandbox: an ephemeral Firecracker MicroVM running Amazon Linux 2023.'
+        : 'Vercel Sandbox: an ephemeral Firecracker MicroVM.',
+      `- ${this._environmentLabel()}. Working directory defaults to /vercel/sandbox.`,
       this._sandboxName
         ? '- Persistent filesystem: stopping snapshots the filesystem and the named sandbox resumes it on the next start. Processes do not survive a stop.'
         : '- Persistent filesystem within the session; state is lost when the sandbox stops.',
-      '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).',
+      runtimeManaged
+        ? '- Runs as the vercel-sandbox user with sudo access (install packages via dnf).'
+        : '- Runs as the vercel-sandbox user with sudo access.',
       `- The sandbox auto-terminates after ${Math.round(this._timeout / 1000)} seconds.`,
       ...(this._ports?.length
         ? [`- Exposed ports: ${this._ports.join(', ')} (reachable via public HTTPS domains).`]

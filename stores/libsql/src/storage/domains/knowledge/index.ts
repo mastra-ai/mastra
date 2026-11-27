@@ -257,6 +257,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#pages.getPage(input);
   }
 
+  override getPageParents(
+    input: Parameters<KnowledgeStorage['getPageParents']>[0],
+  ): ReturnType<KnowledgeStorage['getPageParents']> {
+    return this.#pages.getPageParents(input);
+  }
+
   override getPageByPath(
     input: Parameters<KnowledgePageStore['getPageByPath']>[0],
   ): ReturnType<KnowledgePageStore['getPageByPath']> {

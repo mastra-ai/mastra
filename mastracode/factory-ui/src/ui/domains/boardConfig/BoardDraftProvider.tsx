@@ -4,13 +4,11 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { StoredBoardInfo } from '../../../api/types';
 import { useBoardWritePending } from '../../../hooks/useBoardEditor';
 import { draftOf } from './boardDraft';
-import type { BoardDraft, RawRules } from './boardDraft';
+import type { BoardDraft } from './boardDraft';
 
 interface StoredDraft {
   key: string;
   draft: BoardDraft;
-  /** Rules typed as JSON, kept here so they outlive the phase page they were typed on. */
-  rawRules: RawRules;
 }
 
 type DraftState = [StoredDraft | undefined, Dispatch<SetStateAction<StoredDraft | undefined>>];
@@ -23,8 +21,8 @@ function draftKey(factoryId: string, boardId: string, board: StoredBoardInfo) {
 }
 
 /**
- * Holds the board draft above the sidebar and the page, so the phase list shows unsaved names and order while the
- * page edits them.
+ * Holds the board draft for the board settings page, outside the canvas: the canvas gives way to an error while the
+ * board fails to reload, and the edits must still be there once it's back.
  */
 export function BoardDraftProvider({ children }: { children: ReactNode }) {
   const state = useState<StoredDraft | undefined>(undefined);
@@ -38,28 +36,14 @@ export function useBoardDraft(factoryId: string, boardId: string, board: StoredB
   // A save answers with the next revision, which starts a fresh draft: edits made while it's on its way would be lost.
   const locked = useBoardWritePending(factoryId, boardId);
   const key = draftKey(factoryId, boardId, board);
-  const current = stored?.key === key ? stored : { key, draft: draftOf(board), rawRules: {} };
+  const current = stored?.key === key ? stored : { key, draft: draftOf(board) };
   const update = (change: (open: StoredDraft) => StoredDraft) =>
-    setStored(latest => change(latest?.key === key ? latest : { key, draft: draftOf(board), rawRules: {} }));
+    setStored(latest => change(latest?.key === key ? latest : { key, draft: draftOf(board) }));
 
   return {
     draft: current.draft,
-    rawRules: current.rawRules,
     locked,
     setDraft: (change: (draft: BoardDraft) => BoardDraft) => update(open => ({ ...open, draft: change(open.draft) })),
-    /** Unset text means the rule editor shows the rule builder again. */
-    setRawRule: (ruleKey: string, text: string | undefined) =>
-      update(open => {
-        const { [ruleKey]: _dropped, ...rest } = open.rawRules;
-        return { ...open, rawRules: text === undefined ? rest : { ...rest, [ruleKey]: text } };
-      }),
     discard: () => setStored(undefined),
   };
-}
-
-/** The open draft, else the saved board: for places that show the board but don't edit it. */
-export function useShownDraft(factoryId: string, boardId: string, board: StoredBoardInfo | undefined) {
-  const stored = useContext(BoardDraftContext)?.[0];
-  if (!board) return undefined;
-  return stored?.key === draftKey(factoryId, boardId, board) ? stored.draft : draftOf(board);
 }

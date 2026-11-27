@@ -1,5 +1,5 @@
+import type { FactoryRuleHandler, FactoryVantaEventName, FactoryVantaRuleContext } from '@internal/factory-contract';
 import { closedByRoutes } from '../../rules/event-rules.js';
-import type { FactoryRuleHandler, FactoryVantaEventName, FactoryVantaRuleContext } from '../../rules/types.js';
 
 export type VantaEventRules = Readonly<
   Record<FactoryVantaEventName, FactoryRuleHandler<FactoryVantaRuleContext> | null>

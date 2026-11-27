@@ -1,23 +1,14 @@
-import { cardChangeRequests } from '@mastra/factory/work-items/change-requests';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import type { ReactNode } from 'react';
+import { cardChangeRequests } from '@internal/factory-contract';
+import { UpstreamLinks } from '@mastra/playground-ui/domains/factory';
+import type { UpstreamLink } from '@mastra/playground-ui/domains/factory';
 
 import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '../changeRequestState';
 import { changeRequestLinkLabel, changeRequestRepository } from '../sessionChangeRequests';
 import { workItemIdentifier, workItemShortReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
-import { RELATED_ITEM_LINK_CLASS } from './RelatedWorkItemLink';
-
-interface UpstreamLink {
-  url: string;
-  label: string;
-  ariaLabel: string;
-  icon: ReactNode;
-}
 
 function upstreamLinks(item: WorkItem, shownAsRelated: readonly string[], short: boolean): UpstreamLink[] {
   const origin = item.url;
@@ -68,20 +59,5 @@ export function WorkItemUpstreamLinks({
   shownAsRelated: readonly string[];
   short?: boolean;
 }) {
-  return upstreamLinks(item, shownAsRelated, short).map(link => (
-    <a
-      key={link.url}
-      href={link.url}
-      target="_blank"
-      rel="noreferrer"
-      draggable={false}
-      aria-label={link.ariaLabel}
-      className={cn('text-muted-foreground', RELATED_ITEM_LINK_CLASS)}
-    >
-      {link.icon}
-      <Txt as="span" variant="meta" className="min-w-0 truncate">
-        {link.label}
-      </Txt>
-    </a>
-  ));
+  return <UpstreamLinks links={upstreamLinks(item, shownAsRelated, short)} />;
 }
