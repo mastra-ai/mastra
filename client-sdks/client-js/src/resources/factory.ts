@@ -39,6 +39,7 @@ export type {
   FactoryDecisionPage,
   FactoryDecisionStatus,
   FactoryDecisionSummary,
+  FactoryRuleStage,
   FactoryTransitionResult,
   RunQueueResponse,
   SubmittedTransition,
@@ -93,7 +94,11 @@ interface Read {
 export class Factory extends BaseResource {
   private readonly project: string;
 
-  constructor(options: ClientOptions, factoryProjectId: string, { basePath = '/web/factory' }: FactoryOptions = {}) {
+  constructor(
+    options: ClientOptions,
+    readonly factoryProjectId: string,
+    { basePath = '/web/factory' }: FactoryOptions = {},
+  ) {
     super({ ...options, apiPrefix: basePath });
     this.project = `/projects/${encodeURIComponent(factoryProjectId)}`;
   }

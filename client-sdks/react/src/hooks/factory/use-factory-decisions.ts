@@ -5,7 +5,12 @@ import type {
   FactoryDecisionStatus,
   RunQueueResponse,
 } from '@mastra/client-js';
-import type { InfiniteData, UseInfiniteQueryResult } from '@tanstack/react-query';
+import type {
+  InfiniteData,
+  UseInfiniteQueryOptions,
+  UseInfiniteQueryResult,
+  UseQueryOptions,
+} from '@tanstack/react-query';
 import {
   infiniteQueryOptions,
   queryOptions,
@@ -17,12 +22,11 @@ import {
 } from '@tanstack/react-query';
 import { useFactory } from './context';
 import { factoryKeys } from './keys';
-import type { FactoryInfiniteQueryOptions, FactoryQueryOptions } from './query-options';
 
 export function factoryDecisionStatusQueryOptions(
   factory: Factory | undefined,
   statuses: FactoryDecisionStatus[],
-): FactoryQueryOptions<FactoryDecisionPage, ReturnType<typeof factoryKeys.decisions>> {
+): UseQueryOptions<FactoryDecisionPage, Error, FactoryDecisionPage, ReturnType<typeof factoryKeys.decisions>> {
   return queryOptions({
     queryKey: factoryKeys.decisions(factory?.factoryProjectId, statuses.join(',')),
     queryFn: factory ? ({ signal }) => factory.decisions({ statuses, limit: 50 }, { signal }) : skipToken,
@@ -37,7 +41,7 @@ export function useFactoryDecisionStatus(factoryProjectId: string | undefined, s
 /** Automated runs waiting for a run slot; the feed refreshes it with the board's decisions. */
 export function runQueueQueryOptions(
   factory: Factory | undefined,
-): FactoryQueryOptions<RunQueueResponse, ReturnType<typeof factoryKeys.runQueue>> {
+): UseQueryOptions<RunQueueResponse, Error, RunQueueResponse, ReturnType<typeof factoryKeys.runQueue>> {
   return queryOptions({
     queryKey: factoryKeys.runQueue(factory?.factoryProjectId),
     queryFn: factory ? ({ signal }) => factory.runQueue({ signal }) : skipToken,
@@ -73,7 +77,13 @@ export function factoryDecisionHistoryQueryOptions(
   factory: Factory | undefined,
   statusKey: string,
   statuses: FactoryDecisionStatus[] | undefined,
-): FactoryInfiniteQueryOptions<FactoryDecisionPage, ReturnType<typeof factoryKeys.decisions>, DecisionCursor> {
+): UseInfiniteQueryOptions<
+  FactoryDecisionPage,
+  Error,
+  InfiniteData<FactoryDecisionPage, DecisionCursor>,
+  ReturnType<typeof factoryKeys.decisions>,
+  DecisionCursor
+> {
   return infiniteQueryOptions({
     queryKey: factoryKeys.decisions(factory?.factoryProjectId, statusKey),
     queryFn: factory

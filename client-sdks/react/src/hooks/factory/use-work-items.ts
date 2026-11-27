@@ -5,6 +5,7 @@ import type {
   CreateWorkItemInput,
   Factory,
   FactoryBoard,
+  FactoryRuleStage,
   TransitionOutcome,
   UpdateWorkItemInput,
   WorkItem,
@@ -13,7 +14,7 @@ import type {
   WorkItemStageEntry,
   WorkItemStartersResponse,
 } from '@mastra/client-js';
-import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import type { QueryClient, QueryKey, UseQueryOptions } from '@tanstack/react-query';
 import {
   keepPreviousData,
   queryOptions,
@@ -26,7 +27,6 @@ import {
 } from '@tanstack/react-query';
 import { useFactory } from './context';
 import { factoryKeys, isUnnarrowedBoardView } from './keys';
-import type { FactoryQueryOptions } from './query-options';
 import { awaitMoveAnswer, moveAnswerStream } from './submitted-moves';
 
 /**
@@ -69,7 +69,7 @@ const selectCards = (board: BoardSnapshot) => board.workItems;
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
 export function sessionCardsQueryOptions(
   factory: Factory | undefined,
-): FactoryQueryOptions<BoardSnapshot, ReturnType<typeof factoryKeys.workItemsWithSessions>> {
+): UseQueryOptions<BoardSnapshot, Error, BoardSnapshot, ReturnType<typeof factoryKeys.workItemsWithSessions>> {
   return queryOptions({
     queryKey: factoryKeys.workItemsWithSessions(factory?.factoryProjectId),
     queryFn: factory ? ({ signal }) => factory.listWorkItems({ scope: 'sessions' }, { signal }) : skipToken,
@@ -207,7 +207,7 @@ async function readBoardPhases(
 export function boardPhasesQueryOptions(
   factory: Factory | undefined,
   request: BoardPhasesRequest,
-): FactoryQueryOptions<BoardPhasesSnapshot, ReturnType<typeof factoryKeys.boardPhasesView>> {
+): UseQueryOptions<BoardPhasesSnapshot, Error, BoardPhasesSnapshot, ReturnType<typeof factoryKeys.boardPhasesView>> {
   return queryOptions({
     queryKey: factoryKeys.boardPhasesView(factory?.factoryProjectId, request),
     queryFn: factory ? ({ signal, client }) => readBoardPhases(factory, request, signal, client) : skipToken,
@@ -222,7 +222,12 @@ export function boardPhasesQueryOptions(
 /** The labels and people the project's cards can be filtered by. */
 export function workItemFilterOptionsQueryOptions(
   factory: Factory | undefined,
-): FactoryQueryOptions<WorkItemFilterOptionsResponse, ReturnType<typeof factoryKeys.workItemFilterOptions>> {
+): UseQueryOptions<
+  WorkItemFilterOptionsResponse,
+  Error,
+  WorkItemFilterOptionsResponse,
+  ReturnType<typeof factoryKeys.workItemFilterOptions>
+> {
   return queryOptions({
     queryKey: factoryKeys.workItemFilterOptions(factory?.factoryProjectId),
     queryFn: factory ? ({ signal }) => factory.filterOptions({ signal }) : skipToken,
@@ -234,7 +239,12 @@ export function workItemFilterOptionsQueryOptions(
 /** What the draft page's starter buttons count: the server counts, so the page never loads the board for them. */
 export function workItemStartersQueryOptions(
   factory: Factory,
-): FactoryQueryOptions<WorkItemStartersResponse, ReturnType<typeof factoryKeys.workItemStarters>> {
+): UseQueryOptions<
+  WorkItemStartersResponse,
+  Error,
+  WorkItemStartersResponse,
+  ReturnType<typeof factoryKeys.workItemStarters>
+> {
   return queryOptions({
     queryKey: factoryKeys.workItemStarters(factory.factoryProjectId),
     queryFn: ({ signal }) => factory.starters({ signal }),
@@ -254,7 +264,12 @@ const ACTIVITY_DAYS: Record<WorkItemActivityDepth, number> = { week: 7, month: 3
 export function workItemActivityQueryOptions(
   factory: Factory,
   depth: WorkItemActivityDepth,
-): FactoryQueryOptions<WorkItemActivityResponse, ReturnType<typeof factoryKeys.workItemActivity>> {
+): UseQueryOptions<
+  WorkItemActivityResponse,
+  Error,
+  WorkItemActivityResponse,
+  ReturnType<typeof factoryKeys.workItemActivity>
+> {
   return queryOptions({
     queryKey: factoryKeys.workItemActivity(factory.factoryProjectId, depth),
     queryFn: ({ signal }) => {
@@ -274,7 +289,7 @@ export function workItemActivityQueryOptions(
 export function sessionWorkItemsQueryOptions(
   factory: Factory | undefined,
   sessionId: string | undefined,
-): FactoryQueryOptions<BoardSnapshot, ReturnType<typeof factoryKeys.sessionWorkItems>, WorkItem[]> {
+): UseQueryOptions<BoardSnapshot, Error, WorkItem[], ReturnType<typeof factoryKeys.sessionWorkItems>> {
   return queryOptions({
     queryKey: factoryKeys.sessionWorkItems(factory?.factoryProjectId, sessionId),
     queryFn: factory && sessionId ? ({ signal }) => factory.listWorkItems({ sessionId }, { signal }) : skipToken,
@@ -292,7 +307,7 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
 export function workItemQueryOptions(
   factory: Factory | undefined,
   workItemId: string | undefined,
-): FactoryQueryOptions<BoardSnapshot, ReturnType<typeof factoryKeys.workItem>, WorkItem | null> {
+): UseQueryOptions<BoardSnapshot, Error, WorkItem | null, ReturnType<typeof factoryKeys.workItem>> {
   return queryOptions({
     queryKey: factoryKeys.workItem(factory?.factoryProjectId, workItemId),
     queryFn:
@@ -425,7 +440,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
 type TransitionWorkItemVariables = {
   item: WorkItem;
   board: FactoryBoard;
-  stage: string;
+  stage: FactoryRuleStage;
   cause?: string;
   reenter?: boolean;
 };
