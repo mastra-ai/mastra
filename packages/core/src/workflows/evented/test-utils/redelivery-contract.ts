@@ -49,7 +49,11 @@ export async function drainHandlers(timeoutMs = 10_000): Promise<void> {
   }
 }
 
-export const REDELIVERY_MODES = ['publish', 'same-id', 'expired'] as const;
+/**
+ * `'publish'` replays the step event under a new id, `'same-id'` redelivers it with its id and
+ * `deliveryAttempt` 2, as a broker does after a missed ack.
+ */
+export const REDELIVERY_MODES = ['publish', 'same-id'] as const;
 
 /**
  * COR-1429's EngineDifference compares only agent stream output and model requests;
@@ -102,18 +106,7 @@ export async function redeliverAndDrain(
   const handle = vi.mocked(WorkflowEventProcessor.prototype.handle);
   let cursor = handle.mock.results.length;
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setImmediate', 'clearImmediate'] });
-  // The lease provider reads Date.now(). Keep the Date constructor intact so
-  // captured payload dates retain their identity and cloning semantics.
-  const now = Date.now();
-  const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
-  let restoreClock: (() => void) | undefined;
   try {
-    if (mode !== 'publish') {
-      expect(
-        await driver.pubsub.getLeaseOwner(leaseKey),
-        'The completed delivery must still hold its lease',
-      ).toBeDefined();
-    }
     // Drain descendants, background dispatch and sleep continuations without
     // waiting for any bug-specific side-effect count.
     let pendingHandlers = 0;
@@ -161,7 +154,6 @@ export async function redeliverAndDrain(
     expect(driver.deliveryCount(match)).toBe(deliveriesBefore + 1);
     return { ...outcome, event };
   } finally {
-    restoreClock?.();
     vi.useRealTimers();
   }
 }

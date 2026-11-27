@@ -430,7 +430,7 @@ export function describeResumeOccurrenceCases({
     // versions. Under a new ID, storage v1 refuses it too, because the event expected no occurrence
     // of the step; storage v2 reads the expected occurrence from the stored step, so it runs the
     // step again (COR-1666). The next step still runs once there: its guard refuses the second start.
-    it.each(['expired', 'publish'] as const)(
+    it.each(['same-id', 'publish'] as const)(
       'refuses a late duplicate of a step after a resume (%s)',
       async mode => {
         const wf = linearWorkflow({

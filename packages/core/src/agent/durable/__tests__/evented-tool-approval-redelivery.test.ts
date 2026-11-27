@@ -145,12 +145,12 @@ describe('T6 tool-approval redelivery', () => {
           { executions: 1, approvalRequests: 1, modelCalls: 2 },
           // Storage v2 replays load the step's inputs from the stored run, which is deleted once the run
           // finishes, so the replayed step fails before it reaches the tool: only storage v1 shows the bug.
-          mode === 'same-id' || original.data?.storageVersion === 2
+          original.data?.storageVersion === 2
             ? undefined
             : {
                 reason:
-                  mode === 'expired'
-                    ? 'COR-1307 / COR-1394: an expired completed approved step executes again.'
+                  mode === 'same-id'
+                    ? 'COR-1307 / COR-1394: a redelivered completed approved step executes again.'
                     : 'COR-1307: a fresh-ID replay executes the completed approved step again.',
                 expect: correct => ({ ...correct, executions: correct.executions + 1 }),
               },

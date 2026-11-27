@@ -62,9 +62,7 @@
  * finished steps (see `#finishedCheckStore` in the processor: the store
  * supports run fencing, and the workflow is not a processor workflow and
  * keeps `autoRestartActiveRuns`). Otherwise, as for durable agent workflows,
- * it re-executes the step (F4, COR-1307): only the id-keyed step fence
- * (`STEP_FENCE_TTL_MS`) drops a duplicate there, which covers an immediate
- * redelivery but not a late one.
+ * it re-executes the step (F4, COR-1307), whatever its id.
  */
 import EventEmitter from 'node:events';
 import { vi } from 'vitest';
