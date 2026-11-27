@@ -192,9 +192,9 @@ jobs:
         id: vale-install
         if: ${{ !cancelled() && steps.vale-config.outcome == 'success' }}
         env:
-          VALE_VERSION: 3.27.0
+          VALE_VERSION: 3.29.0
         run: |
-          curl -fsSL "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
+          curl -fsSL "https://github.com/vale-cli/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" \
             | tar -xz -C /usr/local/bin vale
           vale --version
 
