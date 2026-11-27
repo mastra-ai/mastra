@@ -44,7 +44,7 @@ function TraceWhereEditor({ initial, onChange }: { initial: TraceQueryPredicate;
       ]}
       operators={OPERATORS}
       value={expression}
-      onValueChange={next => {
+      onValueChange={(next: FilterBarExpression) => {
         setExpression(next);
         onChange(expressionToTracePredicate(next));
       }}

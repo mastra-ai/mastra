@@ -536,7 +536,9 @@ export function FilterBarProvider({
       if (existing) {
         // An unknown field has no operator contract to widen into: the new filter replaces the old one.
         const field = getField(fieldId, groupId);
-        const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
+        // Widen only into an operator allowed where the existing chip sits.
+        const allowed = field ? getFieldOperators(field, placeOf(groupId, existing.id)) : [];
+        const condition = mergeCondition(existing, { operatorId, value }, allowed);
         const item = { ...existing, ...condition };
         emit(updateTreeItem(exprRef.current, existing.id, condition));
         reflectedCommitIdRef.current = undefined;
@@ -550,7 +552,7 @@ export function FilterBarProvider({
       setLastCommit({ item, from, glint: true, groupId });
       announce('Filter added');
     },
-    [emit, announce, newItemId, inputTarget, fieldItem, getField, getFieldOperators],
+    [emit, announce, newItemId, inputTarget, fieldItem, getField, getFieldOperators, placeOf],
   );
 
   const updateItem = useCallback(

@@ -6,7 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarProps } from './filter-bar';
-import type { FilterBarExpression, FilterBarField, FilterBarGroup, FilterBarItem, FilterBarScope } from './types';
+import { isFilterBarGroup } from './types';
+import type {
+  FilterBarExpression,
+  FilterBarField,
+  FilterBarGroup,
+  FilterBarItem,
+  FilterBarNode,
+  FilterBarScope,
+} from './types';
 
 afterEach(cleanup);
 
@@ -20,6 +28,9 @@ const FIELDS: FilterBarField[] = [
   { id: 'traceId', label: 'Trace ID', operators: ['is', 'contains'] },
 ];
 
+type ExpressionChange = (expression: FilterBarExpression) => void;
+type ListChange = (items: FilterBarItem[]) => void;
+
 type RuleProps = Omit<FilterBarProps, 'fields' | 'operators' | 'value' | 'onValueChange' | 'children'>;
 
 function ExpressionHarness({
@@ -29,7 +40,7 @@ function ExpressionHarness({
   ...props
 }: RuleProps & {
   initial: FilterBarExpression;
-  onChange?: (expression: FilterBarExpression) => void;
+  onChange?: ExpressionChange;
   fields?: FilterBarField[];
 }) {
   const [value, setValue] = useState(initial);
@@ -39,7 +50,7 @@ function ExpressionHarness({
       fields={fields}
       operators={DEFAULT_FILTER_OPERATORS}
       value={value}
-      onValueChange={next => {
+      onValueChange={(next: typeof value) => {
         setValue(next);
         onChange?.(next);
       }}
@@ -50,11 +61,7 @@ function ExpressionHarness({
   );
 }
 
-function ListHarness({
-  initial,
-  onChange,
-  ...props
-}: RuleProps & { initial: FilterBarItem[]; onChange?: (items: FilterBarItem[]) => void }) {
+function ListHarness({ initial, onChange, ...props }: RuleProps & { initial: FilterBarItem[]; onChange?: ListChange }) {
   const [value, setValue] = useState(initial);
   return (
     <FilterBar
@@ -62,7 +69,7 @@ function ListHarness({
       fields={FIELDS}
       operators={DEFAULT_FILTER_OPERATORS}
       value={value}
-      onValueChange={next => {
+      onValueChange={(next: typeof value) => {
         setValue(next);
         onChange?.(next);
       }}
@@ -83,18 +90,33 @@ const status = (id = 'a', extra: Partial<FilterBarItem> = {}): FilterBarItem => 
 
 const expressionOf = (...nodes: FilterBarExpression['nodes']): FilterBarExpression => ({ logic: 'and', nodes });
 
-const lastCall = <T,>(mock: { mock: { calls: T[][] } }) => mock.mock.calls.at(-1)?.[0];
+const lastValue = <T,>(mock: { mock: { calls: [T][] } }): T => {
+  const call = mock.mock.calls.at(-1);
+  if (!call) throw new Error('onChange was not called');
+  return call[0];
+};
+
+const first = <T,>(items: readonly T[]): T => {
+  const [item] = items;
+  if (item === undefined) throw new Error('expected at least one element');
+  return item;
+};
+
+const groupOf = (node: FilterBarNode | undefined): FilterBarGroup => {
+  if (!node || !isFilterBarGroup(node)) throw new Error('expected a group');
+  return node;
+};
 
 const getChip = (name: string | RegExp) => screen.getByRole('group', { name });
 
-const getInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
+const getInput = () => screen.getByRole<HTMLInputElement>('combobox', { name: 'Add filter' });
 const type = (text: string) => fireEvent.change(getInput(), { target: { value: text } });
 const key = (k: string) => fireEvent.keyDown(getInput(), { key: k });
 
 const openAdvanced = async () => {
   fireEvent.click(screen.getByRole('button', { name: /Advanced filter/ }));
   // The root editor comes first; nested groups render their own editors inside it.
-  return (await screen.findAllByRole('group', { name: /^Conditions joined with/ }))[0];
+  return first(await screen.findAllByRole('group', { name: /^Conditions joined with/ }));
 };
 
 describe('FilterBar rules', () => {
@@ -108,14 +130,14 @@ describe('FilterBar rules', () => {
 
     describe('when the bar is negatable', () => {
       it('negates a condition from its chip and reads it as "not"', () => {
-        const onChange = vi.fn();
+        const onChange = vi.fn<ExpressionChange>();
         render(<ExpressionHarness negatable initial={expressionOf(status())} onChange={onChange} />);
 
         const toggle = screen.getByRole('button', { name: 'Negate Status is error' });
         expect(toggle.getAttribute('aria-pressed')).toBe('false');
         fireEvent.click(toggle);
 
-        expect(lastCall(onChange)).toEqual(expressionOf(status('a', { negated: true })));
+        expect(lastValue(onChange)).toEqual(expressionOf(status('a', { negated: true })));
         expect(getChip(/^not Status is error/)).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Negate Status is error' }).getAttribute('aria-pressed')).toBe(
           'true',
@@ -123,25 +145,25 @@ describe('FilterBar rules', () => {
       });
 
       it('drops the flag when the negation is turned off again', () => {
-        const onChange = vi.fn();
+        const onChange = vi.fn<ExpressionChange>();
         render(
           <ExpressionHarness negatable initial={expressionOf(status('a', { negated: true }))} onChange={onChange} />,
         );
 
         fireEvent.click(screen.getByRole('button', { name: 'Negate Status is error' }));
 
-        const next = lastCall(onChange) as FilterBarExpression;
+        const next = lastValue(onChange);
         expect(next.nodes[0]).toEqual(status());
         expect(next.nodes[0]).not.toHaveProperty('negated');
       });
 
       it('keeps the negation on a flat list of filters', () => {
-        const onChange = vi.fn();
+        const onChange = vi.fn<ListChange>();
         render(<ListHarness negatable initial={[status()]} onChange={onChange} />);
 
         fireEvent.click(screen.getByRole('button', { name: 'Negate Status is error' }));
 
-        expect(lastCall(onChange)).toEqual([status('a', { negated: true })]);
+        expect(lastValue(onChange)).toEqual([status('a', { negated: true })]);
       });
 
       it('reaches the negation with the arrow keys, before the field', () => {
@@ -192,20 +214,20 @@ describe('FilterBar rules', () => {
         });
 
         it('negates the whole group from its editor', async () => {
-          const onChange = vi.fn();
+          const onChange = vi.fn<ExpressionChange>();
           render(<ExpressionHarness negatable initial={GROUP} onChange={onChange} />);
           const editor = await openAdvanced();
 
-          const toggle = within(editor).getAllByRole('button', { name: 'Negate group' })[0];
+          const toggle = first(within(editor).getAllByRole('button', { name: 'Negate group' }));
           fireEvent.click(toggle);
 
-          const next = lastCall(onChange) as FilterBarExpression;
+          const next = lastValue(onChange);
           expect(next.nodes[0]).toMatchObject({ id: 'g', negated: true });
           expect(screen.getByRole('group', { name: /^Advanced filter, not, 2 conditions/ })).toBeTruthy();
         });
 
         it('negates a nested group without touching its parent', async () => {
-          const onChange = vi.fn();
+          const onChange = vi.fn<ExpressionChange>();
           const nested = expressionOf({
             id: 'g',
             kind: 'group',
@@ -218,8 +240,8 @@ describe('FilterBar rules', () => {
           const card = screen.getByRole('group', { name: /^Conditions joined with or/ });
           fireEvent.click(within(card).getByRole('button', { name: 'Negate group' }));
 
-          const next = lastCall(onChange) as FilterBarExpression;
-          const root = next.nodes[0] as Extract<FilterBarExpression['nodes'][number], { kind: 'group' }>;
+          const next = lastValue(onChange);
+          const root = groupOf(next.nodes[0]);
           expect(root).not.toHaveProperty('negated');
           expect(root.nodes[1]).toMatchObject({ id: 'n', negated: true });
         });
@@ -247,7 +269,7 @@ describe('FilterBar rules', () => {
 
     describe('when the bar takes a custom field', () => {
       it('offers the typed name under the prefix and filters on it', async () => {
-        const onChange = vi.fn();
+        const onChange = vi.fn<ExpressionChange>();
         render(<ExpressionHarness customField={METADATA} initial={expressionOf()} onChange={onChange} />);
         getInput().focus();
         type('region');
@@ -260,7 +282,7 @@ describe('FilterBar rules', () => {
         type('eu');
         key('Enter');
 
-        expect((lastCall(onChange) as FilterBarExpression).nodes[0]).toMatchObject({
+        expect(lastValue(onChange).nodes[0]).toMatchObject({
           fieldId: 'metadata.region',
           operatorId: 'is',
           value: 'eu',
@@ -288,6 +310,46 @@ describe('FilterBar rules', () => {
         expect(screen.queryByRole('option', { name: /^metadata\.$/ })).toBeNull();
       });
 
+      describe('whose template is root-only', () => {
+        const rootOnly = { prefix: 'metadata.', field: { ...METADATA.field, rootOnly: true } };
+
+        it('offers it at the root', async () => {
+          render(<ExpressionHarness customField={rootOnly} initial={expressionOf()} />);
+          getInput().focus();
+          type('region');
+          expect(await screen.findByRole('option', { name: /metadata\.region/ })).toBeTruthy();
+        });
+
+        it('does not offer it inside a group', async () => {
+          render(
+            <ExpressionHarness
+              customField={rootOnly}
+              initial={expressionOf({ id: 'g', kind: 'group', logic: 'or', nodes: [status('b')] })}
+            />,
+          );
+          const editor = await openAdvanced();
+          fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+          const input = await within(editor).findByRole('combobox', { name: 'Add filter' });
+          fireEvent.change(input, { target: { value: 'region' } });
+          await screen.findByText('No matching field.');
+          expect(screen.queryByRole('option', { name: /metadata\.region/ })).toBeNull();
+        });
+
+        it('does not offer it from the field segment of a chip inside a group', async () => {
+          render(
+            <ExpressionHarness
+              customField={rootOnly}
+              initial={expressionOf({ id: 'g', kind: 'group', logic: 'or', nodes: [status('b')] })}
+            />,
+          );
+          await openAdvanced();
+          fireEvent.click(screen.getByRole('combobox', { name: /^Field:/ }));
+          fireEvent.change(await screen.findByPlaceholderText('Change field'), { target: { value: 'region' } });
+          await screen.findByText('No matching field.');
+          expect(screen.queryByRole('option', { name: /metadata\.region/ })).toBeNull();
+        });
+      });
+
       it('reads a chip on a custom field with the template operators', async () => {
         render(
           <ExpressionHarness
@@ -303,14 +365,14 @@ describe('FilterBar rules', () => {
       });
 
       it('changes a chip to a custom field from its field segment', async () => {
-        const onChange = vi.fn();
+        const onChange = vi.fn<ExpressionChange>();
         render(<ExpressionHarness customField={METADATA} initial={expressionOf(status())} onChange={onChange} />);
 
         fireEvent.click(screen.getByRole('combobox', { name: /^Field:/ }));
         fireEvent.change(await screen.findByPlaceholderText('Change field'), { target: { value: 'region' } });
         fireEvent.click(await screen.findByRole('option', { name: /metadata\.region/ }));
 
-        expect((lastCall(onChange) as FilterBarExpression).nodes[0]).toMatchObject({
+        expect(lastValue(onChange).nodes[0]).toMatchObject({
           fieldId: 'metadata.region',
           operatorId: 'is',
         });
@@ -468,6 +530,33 @@ describe('FilterBar rules', () => {
       expect(chip.getAttribute('aria-description')).toBe('"contains" is not available here');
     });
 
+    it('does not widen a chip into an operator its place rules out', async () => {
+      // A negated chip may not read "is any of"; a second value replaces the first instead.
+      const noInUnderNot: NonNullable<FilterBarProps['operatorsFor']> = (field, place) =>
+        place.negated ? (field.operators ?? []).filter(id => id !== 'in') : undefined;
+      const onChange = vi.fn<(expression: FilterBarExpression) => void>();
+      render(
+        <ExpressionHarness
+          negatable
+          createItemId={fieldId => fieldId}
+          operatorsFor={noInUnderNot}
+          initial={expressionOf({ id: 'status', fieldId: 'status', operatorId: 'is', value: 'running', negated: true })}
+          onChange={onChange}
+        />,
+      );
+      getInput().focus();
+      type('status');
+      key('Enter');
+      await screen.findByRole('option', { name: 'is' });
+      key('Enter');
+      type('err');
+      key('Enter');
+
+      expect(lastValue(onChange).nodes).toEqual([
+        { id: 'status', fieldId: 'status', operatorId: 'is', value: 'error', negated: true },
+      ]);
+    });
+
     it('asks again for each group a condition sits in', async () => {
       // Same negation and scope in both groups: only the group tells them apart.
       const byGroup: NonNullable<FilterBarProps['operatorsFor']> = (_field, place) =>
@@ -505,7 +594,7 @@ describe('FilterBar rules', () => {
     });
 
     it('shows one toggle between each pair of root chips and switches the root to or', () => {
-      const onChange = vi.fn();
+      const onChange = vi.fn<ExpressionChange>();
       render(
         <ExpressionHarness
           rootLogicToggle
@@ -515,9 +604,9 @@ describe('FilterBar rules', () => {
       );
       expect(toggles()).toHaveLength(2);
 
-      fireEvent.click(toggles()[0]);
+      fireEvent.click(first(toggles()));
 
-      expect(lastCall(onChange)?.logic).toBe('or');
+      expect(lastValue(onChange).logic).toBe('or');
       expect(toggles().map(t => t.textContent)).toEqual(['or', 'or']);
     });
 
@@ -528,7 +617,7 @@ describe('FilterBar rules', () => {
           initial={{ logic: 'or', nodes: [status('a'), status('b', { value: 'running' })] }}
         />,
       );
-      expect(toggles()[0].getAttribute('aria-label')).toBe('Joined with or, switch to and');
+      expect(first(toggles()).getAttribute('aria-label')).toBe('Joined with or, switch to and');
     });
 
     it('shows no toggle for a single chip', () => {
@@ -581,7 +670,7 @@ describe('FilterBar rules', () => {
     });
     const openScoped = async (name: RegExp) => {
       fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name.source}`) }));
-      return (await screen.findAllByRole('group', { name: /^Conditions joined with/ }))[0];
+      return first(await screen.findAllByRole('group', { name: /^Conditions joined with/ }));
     };
     const openFieldList = () => getInput().focus();
 
@@ -597,18 +686,18 @@ describe('FilterBar rules', () => {
     });
 
     it('starts a related clause from the bar and edits it with the scope fields', async () => {
-      const onChange = vi.fn();
+      const onChange = vi.fn<ExpressionChange>();
       render(<ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf()} />);
 
       openFieldList();
       fireEvent.click(await screen.findByRole('option', { name: 'Has spans…' }));
 
-      expect(lastCall(onChange)?.nodes[0]).toMatchObject({
+      expect(lastValue(onChange).nodes[0]).toMatchObject({
         kind: 'group',
         scope: { id: 'spans', quantifierId: 'some' },
       });
       await screen.findByRole('group', { name: /^Conditions joined with/ });
-      expect(getInput().dataset.target).toBe(lastCall(onChange)?.nodes[0].id);
+      expect(getInput().dataset.target).toBe(first(lastValue(onChange).nodes).id);
       openFieldList();
       await screen.findByRole('option', { name: 'Span name' });
       expect(screen.queryByRole('option', { name: 'Trace ID' })).toBeNull();
@@ -626,7 +715,7 @@ describe('FilterBar rules', () => {
     });
 
     it('switches the quantifier of a related clause', async () => {
-      const onChange = vi.fn();
+      const onChange = vi.fn<ExpressionChange>();
       render(
         <ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf(spansGroup([spanName()]))} />,
       );
@@ -634,19 +723,19 @@ describe('FilterBar rules', () => {
 
       fireEvent.click(screen.getByRole('radio', { name: 'Has no' }));
 
-      expect(lastCall(onChange)?.nodes[0]).toMatchObject({ scope: { id: 'spans', quantifierId: 'none' } });
+      expect(lastValue(onChange).nodes[0]).toMatchObject({ scope: { id: 'spans', quantifierId: 'none' } });
       expect(screen.getByRole('group', { name: 'Has no spans, 1 condition' })).toBeTruthy();
     });
 
     it('adds a related clause inside an advanced filter', async () => {
-      const onChange = vi.fn();
+      const onChange = vi.fn<ExpressionChange>();
       render(<ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf(orGroup())} />);
       const editor = await openAdvanced();
 
       fireEvent.click(within(editor).getByRole('button', { name: /Related/ }));
       fireEvent.click(await screen.findByRole('menuitem', { name: 'scores' }));
 
-      const group = lastCall(onChange)?.nodes[0] as FilterBarGroup;
+      const group = groupOf(lastValue(onChange).nodes[0]);
       expect(group.nodes[1]).toMatchObject({ kind: 'group', scope: { id: 'scores', quantifierId: 'some' } });
       expect(await screen.findByText('scores')).toBeTruthy();
     });

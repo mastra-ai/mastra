@@ -507,13 +507,11 @@ function FieldEditor() {
   const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
   const groupId = ctx.groupOfItem(chip.item.id);
   const customOption = ctx.customFieldAt(groupId, query);
-  const offered = (field: FilterBarField) => ctx.getFieldOperators(field, chip.place).length > 0;
-  const listed = ctx.fieldsAt(groupId).filter(field => {
+  const fields = [...ctx.fieldsAt(groupId), ...(customOption ? [customOption] : [])].filter(field => {
     if (field.rootOnly && !isRoot) return false;
-    if (!offered(field)) return false;
+    if (ctx.getFieldOperators(field, chip.place).length === 0) return false;
     return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
   });
-  const fields = customOption && offered(customOption) ? [...listed, customOption] : listed;
   const filter = useCallback(
     (field: FilterBarField, text: string, itemToString?: (field: FilterBarField) => string) =>
       field === customOption || matchesQueryFilter(field, text, itemToString),

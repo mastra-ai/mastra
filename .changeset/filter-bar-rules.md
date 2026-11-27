@@ -20,10 +20,17 @@ import {
   tracePredicateToExpression,
 } from '@mastra/playground-ui/domains/traces/trace-predicate-expression';
 
+// No predicate yet: start from an empty bar.
+const expression = where ? tracePredicateToExpression(where) : { logic: 'and', nodes: [] };
+
+// `undefined` means the bar can't show this predicate (for example, a literal on the left).
+// Keep `where` as it is instead of editing an empty bar, which would drop it on the first change.
+if (!expression) return <RawPredicate where={where} />;
+
 <FilterBar
   fields={fields}
   operators={operators}
-  value={tracePredicateToExpression(where) ?? { logic: 'and', nodes: [] }}
+  value={expression}
   onValueChange={next => setWhere(expressionToTracePredicate(next))}
   negatable
   rootLogicToggle

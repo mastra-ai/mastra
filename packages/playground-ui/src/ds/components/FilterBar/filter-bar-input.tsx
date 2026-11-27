@@ -127,10 +127,10 @@ function FilterBarInputImpl({
   // Typed text naming no listed field can still be one under the bar's custom-field prefix.
   const customOption = step === 'field' ? ctx.customFieldAt(groupId, query) : undefined;
   const visibleFields = useMemo(() => {
-    const offered = (f: FilterBarField) => ctx.getFieldOperators(f, place).length > 0;
-    const fields = ctx.fieldsAt(groupId).filter(f => !f.hidden && (!f.rootOnly || groupId === undefined) && offered(f));
-    const custom = customOption && offered(customOption) ? [customOption] : [];
-    return [...fields, ...custom, ...scopeOptions, ...(offerAdvanced ? [ADVANCED_FIELD] : [])];
+    const offered = (f: FilterBarField) =>
+      !f.hidden && (!f.rootOnly || groupId === undefined) && ctx.getFieldOperators(f, place).length > 0;
+    const fields = [...ctx.fieldsAt(groupId), ...(customOption ? [customOption] : [])].filter(offered);
+    return [...fields, ...scopeOptions, ...(offerAdvanced ? [ADVANCED_FIELD] : [])];
   }, [ctx, offerAdvanced, groupId, customOption, place, scopeOptions]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
