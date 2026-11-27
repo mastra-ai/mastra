@@ -1,5 +1,5 @@
 import { BOARD_PERSON_FIELDS, factoryParticipantId, isHumanActorId } from '@internal/factory-contract';
-import type { ProviderPerson } from '@internal/factory-contract';
+import type { ProviderPerson } from '@mastra/client-js';
 
 import { githubAvatarUrl } from '../card';
 import type { AuditActorProfile, AuditEventPage } from '../card';

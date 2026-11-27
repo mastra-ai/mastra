@@ -1,5 +1,5 @@
 import { boardIdOf, cardHasPullRequest, isPullRequestSource } from '@internal/factory-contract';
-import type { InstalledPhaseInfo, WorkItem } from '@internal/factory-contract';
+import type { InstalledPhaseInfo, WorkItem } from '@mastra/client-js';
 
 import { boardLoop, phaseKindOf, phaseOf } from './board-flow';
 import type { BoardInfo } from './board-flow';

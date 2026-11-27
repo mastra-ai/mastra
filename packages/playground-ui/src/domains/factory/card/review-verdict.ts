@@ -1,4 +1,4 @@
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 import { boardLoop } from './board-flow';
 import type { BoardInfo } from './board-flow';
 import type { BoardStageId } from './stages';

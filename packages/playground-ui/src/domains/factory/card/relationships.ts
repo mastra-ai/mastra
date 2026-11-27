@@ -1,5 +1,5 @@
 import { DEFAULT_BOARD_ID, relatedCardIndex, isPullRequestSource } from '@internal/factory-contract';
-import type { PullRequestFacts, WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
+import type { PullRequestFacts, WorkItem, WorkItemBoardSource as WorkItemSource } from '@mastra/client-js';
 import { relativeTime } from '../board';
 import { CARD_SOURCES } from '../board/card-sources';
 import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from './board-items';

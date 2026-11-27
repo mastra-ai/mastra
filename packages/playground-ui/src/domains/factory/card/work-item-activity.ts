@@ -1,5 +1,5 @@
 import { isHumanActorId } from '@internal/factory-contract';
-import type { AuditAction, WorkItem } from '@internal/factory-contract';
+import type { AuditAction, WorkItem } from '@mastra/client-js';
 
 import type { AuditActorProfile, AuditEvent, AuditEventPage } from './audit';
 import { sourceMetadata } from './board-items';

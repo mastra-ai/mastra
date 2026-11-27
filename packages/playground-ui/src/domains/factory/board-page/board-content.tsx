@@ -1,5 +1,5 @@
-import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
-import type { ProviderPerson, WorkItem, InstalledBoardInfo } from '@internal/factory-contract';
+import { BUSY_CARD_MOVE_REFUSAL, DEFAULT_BOARD_ID } from '@internal/factory-contract';
+import type { ProviderPerson, WorkItem, InstalledBoardInfo } from '@mastra/client-js';
 import {
   useRecentAuditEvents,
   useRunQueue,
@@ -16,7 +16,6 @@ import {
   RunQueueIndicator,
   boardLoop,
   boardLoadingStages,
-  BUSY_CARD_MOVE_REFUSAL,
   canMoveTo,
   relatedWorkItemIndex,
   WorkItemCard,

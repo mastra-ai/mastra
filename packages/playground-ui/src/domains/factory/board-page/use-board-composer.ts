@@ -1,4 +1,4 @@
-import type { InstalledBoardInfo, WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo, WorkItem } from '@mastra/client-js';
 
 import {
   useTransitionWorkItemMutation,

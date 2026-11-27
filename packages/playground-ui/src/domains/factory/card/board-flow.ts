@@ -1,5 +1,5 @@
 import { boardIdOf, DEFAULT_BOARD_ID } from '@internal/factory-contract';
-import type { BoardPhaseKind, InstalledBoardInfo } from '@internal/factory-contract';
+import type { BoardPhaseKind, InstalledBoardInfo } from '@mastra/client-js';
 
 import { phaseIconKind } from '../board/board-icons';
 

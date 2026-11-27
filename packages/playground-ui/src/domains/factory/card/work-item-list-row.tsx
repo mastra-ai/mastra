@@ -1,4 +1,4 @@
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import type { ReactNode } from 'react';
 import { ListRowLabels, ListRowLinks, ListRowStatus, ListRowTitle } from '../board';

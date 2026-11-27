@@ -1,11 +1,5 @@
 import { isAuditActorType } from '@internal/factory-contract';
-import type {
-  AuditAction,
-  AuditTarget,
-  WireAuditActor,
-  WireAuditEvent,
-  WireAuditPage,
-} from '@internal/factory-contract';
+import type { AuditAction, AuditTarget, WireAuditActor, WireAuditEvent, WireAuditPage } from '@mastra/client-js';
 
 export type { AuditTarget };
 export type AuditActorProfile = WireAuditActor;

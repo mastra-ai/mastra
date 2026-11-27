@@ -1,4 +1,4 @@
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 
 import { SourceStateBadge as SharedSourceStateBadge } from '../board';
 import { sourceState } from './work-item-presentation';

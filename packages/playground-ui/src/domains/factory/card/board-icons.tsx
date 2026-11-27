@@ -1,4 +1,4 @@
-import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
+import type { WorkItemBoardSource as WorkItemSource } from '@mastra/client-js';
 import type { ComponentType } from 'react';
 import { CardSourceIcon } from '../board';
 

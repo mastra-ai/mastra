@@ -1,6 +1,6 @@
 import { searchQuery } from '@internal/factory-contract';
 
-import type { BoardPhasesRequest } from '@internal/factory-contract';
+import type { BoardPhasesRequest } from '@mastra/client-js';
 import { BOARD_FILTER_FIELDS } from './board-filters';
 import type { BoardFilterState } from './board-filters';
 import type { BoardSort } from './board-sort';

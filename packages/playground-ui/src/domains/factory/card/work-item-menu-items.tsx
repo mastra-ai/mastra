@@ -1,4 +1,4 @@
-import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
+import type { FactoryDecisionSummary, WorkItem } from '@mastra/client-js';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import type { ReactElement } from 'react';
 

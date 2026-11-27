@@ -1,6 +1,5 @@
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from '@internal/factory-contract';
+import type { FactoryDecisionStatus, FactoryDecisionSummary, Factory } from '@mastra/client-js';
 
-import type { Factory } from '@mastra/client-js';
 import {
   factoryDecisionStatusQueryOptions,
   useFactoryDecisionAction,

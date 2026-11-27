@@ -1,4 +1,4 @@
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 import { useBoardCatalog, useDeleteWorkItemMutation, useTransitionWorkItemMutation } from '@mastra/react/hooks/factory';
 
 import { useRef, useState } from 'react';

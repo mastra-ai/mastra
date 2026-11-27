@@ -6,7 +6,7 @@ import {
   isPullRequestSource,
 } from '@internal/factory-contract';
 
-import type { WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
+import type { WorkItem, WorkItemSessionRef } from '@mastra/client-js';
 import type { BoardCardState, BoardCardStatus } from './board-card-state';
 import { allowsMove, boardLoop, phaseKindOf } from './board-flow';
 import type { BoardInfo, BoardLoop } from './board-flow';

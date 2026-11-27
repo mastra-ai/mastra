@@ -1,4 +1,4 @@
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 import type { BoardPhasesSnapshot } from '@mastra/react/hooks/factory';
 import type { BoardStageId } from '../board';
 import { itemAppearsInStage } from '../card';

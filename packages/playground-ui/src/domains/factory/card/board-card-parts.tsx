@@ -1,5 +1,5 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
-import type { WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
+import type { WorkItem, WorkItemBoardSource as WorkItemSource } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { MetadataLabels as SharedMetadataLabels } from '../board';
 

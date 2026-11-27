@@ -1,5 +1,5 @@
 import { cardChangeRequests } from '@internal/factory-contract';
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 import { UpstreamLinks } from '../board';
 
 import type { UpstreamLink } from '../board';

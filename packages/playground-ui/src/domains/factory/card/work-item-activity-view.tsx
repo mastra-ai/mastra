@@ -1,5 +1,5 @@
 import { isAuditAction } from '@internal/factory-contract';
-import type { AuditAction } from '@internal/factory-contract';
+import type { AuditAction } from '@mastra/client-js';
 import { CardActivity, relativeTime } from '../board';
 import type { CardActivityEntry } from '../board';
 import type { AuditActorProfile, AuditEvent } from './audit';

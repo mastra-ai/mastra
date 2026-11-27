@@ -1,4 +1,4 @@
-import type { InstalledBoardInfo, FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo, FactoryDecisionSummary, WorkItem } from '@mastra/client-js';
 import { phaseLabel, installedPhaseName } from './board-stages';
 import type { CardMove } from './card-primary-action';
 

@@ -1,6 +1,6 @@
+import { BUSY_CARD_MOVE_REFUSAL } from '@internal/factory-contract';
 import {
   CardStageBar as SharedCardStageBar,
-  BUSY_CARD_MOVE_REFUSAL,
   boardCardState,
   canMoveTo,
   installedPhaseName,

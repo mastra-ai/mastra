@@ -1,5 +1,5 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 
 import { RelatedItemLink } from '../board';
 import type { BoardNavigation } from '../board';

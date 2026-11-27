@@ -1,9 +1,4 @@
-import type {
-  SessionRowStatus,
-  WorkItem,
-  FactoryDecisionSummary,
-  InstalledBoardInfo,
-} from '@internal/factory-contract';
+import type { SessionRowStatus, WorkItem, FactoryDecisionSummary, InstalledBoardInfo } from '@mastra/client-js';
 
 import { boardCardState } from './board-card-state';
 import { boardLoop } from './board-flow';

@@ -1,6 +1,5 @@
 import { phaseMayStartRun } from '@internal/factory-contract';
-import type { SessionRowStatus, FactoryDecisionSummary, InstalledPhaseInfo } from '@internal/factory-contract';
-export { BUSY_CARD_MOVE_REFUSAL } from '@internal/factory-contract';
+import type { SessionRowStatus, FactoryDecisionSummary, InstalledPhaseInfo } from '@mastra/client-js';
 import type { BoardCardStatus } from '../board';
 
 export type { BoardCardStatus };
