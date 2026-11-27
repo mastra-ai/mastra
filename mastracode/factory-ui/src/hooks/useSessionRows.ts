@@ -1,4 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@internal/factory-contract';
 import { hashKey, queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 

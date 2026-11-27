@@ -1,5 +1,4 @@
-// Browser-safe leaf, exported through ../contract.ts. Keep it free of imports:
-// storage, Node and the code SDK depend on it, not the other way round (see contract.test.ts).
+// Browser-safe: part of @internal/factory-contract, which Factory's server and UIs share.
 
 /**
  * What a phase means to the runtime.

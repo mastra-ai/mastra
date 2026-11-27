@@ -1,7 +1,7 @@
+import type { ProviderPerson } from '@internal/factory-contract';
 import type { WorkItemFilterOptionsResponse } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardFacts } from './card-facts.js';
-import type { ProviderPerson } from './card-people.js';
 
 // One answer per list version: `listShared` returns the same array until a card changes.
 const optionsByList = new WeakMap<readonly Card[], WorkItemFilterOptionsResponse>();

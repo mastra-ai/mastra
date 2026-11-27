@@ -1,4 +1,4 @@
-import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest } from '@internal/factory-contract';
 import { RelatedCardLink as SharedRelatedCardLink } from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';
 

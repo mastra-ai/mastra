@@ -1,11 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { evaluateRuleGroup, externallyAuthoredWorkItem } from '@internal/factory-contract';
 
-import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleGroup } from '../rules/rule-group.js';
-import { externallyAuthoredWorkItem } from '../rules/types.js';
+import type { ExternalWorkItemSource, RuleGroup } from '@internal/factory-contract';
+import { describe, expect, it } from 'vitest';
 import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { ExternalWorkItemSource } from '../work-items/external-source.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { cardRuleFacts } from './card-facts.js';
 

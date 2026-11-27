@@ -1,5 +1,5 @@
-import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+import { isHumanActorId } from '@internal/factory-contract';
+import type { AuditAction } from '@internal/factory-contract';
 
 import { sourceMetadata } from './boardItems';
 import { githubAvatarUrl } from './githubAvatar';

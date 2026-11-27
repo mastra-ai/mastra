@@ -1,4 +1,4 @@
-import { cardChangeRequests } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequests } from '@internal/factory-contract';
 import { UpstreamLinks } from '@mastra/playground-ui/domains/factory';
 import type { UpstreamLink } from '@mastra/playground-ui/domains/factory';
 

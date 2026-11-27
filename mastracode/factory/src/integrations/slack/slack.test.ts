@@ -1,3 +1,4 @@
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import { AgentChannels, ChannelSessionRejectedError, NEW_CHANNEL_THREAD_KEY } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -9,7 +10,6 @@ import { FACTORY_INTERACTIVE_KEY } from '../../auth.js';
 import { factoryProjectSettingsUserId } from '../../storage/domains/projects/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
-import type { ExternalWorkItemSource } from '../../work-items/external-source.js';
 
 // Captures the tenant each prime saw: the stamp can be overwritten later in
 // the gate, so asserting on the final request context alone isn't enough.

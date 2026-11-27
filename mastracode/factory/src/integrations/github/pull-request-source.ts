@@ -1,5 +1,5 @@
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 import { sourceExternalId } from '../../boards/semantics.js';
-import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 
 /**
  * Whether a card's source row is pull request `pullRequestNumber` of this repository. Numbers

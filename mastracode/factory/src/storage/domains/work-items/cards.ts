@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 
-import type { ExternalWorkItemSource } from '../../../work-items/external-source.js';
+import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { WorkItemDbRow } from './base.js';
 import {

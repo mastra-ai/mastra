@@ -1,5 +1,5 @@
-import { cardContextSessions, phaseContext } from '@mastra/factory/work-items/card-context-sessions';
-import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+import { cardContextSessions, phaseContext } from '@internal/factory-contract';
+import type { CardContextSession } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { Link, useParams } from 'react-router';

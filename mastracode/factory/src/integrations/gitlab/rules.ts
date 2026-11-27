@@ -1,5 +1,5 @@
-import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
-import type { BoardEventFacts } from '../../boards/board-events.js';
+import { authorTrusted, closeReason, listChange, updateEventFacts } from '@internal/factory-contract';
+import type { BoardEventFacts, FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryPullRequestHome, FactoryRuleActor, FactoryRuleDecision, FactoryRuleIntakeTarget, FactorySignalActivityDecision } from '@internal/factory-contract';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -30,16 +30,6 @@ import {
   withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { NotRoutedLookup } from '../../rules/event-rules.js';
-import { authorTrusted } from '../../rules/types.js';
-import type {
-  FactoryGitLabEventName,
-  FactoryGitLabRuleContext,
-  FactoryPullRequestHome,
-  FactoryRuleIntakeTarget,
-  FactoryRuleActor,
-  FactoryRuleDecision,
-  FactorySignalActivityDecision,
-} from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';

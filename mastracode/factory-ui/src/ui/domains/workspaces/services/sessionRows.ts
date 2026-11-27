@@ -1,7 +1,5 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import { SLACK_SESSION_BRANCH_PREFIX } from '@mastra/factory/work-item-branch';
-import { isSettledChangeRequest } from '@mastra/factory/work-items/change-requests';
-import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import { isSettledChangeRequest, SLACK_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
+import type { CardChangeRequest, PullRequestStatus, SessionRowStatus } from '@internal/factory-contract';
 
 import type { SessionRowWire, SessionRowsResponse } from '../../../../api/types';
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';

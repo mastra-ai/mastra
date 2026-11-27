@@ -1,7 +1,9 @@
+import { externallyAuthoredWorkItem } from '@internal/factory-contract';
+import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from '@internal/factory-contract';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
+
 import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -21,8 +23,6 @@ import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { externallyAuthoredWorkItem } from './types.js';
-import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
 export interface FactoryStartRequest {
   orgId: string;

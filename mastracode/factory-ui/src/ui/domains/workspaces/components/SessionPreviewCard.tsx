@@ -1,4 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@internal/factory-contract';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';

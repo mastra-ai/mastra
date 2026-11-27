@@ -1,4 +1,4 @@
-import { searchQuery } from '@mastra/factory/work-items/search-words';
+import { searchQuery } from '@internal/factory-contract';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
 

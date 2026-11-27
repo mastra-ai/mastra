@@ -1,5 +1,5 @@
-import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
-import type { SourceFilters } from '@mastra/factory/work-items/card-source-filters';
+import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
+import type { SourceFilters } from '@internal/factory-contract';
 
 import { CARD_SOURCES } from './cardSources';
 import type { SourceGlyph } from './cardSources';

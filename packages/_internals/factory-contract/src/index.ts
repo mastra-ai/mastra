@@ -1,13 +1,10 @@
 /**
- * The browser-safe slice of Factory: wire types and pure helpers that UIs (playground-ui,
- * @mastra/react, Platform) import as `@mastra/factory/contract`.
+ * The browser-safe slice of Factory: wire types and pure helpers shared by Factory's server,
+ * its clients (@mastra/client-js, @mastra/react) and UIs. Private; consumers bundle it.
  *
- * Everything reachable from this file must run in a browser. `contract.test.ts` walks the import
- * graph and fails if any module reaches a Node built-in, the code SDK, or a server dependency.
+ * Everything reachable from here must run in a browser. `index.test.ts` walks the import graph
+ * and fails if any module reaches a Node built-in, the code SDK, or a server dependency.
  * Type-only imports of `@mastra/core` are allowed; they are erased at build time.
- *
- * To add a helper: export it here and keep its imports pointed at leaf modules
- * (e.g. `work-items/external-source.ts`, `boards/phase-kind.ts`), never at storage bases.
  */
 export * from './boards/default-board.js';
 export * from './boards/busy-card.js';
@@ -24,8 +21,11 @@ export * from './work-items/related-cards.js';
 export * from './work-items/external-source.js';
 export * from './work-item-branch.js';
 export * from './rules/types.js';
-export * from './storage/domains/audit/actors.js';
-export * from './storage/domains/audit/actions.js';
-export * from './storage/domains/audit/wire.js';
-export * from './storage/domains/work-items/work-item-schema.js';
+export * from './audit/actors.js';
+export * from './audit/actions.js';
+export * from './audit/wire.js';
+export * from './work-items/work-item-rows.js';
 export * from './session/session-row-status.js';
+export * from './audit/event.js';
+export * from './boards/board-events.js';
+export * from './rules/rule-group.js';

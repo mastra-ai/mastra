@@ -1,4 +1,4 @@
-import { DEFAULT_BOARD_ID } from './default-board.js';
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 

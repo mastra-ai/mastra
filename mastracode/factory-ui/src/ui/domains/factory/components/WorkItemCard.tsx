@@ -1,7 +1,7 @@
 import { BoardCard } from '@mastra/playground-ui/domains/factory';
 import { HrefLink } from '../../../ui/HrefLink';
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import { cardThreadSession, itemThreadSession } from '@mastra/factory/work-items/card-context-sessions';
+import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
+import type { SessionRowStatus } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';

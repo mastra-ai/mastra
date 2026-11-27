@@ -1,5 +1,4 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
-import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import { DEFAULT_BOARD_ID, PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
 import { noop } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import type { LoaderFunctionArgs, ShouldRevalidateFunction } from 'react-router';

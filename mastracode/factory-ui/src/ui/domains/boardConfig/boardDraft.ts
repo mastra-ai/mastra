@@ -1,4 +1,4 @@
-import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
+import { cardRuleGroupSchema } from '@internal/factory-contract';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
 import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
 

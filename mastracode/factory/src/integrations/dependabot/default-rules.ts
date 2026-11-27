@@ -1,9 +1,5 @@
+import type { FactoryDependabotEventName, FactoryDependabotRuleContext, FactoryRuleHandler } from '@internal/factory-contract';
 import { closedByRoutes } from '../../rules/event-rules.js';
-import type {
-  FactoryDependabotEventName,
-  FactoryDependabotRuleContext,
-  FactoryRuleHandler,
-} from '../../rules/types.js';
 
 export type DependabotEventRules = Readonly<
   Record<FactoryDependabotEventName, FactoryRuleHandler<FactoryDependabotRuleContext> | null>

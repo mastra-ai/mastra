@@ -1,8 +1,8 @@
+import type { FactoryLinearRuleContext } from '@internal/factory-contract';
 import type { WorkerDeps } from '@mastra/core/worker';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
-import type { FactoryLinearRuleContext } from '../../../rules/types.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';

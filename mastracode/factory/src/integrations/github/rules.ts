@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
-import { closeReason, isPullRequestEvent, listChange, updateEventFacts } from '../../boards/board-events.js';
-import type { BoardEventFacts } from '../../boards/board-events.js';
+import { authorTrusted, closeReason, isPullRequestEvent, listChange, primarySource, updateEventFacts, workItemBranch, workItemBranchSource } from '@internal/factory-contract';
+import type { BoardEventFacts, ExternalWorkItemSource, FactoryGithubEventName, FactoryGithubRuleContext, FactoryPullRequestHome, FactoryRuleActor, FactoryRuleDecision, FactorySignalActivityDecision, WorkItemSourceRow } from '@internal/factory-contract';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -35,15 +35,6 @@ import {
   withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { CardUpdateStatus, NotRoutedLookup } from '../../rules/event-rules.js';
-import type {
-  FactoryGithubEventName,
-  FactoryGithubRuleContext,
-  FactoryPullRequestHome,
-  FactoryRuleActor,
-  FactoryRuleDecision,
-  FactorySignalActivityDecision,
-} from '../../rules/types.js';
-import { authorTrusted } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -58,10 +49,6 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
-import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
-import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
-import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
-import type { ExternalWorkItemSource } from '../../work-items/external-source.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { storageCards } from '../kept-cards.js';

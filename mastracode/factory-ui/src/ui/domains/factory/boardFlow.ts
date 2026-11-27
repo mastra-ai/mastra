@@ -1,4 +1,4 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo } from '../../../api/types';
 

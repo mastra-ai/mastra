@@ -1,16 +1,15 @@
-import type { RequestContext } from '@mastra/core/request-context';
+import { isPullRequestCard, workItemSource } from '@internal/factory-contract';
 
+import type { RequestContext } from '@mastra/core/request-context';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { cardBoardFlow } from '../boards/semantics.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
-import { workItemSource } from '../rules/types.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { isPullRequestCard } from '../work-items/change-requests.js';
 import { REPOSITORY_CHOICE_KEY, resolveWorkItemRepository } from './work-item-repository.js';
 
 /** The repository a source-control tool call targets. */

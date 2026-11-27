@@ -1,4 +1,4 @@
-import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { PullRequestStatus } from '@internal/factory-contract';
 import { createContext } from 'react';
 import type { ReactNode } from 'react';
 

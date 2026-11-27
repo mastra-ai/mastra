@@ -1,16 +1,21 @@
-import type { BoardEventFacts, PullRequestEvent } from '../boards/board-events.js';
 import {
   closeReason,
   eventMovesCard,
+  isPullRequestCard,
   isPullRequestEvent,
   isUpdateEvent,
   listChange,
   updateEventFacts,
-} from '../boards/board-events.js';
+} from '@internal/factory-contract';
+import type {
+  BoardEventFacts,
+  FactoryRouteEventDecision,
+  FactoryRuleHandler,
+  FactoryTransitionDecision,
+  PullRequestEvent,
+} from '@internal/factory-contract';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { isPullRequestCard } from '../work-items/change-requests.js';
-import type { FactoryRouteEventDecision, FactoryRuleHandler, FactoryTransitionDecision } from './types.js';
 
 type EventRuleTable<E extends string, TContext> = Readonly<Record<E, FactoryRuleHandler<TContext> | null>>;
 type BoardEventRuleMap<E extends string, TContext> = Readonly<Partial<Record<E, FactoryRuleHandler<TContext> | null>>>;

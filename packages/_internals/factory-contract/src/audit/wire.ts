@@ -1,5 +1,5 @@
 import type { AuditActorType } from './actors.js';
-import type { AuditEventRow, AuditTarget } from './base.js';
+import type { AuditEventRow, AuditTarget } from './event.js';
 
 export interface WireAuditActor {
   id: string;

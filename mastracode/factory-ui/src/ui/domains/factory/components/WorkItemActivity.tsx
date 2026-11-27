@@ -1,5 +1,5 @@
-import { isAuditAction } from '@mastra/factory/storage/domains/audit/actions';
-import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
+import { isAuditAction } from '@internal/factory-contract';
+import type { AuditAction } from '@internal/factory-contract';
 import { CardActivity } from '@mastra/playground-ui/domains/factory';
 import type { CardActivityEntry } from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';

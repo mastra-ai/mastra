@@ -1,6 +1,7 @@
+import { needsApproval } from '@internal/factory-contract';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import {
   awaitsAcceptance,
   boardFlow,
@@ -16,7 +17,6 @@ import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { parkedRunLabel } from '../routes/attention-parked.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
-import { needsApproval } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type {

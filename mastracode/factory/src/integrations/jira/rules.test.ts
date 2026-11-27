@@ -1,10 +1,10 @@
+import { FACTORY_JIRA_EVENTS } from '@internal/factory-contract';
+import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleItemContext } from '@internal/factory-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { FACTORY_JIRA_EVENTS } from '../../rules/types.js';
-import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveJiraRules } from './default-rules.js';
 import type { JiraRuleOverrides } from './default-rules.js';

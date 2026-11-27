@@ -1,15 +1,16 @@
-import { ACTIVITY_EVENTS, CLOSE_REASONS, isUpdateEvent, STATUS_EVENTS } from '../boards/board-events.js';
-import type { BoardEventFacts, ItemChange } from '../boards/board-events.js';
-import type { BoardRegistry } from '../boards/registry.js';
+import { ACTIVITY_EVENTS, CLOSE_REASONS, isUpdateEvent, STATUS_EVENTS } from '@internal/factory-contract';
 import type {
+  BoardEventFacts,
   FactoryCommitDecision,
+  FactoryRouteEventDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRuleRejectionCode,
-  FactoryRouteEventDecision,
   FactoryTransitionDecision,
+  ItemChange,
   WorkItemSource,
-} from './types.js';
+} from '@internal/factory-contract';
+import type { BoardRegistry } from '../boards/registry.js';
 
 export const MAX_FACTORY_RULE_CAUSAL_DEPTH = 8;
 

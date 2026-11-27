@@ -1,5 +1,5 @@
-import { MAX_RULE_GROUP_DEPTH, RULE_OPERATORS } from '@mastra/factory/rules/rule-group';
-import type { RuleCondition, RuleGroup, RuleOperator, RuleValue } from '@mastra/factory/rules/rule-group';
+import { MAX_RULE_GROUP_DEPTH, RULE_OPERATORS } from '@internal/factory-contract';
+import type { RuleCondition, RuleGroup, RuleOperator, RuleValue } from '@internal/factory-contract';
 import type { FilterBarField } from '@mastra/playground-ui/components/FilterBar';
 
 export const VALUELESS = new Set(['exists', 'not_exists']);

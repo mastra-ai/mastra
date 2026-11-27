@@ -1,5 +1,5 @@
-import { cardChangeRequest, cardChangeRequests } from '@mastra/factory/work-items/change-requests';
-import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest, cardChangeRequests } from '@internal/factory-contract';
+import type { CardChangeRequest, PullRequestStatus } from '@internal/factory-contract';
 
 import { CHANGE_REQUEST_TERMS, changeRequestKey, changeRequestStatus, isOpenChangeRequest } from './changeRequestState';
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';

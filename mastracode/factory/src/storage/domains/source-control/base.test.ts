@@ -3,12 +3,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { workItemBranch } from '@internal/factory-contract';
 import { UniqueViolationError } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { ensureFactorySourceSession } from '../../../session/factory-session.js';
-import { workItemBranch } from '../../../work-item-branch.js';
 
 import { FactoryProjectsStorage } from '../projects/base.js';
 import { SessionOwnershipMismatchError, SourceControlStorage } from './base.js';

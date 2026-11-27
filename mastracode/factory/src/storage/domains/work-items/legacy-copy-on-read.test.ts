@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { ExternalWorkItemSource } from '../../../work-items/external-source.js';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createIsolatedFactoryPostgresForTests, createLegacyCardTablesForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
 import type { Card } from './base.js';

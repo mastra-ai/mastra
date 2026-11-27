@@ -1,5 +1,5 @@
-import { cardContextSessions } from '@mastra/factory/work-items/card-context-sessions';
-import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+import { cardContextSessions } from '@internal/factory-contract';
+import type { CardContextSession } from '@internal/factory-contract';
 import { workItemNumber } from '@mastra/factory/work-items/card-number';
 import { matchesSearch, searchableCard } from '@mastra/factory/work-items/search-terms';
 import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/search-terms';

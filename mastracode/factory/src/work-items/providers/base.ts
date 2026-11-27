@@ -1,6 +1,5 @@
+import type { ExternalWorkItemSource, WorkItemProvider } from '@internal/factory-contract';
 import { externalSourceKey } from '../../storage/domains/work-items/base.js';
-import type { WorkItemProvider } from '../../storage/domains/work-items/work-item-schema.js';
-import type { ExternalWorkItemSource } from '../external-source.js';
 import { SHARED_PROVIDER_METADATA_KEYS, splitCardMetadata, stringList, stringValue } from './metadata-keys.js';
 import type { ProviderWorkItemSource, WorkItemProviderAdapter } from './types.js';
 

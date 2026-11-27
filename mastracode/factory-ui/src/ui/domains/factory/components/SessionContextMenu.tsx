@@ -1,4 +1,4 @@
-import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+import type { CardContextSession } from '@internal/factory-contract';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';

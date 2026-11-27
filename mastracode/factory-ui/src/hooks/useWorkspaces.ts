@@ -1,4 +1,4 @@
-import { isPersonSessionBranch } from '@mastra/factory/work-item-branch';
+import { isPersonSessionBranch } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient, UseQueryResult } from '@tanstack/react-query';

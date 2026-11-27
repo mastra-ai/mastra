@@ -1,6 +1,6 @@
+import { externalSourceForWorkItem } from '@internal/factory-contract';
 import { cardRuleFacts } from '../../boards/card-facts.js';
 import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
-import { externalSourceForWorkItem } from '../../rules/types.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { GithubIssueFetcher, GithubPullRequestFetcher, GithubRulesIntegration } from './rules.js';
 import { trustedCollaborator } from './rules.js';

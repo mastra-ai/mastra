@@ -1,5 +1,4 @@
-import { contextLabel, phaseContext } from '@mastra/factory/work-items/card-context-sessions';
-import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest, contextLabel, phaseContext } from '@internal/factory-contract';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import { formatDuration } from '../../../lib/date/formatDuration';

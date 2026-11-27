@@ -1,11 +1,11 @@
+import { AUDIT_ACTOR_TYPES, parseAuditAction } from '@internal/factory-contract';
+import type { AuditEventRow } from '@internal/factory-contract';
+
 import { defineEvent } from '@mastra/mcp';
 import { z } from 'zod';
-
 import { canViewSourceControlSession } from '../routes/session-access.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
-import { parseAuditAction } from '../storage/domains/audit/actions.js';
-import { AUDIT_ACTOR_TYPES } from '../storage/domains/audit/actors.js';
-import type { AuditStorage, AuditEventRow } from '../storage/domains/audit/base.js';
+import type { AuditStorage } from '../storage/domains/audit/base.js';
 import {
   ACTOR_PROFILE_METADATA_KEY,
   auditCursorAt,

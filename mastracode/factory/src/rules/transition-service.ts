@@ -1,19 +1,11 @@
-import { BUSY_CARD_MOVE_REFUSAL, phaseMayStartRun } from '../boards/busy-card.js';
-import { DEFAULT_BOARD_ID, REVIEW_CONTEXT } from '../boards/index.js';
-import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
-import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
-import { phaseRunDecision } from '../boards/phase-runner.js';
-import { toBoardSource } from '../boards/project-boards.js';
-import type { ProjectBoardSource } from '../boards/project-boards.js';
-import { boardFlow, boardForWorkItem, hasPullRequest, pullRequestCardRejection } from '../boards/semantics.js';
-import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
-import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
-import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
-import { isAgentActor, REVISION_CONFLICT_REASON } from '../storage/domains/work-items/base.js';
-import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { isRunBearingDecision } from './run-bearing.js';
+import {
+  BUSY_CARD_MOVE_REFUSAL,
+  factoryRuleSourceForWorkItem,
+  phaseMayStartRun,
+  workItemSource,
+} from '@internal/factory-contract';
 import type {
+  AuditContext,
   FactoryCommitDecision,
   FactoryRuleActor,
   FactoryRuleBoard,
@@ -23,8 +15,21 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
   FactoryTransitionResultRejected,
-} from './types.js';
-import { factoryRuleSourceForWorkItem, workItemSource } from './types.js';
+} from '@internal/factory-contract';
+import { DEFAULT_BOARD_ID, REVIEW_CONTEXT } from '../boards/index.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import { autoApprovedExitTool, exitToolSucceeded } from '../boards/phase-automation.js';
+import { phaseRunDecision } from '../boards/phase-runner.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
+import { boardFlow, boardForWorkItem, hasPullRequest, pullRequestCardRejection } from '../boards/semantics.js';
+import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
+import type { AuditActorProfileInput, AuditActorType } from '../storage/domains/audit/base.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import { isAgentActor, REVISION_CONFLICT_REASON } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { isRunBearingDecision } from './run-bearing.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,

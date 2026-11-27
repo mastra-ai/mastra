@@ -8,14 +8,14 @@ interface Reach {
   via: string[];
 }
 
-describe('@mastra/factory/contract', () => {
+describe('@internal/factory-contract', () => {
   it('reaches nothing a browser cannot load', () => {
-    const { bad } = closure(['contract']) as { bad: Reach[] };
+    const { bad } = closure(['index']) as { bad: Reach[] };
     expect(bad.map(b => `${b.spec} <- ${b.via.join(' > ')}`)).toEqual([]);
   });
 
   it('only type-imports @mastra/core, which the build erases', () => {
-    const { bad } = closure(['contract'], { types: true }) as { bad: Reach[] };
+    const { bad } = closure(['index'], { types: true }) as { bad: Reach[] };
     const leaks = bad.filter(b => !b.spec.startsWith('@mastra/core/'));
     expect(leaks.map(b => `${b.spec} <- ${b.via.join(' > ')}`)).toEqual([]);
   });

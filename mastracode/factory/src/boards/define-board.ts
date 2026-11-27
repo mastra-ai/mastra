@@ -1,14 +1,14 @@
-import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
-import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
+  cardRuleGroupSchema,
+  evaluateRuleGroup,
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
   FACTORY_LINEAR_EVENTS,
-} from '../rules/types.js';
+} from '@internal/factory-contract';
 import type {
+  BoardPhaseKind,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryGitLabEventName,
@@ -21,7 +21,10 @@ import type {
   FactoryLinearRuleContext,
   FactoryRuleHandler,
   FactoryToolResultRuleContext,
-} from '../rules/types.js';
+  RuleFacts,
+  RuleGroup,
+} from '@internal/factory-contract';
+import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
 import {
   IDENTIFIER_RE,
   isBoardIdentifier,
@@ -30,7 +33,6 @@ import {
   MAX_TOOL_NAME_LENGTH,
   SKILL_NAME_RE,
 } from '../rules/validation.js';
-import type { BoardPhaseKind } from './phase-kind.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 /** Runs when an agent seated on this board completes the named tool. */
