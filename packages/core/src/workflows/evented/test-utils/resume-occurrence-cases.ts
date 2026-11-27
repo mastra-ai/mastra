@@ -703,103 +703,144 @@ export function describeResumeOccurrenceCases({
     // T10. An evented agent resumed after a tool approval. With one step allowed the agent's loop
     // ends in the resumed iteration, so its finishing step still carries the resume. Delivered
     // twice while its output processor runs, both copies continued the run without the guards, and
-    // the step after it ran twice.
-    it('runs the step after an evented agent finishes once when its finishing step is delivered twice after a tool approval', async () => {
-      const model = new MockLanguageModelV2({
-        doStream: async () => ({
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
-            { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-          ]),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-        }),
-      }) as unknown as LanguageModelV2;
-      const lookup = createTool({
-        id: 'lookup',
-        description: 'Look something up',
-        inputSchema: z.object({}),
-        requireApproval: true,
-        execute: async () => ({ found: true }),
-      });
-      const entered = deferred();
-      const held = deferred();
-      let processed = 0;
-      const holdOutput = {
-        id: 'hold-output',
-        processOutputResult: async ({ messages }: { messages: any[] }) => {
-          if (++processed === 1) {
-            entered.resolve();
-            await held.promise;
-          }
-          return messages;
-        },
-      };
-      const agent = createEventedAgent({
-        agent: new Agent({
-          id: 'approval-agent',
-          name: 'approval-agent',
-          instructions: 'Use lookup.',
-          model,
-          tools: { lookup },
-          outputProcessors: [holdOutput],
-        }),
-        storageVersion,
-      });
-      const drain = async (stream: ReadableStream<unknown>) => {
-        const reader = stream.getReader();
-        while (!(await reader.read()).done) {
-          // consume
-        }
-      };
-      await withHost(
-        {},
-        async ({ driver, warn }) => {
-          try {
-            const started = await agent.stream('Look it up', { requireToolApproval: true, maxSteps: 1 });
-            // The suspended run's stream stays open; the approval request is what the caller waits for.
-            const first = (started.fullStream as ReadableStream<{ type?: string }>).getReader();
-            for (let chunk = await first.read(); !chunk.done; chunk = await first.read()) {
-              if (chunk.value?.type === 'tool-call-approval') break;
+    // the step after it ran twice. Under the guards the slower copy is refused once the next step
+    // started. When it completes first it continues from the saved result and publishes the next
+    // step again, and that step runs for whichever start comes first (the order Postgres hit in
+    // CI). Either way the next step ends once and the run ends once.
+    it.each(['as delivered', 'the slower copy completes first'] as const)(
+      'runs the step after an evented agent finishes once when its finishing step is delivered twice after a tool approval (%s)',
+      async order => {
+        const model = new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          }),
+        }) as unknown as LanguageModelV2;
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Look something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        });
+        const entered = deferred();
+        const held = deferred();
+        let processed = 0;
+        const holdOutput = {
+          id: 'hold-output',
+          processOutputResult: async ({ messages }: { messages: any[] }) => {
+            if (++processed === 1) {
+              entered.resolve();
+              await held.promise;
             }
-            const from = driver.events.length;
-            const resumed = await agent.resume(started.runId, { approved: true });
-            const finished = drain(resumed.fullStream as ReadableStream<unknown>);
-            await entered.promise;
-            const finishing = driver.events
-              .filter(
-                event =>
+            return messages;
+          },
+        };
+        const agent = createEventedAgent({
+          agent: new Agent({
+            id: 'approval-agent',
+            name: 'approval-agent',
+            instructions: 'Use lookup.',
+            model,
+            tools: { lookup },
+            outputProcessors: [holdOutput],
+          }),
+          storageVersion,
+        });
+        let interceptor: MockInstance | undefined;
+        const drain = async (stream: ReadableStream<unknown>) => {
+          const reader = stream.getReader();
+          while (!(await reader.read()).done) {
+            // consume
+          }
+        };
+        await withHost(
+          {},
+          async ({ driver }) => {
+            try {
+              const started = await agent.stream('Look it up', { requireToolApproval: true, maxSteps: 1 });
+              // The suspended run's stream stays open; the approval request is what the caller waits for.
+              const first = (started.fullStream as ReadableStream<{ type?: string }>).getReader();
+              for (let chunk = await first.read(); !chunk.done; chunk = await first.read()) {
+                if (chunk.value?.type === 'tool-call-approval') break;
+              }
+              await first.cancel();
+              const from = driver.events.length;
+              const resumed = await agent.resume(started.runId, { approved: true });
+              const finished = drain(resumed.fullStream as ReadableStream<unknown>);
+              await entered.promise;
+              const finishing = driver.events
+                .filter(
+                  event =>
+                    event.type === 'workflow.step.run' &&
+                    event.runId === started.runId &&
+                    event.data.workflowId === DurableStepIds.AGENTIC_LOOP,
+                )
+                .at(-1)!;
+              expect(finishing.data.resumeSteps?.length).toBeGreaterThan(0);
+              const afterPath = [finishing.data.executionPath[0] + 1];
+              // The faster copy's next step event waits until the slower copy's completion was handled.
+              const publish = driver.pubsub.publish.bind(driver.pubsub);
+              let heldNext: (() => Promise<void>) | undefined;
+              interceptor = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+                if (
+                  order === 'the slower copy completes first' &&
+                  !heldNext &&
                   event.type === 'workflow.step.run' &&
                   event.runId === started.runId &&
-                  event.data.workflowId === DurableStepIds.AGENTIC_LOOP,
-              )
-              .at(-1)!;
-            expect(finishing.data.resumeSteps?.length).toBeGreaterThan(0);
-            await redeliverInBody(driver, finishing);
-            held.resolve();
-            await settleSecondCompletion(
-              driver,
-              from,
-              started.runId,
-              DurableStepIds.AGENTIC_LOOP,
-              finishing.data.executionPath,
-            );
-            await finished;
-            await drainHandlers();
-            const after = `${DurableStepIds.AGENTIC_LOOP}@${finishing.data.executionPath[0] + 1}`;
-            expect(processed).toBe(2);
-            expect(driver.deliveryCount({ spec: after, runId: started.runId })).toBe(1);
-            expect(warn).toHaveBeenCalledWith(
-              expect.stringContaining('stale'),
-              expect.objectContaining({ runId: started.runId, storedStartedBy: finishing.id }),
-            );
-          } finally {
-            held.resolve();
-          }
-        },
-        { 'approval-agent': agent },
-      );
-    }, 30_000);
+                  event.data.workflowId === DurableStepIds.AGENTIC_LOOP &&
+                  event.data.executionPath?.[0] === afterPath[0]
+                ) {
+                  heldNext = () => publish(topic, event, options);
+                  return;
+                }
+                return publish(topic, event, options);
+              });
+              await redeliverInBody(driver, finishing);
+              held.resolve();
+              await settleSecondCompletion(
+                driver,
+                from,
+                started.runId,
+                DurableStepIds.AGENTIC_LOOP,
+                finishing.data.executionPath,
+              );
+              await heldNext?.();
+              await finished;
+              await drainHandlers();
+              expect(processed).toBe(2);
+              expect(stepEndsSince(driver, from, started.runId, DurableStepIds.AGENTIC_LOOP, afterPath)).toHaveLength(
+                1,
+              );
+              // The agent's run ends once.
+              expect(
+                driver.events
+                  .slice(from)
+                  .filter(
+                    event =>
+                      event.type === 'workflow.end' &&
+                      event.runId === started.runId &&
+                      event.data.workflowId === DurableStepIds.AGENTIC_LOOP,
+                  ),
+              ).toHaveLength(1);
+            } finally {
+              held.resolve();
+              interceptor?.mockRestore();
+            }
+          },
+          { 'approval-agent': agent },
+        );
+      },
+      30_000,
+    );
   });
 }
