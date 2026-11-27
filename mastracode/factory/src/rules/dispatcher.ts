@@ -1337,7 +1337,8 @@ export class FactoryDecisionDispatcher {
         advanceDeliveryGeneration: !executionCompleted,
       });
       if (terminal && failed) await this.#supersedeFailureOnSettledCard(failed);
-      await this.#reportRunFailed(record, error, failureCode, terminal);
+      // An attempt whose lease another worker took over failed nothing on record; that worker tells.
+      if (failed) await this.#reportRunFailed(record, error, failureCode, terminal);
       // A re-claim that failed before proving its kickoff never landed may be racing
       // an earlier attempt's live run; only a terminal failure may speak over it.
       if (terminal || this.#reviewQueued.has(record)) {

@@ -3286,6 +3286,46 @@ describe('FactoryDecisionDispatcher', () => {
     ).toMatchObject({ status: 'failed', lastError: expect.stringContaining('This host keeps cards out of Done.') });
   });
 
+  it("tells the board engine of a phase run's failed attempt only when that attempt's failure was recorded", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueDecision(
+      storage,
+      { type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'failing-run' },
+      { armed: true },
+    );
+    const told: unknown[] = [];
+    const dispatcher = new FactoryDecisionDispatcher({
+      // No session to run in: every attempt fails before a kickoff.
+      controller: { getSession: async () => undefined } as never,
+      transitionService,
+      boardEngine: {
+        runEnded: async () => false,
+        requestMove: input => transitionService.transition(input),
+        requestPlacement: async () => 'skipped',
+        runFailed: async (seat, failure) => void told.push({ seat, failure }),
+      },
+      storage,
+      audit: seed.audit,
+      openRuns: seed.openRuns,
+    });
+
+    // Another worker took the decision over before this attempt's failure landed.
+    const lost = vi.spyOn(storage, 'failDeferredDecision').mockResolvedValueOnce(null);
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(lost).toHaveBeenCalledTimes(1);
+    expect(told).toEqual([]);
+
+    lost.mockRestore();
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+    expect(told).toEqual([
+      {
+        seat: { orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item.id, role: 'work' },
+        failure: expect.objectContaining({ attempt: 2, terminal: false }),
+      },
+    ]);
+  });
+
   it('waits for an open run on the same binding before sending another kickoff', async () => {
     const seed = await createFactoryStorageForTests();
     const storage = seed.workItems;
