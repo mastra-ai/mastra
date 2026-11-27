@@ -101,6 +101,8 @@ export type FilterBarContextValue = {
   setLogic: (groupId: string, logic: FilterBarLogic) => void;
   /** Whether items and groups may be negated (the bar's `negatable`). */
   negatable: boolean;
+  /** Whether the bar shows an `and` / `or` toggle between root chips (expression values only). */
+  rootLogicToggle: boolean;
   /** Negates an item or a group, or turns its negation off. */
   setNegated: (id: string, negated: boolean) => void;
   /** Nesting level of a group (root-level = 1); 0 when unknown. */
@@ -194,6 +196,8 @@ export type FilterBarProviderProps = {
   describeSuggestionsError?: (error: unknown) => string | undefined;
   /** Lets each item and group be negated ("not …"). */
   negatable?: boolean;
+  /** Shows an `and` / `or` toggle between root chips; ignored for flat values. */
+  rootLogicToggle?: boolean;
   /** Lets the field step take names outside `fields`, under a prefix. */
   customField?: FilterBarCustomField;
   /** Message for a committed condition that is wrong where it sits; `undefined` when fine. */
@@ -252,6 +256,7 @@ export function FilterBarProvider({
   ariaLabel,
   describeSuggestionsError,
   negatable = false,
+  rootLogicToggle = false,
   customField,
   validateItem,
   operatorsFor,
@@ -692,6 +697,7 @@ export function FilterBarProvider({
       removeGroup,
       setLogic,
       negatable,
+      rootLogicToggle: rootLogicToggle && !flat,
       setNegated,
       getGroupDepth,
       openGroupId,
@@ -740,6 +746,7 @@ export function FilterBarProvider({
       removeGroup,
       setLogic,
       negatable,
+      rootLogicToggle,
       setNegated,
       getGroupDepth,
       openGroupId,

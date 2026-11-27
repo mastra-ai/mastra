@@ -468,4 +468,50 @@ describe('FilterBar rules', () => {
       expect(chip.getAttribute('aria-description')).toBe('"contains" is not available here');
     });
   });
+
+  describe('root logic', () => {
+    const toggles = () => screen.queryAllByRole('button', { name: /^Joined with/ });
+
+    it('keeps root conditions joined with and, without a toggle, by default', () => {
+      render(<ExpressionHarness initial={expressionOf(status('a'), status('b', { value: 'running' }))} />);
+      expect(toggles()).toHaveLength(0);
+    });
+
+    it('shows one toggle between each pair of root chips and switches the root to or', () => {
+      const onChange = vi.fn();
+      render(
+        <ExpressionHarness
+          rootLogicToggle
+          onChange={onChange}
+          initial={expressionOf(status('a'), status('b', { value: 'running' }), status('c', { value: 'success' }))}
+        />,
+      );
+      expect(toggles()).toHaveLength(2);
+
+      fireEvent.click(toggles()[0]);
+
+      expect(lastCall(onChange)?.logic).toBe('or');
+      expect(toggles().map(t => t.textContent)).toEqual(['or', 'or']);
+    });
+
+    it('reads the logic the value already has', () => {
+      render(
+        <ExpressionHarness
+          rootLogicToggle
+          initial={{ logic: 'or', nodes: [status('a'), status('b', { value: 'running' })] }}
+        />,
+      );
+      expect(toggles()[0].getAttribute('aria-label')).toBe('Joined with or, switch to and');
+    });
+
+    it('shows no toggle for a single chip', () => {
+      render(<ExpressionHarness rootLogicToggle initial={expressionOf(status('a'))} />);
+      expect(toggles()).toHaveLength(0);
+    });
+
+    it('shows no toggle on a flat list, which has nowhere to keep the logic', () => {
+      render(<ListHarness rootLogicToggle initial={[status('a'), status('b', { value: 'running' })]} />);
+      expect(toggles()).toHaveLength(0);
+    });
+  });
 });
