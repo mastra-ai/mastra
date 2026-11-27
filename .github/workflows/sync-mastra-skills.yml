@@ -113,6 +113,16 @@ jobs:
               --title "chore: sync official Mastra skills" --body "${BODY}"
           fi
 
-      - name: Log no changes
+      # When upstream is back to what main already serves, an open sync PR would propose stale skills.
+      - name: Close an obsolete sync pull request
         if: steps.git-check.outputs.changed != 'true'
-        run: echo "ℹ️ Official Mastra skills unchanged"
+        env:
+          GH_TOKEN: ${{ steps.app-auth.outputs.token }}
+          BRANCH: ci/sync-mastra-skills
+        run: |
+          echo "ℹ️ Official Mastra skills unchanged"
+          PR=$(gh pr list --head "${BRANCH}" --state open --json number --jq '.[].number')
+          if [ -n "${PR}" ]; then
+            gh pr close "${PR}" --delete-branch \
+              --comment "Closing: the official Mastra skills on main already match mastra-ai/skills."
+          fi
