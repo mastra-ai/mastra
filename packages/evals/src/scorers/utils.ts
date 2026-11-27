@@ -1327,6 +1327,22 @@ const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
 };
 
 /**
+ * `JSON.stringify` with object keys sorted at every depth, so values that differ
+ * only in key order serialize the same. Arrays keep their order.
+ */
+function stableStringify(value: unknown): string | undefined {
+  return JSON.stringify(value, (_key, val) =>
+    val && typeof val === 'object' && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.keys(val)
+            .sort()
+            .map(key => [key, val[key]]),
+        )
+      : val,
+  );
+}
+
+/**
  * Check if an actual TrajectoryStep matches an ExpectedStep.
  * Matches by name, optionally by stepType, and auto-compares any variant-specific
  * fields that are present on the expected step.
@@ -1343,7 +1359,7 @@ function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep): bo
       const actualVal = (actual as any)[field];
       if (actualVal === undefined) return false;
       try {
-        if (JSON.stringify(actualVal) !== JSON.stringify(expectedVal)) return false;
+        if (stableStringify(actualVal) !== stableStringify(expectedVal)) return false;
       } catch {
         return false;
       }
@@ -1511,7 +1527,7 @@ export function checkTrajectoryEfficiency(
         const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         try {
-          if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
+          if (stableStringify(prevArgs) === stableStringify(currArgs)) {
             redundantCalls.push({ name: curr.name, index: i });
           }
         } catch {
