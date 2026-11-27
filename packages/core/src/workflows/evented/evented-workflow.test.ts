@@ -1534,7 +1534,6 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(result.type).toBe('return');
         await expect(result.value).resolves.toMatchObject(expected);
       };
-      const leases = vi.spyOn(pubsub, 'acquireLease');
       const publish = vi.spyOn(pubsub, 'publish');
       const mastra = new Mastra({
         logger: false,
@@ -1561,7 +1560,6 @@ describe('Workflow (Evented Engine Specific)', () => {
         requestContext,
         emitter,
         deliveries,
-        leases,
         pubsub,
         waitForDelivery,
         effects: () => effects,
@@ -1657,10 +1655,6 @@ describe('Workflow (Evented Engine Specific)', () => {
           const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
           await fixture.waitForDelivery(delivery, 1);
           fixture.policy.allowed = false;
-          const lease = fixture.leases.mock.calls.find(
-            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
-          )!;
-          await fixture.pubsub.releaseLease(lease[0], lease[1]);
           fixture.emitter.emit('workflows', delivery);
           await fixture.waitForDelivery(delivery, 2);
           const snapshot = await store.loadWorkflowSnapshot({
@@ -1684,7 +1678,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       15000,
     );
 
-    it('does not fail an authorized foreach child after lease expiry', async () => {
+    it('does not fail an authorized foreach child when its step is redelivered', async () => {
       const effect = Promise.withResolvers<void>();
       const entered = Promise.withResolvers<void>();
       const fixture = await setup({
@@ -1702,10 +1696,6 @@ describe('Workflow (Evented Engine Specific)', () => {
         await entered.promise;
         fixture.policy.allowed = false;
         const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
-        const lease = fixture.leases.mock.calls.find(
-          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
-        )!;
-        await fixture.pubsub.releaseLease(lease[0], lease[1]);
         fixture.emitter.emit('workflows', delivery);
         await fixture.waitForDelivery(delivery, 2);
         const store = (await fixture.storage.getStore('workflows'))!;
@@ -1829,11 +1819,6 @@ describe('Workflow (Evented Engine Specific)', () => {
           fixture.policy.allowed = false;
           fixture.fga.require.mockClear();
           fixture.publish.mockClear();
-          // Model redelivery after the transport's execution lease expires.
-          const lease = fixture.leases.mock.calls.find(
-            ([key]) => key === `workflow-step-run:${delivery!.runId}:${delivery!.id}`,
-          )!;
-          await fixture.pubsub.releaseLease(lease[0], lease[1]);
           fixture.emitter.emit('workflows', delivery);
           await fixture.waitForDelivery(delivery!, 2);
           expect(fixture.fga.require).not.toHaveBeenCalled();
@@ -1863,11 +1848,6 @@ describe('Workflow (Evented Engine Specific)', () => {
             throw new Error('Access revoked during concurrent delivery');
           });
           const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
-          // Model redelivery after the transport's execution lease expires.
-          const lease = fixture.leases.mock.calls.find(
-            ([key]) => key === `workflow-step-run:${delivery!.runId}:${delivery!.id}`,
-          )!;
-          await fixture.pubsub.releaseLease(lease[0], lease[1]);
           fixture.emitter.emit('workflows', delivery);
           await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
           effect.resolve();
@@ -1893,7 +1873,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       15000,
     );
 
-    it('does not fail an authorized child that is still running after lease expiry', async () => {
+    it('does not fail an authorized child that is still running when its step is redelivered', async () => {
       const effect = Promise.withResolvers<void>();
       const entered = Promise.withResolvers<void>();
       const fixture = await setup({
@@ -1907,10 +1887,6 @@ describe('Workflow (Evented Engine Specific)', () => {
         await entered.promise;
         fixture.policy.allowed = false;
         const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
-        const lease = fixture.leases.mock.calls.find(
-          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
-        )!;
-        await fixture.pubsub.releaseLease(lease[0], lease[1]);
         fixture.emitter.emit('workflows', delivery);
         await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
         await fixture.waitForDelivery(delivery, 2);
@@ -1941,10 +1917,6 @@ describe('Workflow (Evented Engine Specific)', () => {
         await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(1));
         fixture.policy.allowed = false;
         const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
-        const lease = fixture.leases.mock.calls.find(
-          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
-        )!;
-        await fixture.pubsub.releaseLease(lease[0], lease[1]);
         fixture.emitter.emit('workflows', delivery);
         await expect(starting).resolves.toMatchObject({ status: 'failed' });
         authorization.resolve();
@@ -2074,10 +2046,6 @@ describe('Workflow (Evented Engine Specific)', () => {
           await entered.promise;
           fixture.policy.allowed = false;
           const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
-          const lease = fixture.leases.mock.calls.find(
-            ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
-          )!;
-          await fixture.pubsub.releaseLease(lease[0], lease[1]);
           fixture.emitter.emit('workflows', delivery);
           await fixture.waitForDelivery(delivery, 2);
           const snapshot = await store.loadWorkflowSnapshot({
