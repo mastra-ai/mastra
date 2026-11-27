@@ -686,9 +686,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
     const idleTtlMs = this.#idleTtlFor(topic);
-    // A retry after a lost reply can append the event twice. Both copies carry
-    // the same event id; a duplicate workflow.step.run is dropped by the step
-    // fence, and other events are already handled as at-least-once deliveries.
+    // A retry after a lost reply can append the event twice with the same event
+    // id. Every event is handled as an at-least-once delivery.
     const budgetMs = this.#publishRetryBudgetMs;
     const deadline = Date.now() + budgetMs;
     let lastError: unknown;
