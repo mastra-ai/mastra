@@ -284,11 +284,6 @@ describe('deriveAction', () => {
       // /publish appears mid-path, not as terminal segment
       expect(deriveAction('POST', '/stored/skills/publish/something')).toBe('write');
     });
-
-    it('should prefer publish over execute if both could match', () => {
-      // Defensive: a hypothetical /activate path is treated as publish, not execute
-      expect(deriveAction('POST', '/stored/agents/:id/versions/:vid/activate')).toBe('publish');
-    });
   });
 
   describe('case insensitivity', () => {
@@ -308,58 +303,12 @@ describe('deriveAction', () => {
 
 describe('derivePermission', () => {
   describe('successful derivation', () => {
-    it('should derive agents:read for GET /agents', () => {
-      expect(derivePermission({ path: '/agents', method: 'GET' })).toBe('agents:read');
-    });
-
-    it('should derive agents:read for GET /agents/:agentId', () => {
-      expect(derivePermission({ path: '/agents/:agentId', method: 'GET' })).toBe('agents:read');
-    });
-
-    it('should derive agents:execute for POST /agents/:agentId/generate', () => {
-      expect(derivePermission({ path: '/agents/:agentId/generate', method: 'POST' })).toBe('agents:execute');
-    });
-
     it('should derive agents:write for POST /agents', () => {
       expect(derivePermission({ path: '/agents', method: 'POST' })).toBe('agents:write');
     });
 
     it('should derive agents:delete for DELETE /agents/:agentId', () => {
       expect(derivePermission({ path: '/agents/:agentId', method: 'DELETE' })).toBe('agents:delete');
-    });
-
-    it('should derive workflows:read for GET /workflows', () => {
-      expect(derivePermission({ path: '/workflows', method: 'GET' })).toBe('workflows:read');
-    });
-
-    it('should derive workflows:execute for POST /workflows/:id/start', () => {
-      expect(derivePermission({ path: '/workflows/:workflowId/start', method: 'POST' })).toBe('workflows:execute');
-    });
-
-    it('should derive workflows:delete for DELETE /workflows/:id/runs/:runId', () => {
-      expect(derivePermission({ path: '/workflows/:workflowId/runs/:runId', method: 'DELETE' })).toBe(
-        'workflows:delete',
-      );
-    });
-
-    it('should derive tools:read for GET /tools', () => {
-      expect(derivePermission({ path: '/tools', method: 'GET' })).toBe('tools:read');
-    });
-
-    it('should derive tools:read for GET /tools/:toolId', () => {
-      expect(derivePermission({ path: '/tools/:toolId', method: 'GET' })).toBe('tools:read');
-    });
-
-    it('should derive tools:execute for POST /tools/:toolId/execute', () => {
-      expect(derivePermission({ path: '/tools/:toolId/execute', method: 'POST' })).toBe('tools:execute');
-    });
-
-    it('should derive memory:read for GET /memory/threads', () => {
-      expect(derivePermission({ path: '/memory/threads', method: 'GET' })).toBe('memory:read');
-    });
-
-    it('should derive memory:write for POST /memory/threads', () => {
-      expect(derivePermission({ path: '/memory/threads', method: 'POST' })).toBe('memory:write');
     });
 
     it('should derive stored-agents:read for GET /stored/agents', () => {

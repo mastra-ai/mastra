@@ -733,14 +733,17 @@ describe('HTTP provider tool approval', () => {
     expect(result['linear_delete_team']!.requireApproval).toBe(true);
   });
 
-  it('fails resolution when a requireApproval glob matches nothing', async () => {
+  it.each([
+    ['fails resolution when a requireApproval glob matches nothing', 'linear_nope_*', "Pattern 'linear_nope_*'"],
+    ['fails resolution when requireApproval names an unknown generated tool', 'linear_nope', 'requireApproval'],
+  ] as const)('%s', async (_title, value, input) => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope_*'] } } });
+    const tools = connect({ ...options, providers: { linear: { requireApproval: [value] } } });
 
     await expect(tools()).rejects.toMatchObject({
       code: 'invalid_options',
-      message: expect.stringContaining("Pattern 'linear_nope_*'"),
+      message: expect.stringContaining(input),
     });
   });
 
@@ -755,17 +758,6 @@ describe('HTTP provider tool approval', () => {
     const result = (await tools()) as Record<string, ApprovalTool>;
     expect(result['linear_fake_tool']!.requireApproval).toBe(true);
     expect(result['linear__list_connections']!.requireApproval).toBeFalsy();
-  });
-
-  it('fails resolution when requireApproval names an unknown generated tool', async () => {
-    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
-    const { options } = resolverOptions(() => [makeConnection()]);
-    const tools = connect({ ...options, providers: { linear: { requireApproval: ['linear_nope'] } } });
-
-    await expect(tools()).rejects.toMatchObject({
-      code: 'invalid_options',
-      message: expect.stringContaining('requireApproval'),
-    });
   });
 
   it('gates wrapped multi-connection tools but not list_connections when requireApproval is true', async () => {

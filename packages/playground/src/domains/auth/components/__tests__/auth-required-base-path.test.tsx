@@ -66,29 +66,19 @@ afterEach(() => {
 
 describe('AuthRequired', () => {
   describe('when the studio is served from a custom base path and the user is unauthenticated', () => {
-    it('sends the Sign in button to /login under the studio base path', async () => {
+    it.each([
+      ['sends the Sign in button to /login under the studio base path', 'Sign in', '/studio/login'],
+      ['sends the Sign up link to /signup under the studio base path', 'Sign up', '/studio/signup'],
+    ] as const)('%s', async (_title, name, expected) => {
       window.MASTRA_STUDIO_BASE_PATH = '/studio';
       server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(credentialsCapabilities)));
       const { hrefSetter, restore } = stubLocationHref();
 
       renderAuthRequired();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+      fireEvent.click(await screen.findByRole('button', { name }));
 
       const target = new URL(hrefSetter.mock.calls[0][0]);
-      expect(target.pathname).toBe('/studio/login');
-      restore();
-    });
-
-    it('sends the Sign up link to /signup under the studio base path', async () => {
-      window.MASTRA_STUDIO_BASE_PATH = '/studio';
-      server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(credentialsCapabilities)));
-      const { hrefSetter, restore } = stubLocationHref();
-
-      renderAuthRequired();
-      fireEvent.click(await screen.findByRole('button', { name: 'Sign up' }));
-
-      const target = new URL(hrefSetter.mock.calls[0][0]);
-      expect(target.pathname).toBe('/studio/signup');
+      expect(target.pathname).toBe(expected);
       restore();
     });
   });

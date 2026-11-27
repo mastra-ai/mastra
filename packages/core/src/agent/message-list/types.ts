@@ -19,6 +19,7 @@ export type {
   MastraMessageV1,
   MastraMessageContentV2,
   MastraMessagePart,
+  MastraCustomPart,
   MastraErrorPart,
   UIMessageV4Part,
   MessageSource,

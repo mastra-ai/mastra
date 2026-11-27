@@ -187,25 +187,6 @@ describe('MDocument', () => {
       expect(doc.getText().join(' ')).toBe('Hello world How are you');
     });
 
-    it('should keep separator when specified', async () => {
-      const text = 'Hello\n\nWorld';
-
-      const doc = MDocument.fromText(text, { meta: 'data' });
-
-      await doc.chunk({
-        strategy: 'character',
-        separator: '\n\n',
-        isSeparatorRegex: false,
-        maxSize: 50,
-        overlap: 5,
-        separatorPosition: 'end',
-      });
-      const chunks = doc.getText();
-
-      expect(chunks[0]).toBe('Hello\n\n');
-      expect(chunks[1]).toBe('World');
-    });
-
     describe('separator handling', () => {
       it('should keep separator at end when specified', async () => {
         const text = 'Hello\n\nWorld';

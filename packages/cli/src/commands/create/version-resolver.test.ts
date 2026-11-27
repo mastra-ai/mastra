@@ -79,20 +79,15 @@ describe('resolveMastraPackageVersions', () => {
     expect(result).toBeUndefined();
   });
 
-  it('accepts a valid exact stable version', async () => {
-    mockedExeca.mockResolvedValue({ stdout: '1.50.2\n' } as never);
+  it.each([
+    ['accepts a valid exact stable version', '1.50.2\n', 'latest', '1.50.2'],
+    ['accepts a valid exact prerelease version', '1.55.0-alpha.0\n', 'alpha', '1.55.0-alpha.0'],
+  ] as const)('%s', async (_title, stdout, input, value) => {
+    mockedExeca.mockResolvedValue({ stdout } as never);
 
-    const result = await resolveMastraPackageVersions(['@mastra/core'], 'latest');
+    const result = await resolveMastraPackageVersions(['@mastra/core'], input);
 
-    expect(result).toEqual({ '@mastra/core': '1.50.2' });
-  });
-
-  it('accepts a valid exact prerelease version', async () => {
-    mockedExeca.mockResolvedValue({ stdout: '1.55.0-alpha.0\n' } as never);
-
-    const result = await resolveMastraPackageVersions(['@mastra/core'], 'alpha');
-
-    expect(result).toEqual({ '@mastra/core': '1.55.0-alpha.0' });
+    expect(result).toEqual({ '@mastra/core': value });
   });
 
   const invalidValues: Array<[string, string]> = [

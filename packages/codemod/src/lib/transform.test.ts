@@ -110,25 +110,27 @@ describe('transform', () => {
       return transform('v1/runtime-context', '.', {}, { logStatus: false });
     };
 
-    it('reports non-syntax transform failures', async () => {
-      const { errors } = await run(
+    it.each([
+      [
+        'reports non-syntax transform failures',
         "Processing 1 files...\n ERR /src/boom.ts Transformation error (Cannot read properties of undefined (reading 'x'))\nTypeError: Cannot read properties of undefined (reading 'x')\n    at foo\nResults:\n1 errors\n",
-      );
+        '/src/boom.ts',
+        "Cannot read properties of undefined (reading 'x')",
+      ],
+      [
+        'reports syntax errors',
+        ' ERR /src/bad.ts Transformation error (Unexpected token (1:13))\nSyntaxError: Unexpected token (1:13)\n',
+        '/src/bad.ts',
+        'Unexpected token (1:13)',
+      ],
+    ] as const)('%s', async (_title, input, filename, summary) => {
+      const { errors } = await run(input);
       expect(errors).toEqual([
         {
           transform: 'v1/runtime-context',
-          filename: '/src/boom.ts',
-          summary: "Cannot read properties of undefined (reading 'x')",
+          filename,
+          summary,
         },
-      ]);
-    });
-
-    it('reports syntax errors', async () => {
-      const { errors } = await run(
-        ' ERR /src/bad.ts Transformation error (Unexpected token (1:13))\nSyntaxError: Unexpected token (1:13)\n',
-      );
-      expect(errors).toEqual([
-        { transform: 'v1/runtime-context', filename: '/src/bad.ts', summary: 'Unexpected token (1:13)' },
       ]);
     });
 

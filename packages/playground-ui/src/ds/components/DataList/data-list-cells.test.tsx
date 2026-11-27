@@ -231,22 +231,14 @@ describe('DataListNumberCell', () => {
 });
 
 describe('DataListIdCell', () => {
-  it('shortens a long id to its first eight characters', () => {
-    const { container } = render(<DataListIdCell id="0123456789abcdef" />);
+  it.each([
+    ['shortens a long id to its first eight characters', '0123456789abcdef', '01234567'],
+    ['leaves an id of exactly eight characters whole', '01234567', '01234567'],
+    ['leaves a short id whole', 'abc', 'abc'],
+  ] as const)('%s', (_title, value, expected) => {
+    const { container } = render(<DataListIdCell id={value} />);
 
-    expect(container.textContent).toBe('01234567');
-  });
-
-  it('leaves an id of exactly eight characters whole', () => {
-    const { container } = render(<DataListIdCell id="01234567" />);
-
-    expect(container.textContent).toBe('01234567');
-  });
-
-  it('leaves a short id whole', () => {
-    const { container } = render(<DataListIdCell id="abc" />);
-
-    expect(container.textContent).toBe('abc');
+    expect(container.textContent).toBe(expected);
   });
 
   it('shows nothing for an id it was never given', () => {

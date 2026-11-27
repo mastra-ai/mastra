@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { queryKeys } from '../../api/keys';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
+import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
@@ -334,6 +335,65 @@ describe('Board card pending states', () => {
     // Server answered: the status row disappears.
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
+
+  describe('when the server takes a move on and answers it later', () => {
+    const INPUT_ID = 'input-1';
+
+    /** A board whose server answers the move `202`, and whose feed stream the test writes. */
+    async function submitMoveToPlanning() {
+      stubBoardEndpoints();
+      const stream = pushableFeedStream(FACTORY_ID);
+      server.use(
+        stream.handler,
+        http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`, () =>
+          HttpResponse.json({ inputId: INPUT_ID }, { status: 202 }),
+        ),
+      );
+      const user = userEvent.setup();
+      const rendered = renderWorkBoard();
+      await screen.findByTestId('work-item-card');
+      await waitFor(() => expect(stream.open).toBe(true));
+
+      await user.click(screen.getByRole('button', { name: 'Actions for Fix login bug' }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Move to Planning' }));
+      await screen.findByText('Moving to Planning…');
+      return { stream, ...rendered };
+    }
+
+    it('keeps the card "Moving to …" past the 202, until the feed says the move landed', async () => {
+      const { stream } = await submitMoveToPlanning();
+
+      // The 202 is long answered, and another move's answer is none of this card's business.
+      await act(() => delay(150));
+      stream.move({ inputId: 'another-move', status: 'accepted' });
+      await act(() => delay(150));
+      expect(screen.getByText('Moving to Planning…')).toBeInTheDocument();
+
+      stream.move({ inputId: INPUT_ID, status: 'accepted' });
+      await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+      expect(screen.queryByText(/busy/)).not.toBeInTheDocument();
+    });
+
+    it('puts the card back and says why, once, when the feed says the move was refused', async () => {
+      const { stream } = await submitMoveToPlanning();
+      const refusal = {
+        inputId: INPUT_ID,
+        status: 'rejected',
+        code: 'card_busy',
+        reason: "Another run can't start while this card is busy.",
+      } as const;
+
+      stream.move(refusal);
+      await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+      // The board's toast for a refused move, as when the server refuses at once; a repeat of the frame adds none.
+      const toasts = () =>
+        within(screen.getByRole('region', { name: /notifications/i })).queryAllByText(refusal.reason);
+      await waitFor(() => expect(toasts()).toHaveLength(1));
+      stream.move(refusal);
+      await act(() => delay(150));
+      expect(toasts()).toHaveLength(1);
+    });
   });
 
   it('re-queues a failed rule effect from the card', async () => {

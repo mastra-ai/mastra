@@ -435,7 +435,42 @@ const factory = new MastraFactory({
 });
 ```
 
-A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time.
+A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id and the card's state, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time. A Factory host answers 404 for Mastra's workflow routes on an engine's workflows (`/api/workflows/factory-board` and everything under it): the runs belong to no one organization, and the engine drives them in process. The host's built-in MCP endpoint, which reads workflow runs too, leaves those workflows out.
+
+The card's run also records what the card is doing, and `describe` reads it back:
+
+```typescript
+const doing = await boardEngine.describe?.({ workItemId });
+// { state: 'probing', phase: 'execute', probes: 1, lastOutcome: 'advance' }
+```
+
+| State               | The card                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `resting`           | Sits in a resting phase until someone moves it.                                    |
+| `awaiting_start`    | Sits in a working phase whose run waits for a person to start it.                  |
+| `running`           | Has its phase's run queued or going.                                               |
+| `probing`           | Had a run end without an outcome; the phase runs once more.                        |
+| `awaiting_approval` | Has a session waiting on a person's answer: a submitted plan, or a held tool call. |
+| `needs_attention`   | Had a run end without an outcome and none follows. `reason` says why.              |
+| `terminal`          | Sits in a terminal phase.                                                          |
+
+`phase` is the phase the state was recorded in, `probes` counts the runs that ended there without an outcome, and `lastOutcome` is the last outcome a run ended a phase with. The record holds nothing else: no actor, organization or card content. `describe` answers nothing for a card no input was asked of yet. A run end told more than once counts once, and the count starts over when the card changes phase. Only an end the dispatcher follows up counts: with another run the card is `probing`, and when it gives the phase up, after its second run or because an earlier failure spent its attempts, the card is `needs_attention`. A person's chat turn with the card's session ends a run too, and changes nothing unless it reported an outcome. Only a phase that names how it ends, with a goal or an exit tool, is run once more; a run that ends without an outcome in any other working phase leaves the card `awaiting_start`. A person starting a waiting run isn't an input yet, so the card says `awaiting_start` until that run pauses or ends.
+
+An engine that keeps such a record may implement two optional members: `describe(card)`, and `runPaused(binding, 'approval')`, which Factory calls when a session's run stops for a person's answer. The default engine implements neither.
+
+On a workflow board, a person's move wins over a run. When someone drags a card whose phase's run is going into another phase that runs work, the engine stops the card's runs the way Stop does, waits up to two minutes for them to end, and then commits the move. When a run is still going after that, another Factory process holds it, or it runs in a private session of someone else, the move is refused with `card_busy` and the run is left as it is: a person stops only the runs of sessions they may drive. Moves the board would refuse anyway, moves to a resting or terminal phase, and moves to another board stop nothing. The default engine still refuses such a move with `card_busy`.
+
+Deleting a card ends its run. Factory tells the engine through the optional `cardDeleted(card)`; the workflow engine answers the inputs asked before the delete, then deletes the card's `factory-board` run.
+
+A custom engine reaches the card's runs through `context.runs` (`inFlight`, and `stop(card, { userId })` for the person who moves the card), which Factory fills in.
+
+A board move can be answered before it settles. An engine that has the optional `submitMove(request)` takes the move on after its first checks and settles it later. The workflow engine checks that the mover is a person, the card's revision matches and the board allows the move; a move that fails one of these is answered at once, with the same `409` or `422` as before. For a move it takes on, `POST /work-items/:id/transition` answers `202` with an `inputId`:
+
+```json
+{ "inputId": "0c0f6c3e-6f0b-4b5e-9a0f-3d0e3f3b0a51" }
+```
+
+The move's answer follows on the project's feed stream (`GET /feed-events`) as a `move` event that names the same `inputId`, either `{ "inputId", "status": "accepted" }` or `{ "inputId", "status": "rejected", "code", "reason" }`. The board shows the card as moving until that event arrives, and shows the reason when the move was refused. The default engine has no `submitMove`, so the route still answers `200` with the result.
 
 A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 

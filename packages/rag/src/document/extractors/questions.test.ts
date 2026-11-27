@@ -30,9 +30,17 @@ describe('QuestionsAnsweredExtractor', () => {
     expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
   });
 
-  it('extracts questions', async () => {
+  it.each([
+    ['extracts questions', 'What is the capital of France? What is the color of the sky?'],
+    ['handles special characters and emojis', '🚀✨🔥'],
+    ['handles numbers only', '1234567890'],
+    ['handles HTML tags', '<h1>Test</h1>'],
+    ['handles non-English text', '这是一个测试文档。'],
+    ['handles duplicate/repeated text', 'repeat repeat repeat'],
+    ['handles only punctuation', '!!!???...'],
+  ] as const)('%s', async (_title, text) => {
     const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: 'What is the capital of France? What is the color of the sky?' });
+    const node = new TextNode({ text });
     const result = await extractor.extractQuestionsFromNode(node);
     expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
     expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
@@ -74,59 +82,5 @@ describe('QuestionsAnsweredExtractor', () => {
     const node = new TextNode({ text: '    ' });
     const result = await extractor.extractQuestionsFromNode(node);
     expect(result.questionsThisExcerptCanAnswer).toBe('');
-  });
-
-  it('handles special characters and emojis', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: '🚀✨🔥' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
-  });
-
-  it('handles numbers only', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: '1234567890' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
-  });
-
-  it('handles HTML tags', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: '<h1>Test</h1>' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
-  });
-
-  it('handles non-English text', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: '这是一个测试文档。' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
-  });
-
-  it('handles duplicate/repeated text', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: 'repeat repeat repeat' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
-  });
-
-  it('handles only punctuation', async () => {
-    const extractor = new QuestionsAnsweredExtractor({ llm: model });
-    const node = new TextNode({ text: '!!!???...' });
-    const result = await extractor.extractQuestionsFromNode(node);
-    expect(result).toHaveProperty('questionsThisExcerptCanAnswer');
-    expect(typeof result.questionsThisExcerptCanAnswer).toBe('string');
-    expect(result.questionsThisExcerptCanAnswer.length).toBeGreaterThan(0);
   });
 });
