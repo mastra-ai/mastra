@@ -143,6 +143,86 @@ describe('parseKnowledgeImporterFlushBody', () => {
     expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(TypeError);
   });
 
+  describe('sequence items and declarations', () => {
+    const sequenceItem = {
+      externalId: 'step-2',
+      title: 'Roll back',
+      links: [{ url: 'https://example.com/runbook', title: 'Runbook' }, { url: 'https://example.com/raw' }],
+      properties: { owner: 'ops', checks: ['db', { name: 'cache', retries: 2 }], done: false },
+      type: 'step',
+      externalParentId: 'step-1',
+      after: 'step-1',
+    };
+    const declaration = {
+      sourceId: 'runbook',
+      title: 'Runbook',
+      sequence: {
+        orderBy: 'position',
+        propertiesSchema: { type: 'object', properties: { owner: { type: 'string' } } },
+        itemTypes: { step: { label: 'Step' } },
+      },
+    };
+
+    it('takes the whole item envelope, with no time or body on a position item', async () => {
+      const body = { ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem }] };
+      expect(parseKnowledgeImporterFlushBody(body).ops).toEqual(body.ops);
+      expect(await knowledgeImporterFlushDigest(JSON.parse(JSON.stringify(body)))).toBe(
+        await knowledgeImporterFlushDigest(body),
+      );
+    });
+
+    it('takes position and before, and drops undefined property members as the wire does', () => {
+      const [op] = parseKnowledgeImporterFlushBody({
+        ops: [
+          {
+            op: 'sequenceItem',
+            sequence: 'runbook',
+            sequenceItem: { externalId: 'a', title: 'A', position: 'm', properties: { kept: 1, gone: undefined } },
+          },
+          { op: 'sequenceItem', sequence: 'runbook', sequenceItem: { externalId: 'b', title: 'B', before: 'a' } },
+        ],
+      }).ops;
+      expect(op).toEqual({
+        op: 'sequenceItem',
+        sequence: 'runbook',
+        sequenceItem: { externalId: 'a', title: 'A', position: 'm', properties: { kept: 1 } },
+      });
+    });
+
+    it('takes a sequence declaration on a declare and on an upsert', () => {
+      const ops = [
+        { op: 'declare', item: declaration },
+        { op: 'upsert', item: { ...declaration, sourceId: 'log', body: 'Deploys.', sequence: {} } },
+      ];
+      expect(parseKnowledgeImporterFlushBody({ ops }).ops).toEqual(ops);
+    });
+
+    const withItem = (patch: Record<string, unknown>) => ({
+      ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem: { ...sequenceItem, ...patch } }],
+    });
+    const withSequence = (sequence: unknown) => ({ ops: [{ op: 'declare', item: { ...declaration, sequence } }] });
+
+    it.each([
+      ['the old threadExternalId', withItem({ threadExternalId: 'step-1' })],
+      ['a page link on an item', withItem({ links: [{ sourceId: 'page' }] })],
+      ['a link without a url', withItem({ links: [{ title: 'T' }] })],
+      ['an empty link url', withItem({ links: [{ url: '' }] })],
+      ['array properties', withItem({ properties: ['a'] })],
+      ['a sparse array in properties', withItem({ properties: { list: Array(1) } })],
+      ['a non-finite number in properties', withItem({ properties: { n: Number.NaN } })],
+      ['a lone surrogate in a property key', withItem({ properties: { '\ud800': 1 } })],
+      ['an empty type', withItem({ type: '' })],
+      ['an empty position', withItem({ position: '' })],
+      ['an unknown orderBy', withSequence({ orderBy: 'alphabetical' })],
+      ['an unknown sequence field', withSequence({ order: 'position' })],
+      ['a non-object sequence', withSequence('position')],
+      ['an array propertiesSchema', withSequence({ propertiesSchema: [] })],
+      ['a non-object itemTypes', withSequence({ itemTypes: 'step' })],
+    ])('refuses %s', (_name, body) => {
+      expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(TypeError);
+    });
+  });
+
   it('keeps a "__proto__" state key from JSON as data, so its value changes the digest', async () => {
     const a = JSON.parse('{"ops":[],"state":{"__proto__":"cursor-a"}}');
     const b = JSON.parse('{"ops":[],"state":{"__proto__":"cursor-b"}}');

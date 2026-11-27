@@ -263,7 +263,17 @@ function wellFormed(value: string): string {
   return value;
 }
 
-type FieldKind = 'string' | 'nonEmpty' | 'isoTime' | 'nullableString' | 'links' | 'aliases' | 'author';
+type FieldKind =
+  | 'string'
+  | 'nonEmpty'
+  | 'isoTime'
+  | 'nullableString'
+  | 'links'
+  | 'aliases'
+  | 'author'
+  | 'urlLinks'
+  | 'jsonObject'
+  | 'sequence';
 
 const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   sourceId: { kind: 'nonEmpty', required: true },
@@ -271,15 +281,30 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   title: { kind: 'string', required: true },
   parent: { kind: 'nullableString' },
   fallbackParent: { kind: 'nonEmpty' },
+  sequence: { kind: 'sequence' },
 };
 
+// Shape only: the store checks the content rule, limits and schemas when the item is applied.
 const SEQUENCE_ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   externalId: { kind: 'nonEmpty', required: true },
-  occurredAt: { kind: 'isoTime', required: true },
+  occurredAt: { kind: 'isoTime' },
   editedAt: { kind: 'isoTime' },
   author: { kind: 'author' },
-  body: { kind: 'string', required: true },
-  threadExternalId: { kind: 'nonEmpty' },
+  externalParentId: { kind: 'nonEmpty' },
+  type: { kind: 'nonEmpty' },
+  title: { kind: 'string' },
+  body: { kind: 'string' },
+  links: { kind: 'urlLinks' },
+  properties: { kind: 'jsonObject' },
+  position: { kind: 'nonEmpty' },
+  after: { kind: 'nonEmpty' },
+  before: { kind: 'nonEmpty' },
+};
+
+const SEQUENCE_DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
+  orderBy: { kind: 'nonEmpty' },
+  propertiesSchema: { kind: 'jsonObject' },
+  itemTypes: { kind: 'jsonObject' },
 };
 
 const ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
@@ -302,6 +327,36 @@ function checkDenseArray(value: unknown, where: string): unknown[] {
     if (!(index in value)) throw new TypeError(`${where}[${index}] is empty.`);
   }
   return value;
+}
+
+/**
+ * A copy of plain JSON that survives the wire unchanged: dense arrays, plain objects, finite
+ * numbers and well-formed strings. Undefined members are left out, as JSON.stringify leaves them.
+ */
+function checkJson(value: unknown, where: string): unknown {
+  try {
+    return copyJson(value, where);
+  } catch (error) {
+    if (error instanceof RangeError) throw new TypeError(`${where} nests too deeply.`);
+    throw error;
+  }
+}
+
+function copyJson(value: unknown, where: string): unknown {
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new TypeError(`${where} holds a non-finite number.`);
+    return value;
+  }
+  if (typeof value === 'string') return wellFormed(value);
+  if (Array.isArray(value))
+    return checkDenseArray(value, where).map((inner, index) => copyJson(inner, `${where}[${index}]`));
+  if (!isPlainObject(value)) throw new TypeError(`${where} must be plain JSON.`);
+  const out: Record<string, unknown> = Object.create(null);
+  for (const key of Object.keys(value)) {
+    if (value[key] !== undefined) out[wellFormed(key)] = copyJson(value[key], `${where}.${key}`);
+  }
+  return { ...out };
 }
 
 function checkFields<T>(
@@ -355,6 +410,27 @@ function checkFields<T>(
       case 'author':
         out[key] = checkFields(field, { sourceId: { kind: 'nonEmpty', required: true }, name: { kind: 'string' } }, at);
         break;
+      case 'urlLinks':
+        out[key] = checkDenseArray(field, at).map((link, index) =>
+          checkFields(
+            link,
+            { url: { kind: 'nonEmpty', required: true }, title: { kind: 'string' } },
+            `${at}[${index}]`,
+          ),
+        );
+        break;
+      case 'jsonObject':
+        if (!isPlainObject(field)) throw new TypeError(`${at} must be a JSON object.`);
+        out[key] = checkJson(field, at);
+        break;
+      case 'sequence': {
+        const sequence = checkFields<{ orderBy?: string }>(field, SEQUENCE_DECLARATION_FIELDS, at);
+        if (sequence.orderBy !== undefined && sequence.orderBy !== 'timeline' && sequence.orderBy !== 'position') {
+          throw new TypeError(`${at}.orderBy must be "timeline" or "position".`);
+        }
+        out[key] = sequence;
+        break;
+      }
     }
   }
   return { ...out } as T;

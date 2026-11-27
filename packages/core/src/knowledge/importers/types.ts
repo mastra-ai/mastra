@@ -20,6 +20,22 @@ export interface KnowledgeImportDeclaration {
   parent?: string | null;
   /** Where the item waits while `parent` hasn't arrived: a holding item's `sourceId`. */
   fallbackParent?: string;
+  /**
+   * Makes the page a sequence, with this order and these schemas. Importers send it on every run;
+   * the same declaration writes nothing, a changed schema replaces the old one, and a different
+   * `orderBy` is refused.
+   */
+  sequence?: KnowledgeImportSequenceDeclaration;
+}
+
+/** A sequence page's declaration, as `markSequence` takes it. Schemas are checked when applied. */
+export interface KnowledgeImportSequenceDeclaration {
+  /** `timeline` (by `occurredAt`, the default) or `position`. Fixed once the page is a sequence. */
+  orderBy?: 'timeline' | 'position';
+  /** The schema for untyped items' properties. */
+  propertiesSchema?: Record<string, unknown>;
+  /** Item types by key, each with an optional label, description and properties schema. */
+  itemTypes?: Record<string, unknown>;
 }
 
 /**
@@ -42,21 +58,34 @@ export type KnowledgeImporterPageOp =
   | { op: 'remove'; sourceId: string };
 
 /**
- * One dated item of a sequence page (a chat message, an event), keyed by the source's own ID.
- * Times are ISO 8601 strings so a flush survives a JSON round trip unchanged.
+ * One item of a sequence page (a chat message, a deploy, a runbook step), keyed by the source's
+ * own ID. It needs at least one of `title`, `body`, `links` and `properties`. Times are ISO 8601
+ * strings so a flush survives a JSON round trip unchanged.
  */
 export interface KnowledgeImportSequenceItem {
   /** The source's own ID for the item, unique within its sequence. */
   externalId: string;
-  /** When it happened at the source; items are ordered by this. */
-  occurredAt: string;
+  /** When it happened at the source. Required on a timeline sequence, which orders by it. */
+  occurredAt?: string;
   /** When the source last edited it. */
   editedAt?: string;
   /** Who wrote it at the source. */
   author?: { sourceId: string; name?: string };
-  body: string;
-  /** The `externalId` of the thread's root item, for a reply. */
-  threadExternalId?: string;
+  /** The `externalId` of the root item it sits under, such as a reply's message. */
+  externalParentId?: string;
+  /** Its kind, e.g. `deploy`, matching the sequence's `itemTypes` when declared. */
+  type?: string;
+  /** One line. */
+  title?: string;
+  body?: string;
+  /** Up to 10 http(s) links. */
+  links?: { url: string; title?: string }[];
+  /** Plain JSON, up to 16 KB; checked against the item's schema when the sequence declares one. */
+  properties?: Record<string, unknown>;
+  /** On a position sequence: an explicit position key, or the item to go `after` or `before`; else last. */
+  position?: string;
+  after?: string;
+  before?: string;
 }
 
 /**
