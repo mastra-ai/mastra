@@ -279,46 +279,6 @@ describe('RedeliveryDriver', () => {
     });
   });
 
-  it('fences a redelivered step.run while the step is still running', async () => {
-    const started = deferred();
-    const gate = deferred();
-    const execute = vi.fn(async () => {
-      started.resolve();
-      await gate.promise;
-      return { done: true };
-    });
-    const workflow = singleStepWorkflow('driver-running-wf', execute);
-    const driver = new RedeliveryDriver();
-
-    await withMastra(driver, { workflows: { [workflow.id]: workflow } }, async () => {
-      const runId = 'driver-running-run';
-      const match = { spec: 'driver-running-wf@0', runId };
-      const run = await workflow.createRun({ runId });
-      const result = run.start({ inputData: {} });
-      try {
-        await started.promise;
-        expect(stepEndCount(driver)).toBe(0);
-
-        // The fence keys on the original event id. A non-default attempt proves
-        // the injected deliveryAttempt survives group delivery's own counter.
-        const { handled } = await driver.redeliver(match, { deliveryAttempt: 3 });
-        expect(handled).toHaveLength(1);
-        expect(handled.map(h => h.event.deliveryAttempt)).toEqual([3]);
-        expect(handled.every(h => h.result.ok)).toBe(true);
-        expect(driver.deliveryCount(match)).toBe(2);
-        expect(execute).toHaveBeenCalledTimes(1);
-        // Fenced while running: the duplicate produced no step.end.
-        expect(stepEndCount(driver)).toBe(0);
-      } finally {
-        gate.resolve();
-      }
-      expect((await result).status).toBe('success');
-      await driver.waitForStepEnd(match);
-      expect(execute).toHaveBeenCalledTimes(1);
-      expect(stepEndCount(driver)).toBe(1);
-    });
-  });
-
   it('addresses the durable agent tool step as tool-step', async () => {
     let calls = 0;
     const model = new MockLanguageModelV2({
@@ -385,21 +345,22 @@ describe('RedeliveryDriver', () => {
           executionPath: [...TOOL_STEP_PATH],
         });
 
-        const endedBefore = stepEndCount(driver);
-        const { event, handled } = await driver.redeliver(toolStep);
+        const redelivered = driver.redeliver(toolStep);
+        // Nothing drops a duplicate of a running step: it reaches the tool too.
+        await vi.waitFor(() => expect(toolExecutions).toBe(2));
+        gate.resolve();
+        const { event, handled } = await redelivered;
         expect(handled).toHaveLength(1);
         expect(event.data).toMatchObject({ workflowId: 'durable-agentic-execution', executionPath: [3, 0] });
         expect(driver.deliveryCount(toolStep)).toBe(2);
         expect(driver.deliveryCount({ spec: 'durable-agentic-execution@3,0' })).toBe(2);
-        // Fenced while the tool step was running, so no extra step.end.
-        expect(stepEndCount(driver)).toBe(endedBefore);
 
-        gate.resolve();
         await consumed;
         await driver.waitForStepEnd(toolStep);
-        // The duplicate did not reach the tool, and did not cost a model call.
-        expect(toolExecutions).toBe(1);
-        expect(calls).toBe(2);
+        expect(toolExecutions).toBe(2);
+        // InMemoryStore has no step guards, so both tool results continue the run and the
+        // duplicate costs a model call. Stores with step guards keep one (COR-1610).
+        expect(calls).toBe(3);
       } finally {
         gate.resolve();
         cleanup();
