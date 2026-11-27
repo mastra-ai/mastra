@@ -121,7 +121,7 @@ describe('PageLayout variant="form"', () => {
     expect(screen.queryByRole('link', { name: /^Back to/ })).toBeNull();
   });
 
-  it('puts the aside on the start side when asked, still above the fields in the markup', () => {
+  it('puts the aside on the start side when asked, before the fields in the markup', () => {
     render(
       <PageLayout variant="form" title="New agent" aside={<p>Steps</p>} asidePlacement="start">
         <label>

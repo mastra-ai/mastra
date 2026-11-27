@@ -57,7 +57,7 @@ interface PageLayoutFormBaseProps {
   LinkComponent?: LinkComponent;
   /** Content beside the form when the column is wide enough, above the fields otherwise: a live preview or a step list. */
   aside?: ReactNode;
-  /** Which side of the form `aside` sits on when there is room. `end` (default) suits a preview, `start` a step list. */
+  /** Which side of the form `aside` sits on. `end` (default) suits a preview and stacks above the fields on narrow screens; `start` suits a step list and hides there, so show progress in the form instead. */
   asidePlacement?: 'start' | 'end';
   /** Sections (`SettingsGroup`s), 24px apart. */
   children: ReactNode;

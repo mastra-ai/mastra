@@ -212,7 +212,7 @@ export const WithAside: Story = {
   },
 };
 
-/** Onboarding: the breadcrumb bar is the way back, and the steps sit on the start side of the form. */
+/** Onboarding: the breadcrumb bar is the way back, and the steps sit on the start side of the form. They hide on narrow screens. */
 export const OnboardingForm: Story = {
   args: {
     backHref: undefined,

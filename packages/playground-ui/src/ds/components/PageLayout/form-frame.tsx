@@ -44,7 +44,7 @@ export function FormFrame({
             !hasAside
               ? 'grid-rows-[auto_1fr]'
               : asideStart
-                ? 'grid-rows-[auto_auto_1fr] @4xl:max-w-226 @4xl:grid-cols-[--spacing(56)_minmax(0,--spacing(160))] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10'
+                ? 'grid-rows-[auto_1fr] @4xl:max-w-226 @4xl:grid-cols-[--spacing(56)_minmax(0,--spacing(160))] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10'
                 : 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10',
           )}
         >
@@ -67,7 +67,10 @@ export function FormFrame({
             <div
               data-slot="form-layout-aside"
               data-placement={asidePlacement}
-              className={cn('min-w-0 @4xl:row-start-2', asideStart ? '@4xl:col-start-1' : '@4xl:col-start-2')}
+              className={cn(
+                'min-w-0 @4xl:row-start-2',
+                asideStart ? 'hidden @4xl:col-start-1 @4xl:block' : '@4xl:col-start-2',
+              )}
             >
               <div className="@4xl:sticky @4xl:top-6">{aside}</div>
             </div>

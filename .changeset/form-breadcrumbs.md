@@ -16,4 +16,4 @@ Form pages can now show breadcrumbs instead of a back link, and put their side p
 </PageLayout>
 ```
 
-A form shows one way back: passing `breadcrumbs` together with `backHref` or `backLabel` is a type error. `asidePlacement` defaults to `end`, so existing forms look the same.
+A form shows one way back: passing `breadcrumbs` together with `backHref` or `backLabel` is a type error. `asidePlacement` defaults to `end`, so existing forms look the same. A start-side aside hides on narrow screens, where a step list would push the fields down.
