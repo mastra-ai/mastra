@@ -337,6 +337,15 @@ describe('ModelPicker', () => {
       expect(optionNames(list)).toEqual([expect.stringMatching(/^Undated/), expect.stringMatching(/^Gateway 0/)]);
     });
 
+    it("given a default model from a provider with older models, keeps that provider's pill and its default model", () => {
+      const list = openPicker(catalog, { defaultModel: { provider: 'gw-0', model: 'gw-0-model-3' } });
+
+      expect(
+        within(screen.getByRole('group', { name: 'Filter by provider' })).getByRole('button', { name: 'Gateway 0' }),
+      ).toBeTruthy();
+      expect(optionNames(providerGroup(list, 'Gateway 0'))).toContainEqual(expect.stringMatching(/Default$/));
+    });
+
     it('given a single provider holding them all, lists its newest 200 and finds the rest by search', () => {
       const legacy = Array.from({ length: 250 }, (_, j) => ({ id: `claude-legacy-${j}`, releaseDate: '2023-01-01' }));
       const list = openPicker([{ ...anthropicCatalog, models: [...anthropicCatalog.models, ...legacy] }]);

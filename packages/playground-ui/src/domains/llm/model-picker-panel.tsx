@@ -41,9 +41,9 @@ const newestRelease = (provider: ModelPickerProvider) =>
     undefined,
   );
 
-/** The providers with the newest models, keeping the picked and filtered ones in the row. */
-function busiestProviders(providers: ModelPickerProvider[], value?: ModelPickerValue, filter?: string) {
-  const pinned = (provider: ModelPickerProvider) => provider.id === value?.provider || provider.id === filter;
+/** The providers with the newest models, keeping the picked, default and filtered ones in the row. */
+function busiestProviders(providers: ModelPickerProvider[], pinnedIds: ReadonlyArray<string | undefined>) {
+  const pinned = (provider: ModelPickerProvider) => pinnedIds.includes(provider.id);
   const newest = new Map(providers.map(provider => [provider, newestRelease(provider)]));
   const ranked = providers.toSorted(
     (a, b) => Number(pinned(b)) - Number(pinned(a)) || compareModelReleaseDates(newest.get(a), newest.get(b)),
@@ -138,7 +138,7 @@ export function ModelPickerPanel({
   const inRowProviders = providers.filter(inRow);
   const usable =
     inRowProviders.length > MAX_PROVIDER_PILLS
-      ? busiestProviders(inRowProviders, value, providerFilter)
+      ? busiestProviders(inRowProviders, [value?.provider, defaultModel?.provider, providerFilter])
       : inRowProviders;
   const others = providers.filter(provider => !usable.includes(provider));
   const filtering = usable.length > 1 || others.length > 0;

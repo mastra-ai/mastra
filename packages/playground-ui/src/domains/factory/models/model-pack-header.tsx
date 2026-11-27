@@ -76,7 +76,7 @@ export function ModelPackHeader({
                 disabled={disabled}
                 className={cn('shrink-0', packActionsVisibility)}
                 ref={button => {
-                  if (button && restoreFocus.current) {
+                  if (button && !disabled && restoreFocus.current) {
                     restoreFocus.current = false;
                     button.focus();
                   }
