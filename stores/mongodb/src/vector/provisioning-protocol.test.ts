@@ -327,6 +327,13 @@ describe('provisioning protocol', () => {
         const name = uniqueName('psdm');
         colls.push(name);
         await a.createIndex({ indexName: name, dimension: 4 });
+        // Atlas Local keeps listing a dropped collection's search indexes as DOES_NOT_EXIST until
+        // they finish building, which never happens once the collection is gone, so the recreate
+        // below would CONFLICT until it timed out. Drop only once both are READY.
+        await waitFor(async () => {
+          const rows = await db.collection(name).listSearchIndexes().toArray();
+          return rows.length === 2 && rows.every(r => r.status === 'READY');
+        });
         const original = (await entry(name))?.generation;
         const p = parkDelete(a);
         try {
@@ -354,7 +361,10 @@ describe('provisioning protocol', () => {
         expect(typeof replacement?.generation).toBe('string');
         expect(replacement?.generation).not.toBe(original);
         expect(await db.collection(name).countDocuments({ _id: 'kept' as any })).toBe(1);
-        expect(await searchIndexNames(db, name)).toContain(`${name}_vector_index`);
+        // Atlas Local lists a recreated collection's search indexes asynchronously, so one listing
+        // straight after the recreate can still be empty.
+        const vec = `${name}_vector_index`;
+        await waitFor(async () => (await searchIndexNames(db, name)).includes(vec), 30000);
         // Atlas Local revives a dropped collection's search indexes when it is recreated, so the
         // replacement attaches them without recording ownership; a real cluster drops them.
         clean.opts = { expectedLeaks: [`${name}_vector_index`, `${name}_search_index`] };
