@@ -97,7 +97,7 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     name: 'idleTimeoutMs',
     type: 'number',
     description:
-      'Idle window in milliseconds. Modal terminates the sandbox after this long without activity. Must be a multiple of 1000. `timeoutMs` still caps the total lifetime.',
+      'Idle window in milliseconds. Modal terminates the sandbox after this long without activity, and a running command counts as activity. Must be a positive whole number of seconds (a multiple of 1000). `timeoutMs` still caps the total lifetime.',
     isOptional: true,
   },
   {
@@ -224,7 +224,7 @@ await sandbox._stop()
 await sandbox._start()
 ```
 
-`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone and raises its `timeoutMs` to at least the idle window, capped at Modal's 24-hour maximum. `idleTimeoutMinutes: 0` turns the idle timeout off. A clone that reconnects to a running sandbox with the same `id` keeps the timeouts that sandbox was created with.
+`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone, capped at Modal's 24-hour maximum. If the template sets `timeoutMs`, that stays the clone's hard lifetime, raised to the idle window when shorter. If it doesn't, the clone gets Modal's 24-hour maximum lifetime, so the idle timeout ends the clone and running commands aren't cut off. `idleTimeoutMinutes: 0` turns the idle timeout off. A clone that reconnects to a running sandbox with the same `id` keeps the timeouts that sandbox was created with.
 
 ## Volumes and persistent files
 

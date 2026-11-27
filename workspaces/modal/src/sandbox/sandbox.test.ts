@@ -2,6 +2,7 @@
  * ModalSandbox unit tests — Modal SDK is mocked.
  */
 
+import type { SandboxCreateParams, SandboxService } from 'modal';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -18,8 +19,14 @@ const mockSandbox = {
 
 const mockSandboxes = {
   fromName: vi.fn(),
-  create: vi.fn().mockResolvedValue(mockSandbox),
+  create: vi
+    .fn<(...args: Parameters<SandboxService['create']>) => Promise<typeof mockSandbox>>()
+    .mockResolvedValue(mockSandbox),
 };
+
+function createParams(call = 0): SandboxCreateParams | undefined {
+  return mockSandboxes.create.mock.calls[call]?.[2];
+}
 
 const mockApps = {
   fromName: vi.fn().mockResolvedValue({ appId: 'app-123', name: 'mastra' }),
@@ -244,8 +251,7 @@ describe('ModalSandbox lifecycle', () => {
     const sandbox = new ModalSandbox({ timeoutMs: 3_600_000, idleTimeoutMs: 120_000 });
     await sandbox._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params).toMatchObject({ timeoutMs: 3_600_000, idleTimeoutMs: 120_000 });
+    expect(createParams()).toMatchObject({ timeoutMs: 3_600_000, idleTimeoutMs: 120_000 });
     expect(await sandbox.getInfo()).toMatchObject({ metadata: { idleTimeoutMs: 120_000 } });
   });
 
@@ -253,8 +259,8 @@ describe('ModalSandbox lifecycle', () => {
     const sandbox = new ModalSandbox({ timeoutMs: 120_000 });
     await sandbox._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params.idleTimeoutMs).toBeUndefined();
+    expect(mockSandboxes.create).toHaveBeenCalledOnce();
+    expect(createParams()?.idleTimeoutMs).toBeUndefined();
   });
 });
 
@@ -735,7 +741,7 @@ describe('ModalSandbox.clone', () => {
     });
   });
 
-  it('maps idleTimeoutMinutes to idleTimeoutMs and keeps the template lifetime', async () => {
+  it('maps idleTimeoutMinutes to idleTimeoutMs and keeps an explicit template timeoutMs', async () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 3_600_000 });
 
     const child = template.clone({ id: 'x', idleTimeoutMinutes: 1 });
@@ -744,39 +750,46 @@ describe('ModalSandbox.clone', () => {
     await child._start();
 
     expect(mockSandboxes.create).toHaveBeenCalledTimes(2);
-    for (const [, , params] of mockSandboxes.create.mock.calls) {
-      expect(params).toMatchObject({ name: 'x', idleTimeoutMs: 60_000, timeoutMs: 3_600_000 });
-    }
+    expect(createParams(0)).toMatchObject({ name: 'x', idleTimeoutMs: 60_000, timeoutMs: 3_600_000 });
+    expect(createParams(1)).toMatchObject({ name: 'x', idleTimeoutMs: 60_000, timeoutMs: 3_600_000 });
   });
 
-  it('raises a shorter inherited timeoutMs to the idle window', async () => {
-    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+  it('raises an explicit template timeoutMs shorter than the idle window to the idle window', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
 
     const child = template.clone({ idleTimeoutMinutes: 15 });
     await child._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params).toMatchObject({ idleTimeoutMs: 900_000, timeoutMs: 900_000 });
+    expect(createParams()).toMatchObject({ idleTimeoutMs: 900_000, timeoutMs: 900_000 });
+  });
+
+  it('gives a default-template clone a hard lifetime longer than its idle window', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+
+    const child = template.clone({ idleTimeoutMinutes: 5 });
+    await child._start();
+
+    const params = createParams();
+    expect(params).toMatchObject({ idleTimeoutMs: 300_000, timeoutMs: 86_400_000 });
+    expect(params?.timeoutMs).toBeGreaterThan(params?.idleTimeoutMs ?? Infinity);
   });
 
   it('rounds a fractional idle window up to whole seconds', async () => {
-    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 300_000 });
 
     const child = template.clone({ idleTimeoutMinutes: 0.01 });
     await child._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params).toMatchObject({ idleTimeoutMs: 1_000, timeoutMs: 300_000 });
+    expect(createParams()).toMatchObject({ idleTimeoutMs: 1_000, timeoutMs: 300_000 });
   });
 
   it('caps the idle window at 24 hours', async () => {
-    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec' });
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 300_000 });
 
     const child = template.clone({ idleTimeoutMinutes: 48 * 60 });
     await child._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params).toMatchObject({ idleTimeoutMs: 86_400_000, timeoutMs: 86_400_000 });
+    expect(createParams()).toMatchObject({ idleTimeoutMs: 86_400_000, timeoutMs: 86_400_000 });
   });
 
   it('turns the idle timeout off for idleTimeoutMinutes: 0', async () => {
@@ -790,9 +803,9 @@ describe('ModalSandbox.clone', () => {
     const child = template.clone({ idleTimeoutMinutes: 0 });
     await child._start();
 
-    const [, , params] = mockSandboxes.create.mock.calls[0]!;
-    expect(params.timeoutMs).toBe(120_000);
-    expect(params.idleTimeoutMs).toBeUndefined();
+    expect(mockSandboxes.create).toHaveBeenCalledOnce();
+    expect(createParams()?.timeoutMs).toBe(120_000);
+    expect(createParams()?.idleTimeoutMs).toBeUndefined();
   });
 
   it('applies workingDirectory override', () => {

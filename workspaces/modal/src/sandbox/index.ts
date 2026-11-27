@@ -44,7 +44,8 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
   timeoutMs?: number;
   /**
    * Idle window in milliseconds: Modal terminates the sandbox after this long without
-   * activity. Must be a multiple of 1000. `timeoutMs` still caps the total lifetime.
+   * activity (a running command counts as activity). Must be a positive multiple of
+   * 1000. `timeoutMs` still caps the total lifetime.
    */
   idleTimeoutMs?: number;
   /** Environment variables baked into the sandbox at create time. */
@@ -157,9 +158,11 @@ export class ModalSandbox extends MastraSandbox {
    * independent sandboxes (e.g. one per project).
    *
    * `options.idleTimeoutMinutes` maps to Modal's `idleTimeoutMs`, rounded up to a
-   * whole second and capped at Modal's 24-hour maximum. The inherited `timeoutMs`
-   * is raised to the idle window when it is shorter. A value of 0 or less turns
-   * the idle timeout off and keeps the inherited `timeoutMs`.
+   * whole second and capped at Modal's 24-hour maximum. If the template set
+   * `timeoutMs`, it stays the clone's hard lifetime, raised to the idle window
+   * when shorter. Otherwise the clone gets Modal's 24-hour maximum, so the idle
+   * timeout does the teardown and active commands are not cut off. A value of 0
+   * or less turns the idle timeout off and keeps the inherited `timeoutMs`.
    * `options.sandboxId` is ignored because Modal reconnects by logical `id`.
    */
   clone(options: SandboxCloneOptions = {}): ModalSandbox {
@@ -167,10 +170,12 @@ export class ModalSandbox extends MastraSandbox {
     let timeouts: Pick<ModalSandboxOptions, 'timeoutMs' | 'idleTimeoutMs'> = {};
     if (options.idleTimeoutMinutes !== undefined) {
       const idleTimeoutMs = Math.min(Math.ceil(options.idleTimeoutMinutes * 60) * 1000, MODAL_MAX_TIMEOUT_MS);
-      timeouts =
-        idleTimeoutMs > 0
-          ? { idleTimeoutMs, timeoutMs: Math.max(this.timeoutMs, idleTimeoutMs) }
-          : { idleTimeoutMs: undefined };
+      if (idleTimeoutMs > 0) {
+        const timeoutMs = base.timeoutMs === undefined ? MODAL_MAX_TIMEOUT_MS : Math.max(base.timeoutMs, idleTimeoutMs);
+        timeouts = { idleTimeoutMs, timeoutMs };
+      } else {
+        timeouts = { idleTimeoutMs: undefined };
+      }
     }
     return new ModalSandbox({
       ...base,
