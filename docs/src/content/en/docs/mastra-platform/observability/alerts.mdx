@@ -85,18 +85,27 @@ For example, an alert opens when the error rate is above 5%. With a recovery lev
 
 ### Wait for late data
 
-Spans can reach Mastra several seconds after they happen. Mastra saves incoming spans in batches, and most exporters, including Mastra's own, also send them in batches. How late spans arrive depends on your exporter and its settings. A check that runs before they arrive counts too few spans, and totals such as runs, tokens, or cost look lower than they are.
+If some spans haven't reached Mastra when an alert checks, the alert judges an incomplete window. It can fire even when nothing is wrong. **"Wait for late data"** prevents this by checking each window a little after it closes, giving in-flight spans time to arrive.
 
-You can recognize this when an alert opens and then closes again at the next check, although nothing changed. The first check counted the latest minutes before all their spans had arrived. By the next check, five minutes later, they had arrived and the value was back to normal.
+Take a 5-minute window from 10:00 to 10:05:
 
-**"Wait for late data"**, under **"Advanced"**, ends each check's window a little earlier. The check then counts only spans that had time to arrive. Checks still run every five minutes, and the window keeps its length:
+- Without a wait
+  - The alert checks 10:00 to 10:05 at 10:05. If spans from 10:03 and 10:04 are still in flight, the alert judges the window using only 3 minutes of data. A single error can spike the error rate on that smaller sample, firing an alert that resolves itself once the remaining spans land.
+- With a 2-minute wait
+  - The alert checks that same 10:00 to 10:05 window at 10:07, once all 5 minutes of data have filled in. Checks run on the same schedule and windows keep the same length, but alerts fire later by the wait amount. The trade-off is that alerts fire, and resolve, later by the same amount.
 
-| "Wait for late data" | The 10:15 check of a 15-minute window reads |
-| - | - |
-| None | 10:00 to 10:15 |
-| 2m | 09:58 to 10:13 |
+#### When late data happens
 
-In exchange, the alert also notices a rising error rate or cost later by the same amount. Keep "None" unless an alert opens and closes by itself like this. Then choose the shortest delay that stops it, starting with 1m.
+Spans usually arrive within seconds of finishing, so most alerts don't need a wait. Late spans mainly happen in two cases:
+
+- Serverless environments: A function can pause after returning a response, before it finishes sending its spans.
+- Long agent runs or workflows: Spans are placed into windows based on when they started, not when they arrived. Because the root span for a full run isn't sent until the run finishes, a 3-minute run starting at 10:04 arrives at 10:07 and misses the 10:05 check. (Inner spans like model and tool calls are still sent as each one finishes.)
+
+#### How much wait time to set
+
+- No wait for most alerts, so you hear about problems as fast as possible.
+- 1 to 2 minutes if you run on serverless, have low or bursty traffic, or see alerts fire and quickly resolve themselves.
+- The length of a typical run when alerting on full agent runs or workflows, so runs finish before their window is checked.
 
 ## Related
 
