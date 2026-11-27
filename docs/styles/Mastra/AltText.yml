@@ -1,9 +1,10 @@
 # Flags images without alt text, or with alt text that is only a placeholder
-# word or a filename. Covers Markdown images and <img> tags, including tags
-# that span several lines, so it matches against the raw source. An empty alt
-# is allowed when the tag marks the image as decorative with aria-hidden="true"
-# or role="presentation". Single and double quotes are both checked,
-# and attributes such as data-alt are not mistaken for alt.
+# word or a filename. Covers inline and reference-style Markdown images and
+# <img> tags, including tags that span several lines, so it matches against the
+# raw source. An empty alt is allowed when the tag marks the image as decorative
+# with aria-hidden="true" or role="presentation". Both quote styles are checked,
+# a `>` inside a quoted attribute value does not end the tag, and attributes
+# such as data-alt are not mistaken for alt.
 extends: existence
 message: "Describe the image in its alt text: '%s'."
 level: error
@@ -12,12 +13,12 @@ nonword: true
 ignorecase: true
 tokens:
   # No alt text
-  - '!\[\]\('
-  - '<[a-z][\w.]*\b(?![^>]*(?<![\w-])(?:aria-hidden\s*=\s*["'']true["'']|role\s*=\s*["'']presentation["'']))[^>]*(?<![\w-])alt\s*=\s*(?:""|'''')[^>]*>'
-  - '<img\b(?:(?!(?<![\w-])alt\s*=)[^>])*/?>'
+  - '!\[\]'
+  - '<[a-z][\w.]*\b(?!(?:[^>"'']|"[^"]*"|''[^'']*'')*(?<![\w-])(?:aria-hidden\s*=\s*["'']true["'']|role\s*=\s*["'']presentation["'']))(?:[^>"'']|"[^"]*"|''[^'']*'')*(?<![\w-])alt\s*=\s*(?:""|'''')(?:[^>"'']|"[^"]*"|''[^'']*'')*>'
+  - '<img\b(?:"[^"]*"|''[^'']*''|(?!(?<![\w-])alt\s*=)[^>"''])*>'
   # Placeholder word
-  - '!\[(?:image|img|screenshot|diagram|picture|photo|logo)\]\('
+  - '!\[(?:image|img|screenshot|diagram|picture|photo|logo)\]'
   - '(?<![\w-])alt\s*=\s*(?:"(?:image|img|screenshot|diagram|picture|photo|logo)"|''(?:image|img|screenshot|diagram|picture|photo|logo)'')'
   # Filename only. A description that mentions a filename is fine.
-  - '!\[[^\]\s]*\.(?:png|jpe?g|gif|svg|webp)\]\('
+  - '!\[[^\]\s]*\.(?:png|jpe?g|gif|svg|webp)\]'
   - '(?<![\w-])alt\s*=\s*(?:"[^"\s]*\.(?:png|jpe?g|gif|svg|webp)"|''[^''\s]*\.(?:png|jpe?g|gif|svg|webp)'')'
