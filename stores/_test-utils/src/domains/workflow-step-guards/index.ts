@@ -326,7 +326,7 @@ export function createWorkflowStepGuardTests({
       it('takes a finished attempt of the expected occurrence, as a retry does', async () => {
         const { a, claim, load } = await setupResume({
           status: 'failed',
-          error: 'Transient failure',
+          error: new Error('Transient failure'),
           payload: {},
           startedAt: 1,
           endedAt: 2,
