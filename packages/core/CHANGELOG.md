@@ -1,5 +1,76 @@
 # @mastra/core
 
+## 1.87.0-alpha.4
+
+### Minor Changes
+
+- Added end-to-end support for preserving OpenAI Responses compaction state across tool loops and memory reloads. Mastra now persists opaque compaction items and replays them on later requests in the same memory thread. With `store: false`, replay uses encrypted compaction content. With stored Responses, items with an OpenAI item ID replay as an `item_reference`. ([#31529](https://github.com/mastra-ai/mastra/pull/31529))
+
+  Built-in `openai/*` Responses models, Netlify OpenAI models, custom URL models configured with `api: 'responses'`, `shape: 'responses'` overrides, and OpenAI WebSocket models now use `@ai-sdk/openai` 4.x instead of 3.x. This enables `contextManagement` and Language Model V4 behavior. When reasoning effort is enabled and `reasoningSummary` isn't set, 4.x defaults to detailed reasoning summaries, which can increase output tokens. Set `providerOptions.openai.reasoningSummary` explicitly to control this behavior.
+
+  ```ts
+  await agent.stream('Summarize the conversation', {
+    memory: { thread: 'thread-1', resource: 'user-1' },
+    providerOptions: {
+      openai: {
+        store: false,
+        contextManagement: [{ type: 'compaction', compactThreshold: 10_000 }],
+      },
+    },
+  });
+  ```
+
+  When the selected history contains a compaction checkpoint, Mastra keeps the complete conversation in Memory while sending OpenAI only the latest checkpoint, system instructions, and messages after that checkpoint. Memory's history controls still determine which stored messages are selected before compaction is applied.
+
+  Fixes #20465.
+
+- Added `createRecreateSandboxTool()` so agents can recover from a sandbox that stopped responding. The tool destroys the sandbox's environment and leaves the workspace usable: the next command starts a fresh one. Anything not saved elsewhere is lost. ([#31668](https://github.com/mastra-ai/mastra/pull/31668))
+
+  ```ts
+  import { createRecreateSandboxTool } from '@mastra/core/workspace';
+
+  const agent = new Agent({
+    // ...
+    workspace,
+    tools: { recreate_sandbox: createRecreateSandboxTool() },
+  });
+  ```
+
+  Sandboxes built on `MastraSandbox` get `_reset()`, which the tool calls. It does not wait on a start that is hung on the dead environment, and treats an environment that is already gone as released. Pass `reset` to the tool to run your own recovery instead.
+
+### Patch Changes
+
+- Fixed channel runs crashing on a replica with `render.wrapStream is not a function` after a run was restored from a durable snapshot. The channel render context holds live adapters and driver callbacks that JSON cannot carry, so a restored copy was a method-less husk. It is no longer written into the durable request-context snapshot, and every reader that needs a live context now rebuilds it from the run's thread when it finds a husk instead of using it. ([#31678](https://github.com/mastra-ai/mastra/pull/31678))
+
+  A restored run also keeps the reply behaviour of the thread it was started on: how the thread displays the agent's text (posted, hidden, or replaced by tool output) is read back from the thread, so a hidden-text conversation resumed on a replica no longer tells the model to answer in text nobody sees, and a new conversation still gets the link back to its thread.
+
+  Approval cards such a run posts are still answered only by the person whose message triggered the tool, unless the adapter sets `toolApprovers: 'anyone'`: the requester is read back from the thread when the restored run no longer remembers it, instead of leaving any channel member able to approve or deny.
+
+- Fixed durable and evented agents copying the run's input message, including any file or image parts, into every saved workflow snapshot. When the agent has a fixed memory, snapshots after the run starts now store a reference to the input message the agent saved to memory before the run started, so large attachments no longer make every checkpoint larger. Fixes #31237. ([#31405](https://github.com/mastra-ai/mastra/pull/31405))
+
+- `ModelRouterEmbeddingModel` now accepts namespaced model IDs and routes DeepInfra embeddings to their default endpoint. IDs with more than one slash, such as `deepinfra/BAAI/bge-base-en-v1.5`, previously failed with "Invalid model string format"; the router now splits the provider from the model at the first slash and keeps the rest of the ID intact. DeepInfra has no URL in the provider registry, so embeddings now fall back to `https://api.deepinfra.com/v1/openai` unless an explicit `url` is passed. ([#31673](https://github.com/mastra-ai/mastra/pull/31673))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('deepinfra/BAAI/bge-base-en-v1.5');
+  await embedMany({ model: embedder, values: ['Hello world'] });
+  ```
+
+  Fixes #31618.
+
+- Fixed agents running Observational Memory twice when the observational memory processor is placed inside a processor workflow, including stored Editor processor graphs with a branch or parallel step. Memory now uses the processor you placed and does not add its own. An OM step inside an error processor workflow does not replace Memory's OM error processor, so context-overflow recovery keeps working. Fixes [#31401](https://github.com/mastra-ai/mastra/issues/31401). ([#31419](https://github.com/mastra-ai/mastra/pull/31419))
+
+  Steps created from a processor now keep that processor's id in a new optional `processorId` field, also after `cloneStep` or an Editor graph renames the step. Upgrade `@mastra/core` together with `@mastra/memory` to get the fix for Editor graphs and cloned steps.
+
+- Preserve Unicode joiners (ZWNJ/ZWJ) in buffered channel replies. ([#31679](https://github.com/mastra-ai/mastra/pull/31679))
+
+  Static (non-streaming) replies and the buffered fallback posted after a failed stream previously stripped U+200C (ZWNJ) and U+200D (ZWJ) from the whole message, corrupting compound emoji (🏄🏼‍♂️, 👨‍👩‍👧) and scripts such as Persian. Zero-width space (U+200B) and the byte-order mark (U+FEFF) are still removed everywhere, and whitespace/joiners are still trimmed at the edges, so internal joiners now survive and invisible-only messages are still suppressed.
+
+- Added `resultType: 'title_generation'` to the trace span of the model call that generates a thread title, so observability exporters can tell it apart from the conversation. ([#31476](https://github.com/mastra-ai/mastra/pull/31476))
+
+- Fixed `messageHistory` token budgets letting the start of the conversation history move forward on every run without ever trimming. When the newest messages weighed between the trim target and `maxTokens`, memory loaded a fixed page of messages and never recorded a cut, so the history start changed each turn and prompt caching broke. Memory now loads enough history for the token limit to trim it and remember where it cut, so the history start stays put between trims. Fixes [#31469](https://github.com/mastra-ai/mastra/issues/31469). ([#31541](https://github.com/mastra-ai/mastra/pull/31541))
+
+- The built-in `web_fetch` tool now works on Cloudflare Workers. Previously every request failed with "The options.lookup option is not implemented". When Node's request API isn't available, the tool now uses `fetch` instead. It still checks every URL and redirect target for `localhost` and private or reserved IP addresses, and keeps the 5-redirect limit, the 100,000-character truncation, and the 15-second timeout. On Workers it can't check the address a hostname resolves to, so a public hostname that points to a private address isn't blocked. ([#31632](https://github.com/mastra-ai/mastra/pull/31632))
+
 ## 1.87.0-alpha.3
 
 ### Minor Changes

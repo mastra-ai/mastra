@@ -46,8 +46,21 @@ describe('isReservedRequestContextKey', () => {
     expect(requestContext.get('mastra__durableSegments')).toBeUndefined();
   });
 
+  it('keeps controller run bindings server-owned when merging request context', () => {
+    const key = 'mastra__controllerRunBinding';
+    const requestContext = new RequestContext();
+    mergeBodyRequestContext(requestContext, { [key]: 'client value', locale: 'en' });
+
+    expect(requestContext.getRaw(key)).toBeUndefined();
+    expect(requestContext.get('locale')).toBe('en');
+
+    requestContext.setRaw(key, 'server value');
+    mergeBodyRequestContext(requestContext, { [key]: 'client value' });
+    expect(requestContext.getRaw(key)).toBe('server value');
+  });
+
   it('reserves every key in the shared reserved-key list', () => {
-    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(15);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(16);
     expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
     expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
       expect.arrayContaining([

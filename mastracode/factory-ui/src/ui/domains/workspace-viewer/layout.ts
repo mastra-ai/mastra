@@ -67,7 +67,7 @@ export const popoverSizeClass: Record<WorkspacePanelSize, string> = {
 
 export const treeRowContainmentClass = '[content-visibility:auto] [contain-intrinsic-size:auto_1.75rem]';
 
-export const overviewClass = 'flex min-h-0 w-full min-w-0 grow flex-col divide-y divide-border overflow-y-auto';
+export { overviewClass } from '@mastra/playground-ui/domains/factory';
 
 /** Read through descendant selectors: a variable or `group-*` variant on this box would restyle the whole transcript. */
 export const panelStateAttributes = (docked: boolean, moved: boolean) => ({

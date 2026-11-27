@@ -1,16 +1,21 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { once } from 'node:events';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { LLMock } from '@copilotkit/aimock';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
 import type { InlineSkill } from '@mastra/core/skills';
+import type { FactoryStorage } from '@mastra/core/storage';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgFactoryStorage } from '@mastra/pg';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,7 +31,7 @@ import type { ModelCredentialsStorage } from '../storage/domains/credentials/bas
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
+import { isolatedPostgresSchemaForTests } from '../storage/test-utils.js';
 import type { RuleGroup } from './rule-group.js';
 
 class TestSandbox extends MastraSandbox {
@@ -180,20 +185,13 @@ function publisher(): (text: string) => ToolCall | undefined {
   };
 }
 
-/** A real Factory with one linked GitHub repository, driven over HTTP. */
-async function startFactory(
+async function bootFactory(
+  storage: FactoryStorage,
   board: ReturnType<typeof defineBoard>,
-  landing: string,
   skills?: InlineSkill[],
-  {
-    evented,
-    boardEngine,
-  }: { evented?: { postgresUrl: string; pubsub: RedisStreamsPubSub }; boardEngine?: FactoryBoardEngineFactory } = {},
+  pubsub?: RedisStreamsPubSub,
+  boardEngine?: FactoryBoardEngineFactory,
 ) {
-  vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
-  const storage = evented
-    ? await createIsolatedFactoryPostgresForTests(evented.postgresUrl)
-    : new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
   const github = new GithubIntegration({
     appId: '123',
     privateKey: 'test-key',
@@ -203,7 +201,7 @@ async function startFactory(
   });
   const factory = new MastraFactory({
     storage,
-    ...(evented ? { pubsub: evented.pubsub } : {}),
+    ...(pubsub ? { pubsub } : {}),
     auth: null,
     integrations: [github],
     sandbox: () => new TestSandbox(),
@@ -216,13 +214,36 @@ async function startFactory(
   });
   const args = await factory.prepare();
   const mastra = new Mastra(args);
+  await factory.finalize();
   const close = async () => {
     await factory.shutdown();
     await mastra.shutdown();
+  };
+  return { args, mastra, sourceControl: github.sourceControlStorage, close };
+}
+
+/** A real Factory with one linked GitHub repository, driven over HTTP. */
+async function startFactory(
+  board: ReturnType<typeof defineBoard>,
+  landing: string,
+  skills?: InlineSkill[],
+  {
+    evented,
+    boardEngine,
+  }: {
+    evented?: { storage: PgFactoryStorage; pubsub: RedisStreamsPubSub };
+    boardEngine?: FactoryBoardEngineFactory;
+  } = {},
+) {
+  vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
+  const storage = evented?.storage ?? new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
+  const runtime = await bootFactory(storage, board, skills, evented?.pubsub, boardEngine);
+  const { args, mastra, sourceControl } = runtime;
+  const close = async () => {
+    await runtime.close();
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   };
-  await factory.finalize();
   const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
   app.use('*', async (c, next) => {
     c.set('factoryAuthUser', { workosId: 'phase-user', organizationId: ORG });
@@ -240,7 +261,6 @@ async function startFactory(
   expect(
     (await send('PATCH', `/web/factory/projects/${project.id}`, { defaultModelId: 'openai/gpt-5.6-sol' })).status,
   ).toBe(200);
-  const sourceControl = github.sourceControlStorage;
   const installation = await sourceControl.installations.upsert({
     orgId: ORG,
     connectedByUserId: 'phase-user',
@@ -301,28 +321,155 @@ async function startFactory(
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 const redisUrl = process.env.FACTORY_TEST_REDIS_URL;
 
-it.skipIf(!postgresUrl || !redisUrl)(
-  'persists a generated title for an evented Factory session over Redis Streams',
+const workerPrefix = process.env.FACTORY_PHASE_TEST_WORKER_PREFIX;
+const workerTestName = 'runs the evented Factory worker fixture';
+const approvalCallId = 'call_write_restart_tasks';
+const restartTask = {
+  id: 'restart-task',
+  content: 'Record the approval across restart',
+  status: 'pending',
+  activeForm: 'Recording the approval across restart',
+};
+const restartReply = 'The approved task is recorded.';
+
+function phaseUserContext() {
+  const requestContext = new RequestContext();
+  requestContext.set('user', { workosId: 'phase-user', organizationId: ORG });
+  return requestContext;
+}
+
+function spawnPhaseWorker(connectionString: string, keyPrefix: string, stopPath: string, sessionId?: string) {
+  const factoryDir = fileURLToPath(new URL('../..', import.meta.url));
+  const processHandle = spawn(
+    process.execPath,
+    [
+      join(factoryDir, 'node_modules/vitest/vitest.mjs'),
+      'run',
+      '--pool=threads',
+      'src/rules/board-phase-runtime.test.ts',
+      '-t',
+      workerTestName,
+    ],
+    {
+      cwd: factoryDir,
+      env: {
+        ...process.env,
+        MASTRA_WORKERS: '',
+        FACTORY_TEST_POSTGRES_URL: connectionString,
+        FACTORY_PHASE_TEST_WORKER_PREFIX: keyPrefix,
+        FACTORY_PHASE_TEST_WORKER_STOP: stopPath,
+        ...(sessionId ? { FACTORY_PHASE_TEST_PARK_SESSION: sessionId } : {}),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  const closed = once(processHandle, 'close');
+  let output = '';
+  processHandle.stdout.on('data', chunk => (output += String(chunk)));
+  processHandle.stderr.on('data', chunk => (output += String(chunk)));
+  return {
+    processHandle,
+    closed,
+    output: () => output,
+    async stop() {
+      writeFileSync(stopPath, '');
+      const kill = setTimeout(() => processHandle.kill('SIGKILL'), 10_000);
+      try {
+        await closed;
+      } finally {
+        clearTimeout(kill);
+      }
+    },
+  };
+}
+
+it.skipIf(!workerPrefix)(
+  workerTestName,
   async () => {
+    const storage = new PgFactoryStorage({ id: 'factory-test', connectionString: postgresUrl! });
+    const pubsub = new RedisStreamsPubSub({ url: redisUrl!, keyPrefix: workerPrefix! });
+    try {
+      const sessionId = process.env.FACTORY_PHASE_TEST_PARK_SESSION;
+      const runtime = sessionId
+        ? await startFactory(release, 'build', [publishSkill], { evented: { storage, pubsub } })
+        : await bootFactory(storage, release, [publishSkill], pubsub);
+      try {
+        if (sessionId && 'send' in runtime) {
+          const response = await runtime.send(
+            'POST',
+            `/web/source-control/projects/${runtime.projectRepository.id}/sessions`,
+            {
+              sessionId,
+            },
+          );
+          expect(response.status, await response.text()).toBe(200);
+          const [controller] = Object.values(runtime.mastra.listAgentControllers());
+          const requestContext = phaseUserContext();
+          const session = (await controller?.getSession(sessionId, requestContext))!;
+          await session.state.set({ yolo: false });
+          await session.permissions.setForTool({ toolName: 'task_write', policy: 'ask' });
+          const turn = session.sendMessage({ content: 'Record the restart task.', requestContext });
+          void turn.catch(error => console.error(error));
+          await expect.poll(() => session.hasPersistedToolApproval(approvalCallId), { timeout: 20_000 }).toBe(true);
+          console.log('factory-phase-approval-persisted');
+          await expect
+            .poll(() => existsSync(`${process.env.FACTORY_PHASE_TEST_WORKER_STOP!}.approve`), { timeout: 60_000 })
+            .toBe(true);
+          expect(
+            session.respondToToolApproval({ toolCallId: approvalCallId, decision: 'approve', requestContext }).accepted,
+          ).toBe(true);
+          await turn;
+        }
+        console.log('factory-phase-worker-ready');
+        await expect
+          .poll(() => existsSync(process.env.FACTORY_PHASE_TEST_WORKER_STOP!), { timeout: 60_000 })
+          .toBe(true);
+      } finally {
+        await runtime.close();
+      }
+    } finally {
+      await pubsub.close();
+      await storage.close();
+    }
+  },
+  90_000,
+);
+
+it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
+  'persists a generated title for an evented Factory session over Redis Streams and completes the turn (split worker=%s)',
+  async split => {
     const title = 'Repair the Login Flow';
     const model = new LLMock({ port: 0 });
-    const pubsub = new RedisStreamsPubSub({ url: redisUrl!, keyPrefix: `factory-title-${randomUUID()}` });
+    const keyPrefix = `factory-title-${randomUUID()}`;
+    const pubsub = new RedisStreamsPubSub({ url: redisUrl!, keyPrefix });
+    const connectionString = await isolatedPostgresSchemaForTests(postgresUrl!);
+    const storage = new PgFactoryStorage({ id: 'factory-test', connectionString });
     const appData = mkdtempSync(join(tmpdir(), 'factory-evented-title-'));
+    const workerStop = join(appData, 'worker.stop');
     vi.stubEnv('MASTRA_APP_DATA_DIR', appData);
     vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
     vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '1');
     vi.stubEnv('MASTRACODE_DISABLE_TITLE_GENERATION', '0');
     model.on({ systemMessage: 'the title must be 3 to 5 words long' }, { content: title });
-    model.onMessage(/.*/, { content: 'The login flow is repaired.' });
+    model.on(
+      { predicate: request => JSON.stringify(request).includes('Tasks updated:') },
+      { content: 'The login flow is repaired.' },
+    );
+    model.onMessage(/Repair the broken login flow/, {
+      toolCalls: [{ id: approvalCallId, name: 'task_write', arguments: JSON.stringify({ tasks: [restartTask] }) }],
+    });
 
     try {
       await model.start();
       vi.stubEnv('OPENAI_BASE_URL', `${model.url.replace(/\/+$/, '')}/v1`);
-      const runtime = await startFactory(release, 'build', [publishSkill], {
-        evented: { postgresUrl: postgresUrl!, pubsub },
-      });
+      vi.stubEnv('MASTRA_WORKERS', split ? 'false' : undefined);
+      const runtime = await startFactory(release, 'build', [publishSkill], { evented: { storage, pubsub } });
+      const worker = split ? spawnPhaseWorker(connectionString, keyPrefix, workerStop) : undefined;
       try {
+        if (worker) {
+          await expect.poll(() => worker.output(), { timeout: 30_000 }).toContain('factory-phase-worker-ready');
+        }
         await runtime.storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
           orgId: ORG,
           userId: factoryProjectSettingsUserId(runtime.project.id),
@@ -342,16 +489,20 @@ it.skipIf(!postgresUrl || !redisUrl)(
         requestContext.set('user', { workosId: 'phase-user', organizationId: ORG });
         const session = await controller?.getSession(sessionId, requestContext);
         expect(session).toBeDefined();
+        // Use the existing boolean approval mode so this test does not depend on a
+        // per-tool approval callback crossing the process boundary.
+        await session!.state.set({ yolo: true });
         await session!.sendMessage({ content: 'Repair the broken login flow.', requestContext });
         const memory = await runtime.storage.getMastraStorage().getStore('memory');
         expect(memory).toBeDefined();
+        const tasks = await runtime.storage.getMastraStorage().getStore('threadState');
         await expect
-          .poll(async () => (await memory!.getThreadById({ threadId: sessionId }))?.title, {
-            timeout: 15_000,
-          })
+          .poll(() => tasks!.getState({ threadId: sessionId, type: 'task' }), { timeout: 15_000 })
+          .toMatchObject([restartTask]);
+        await expect
+          .poll(async () => (await memory!.getThreadById({ threadId: sessionId }))?.title, { timeout: 15_000 })
           .toBe(title);
-        // The title comes from finalization, so it is persisted even when the model step fails.
-        // The reply only exists if the model step's Factory processors could read the live controller.
+        // Title generation can succeed even when the main model step fails.
         await expect
           .poll(
             async () => {
@@ -362,16 +513,108 @@ it.skipIf(!postgresUrl || !redisUrl)(
           )
           .toContain('The login flow is repaired.');
       } finally {
+        await worker?.stop();
         await runtime.close();
       }
     } finally {
       await pubsub.close();
+      await storage.close();
       await model.stop();
       vi.unstubAllEnvs();
       rmSync(appData, { recursive: true, force: true });
     }
   },
-  60_000,
+  120_000,
+);
+
+it.skipIf(!postgresUrl || !redisUrl || !!workerPrefix).each([false, true])(
+  'records an approved task in an evented Factory session (owner killed=%s)',
+  async crash => {
+    const model = new LLMock({ port: 0 });
+    const keyPrefix = `factory-approval-${randomUUID()}`;
+    const connectionString = await isolatedPostgresSchemaForTests(postgresUrl!);
+    const storage = new PgFactoryStorage({ id: 'factory-test', connectionString });
+    const pubsub = new RedisStreamsPubSub({ url: redisUrl!, keyPrefix });
+    const appData = mkdtempSync(join(tmpdir(), 'factory-evented-approval-'));
+    const stopPath = join(appData, 'worker.stop');
+    const sessionId = randomUUID();
+    vi.stubEnv('MASTRA_APP_DATA_DIR', appData);
+    vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_AGENT', 'evented');
+    vi.stubEnv('MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY', '1');
+    vi.stubEnv('MASTRACODE_DISABLE_TITLE_GENERATION', '1');
+    vi.stubEnv('MASTRA_WORKERS', undefined);
+    vi.stubEnv('MASTRA_AGENT_THREAD_LEASE_TTL_MS', '3000');
+    model.on({ predicate: request => JSON.stringify(request).includes('Tasks updated:') }, { content: restartReply });
+    model.onMessage(/Record the restart task/, {
+      toolCalls: [{ id: approvalCallId, name: 'task_write', arguments: JSON.stringify({ tasks: [restartTask] }) }],
+    });
+
+    try {
+      await model.start();
+      vi.stubEnv('OPENAI_BASE_URL', `${model.url.replace(/\/+$/, '')}/v1`);
+      const owner = spawnPhaseWorker(connectionString, keyPrefix, stopPath, sessionId);
+      let replacement: Awaited<ReturnType<typeof bootFactory>> | undefined;
+      try {
+        await expect.poll(owner.output, { timeout: 45_000 }).toContain('factory-phase-approval-persisted');
+        await storage.init();
+        const memory = (await storage.getMastraStorage().getStore('memory'))!;
+        const threadState = (await storage.getMastraStorage().getStore('threadState'))!;
+        const readTasks = () => threadState.getState({ threadId: sessionId, type: 'task' });
+        expect((await readTasks()) ?? []).toEqual([]);
+        if (crash) {
+          expect(owner.processHandle.kill('SIGKILL')).toBe(true);
+          expect((await owner.closed)[1]).toBe('SIGKILL');
+          const thread = (await memory.getThreadById({ threadId: sessionId }))!;
+          vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
+          replacement = await bootFactory(storage, release, [publishSkill], pubsub);
+          const [controller] = Object.values(replacement.mastra.listAgentControllers());
+          const requestContext = phaseUserContext();
+          controller!.onSessionCreated(
+            async session => {
+              await session.state.set({ yolo: false });
+              await session.permissions.setForTool({ toolName: 'task_write', policy: 'ask' });
+            },
+            { blocking: true },
+          );
+          const session = await controller!.createSession({
+            id: sessionId,
+            resourceId: thread.resourceId,
+            threadId: sessionId,
+            ownerId: 'phase-user',
+            requestContext,
+          });
+          expect(session.approval.isArmed({ toolCallId: approvalCallId })).toBe(false);
+          expect(session.resolveToolApproval('task_write', requestContext)).toBe('ask');
+          expect(await session.hasPersistedToolApproval(approvalCallId)).toBe(true);
+          await session.respondToPersistedToolApproval({ toolCallId: approvalCallId, approved: true, requestContext });
+        } else {
+          writeFileSync(`${stopPath}.approve`, '');
+          await expect.poll(owner.output, { timeout: 25_000 }).toContain('factory-phase-worker-ready');
+        }
+        await expect.poll(readTasks, { timeout: 15_000 }).toMatchObject([restartTask]);
+        await expect
+          .poll(
+            async () => {
+              const { messages } = await memory.listMessages({ threadId: sessionId, perPage: false });
+              return JSON.stringify(messages.filter(message => message.role === 'assistant'));
+            },
+            { timeout: 15_000 },
+          )
+          .toContain(restartReply);
+      } finally {
+        await owner.stop();
+        await replacement?.close();
+      }
+    } finally {
+      await pubsub.close();
+      await storage.close();
+      await model.stop();
+      vi.unstubAllEnvs();
+      rmSync(appData, { recursive: true, force: true });
+    }
+  },
+  120_000,
 );
 
 /**
