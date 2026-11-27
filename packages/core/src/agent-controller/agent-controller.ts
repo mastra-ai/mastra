@@ -809,6 +809,7 @@ export class AgentController<TState = {}> {
         },
         workspace: workspaceToConnect,
         browser: browserToConnect,
+        defaultToolApprovalPolicy: this.config.defaultToolApprovalPolicy,
       }),
     );
 

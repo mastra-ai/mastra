@@ -105,7 +105,7 @@ describe('AgentController: tool suspension and resumption', () => {
     await session.sendMessage({ content: 'Hello' });
 
     expect(streamSpy).toHaveBeenCalled();
-    const [, streamOptions] = streamSpy.mock.calls[0] as [any, any];
+    const [, streamOptions] = streamSpy.mock.calls[0] as unknown as [unknown, { modelSettings?: unknown }];
     expect(streamOptions.modelSettings).toBeUndefined();
   });
 
@@ -461,8 +461,9 @@ describe('AgentController: tool suspension and resumption', () => {
       id: 'test-controller-budget-resume',
       storage,
       maxSteps: 100,
+      defaultToolApprovalPolicy: 'allow',
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
-      initialState: { yolo: true } as any,
+      initialState: { yolo: false } as any,
     });
 
     await controller.init();
@@ -478,5 +479,6 @@ describe('AgentController: tool suspension and resumption', () => {
     expect(resumeOptions.streamOptions.maxSteps).toBe(100);
     expect(resumeOptions.streamOptions.savePerStep).toBe(false);
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
+    expect(await resumeOptions.streamOptions.requireToolApproval({ toolName: 'execute_command' })).toBe(false);
   });
 });

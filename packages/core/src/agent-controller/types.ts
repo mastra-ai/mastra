@@ -297,6 +297,13 @@ export interface AgentControllerConfig<TState = {}> {
    */
   maxSteps?: number;
 
+  /**
+   * Default approval policy for tools without a more specific session policy or grant.
+   * Explicit tool and category policies continue to take precedence.
+   * @default 'ask'
+   */
+  defaultToolApprovalPolicy?: PermissionPolicy;
+
   instructions?: string;
 
   /**
