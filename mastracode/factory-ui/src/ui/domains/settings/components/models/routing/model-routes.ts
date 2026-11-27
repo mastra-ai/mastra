@@ -2,6 +2,7 @@ export {
   connectorPath,
   defaultsInUse,
   lanesUsing,
+  MODEL_DEFAULTS_ANCHORS,
   MODEL_DEFAULTS_ICONS,
   MODEL_DEFAULTS_LABELS,
   MODEL_DEFAULTS_TONES,

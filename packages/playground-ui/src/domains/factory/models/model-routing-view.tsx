@@ -6,6 +6,7 @@ import { DefaultsCard } from './defaults-card';
 import type { FactoryModelScope, ModelDefaults } from './model-routes';
 import { ModelRoutingSkeleton } from './model-routing-skeleton';
 import { ModelRoutingSwitch } from './model-routing-switch';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
 
 export interface ModelDefaultsSlots {
@@ -49,13 +50,15 @@ export function ModelRoutingView({
       title="Model routing"
       description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
       action={
-        scope && (
+        scope ? (
           <ModelRoutingSwitch
             value={scope}
             pending={pending}
             disabled={!onPickScope}
             onValueChange={next => onPickScope?.(next)}
           />
+        ) : (
+          loading && <Skeleton className="h-control-md w-72 rounded-full motion-reduce:before:animate-none" />
         )
       }
     >
