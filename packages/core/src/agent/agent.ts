@@ -73,7 +73,6 @@ import {
 import type { AgentLoopResumeClaim } from '../loop/types';
 import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../mastra';
-import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import { createRunScope } from '../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { VersionOverrides } from '../mastra/types';
@@ -151,7 +150,7 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 import type { MemoryStorage, WorkflowsStorage } from '../storage';
-import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
+import { getSnapshotMemoryInfo } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
@@ -495,10 +494,8 @@ function rebindRecoveredModelList(
 
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
-// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
-// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
-// `await import('../mastra')` fallback for the standalone-agent case where the
-// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
+// `class DurableAgent extends Agent` with a TDZ error. The plain engine builds
+// its standalone fallback Mastra from `mastraCtorHolder` instead.
 
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
@@ -523,6 +520,19 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<OUTPUT> & {
   toolCallId?: string;
 };
+
+type StartRunOptions = AgentExecutionOptionsBase<any> & {
+  structuredOutput?: PublicStructuredOutputOptions<any>;
+} & { model?: DynamicArgument<MastraModelConfig> };
+
+type ResumeRunOptions = StartRunOptions & { toolCallId?: string };
+
+type ResumeGenerateRequest<TOutput> = {
+  method: 'resumeGenerate';
+  args: [resumeData: unknown, options?: ResumeRunOptions, legacyOptions?: DurableAgentResumeOptions<TOutput>];
+};
+type ResumeStreamRequest = { method: 'resumeStream'; resumeData: unknown; options: ResumeRunOptions | undefined };
+type RecoverResumeRequest = { method: 'recoverResume'; options: ResumeRunOptions & { runId: string } };
 
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
@@ -1071,14 +1081,6 @@ export class Agent<
   maxRetries?: number;
   readonly #maxRetriesConfigured: boolean;
   #mastra?: Mastra;
-  /**
-   * Lazily-built in-memory Mastra used when the agent isn't wired into one.
-   * Provides a workflow storage backend for internal snapshot lookups
-   * (loadAgenticLoopSnapshotOrThrow, assertToolCallSuspended,
-   * listSuspendedRuns) so `new Agent(...)` works standalone. Cleared when
-   * `__registerMastra` attaches a real Mastra later.
-   */
-  #ephemeralMastra?: Mastra;
 
   /**
    * True when this instance is a fork produced by resolving a stored agent
@@ -1722,42 +1724,13 @@ export class Agent<
 
   /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
   async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
-    const executionEngine = this.#engine();
-    if (executionEngine.durable) {
-      if (!this.#mastra) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires the agent to be registered on a Mastra instance.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-
-      const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-      if (!workflowsStore) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires persistent storage to load the run snapshot.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-
-      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this, key);
-    }
-
-    try {
-      const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-        runId,
-        method: '__getSuspendedRunRequestContextValue',
-      });
-      return snapshot.requestContext?.[key];
-    } catch (error) {
-      if (error instanceof MastraError && error.id === 'AGENT_RESUME_NO_SNAPSHOT_FOUND') return undefined;
-      throw error;
-    }
+    return this.#engine().getSuspendedRequestContextValue({
+      mastra: this.#mastra,
+      pubsub: this.getPubSub(),
+      agent: this,
+      runId,
+      key,
+    });
   }
 
   /**
@@ -4624,12 +4597,6 @@ export class Agent<
     this.#mastra = mastra;
     this.#executionEngine?.registerMastra(mastra);
     this.#plainExecutionEngine?.registerMastra(mastra);
-
-    // Drop any ephemeral Mastra now that a real one is attached; we no longer
-    // need the storage fallback.
-    if (this.#ephemeralMastra) {
-      this.#ephemeralMastra = undefined;
-    }
 
     this.#streamBus?.registerMastra(mastra.pubsub);
 
@@ -8277,7 +8244,7 @@ export class Agent<
 
     for (const [_id, scorerObject] of Object.entries(scorers)) {
       runScorer({
-        mastra: this.#mastra ?? this.#ephemeralMastra,
+        mastra: this.#mastra ?? this.#plainExecutionEngine?.ephemeralMastra,
         scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId,
@@ -8459,25 +8426,15 @@ export class Agent<
   /**
    * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
-   * @internal
    */
-  #throwIfRunAborted(runId: string) {
-    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
-      throw new MastraError({
-        id: 'AGENT_RESUME_ABORTED_RUN',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" cannot resume aborted run "${runId}".`,
-        details: { agentName: this.name, runId },
-      });
-    }
-  }
-
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
-    this.#throwIfRunAborted(runId);
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    return this.#plainEngine().loadSuspendedSnapshot(workflowsStore, { agentName: this.name, runId, method });
+    const engine = this.#plainEngine();
+    engine.assertNotAborted(this.getPubSub(), { agentName: this.name, runId });
+    return engine.loadSuspendedSnapshot(await engine.workflowsStore(this.#mastra), {
+      agentName: this.name,
+      runId,
+      method,
+    });
   }
 
   #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
@@ -8636,8 +8593,7 @@ export class Agent<
     // the target suspended, or either row is still running), and reject early only
     // when the target is not suspended anywhere AND either a different tool call is
     // suspended (a stale toolCallId, see #19377) or the run has settled.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#plainEngine().workflowsStore(this.#mastra);
 
     // `timedOut` marks a run that may still suspend on the target once its snapshot is durable,
     // so callers can retry it instead of treating the tool call as answered.
@@ -8787,11 +8743,11 @@ export class Agent<
     recoverClaimedAt?: number;
     method: string;
   }): Promise<AgentLoopResumeClaim> {
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const engine = this.#plainEngine();
+    const workflowsStore = await engine.workflowsStore(this.#mastra);
     // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
-    this.#throwIfRunAborted(args.runId);
-    return this.#plainEngine().claimSuspendedRun(workflowsStore, {
+    engine.assertNotAborted(this.getPubSub(), { agentName: this.name, runId: args.runId });
+    return engine.claimSuspendedRun(workflowsStore, {
       ...args,
       agentName: this.name,
       logger: this.logger,
@@ -9008,36 +8964,6 @@ export class Agent<
         executionResourceId,
       },
     });
-  }
-
-  /**
-   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
-   * that isn't wired into a Mastra still needs *some* storage for internal
-   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
-   * for every subsequent call on this agent; `__registerMastra(real)` clears
-   * it.
-   */
-  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
-    if (this.#ephemeralMastra) {
-      return this.#ephemeralMastra;
-    }
-    // Resolve the Mastra constructor without a static `agent → mastra` runtime
-    // edge (see the type-only import at the top of this file). In any app that
-    // constructed a Mastra, the holder is already populated and no dynamic
-    // import runs; the `await import` is a fallback for standalone agents that
-    // never loaded the Mastra module.
-    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
-    const ephemeral = new MastraClass({
-      logger: false,
-      storage: new InMemoryStore(),
-      pubsub: new EventEmitterPubSub(),
-      // Skip module-level scorer-hook registration: the hook can never resolve
-      // a scorer on this registry-less instance, and it would pin the whole
-      // ephemeral graph against GC for the process lifetime (#19404).
-      __ephemeral: true,
-    });
-    this.#ephemeralMastra = ephemeral;
-    return ephemeral;
   }
 
   /**
@@ -10337,15 +10263,7 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    // Extract and forward any client observability data attached to
-    // tool-result messages before they reach the loop/model.
-    this.#extractClientObservability(messages);
-    this.#beginExecutionPolicy();
-    if (this.#resolveExecutionEngine())
-      return this.#generateDurable(messages, options as DurableAgentStreamOptions<TOutput>);
-
-    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
-    return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
+    return this.#dispatchStart<OUTPUT>(messages, options, 'generate');
   }
 
   subscribeToThread<OUTPUT = TOutput>(
@@ -10484,8 +10402,7 @@ export class Agent<
       });
     }
 
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#plainEngine().workflowsStore(this.#mastra);
 
     if (!workflowsStore) {
       throw new MastraError({
@@ -10823,7 +10740,7 @@ export class Agent<
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
   async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
-    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    const mastra = this.#mastra ?? this.#plainExecutionEngine?.ephemeralMastra;
     if (!mastra) return true;
     const runtimeLoopWorkflowName = (
       this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
@@ -11273,12 +11190,39 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput> | DurableAgentStreamResult<TOutput>> {
+    return this.#dispatchStart<OUTPUT>(messages, streamOptions, 'stream');
+  }
+
+  /** Starts a `stream()` or `generate()` run on the agent's engine. */
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'generate',
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>>;
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'stream',
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput> | DurableAgentStreamResult<TOutput>>;
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'generate' | 'stream',
+  ): Promise<
+    | FullOutput<OUTPUT>
+    | FullOutput<TOutput>
+    | MastraModelOutput<OUTPUT>
+    | MastraModelOutput<TOutput>
+    | DurableAgentStreamResult<TOutput>
+  > {
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
     this.#beginExecutionPolicy();
     if (this.#resolveExecutionEngine()) {
-      const result = await this.#streamDurable(messages, streamOptions as DurableAgentStreamOptions<TOutput>);
+      const durableOptions = options as DurableAgentStreamOptions<TOutput>;
+      if (methodType === 'generate') return this.#generateDurable(messages, durableOptions);
+      const result = await this.#streamDurable(messages, durableOptions);
       if (this.returnsDurableStreamResult) return result;
       return Object.assign(result.output, {
         abort: result.abort,
@@ -11288,7 +11232,8 @@ export class Agent<
       });
     }
 
-    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
+    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
+    if (methodType === 'generate') return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -11301,10 +11246,11 @@ export class Agent<
         messages,
         // Continuations re-enter stream() and resolve scopes again, so they get the
         // caller's own request context rather than this call's run-scoped copy.
-        { ...rest, requestContext: streamOptions?.requestContext, maxIdleMs },
+        { ...rest, requestContext: options?.requestContext, maxIdleMs },
         {
           activeStreams: this.activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
+          optionsResolved: true,
         },
       );
     }
@@ -11385,19 +11331,12 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) {
-      const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
-      const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
-      if (structuredOutput) {
-        return this.stream(messages, { ...options, structuredOutput, untilIdle });
-      }
-      return this.stream(messages, { ...options, untilIdle });
+    const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
+    const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
+    if (structuredOutput) {
+      return this.stream(messages, { ...options, structuredOutput, untilIdle });
     }
-
-    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
-      activeStreams: this.activeStreamUntilIdle,
-      bgManager: this.#mastra?.backgroundTaskManager,
-    });
+    return this.stream(messages, { ...options, untilIdle });
   }
 
   /**
@@ -11461,12 +11400,6 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<any>> {
-    if (!this.__hasDurableExecution()) {
-      return runResumeStreamUntilIdle(this, resumeData, streamOptions, {
-        activeStreams: this.activeStreamUntilIdle,
-        bgManager: this.#mastra?.backgroundTaskManager,
-      });
-    }
     const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
     const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
     if (structuredOutput) {
@@ -11519,9 +11452,42 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine())
-      return this.#resumeDurableStream(resumeData, streamOptions as DurableAgentResumeOptions<TOutput>);
-    return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+    return this.#dispatchResume<OUTPUT>({ method: 'resumeStream', resumeData, options: streamOptions });
+  }
+
+  /** Resumes a suspended run on the agent's engine for `resumeStream()`, `resumeGenerate()` or `recoverResume()`. */
+  async #dispatchResume<OUTPUT>(
+    request: ResumeGenerateRequest<TOutput>,
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>>;
+  async #dispatchResume<OUTPUT>(
+    request: ResumeStreamRequest,
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>>;
+  async #dispatchResume<OUTPUT>(request: RecoverResumeRequest): Promise<MastraModelOutput<OUTPUT>>;
+  async #dispatchResume<OUTPUT>(
+    request: ResumeGenerateRequest<TOutput> | ResumeStreamRequest | RecoverResumeRequest,
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput> | MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
+    // The DurableAgent wrapper recovers a claimed resume through the plain path, without
+    // resolving its engine.
+    const durable =
+      !(request.method === 'recoverResume' && this.returnsDurableStreamResult) && !!this.#resolveExecutionEngine();
+    if (durable) {
+      if (request.method === 'resumeStream')
+        return this.#resumeDurableStream(request.resumeData, request.options as DurableAgentResumeOptions<TOutput>);
+      if (request.method === 'resumeGenerate') return this.#resumeDurableGenerate(request.args);
+      // A durable/evented run keeps its resume intent in the engine's snapshot, not the plain
+      // loop's; refuse before the plain lookup reports the suspension as missing.
+      throw new MastraError({
+        id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
+        details: { agentName: this.name, runId: request.options.runId },
+      });
+    }
+    if (request.method === 'resumeGenerate') return this.#resumePlainGenerate<OUTPUT>(request.args[0], request.args[1]);
+    if (request.method === 'resumeStream')
+      return this.#resumeStream<OUTPUT>(request.resumeData, request.options, false);
+    return this.#resumeStream<OUTPUT>(undefined, request.options, true);
   }
 
   async #resumeDurableStream(
@@ -11587,6 +11553,7 @@ export class Agent<
         {
           activeStreams: this.activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
+          optionsResolved: true,
         },
         recover ? opts => this.#resumeStream<OUTPUT>(undefined, opts, true) : undefined,
       );
@@ -11831,8 +11798,13 @@ export class Agent<
       legacyOptions?: DurableAgentResumeOptions<TOutput>,
     ]
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) return this.#resumeDurableGenerate(args);
-    const [resumeData, options] = args;
+    return this.#dispatchResume<OUTPUT>({ method: 'resumeGenerate', args });
+  }
+
+  async #resumePlainGenerate<OUTPUT>(
+    resumeData: unknown,
+    options: ResumeRunOptions | undefined,
+  ): Promise<FullOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -12010,17 +11982,7 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // A durable/evented run keeps its resume intent in the engine's snapshot, not the plain
-    // loop's; refuse before the plain lookup reports the suspension as missing.
-    if (!this.returnsDurableStreamResult && this.#resolveExecutionEngine())
-      throw new MastraError({
-        id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
-        details: { agentName: this.name, runId: options.runId },
-      });
-    return this.#resumeStream<OUTPUT>(undefined, options, true);
+    return this.#dispatchResume<OUTPUT>({ method: 'recoverResume', options });
   }
 
   /**

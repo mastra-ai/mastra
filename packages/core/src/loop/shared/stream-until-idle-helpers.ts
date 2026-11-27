@@ -351,6 +351,8 @@ export function untilIdleHandlesBackgroundTask(
 export interface IdleLoopDeps {
   activeStreams: Map<string, () => void>;
   bgManager: BackgroundTaskManager | undefined;
+  /** The stream options already include the agent's default options, so the loop does not resolve them again. */
+  optionsResolved?: boolean;
 }
 
 /**
@@ -421,13 +423,12 @@ export async function runIdleLoop<
   // Inner calls re-merge defaultOptions; force false so an inherited default cannot re-enter the wrapper.
   (restStreamOptions as Record<string, any>).untilIdle = false;
 
-  const defaultOptions = await agent.getDefaultOptions({
-    requestContext: streamOptions?.requestContext,
-  });
-  const mergedOptions = deepMerge(
-    defaultOptions as Record<string, unknown>,
-    (restStreamOptions ?? {}) as Record<string, unknown>,
-  ) as Record<string, any>;
+  const mergedOptions = deps.optionsResolved
+    ? restStreamOptions
+    : (deepMerge(
+        (await agent.getDefaultOptions({ requestContext: streamOptions?.requestContext })) as Record<string, unknown>,
+        restStreamOptions as Record<string, unknown>,
+      ) as Record<string, any>);
 
   const scope = await resolveScope(agent, mergedOptions);
 

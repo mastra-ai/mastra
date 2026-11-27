@@ -1,8 +1,8 @@
 import type { Mastra } from './index';
 
 /**
- * Holds the `Mastra` constructor so `Agent.#getOrCreateEphemeralMastra` can
- * build an ephemeral `Mastra` without a runtime `agent → mastra` import — which
+ * Holds the `Mastra` constructor so `PlainAgentExecutionEngine` can build an
+ * ephemeral `Mastra` without a runtime `agent → mastra` import — which
  * would re-create the ESM init cycle documented at the top of `agent/agent.ts`
  * (`agent → mastra → agent/durable → agent`, breaking `class DurableAgent
  * extends Agent` with a TDZ error).

@@ -41,6 +41,8 @@ export interface StreamUntilIdleDeps {
    * `runStreamUntilIdle` falls through to a plain `agent.stream` call.
    */
   bgManager: BackgroundTaskManager | undefined;
+  /** The stream options already include the agent's default options. */
+  optionsResolved?: boolean;
 }
 
 /**

@@ -1,19 +1,25 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import type { AgentLoopResumeClaim } from '../loop/types';
+import type { Mastra } from '../mastra';
+import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
+import { InMemoryStore } from '../storage';
 import type { WorkflowsStorage } from '../storage';
 import type { RunFence } from '../storage/run-fencing';
 import { matchesRunFence } from '../storage/run-fencing';
 import type { WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import { AgentExecutionEngine } from './execution-engine';
-import type { AgentRunLog, AgentRunOwner } from './execution-engine';
+import type { AgentRunLog, AgentRunOwner, SuspendedRequestContextLookup } from './execution-engine';
 import type { AgentStreamBus } from './streams/bus';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentRunRecord } from './streams/run-records';
 import { readAgentRunRecord } from './streams/run-records';
+import { agentThreadStreamRuntime } from './thread-stream-runtime';
 
 /**
  * Agentic-loop runs currently being resumed in this process, for stores that
@@ -204,6 +210,86 @@ export class PlainAgentExecutionEngine extends AgentExecutionEngine {
   getPublishedRunOwner(runId: string): AgentRunOwner | undefined {
     const run = this.#publishedRuns.get(runId);
     return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
+  }
+
+  /** In-memory Mastra a standalone agent falls back to for storage, built on first use. */
+  #ephemeralMastra?: Mastra;
+
+  override registerMastra(mastra: Mastra): void {
+    super.registerMastra(mastra);
+    // A real Mastra replaces the storage fallback.
+    this.#ephemeralMastra = undefined;
+  }
+
+  /** The fallback Mastra, if one was built. */
+  get ephemeralMastra(): Mastra | undefined {
+    return this.#ephemeralMastra;
+  }
+
+  /**
+   * The workflows store of `mastra`, else of an in-memory Mastra: an agent that isn't registered
+   * on a Mastra still needs some storage for its suspended snapshots (agentic-loop resume,
+   * suspended-run discovery). The fallback is reused until a real Mastra is registered.
+   */
+  async workflowsStore(mastra: Mastra | undefined): Promise<WorkflowsStorage | undefined> {
+    const host = mastra ?? (await this.#getOrCreateEphemeralMastra());
+    return host.getStorage()?.getStore('workflows');
+  }
+
+  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
+    if (this.#ephemeralMastra) {
+      return this.#ephemeralMastra;
+    }
+    // Resolve the Mastra constructor without a static runtime import of the Mastra module, which
+    // would create an ESM init cycle (agent → mastra → agent/durable → agent). In any app that
+    // constructed a Mastra, the holder is already populated and no dynamic import runs; the
+    // `await import` is a fallback for standalone agents that never loaded the Mastra module.
+    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
+    const ephemeral = new MastraClass({
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
+    });
+    this.#ephemeralMastra = ephemeral;
+    return ephemeral;
+  }
+
+  /** Throws when the run was aborted: an aborted run can never be resumed. */
+  assertNotAborted(pubsub: PubSub | undefined, { agentName, runId }: { agentName: string; runId: string }): void {
+    if (agentThreadStreamRuntime.isResumeFenced(runId, pubsub)) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ABORTED_RUN',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${agentName}" cannot resume aborted run "${runId}".`,
+        details: { agentName, runId },
+      });
+    }
+  }
+
+  async getSuspendedRequestContextValue({
+    mastra,
+    pubsub,
+    agent,
+    runId,
+    key,
+  }: SuspendedRequestContextLookup): Promise<unknown> {
+    try {
+      this.assertNotAborted(pubsub, { agentName: agent.name, runId });
+      const snapshot = await this.loadSuspendedSnapshot(await this.workflowsStore(mastra), {
+        agentName: agent.name,
+        runId,
+        method: '__getSuspendedRunRequestContextValue',
+      });
+      return snapshot.requestContext?.[key];
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_RESUME_NO_SNAPSHOT_FOUND') return undefined;
+      throw error;
+    }
   }
 
   /**

@@ -9,7 +9,7 @@ import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { AgentExecutionEngine } from '../execution-engine';
-import type { AgentRunLog, AgentRunOwner } from '../execution-engine';
+import type { AgentRunLog, AgentRunOwner, SuspendedRequestContextLookup } from '../execution-engine';
 import type { AgentRunRecord } from '../streams/run-records';
 import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -987,6 +987,36 @@ export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
       // The suspension ended the step it saved, so the crash left none open.
       openStepsOf: stepSuspended ? [] : openStepsOfCrashedSegment(snapshot.requestContext, runId),
     };
+  }
+
+  async getSuspendedRequestContextValue({
+    mastra,
+    agent,
+    runId,
+    key,
+  }: SuspendedRequestContextLookup): Promise<unknown> {
+    if (!mastra) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agent.name}" __getSuspendedRunRequestContextValue() requires the agent to be registered on a Mastra instance.`,
+        details: { agentName: agent.name, runId },
+      });
+    }
+
+    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agent.name}" __getSuspendedRunRequestContextValue() requires persistent storage to load the run snapshot.`,
+        details: { agentName: agent.name, runId },
+      });
+    }
+
+    return this.loadSuspendedRequestContextValue(workflowsStore, runId, agent, key);
   }
 
   async loadSuspendedRequestContextValue(

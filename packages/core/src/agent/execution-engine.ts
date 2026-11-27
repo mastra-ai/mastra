@@ -1,3 +1,4 @@
+import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { ExtendedRunRegistry } from './durable/run-registry';
@@ -17,6 +18,18 @@ export interface AgentRunOwner {
 export interface AgentRunLog {
   bus: AgentStreamBus | undefined;
   usesSharedRunLog: boolean;
+}
+
+/** A lookup of one request-context value a suspended run saved. */
+export interface SuspendedRequestContextLookup {
+  /** The Mastra the agent is registered on, if any. */
+  mastra: Mastra | undefined;
+  /** The agent's pubsub, which records the runs that were aborted. */
+  pubsub: PubSub | undefined;
+  /** The agent, read after the storage await so a renamed agent is checked by its current id. */
+  agent: { id: string; name: string };
+  runId: string;
+  key: string;
 }
 
 /**
@@ -72,4 +85,7 @@ export abstract class AgentExecutionEngine {
 
   /** The shared ownership record of a run. Rejects when the record cache cannot be read. */
   abstract getRunRecord(agentId: string, runId: string, runLog: AgentRunLog): Promise<AgentRunRecord | undefined>;
+
+  /** The value of `key` in the request context a suspended run saved, or undefined. */
+  abstract getSuspendedRequestContextValue(lookup: SuspendedRequestContextLookup): Promise<unknown>;
 }

@@ -304,9 +304,11 @@ describe('Agent.streamUntilIdle', () => {
     await publishEvent('task.completed');
     await drain(result.fullStream as ReadableStream<any>);
 
-    expect(streamSpy).toHaveBeenCalledTimes(2);
-    expect(streamSpy.mock.calls[0]?.[1]).toMatchObject({ runId: 'caller-run-id' });
-    expect(streamSpy.mock.calls[1]?.[1]).not.toHaveProperty('runId');
+    // The deprecated wrapper delegates to stream({ untilIdle }), which runs the initial turn and the continuation.
+    expect(streamSpy).toHaveBeenCalledTimes(3);
+    expect(streamSpy.mock.calls[0]?.[1]).toMatchObject({ runId: 'caller-run-id', untilIdle: true });
+    expect(streamSpy.mock.calls[1]?.[1]).toMatchObject({ runId: 'caller-run-id' });
+    expect(streamSpy.mock.calls[2]?.[1]).not.toHaveProperty('runId');
   });
 
   it.each([
@@ -425,15 +427,14 @@ describe('Agent.streamUntilIdle', () => {
     mastra.addAgent(agent, 'abort-pending-continuation');
 
     const originalStream = agent.stream.bind(agent);
-    let streamCalls = 0;
     let markCreationStarted!: () => void;
     const creationStarted = new Promise<void>(resolve => {
       markCreationStarted = resolve;
     });
     let creationWasAborted = false;
     vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
-      streamCalls += 1;
-      if (streamCalls === 1) return originalStream(messages, options) as any;
+      // The wrapper's own stream() call and the initial turn carry the caller's runId; continuations drop it.
+      if (options?.runId) return originalStream(messages, options) as any;
 
       return new Promise((_, reject) => {
         markCreationStarted();
@@ -496,15 +497,14 @@ describe('Agent.streamUntilIdle', () => {
     mastra.addAgent(agent, 'cancel-pending-continuation');
 
     const originalStream = agent.stream.bind(agent);
-    let streamCalls = 0;
     let markCreationStarted!: () => void;
     const creationStarted = new Promise<void>(resolve => {
       markCreationStarted = resolve;
     });
     let creationWasAborted = false;
     vi.spyOn(agent, 'stream').mockImplementation((messages: any, options: any) => {
-      streamCalls += 1;
-      if (streamCalls === 1) return originalStream(messages, options) as any;
+      // The wrapper's own stream() call and the initial turn carry the caller's runId; continuations drop it.
+      if (options?.runId) return originalStream(messages, options) as any;
 
       return new Promise((_, reject) => {
         markCreationStarted();
@@ -572,7 +572,6 @@ describe('Agent.streamUntilIdle', () => {
     mastra.addAgent(agent, 'late-pending-continuation');
 
     const originalStream = agent.stream.bind(agent);
-    let streamCalls = 0;
     let markCreationStarted!: () => void;
     const creationStarted = new Promise<void>(resolve => {
       markCreationStarted = resolve;
@@ -585,8 +584,8 @@ describe('Agent.streamUntilIdle', () => {
     let onFinishCalled = false;
     let lateDrainPromise: Promise<any[]> | undefined;
     vi.spyOn(agent, 'stream').mockImplementation(async (messages: any, options: any) => {
-      streamCalls += 1;
-      if (streamCalls === 1) return originalStream(messages, options) as any;
+      // The wrapper's own stream() call and the initial turn carry the caller's runId; continuations drop it.
+      if (options?.runId) return originalStream(messages, options) as any;
 
       markCreationStarted();
       await creationGate;
