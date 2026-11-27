@@ -87,6 +87,30 @@ describe('importer link targets are read when the link is rendered', () => {
     return { paused, release, hold };
   }
 
+  /**
+   * Runs `during` once A is paused, then always releases A and waits for it to settle, so a failed
+   * assertion never strands A's open flush (and its connection) for the next test.
+   */
+  async function whilePaused<T>(
+    runA: Promise<T>,
+    { paused, release }: Pick<ReturnType<typeof gate>, 'paused' | 'release'>,
+    during: () => Promise<void>,
+  ): Promise<T> {
+    try {
+      await Promise.race([
+        paused,
+        runA.then(() => {
+          throw new Error('A finished without pausing');
+        }),
+      ]);
+      await during();
+    } finally {
+      release();
+      await runA.catch(() => undefined);
+    }
+    return runA;
+  }
+
   it("renders a link unresolved when another binding took its target over after this flush's earlier ops", async () => {
     const { run, at, store } = await setup();
     // A's next flush pauses once its first op is written, before the op that links to s.
@@ -101,14 +125,13 @@ describe('importer link targets are read when the link is rendered', () => {
       return getNode.call(this, bindingId, sourceId);
     });
     const runA = run('a', [upsert({ sourceId: 'x' }), upsert({ sourceId: 'l', links: [{ sourceId: 's' }] })]);
-    await paused;
+    const outcome = await whilePaused(runA, { paused, release }, async () => {
+      // B takes the page over at its own path, and commits, while A's flush is open.
+      expect(await run('b', [upsert({ sourceId: 's' })])).toMatchObject({ outcome: 'succeeded' });
+      expect(await store.importers!.getNode('a', 's')).toBeNull();
+    });
 
-    // B takes the page over at its own path, and commits, while A's flush is open.
-    expect(await run('b', [upsert({ sourceId: 's' })])).toMatchObject({ outcome: 'succeeded' });
-    expect(await store.importers!.getNode('a', 's')).toBeNull();
-    release();
-
-    expect(await runA).toMatchObject({ outcome: 'succeeded' });
+    expect(outcome).toMatchObject({ outcome: 'succeeded' });
     expect((await at(`a/${knowledgeImportKey('l')}`))?.body).toBe('body of l');
   });
 
@@ -126,14 +149,13 @@ describe('importer link targets are read when the link is rendered', () => {
       return getPage.call(this, input);
     });
     const runA = run('a', [upsert({ sourceId: 'l', links: [{ sourceId: 'u' }, { sourceId: 's' }] })]);
-    await paused;
+    const outcome = await whilePaused(runA, { paused, release }, async () => {
+      // B takes s's page over and commits before A reads it.
+      expect(await run('b', [upsert({ sourceId: 's' })])).toMatchObject({ outcome: 'succeeded' });
+      expect(await store.importers!.getNode('a', 's')).toBeNull();
+    });
 
-    // B takes s's page over and commits before A reads it.
-    expect(await run('b', [upsert({ sourceId: 's' })])).toMatchObject({ outcome: 'succeeded' });
-    expect(await store.importers!.getNode('a', 's')).toBeNull();
-    release();
-
-    expect(await runA).toMatchObject({ outcome: 'succeeded' });
+    expect(outcome).toMatchObject({ outcome: 'succeeded' });
     expect((await at(`a/${knowledgeImportKey('l')}`))?.body).toBe(
       `body of l\n\nLinks:\n- [[docs:acme#a/${knowledgeImportKey('u')}]]`,
     );
