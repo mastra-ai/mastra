@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { loadDoneSound, playDoneSound, saveDoneSound } from './done-sound';
+import { playDoneSound, saveDoneSound, useDoneSound } from './done-sound';
 
 import type { DoneSound } from './done-sound';
 import { SettingsSubsection } from './settings-subsection';
@@ -9,11 +8,9 @@ import { ThemeToggle } from '@/ds/components/ThemeToggle';
 import { SettingsContainer, SettingsRow } from '@/ds/new/settings';
 
 export function PreferencesSettings() {
-  const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
+  const doneSound = useDoneSound();
   const changeDoneSound = (next: DoneSound) => {
-    setDoneSound(next);
     saveDoneSound(next);
-
     playDoneSound(next);
   };
   return (

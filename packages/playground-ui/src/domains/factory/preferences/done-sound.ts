@@ -8,6 +8,8 @@
  * sidebar is the reliable signal, the sound is a nicety on top.
  */
 
+import { useSyncExternalStore } from 'react';
+
 export type DoneSound = 'none' | 'chime' | 'arcade' | 'fanfare';
 
 export const DONE_SOUND_OPTIONS: { value: DoneSound; label: string }[] = [
@@ -34,12 +36,32 @@ export function loadDoneSound(): DoneSound {
   return DEFAULT_DONE_SOUND;
 }
 
+const doneSoundListeners = new Set<() => void>();
+
 export function saveDoneSound(sound: DoneSound): void {
   try {
     localStorage.setItem(DONE_SOUND_KEY, sound);
   } catch {
     /* non-fatal */
   }
+  for (const listener of doneSoundListeners) listener();
+}
+
+function subscribeToDoneSound(listener: () => void) {
+  doneSoundListeners.add(listener);
+  // Another tab saving a sound updates this one too.
+  window.addEventListener('storage', listener);
+  return () => {
+    doneSoundListeners.delete(listener);
+    window.removeEventListener('storage', listener);
+  };
+}
+
+const serverDoneSound = () => DEFAULT_DONE_SOUND;
+
+/** The saved completion sound. Server rendering and hydration see the default, then the browser's saved one. */
+export function useDoneSound(): DoneSound {
+  return useSyncExternalStore(subscribeToDoneSound, loadDoneSound, serverDoneSound);
 }
 
 /** Calibrated against each other: `tail.wet` only lands right because the impulse is peak-normalized and the convolver's own normalization is off. */

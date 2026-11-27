@@ -14,6 +14,8 @@ import {
   PlatformConnectButton,
   PlatformConnectionActions,
 } from './platform-provider-connections';
+import { isIncidentioDirectConfigured, vantaSourcesEnabled } from './provider-intake-status';
+import type { IncidentioIntakeStatus, VantaIntakeStatus } from './provider-intake-status';
 import { Button } from '@/ds/components/Button';
 import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 
@@ -225,21 +227,9 @@ export function GitLabIntakeCard({
   );
 }
 
-export interface IncidentioIntakeStatus {
-  enabled: boolean;
-  configured: boolean;
-  mode?: 'api-key' | 'platform';
-  reason?: string;
-}
-
 export interface IntakeNamedSource {
   id: string;
   name: string;
-}
-
-/** A deployment API key serves follow-ups without a Platform connection. */
-export function isIncidentioDirectConfigured(status: IncidentioIntakeStatus | undefined) {
-  return Boolean(status?.enabled && status.configured && status.mode === 'api-key' && status.reason === 'ready');
 }
 
 export function IncidentioIntakeCard({
@@ -329,26 +319,6 @@ export function IncidentioIntakeCard({
   );
 }
 
-export function incidentioCredentialActive(
-  status: IncidentioIntakeStatus | undefined,
-  connections: PlatformProviderConnection[] | undefined,
-) {
-  return isIncidentioDirectConfigured(status) || Boolean(connections?.some(c => c.status === 'active'));
-}
-
-export interface VantaIntakeStatus {
-  enabled: boolean;
-  configured: boolean;
-  reason: 'ready' | 'missing_config' | 'organization_required' | 'auth_required';
-}
-
-export function vantaSourcesEnabled(
-  status: VantaIntakeStatus | undefined,
-  connections: PlatformProviderConnection[] | undefined,
-) {
-  return status?.reason === 'ready' && Boolean(connections?.some(c => c.status === 'active'));
-}
-
 export function VantaIntakeCard({
   config,
   listed,
@@ -364,9 +334,10 @@ export function VantaIntakeCard({
   sourcesQuery: IntakeQueryState<IntakeNamedSource[]>;
 }) {
   const vanta = config.vanta ?? { enabled: false, sourceIds: null };
-  const ready = statusQuery.data?.reason === 'ready';
   const connections = connectionsQuery.data ?? [];
   const connected = connections.some(connection => connection.status === 'active');
+  // The host keeps the sources query off otherwise, and a disabled query stays pending and still refetches by hand.
+  const sourcesEnabled = vantaSourcesEnabled(statusQuery.data, connectionsQuery.data);
   const sources = sourcesQuery.data ?? [];
   const unavailable = connectionsQuery.isError || statusQuery.isError;
   const description = connectionsQuery.isError
@@ -403,7 +374,7 @@ export function VantaIntakeCard({
             onClick={() => {
               void connectionsQuery.refetch();
               void statusQuery.refetch();
-              void sourcesQuery.refetch();
+              if (sourcesEnabled) void sourcesQuery.refetch();
             }}
           />
         )
@@ -421,9 +392,9 @@ export function VantaIntakeCard({
           ],
           selectedIds: vanta.sourceIds,
           saving: selection.saving,
-          loading: ready && sourcesQuery.isPending,
+          loading: sourcesEnabled && sourcesQuery.isPending,
           error: sourcesQuery.isError ? "Couldn't load Vanta sources." : undefined,
-          onRetry: () => void sourcesQuery.refetch(),
+          onRetry: sourcesEnabled ? () => void sourcesQuery.refetch() : undefined,
           onToggleItem: id => selection.update(current => toggleSource(current, id)),
         })}
     </IntakeProviderCard>

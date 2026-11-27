@@ -14,12 +14,9 @@ const AUDIBLE_SOUNDS = DONE_SOUND_OPTIONS.filter(option => option.value !== 'non
 /** The mute button swaps the value for `none`, so the picker keeps the sound it has to come back to. */
 export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (value: DoneSound) => void }) {
   const [lastAudible, setLastAudible] = useState<DoneSound>(value === 'none' ? 'chime' : value);
+  // An audible value can arrive after mount (a saved sound loading after hydration); unmuting returns to it.
+  if (value !== 'none' && value !== lastAudible) setLastAudible(value);
   const muted = value === 'none';
-
-  const pick = (sound: DoneSound) => {
-    setLastAudible(sound);
-    onChange(sound);
-  };
 
   return (
     <div className="flex items-center">
@@ -48,7 +45,7 @@ export function SoundPicker({ value, onChange }: { value: DoneSound; onChange: (
         disabled={muted}
         onValueChange={next => {
           const picked = AUDIBLE_SOUNDS.find(option => option.value === next);
-          if (picked) pick(picked.value);
+          if (picked) onChange(picked.value);
         }}
       >
         <SelectTrigger
