@@ -14,9 +14,24 @@ import type { StoreOperationsMySQL } from '../operations';
 import { generateTableSQL, generateIndexSQL } from '../operations';
 import { formatTableName, parseDateTime, quoteIdentifier, transformToSqlValue } from '../utils';
 
+/**
+ * Serializes a JSON column value for MySQL.
+ *
+ * MySQL stores these columns as `JSON`, and `mysql2` parses them back into
+ * JavaScript values on read, so the text written must be a valid JSON document
+ * for every value — not just objects. Writing a bare string (the old behaviour)
+ * is rejected by the server as invalid JSON, and `parseJson` below parses
+ * strings a second time, so a string has to be encoded twice: a single
+ * `JSON.stringify('42')` reads back as the number `42`.
+ *
+ * `undefined`/`null` map to a SQL `NULL` so a cleared column stays cleared
+ * instead of becoming the JSON string `'undefined'` or a JSON `null`.
+ * See mastra-ai/mastra#31613.
+ */
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+  if (v === undefined || v === null) return null;
+  if (typeof v === 'string') return JSON.stringify(JSON.stringify(v));
+  return JSON.stringify(v);
 }
 
 function parseJson(val: unknown): any {
@@ -179,10 +194,10 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
         task.resourceId ?? null,
         task.runId,
         task.status,
-        JSON.stringify(task.args),
-        task.result ? JSON.stringify(task.result) : null,
-        task.error ? JSON.stringify(task.error) : null,
-        task.suspendPayload ? JSON.stringify(task.suspendPayload) : null,
+        serializeJson(task.args),
+        serializeJson(task.result),
+        serializeJson(task.error),
+        serializeJson(task.suspendPayload),
         task.retryCount,
         task.maxRetries,
         task.timeoutMs,
@@ -193,7 +208,7 @@ export class BackgroundTasksMySQL extends BackgroundTasksStorage {
         task.ownerId ?? null,
         transformToSqlValue(task.leaseExpiresAt),
         transformToSqlValue(task.expiresAt),
-        task.metadata ? JSON.stringify(task.metadata) : null,
+        serializeJson(task.metadata),
       ],
     );
   }
