@@ -59,12 +59,15 @@ function replica(
 }
 
 /** A Work card in Planning with a bound planning session, and an engine whose workflow Mastra runs. */
-async function setup(deadlines?: WorkflowBoardEngineOptions['deadlines']) {
+async function setup({
+  deadlines,
+  runs,
+}: { deadlines?: WorkflowBoardEngineOptions['deadlines']; runs?: FactoryCardRuns } = {}) {
   const storage = (await createFactoryStorageForTests()).workItems;
   const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const runsUrl = `file:${join(dir, 'runs.db')}`;
-  const { engine, mastra } = replica(storage, runsUrl, undefined, undefined, undefined, deadlines);
+  const { engine, mastra } = replica(storage, runsUrl, undefined, runs, undefined, deadlines);
   const prepared = await storage.prepareRunStart({
     orgId: ORG,
     userId: 'user-1',
@@ -632,7 +635,7 @@ describe('the workflow board engine', () => {
   });
 
   it('gives a running or probing card a deadline, keeps it while the card stays so, and drops it otherwise', async () => {
-    const { storage, engine, item, binding } = await setup({ runningMs: 60_000, probingMs: 5_000 });
+    const { storage, engine, item, binding } = await setup({ deadlines: { runningMs: 60_000, probingMs: 5_000 } });
     const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
     const deadline = async () => (await engine.describe({ workItemId: item.id }))?.deadlineAt;
     const within = async (ms: number, ask: () => Promise<unknown>) => {
@@ -681,6 +684,154 @@ describe('the workflow board engine', () => {
       { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
     );
     expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeGreaterThanOrEqual(from + 6 * 3_600_000);
+  });
+
+  /** Runs on the card's sessions as a sweep finds them: ended, or still going and stoppable or not. */
+  function sweptRuns(state: { inFlight: boolean; stops?: boolean }) {
+    const stopped: ({ userId: string } | undefined)[] = [];
+    const runs: FactoryCardRuns = {
+      inFlight: async () => state.inFlight,
+      stop: async (_card, by) => {
+        stopped.push(by);
+        return state.stops ?? false;
+      },
+    };
+    return { runs, stopped };
+  }
+  const HOUR = 3_600_000;
+
+  it('probes a running card whose run ended unseen once its deadline passed, and flags it once the probe is overdue', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+
+    // Not due yet: nothing changes.
+    await engine.sweep(Date.now() + HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'probing',
+      deadlineAt: expect.any(Number),
+      phase: 'planning',
+      probes: 1,
+      attempts: 1,
+    });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 2,
+      attempts: 1,
+      reason: "The agent's run ended twice without reporting how the phase ended.",
+    });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('moves a running card past its deadline by the outcome its agent reported, through the engine Factory holds', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    // The agent reported the phase's end, but nobody heard its run end.
+    await storage.update({
+      orgId: ORG,
+      id: item.id,
+      userId: 'agent:binding',
+      patch: {
+        metadata: {
+          [PHASE_EXIT_METADATA_KEY]: { phase: 'planning', tool: 'submit_plan', at: new Date().toISOString() },
+        },
+      },
+    });
+    const seen: string[] = [];
+    const held: Pick<FactoryBoardEngine, 'requestMove'> = {
+      requestMove: request => {
+        seen.push(request.stage);
+        return engine.requestMove(request);
+      },
+    };
+
+    await engine.sweep(Date.now() + 7 * HOUR, held);
+
+    expect(seen).toEqual(['execute']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      phase: 'execute',
+      lastOutcome: 'advance',
+    });
+  });
+
+  it('stops a run still going past its deadline and flags the card as overdue, or looks again when the run is out of reach', async () => {
+    const going = { inFlight: true, stops: false };
+    const { runs, stopped } = sweptRuns(going);
+    const { engine, mastra, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const first = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+
+    // Another process holds the run: its own watch gives it up, so the card is looked at later.
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    const later = await engine.describe({ workItemId: item.id });
+    expect(later).toMatchObject({ state: 'running', probes: 0 });
+    expect(later!.deadlineAt).toBeGreaterThan(Date.now() + 29 * 60_000);
+    expect(later!.deadlineAt).toBeLessThan(first);
+
+    going.stops = true;
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    // Stopped by Factory itself, for no person.
+    expect(stopped).toEqual([undefined, undefined]);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 0,
+      attempts: 1,
+      failure: 'run_overdue',
+      reason: 'Agent run is overdue',
+    });
+    const run = await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id));
+    expect(JSON.stringify(run)).not.toContain('user-1');
+    expect(JSON.stringify(run)).not.toContain(ORG);
+  });
+
+  it('acts on nothing for a deadline the card has since moved past', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { engine, item, binding } = await setup({ runs });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    // What a sweep read while the card was probing, before the next attempt ran.
+    const read = await engine.workflow.listWorkflowRuns({ status: 'suspended' });
+    await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    const running = await engine.describe({ workItemId: item.id });
+    expect(running).toMatchObject({ state: 'running', probes: 1 });
+
+    const list = vi.spyOn(engine.workflow, 'listWorkflowRuns').mockResolvedValueOnce(read);
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+
+    expect(list).toHaveBeenCalled();
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(running);
+  });
+
+  it('counts one expiry once when every process sweeps it', async () => {
+    const { runs } = sweptRuns({ inFlight: false });
+    const { storage, engine, runsUrl, item, binding } = await setup({ runs });
+    const other = replica(storage, runsUrl, undefined, runs).engine;
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+
+    const now = Date.now() + 7 * HOUR;
+    await Promise.all([engine.sweep(now, engine), other.sweep(now, other), engine.sweep(now, engine)]);
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
   });
 
   it('counts a failed attempt once, however many times it is told', async () => {

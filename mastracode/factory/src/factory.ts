@@ -61,7 +61,7 @@ import {
 } from './auth.js';
 import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
 import { createDispatcherBoardEngine } from './board-engine/engine.js';
-import type { FactoryBoardEngineFactory } from './board-engine/engine.js';
+import type { FactoryBoardEngine, FactoryBoardEngineFactory } from './board-engine/engine.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
@@ -554,6 +554,8 @@ export interface MastraFactoryDispatcherConfig {
 }
 
 const CONTROLLER_ID = 'code';
+/** How often each process looks for cards whose automation is past its deadline. */
+const SWEEP_INTERVAL_MS = 60_000;
 
 /**
  * Providers whose sandbox a session's agent may recreate itself. Each needs
@@ -723,6 +725,8 @@ export class MastraFactory {
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The board engine's own workflows, registered with Mastra next to Factory's. */
   #boardEngineWorkflows: Readonly<Record<string, AnyWorkflow>> | undefined;
+  #boardEngine: FactoryBoardEngine | undefined;
+  #stopSweeps: (() => void) | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
@@ -1638,14 +1642,19 @@ export class MastraFactory {
             inFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,
             // A person stops only the runs of sessions they may drive, as the session's Stop does.
             stop: async (card, by) =>
-              (await this.#dispatcher?.stopRunsOnCard(card, async sessionId => {
-                const session = await sourceControlSessions.getBySessionId(sessionId);
-                return !session || canViewSourceControlSession(session, { orgId: card.orgId, userId: by.userId });
-              })) ?? false,
+              (await this.#dispatcher?.stopRunsOnCard(
+                card,
+                by &&
+                  (async sessionId => {
+                    const session = await sourceControlSessions.getBySessionId(sessionId);
+                    return !session || canViewSourceControlSession(session, { orgId: card.orgId, userId: by.userId });
+                  }),
+              )) ?? false,
           },
         })
       : undefined;
     this.#boardEngineWorkflows = boardEngine?.workflows;
+    this.#boardEngine = boardEngine;
     // Set once the API routes mount with the live controller; tools and processors read parked runs through it.
     let liveSessions: LiveSessions | undefined;
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
@@ -2930,12 +2939,32 @@ export class MastraFactory {
       );
     this.#dispatcher?.start();
     this.#sessionUnloader?.start();
+    this.#startSweeps();
     this.#startMetrics();
     // Outside the Mastra logger, which production runs at WARN. Under
     // `mastra factory dev` the CLI's ready banner reports boot time instead.
     if (bootDiagnosticsEnabled && this.#prepareStartedAt !== undefined)
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
     if (process.env.MASTRA_FACTORY_DEV === 'true') void logIntegrationSummary(this.#integrations);
+  }
+
+  /** Once a minute, an engine that keeps deadlines looks at the cards past theirs. */
+  #startSweeps(): void {
+    const engine = this.#boardEngine;
+    if (this.#stopSweeps || !engine?.sweep) return;
+    let sweeping = false;
+    const timer = setInterval(() => {
+      // A sweep slower than a minute isn't stacked up behind by the next.
+      if (sweeping) return;
+      sweeping = true;
+      engine.sweep!(Date.now(), engine)
+        .catch(error =>
+          console.warn(`[factory] sweeping board runs failed: ${error instanceof Error ? error.message : error}`),
+        )
+        .finally(() => (sweeping = false));
+    }, SWEEP_INTERVAL_MS);
+    timer.unref();
+    this.#stopSweeps = () => clearInterval(timer);
   }
 
   #startMetrics(): void {
@@ -2981,6 +3010,8 @@ export class MastraFactory {
             `[factory] unsubscribing from dispatcher wakes failed: ${error instanceof Error ? error.message : error}`,
           ),
         );
+      this.#stopSweeps?.();
+      this.#stopSweeps = undefined;
       const stopMetrics = this.#stopMetrics;
       this.#stopMetrics = undefined;
       await stopMetrics?.().catch(() => undefined);
