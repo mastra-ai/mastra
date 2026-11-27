@@ -797,6 +797,7 @@ const sidebars = {
   ],
   platformSidebar: [
     { type: 'doc', id: 'mastra-platform/overview', label: 'Overview' },
+    { type: 'doc', id: 'mastra-platform/sdk', label: 'Platform SDK', customProps: { tags: ['new'] } },
     {
       type: 'category',
       label: 'Deploy',

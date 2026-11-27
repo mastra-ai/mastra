@@ -1,0 +1,288 @@
+---
+title: 'Reference: MastraPlatform | Platform'
+description: 'API reference for MastraPlatform, the client for a Mastra platform project, including its options, managed agent methods, service accessors, and provisioning APIs.'
+packages:
+  - '@mastra/platform'
+---
+
+# MastraPlatform
+
+`MastraPlatform` is the client for a Mastra platform project. It creates and loads managed agents, returns the project's hosted services as Mastra types, and provisions projects and their resources. See [Platform SDK](/docs/mastra-platform/sdk) for how to use it.
+
+## Usage example
+
+```typescript title="src/platform.ts"
+import { MastraPlatform } from '@mastra/platform'
+
+export const platform = new MastraPlatform({
+  accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
+})
+
+const agent = await platform.createAgent({
+  name: 'Support',
+  instructions: 'Answer billing questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description:
+      'A project access token, organization API key, or `mastra auth login` session token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`. The constructor throws when no token is found.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description:
+      'The project to work in. Falls back to `MASTRA_PROJECT_ID`, then to the project a project access token was issued for. Only project methods need it, and they throw when it is missing.',
+    isOptional: true,
+  },
+  {
+    name: 'organizationId',
+    type: 'string',
+    description:
+      'The organization to act in. Needed with a session token; organization API keys and project tokens already carry it. Falls back to `MASTRA_ORG_ID`.',
+    isOptional: true,
+  },
+  {
+    name: 'apiUrl',
+    type: 'string',
+    description: 'The platform API URL. Falls back to `MASTRA_PLATFORM_API_URL`.',
+    isOptional: true,
+    defaultValue: "'https://platform.mastra.ai'",
+  },
+  {
+    name: 'fetch',
+    type: 'typeof fetch',
+    description: 'The `fetch` implementation for every request the client makes.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'The project this client works in. Throws when none was given or found.',
+  },
+  {
+    name: 'projects',
+    type: 'PlatformProjects',
+    description:
+      "The organization's projects: `list()`, `create({ name, region? })`, `get(projectId)`, and `delete(projectId)`. Needs a session token or an organization API key.",
+  },
+  {
+    name: 'connect',
+    type: 'ConnectClient',
+    description:
+      "The `@mastra/connect` client for the project. Call `withResource(resourceId)` to connect, list, and remove an end user's accounts.",
+  },
+  {
+    name: 'environments',
+    type: 'PlatformEnvironments',
+    description:
+      "The project's environments: `list()` and `create({ name, type, branch?, region? })`, where `type` is `'production'`, `'staging'`, or `'preview'`.",
+  },
+  {
+    name: 'memoryInstances',
+    type: 'PlatformMemoryInstances',
+    description: "The project's hosted Memory instances. See [Provisioning collections](#provisioning-collections).",
+  },
+  {
+    name: 'knowledgeInstances',
+    type: 'PlatformKnowledgeInstances',
+    description: "The project's hosted Knowledge instances. See [Provisioning collections](#provisioning-collections).",
+  },
+  {
+    name: 'databases',
+    type: 'PlatformDatabases',
+    description:
+      "The project's managed databases. Also has `connection(databaseId)`, which returns the database's connection environment variables as `envVars`.",
+  },
+  {
+    name: 'filesystems',
+    type: 'PlatformFilesystems',
+    description:
+      "File systems in the project's environments. `list()` and `create()` take an `environmentId`, and `delete()` takes the file system record.",
+  },
+  {
+    name: 'sandboxes',
+    type: 'PlatformSandboxes',
+    description:
+      "The platform's records of the project's sandboxes: `list(environmentId)` and `get(sandboxId)`. Use `createSandbox()` or `getSandbox()` to run commands.",
+  },
+]}
+/>
+
+## Methods
+
+### `project(projectId)`
+
+Returns a `MastraPlatform` for another project, with the same credentials and options.
+
+### `setupAgents(options?)`
+
+Sets the project up to run managed agents, then waits until it's ready. On a project that's already set up, it returns immediately. It throws if setup fails or doesn't finish within `options.timeoutMs`, which defaults to 15 minutes.
+
+### `agentsSetupStatus()`
+
+Returns whether the project is set up to run managed agents: `'none'`, `'provisioning'`, `'ready'`, or `'failed'`.
+
+### `createAgent(input)`
+
+Creates a managed agent in the project and returns it as a [`PlatformAgent`](/reference/platform/platform-agent).
+
+<PropertiesTable
+  content={[
+  {
+    name: 'name',
+    type: 'string',
+    description: 'The agent name.',
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description: 'The system instructions.',
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'The agent description. A supervisor reads it when deciding whether to delegate to the agent.',
+    isOptional: true,
+  },
+  {
+    name: 'model',
+    type: 'string',
+    description:
+      "A Mastra Gateway model as `provider/model`. Inference is billed to the agent's own Gateway key. Defaults to the platform's default model.",
+    isOptional: true,
+  },
+  {
+    name: 'connectionIds',
+    type: 'string[]',
+    description: 'IDs of Connect connections in the project whose tools the agent can use.',
+    isOptional: true,
+  },
+  {
+    name: 'skillIds',
+    type: 'string[]',
+    description: 'IDs of stored skills in the project to attach to the agent.',
+    isOptional: true,
+  },
+  {
+    name: 'builtinTools',
+    type: 'string[]',
+    description: 'IDs of built-in platform tools to enable, such as `list_agents`.',
+    isOptional: true,
+  },
+  {
+    name: 'codeMode',
+    type: 'boolean',
+    description: 'Whether the agent reaches its tools through code mode. Set to `false` to expose the tools directly.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+]}
+/>
+
+### `getAgent(agentId)`
+
+Returns an existing managed agent as a [`PlatformAgent`](/reference/platform/platform-agent), with its name, instructions, model, and tools read from the platform.
+
+### `listAgents()`
+
+Returns the project's managed agents, keyed by agent ID.
+
+### `getMemory(options?)`
+
+Returns a `PlatformMemory`, which extends `MastraMemory`, for a hosted Memory instance. `options.instanceId` falls back to `MASTRA_MEMORY_INSTANCE_ID`. The other options are those of `PlatformMemory`, such as `workingMemory`.
+
+### `getKnowledge(options?)`
+
+Returns a `PlatformKnowledge`, which extends `Knowledge`, for a hosted Knowledge instance. `options.instanceId` falls back to `MASTRA_KNOWLEDGE_INSTANCE_ID`.
+
+### `createSandbox(options?)`
+
+Starts a sandbox and resolves once it's running. Returns a [`PlatformSandbox`](/reference/workspace/platform-sandbox), which extends `MastraSandbox`. The options are those of `PlatformSandbox`, such as `environmentId` and `idleTimeoutMinutes`. Pass `sandboxId` to reattach to an existing sandbox when possible, and otherwise start a new one.
+
+### `getSandbox(sandboxId, options?)`
+
+Reconnects to a sandbox started earlier and returns it as a [`PlatformSandbox`](/reference/workspace/platform-sandbox). Throws when the sandbox no longer exists, instead of starting a new one.
+
+### `getFilesystem(filesystemId, options?)`
+
+Returns a provisioned file system as a [`PlatformFilesystem`](/reference/workspace/platform-filesystem), which extends `MastraFilesystem`. Throws while the file system is provisioning or if provisioning failed.
+
+### `getStorage(databaseId, options?)`
+
+Returns a provisioned database as `MastraStorage`. Throws while the database is provisioning or if provisioning failed.
+
+The store depends on the database's kind, and its package must be installed:
+
+| Kind | Store | Package |
+| - | - | - |
+| `turso` | `LibSQLStore` | `@mastra/libsql` |
+| `neon`, `postgres` | `PostgresStore` | `@mastra/pg` |
+| `redis` | `RedisStore` | `@mastra/redis` |
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: "The storage's ID in Mastra.",
+    isOptional: true,
+    defaultValue: 'databaseId',
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description: 'Skips creating and migrating tables, for runtimes that run migrations separately.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Provisioning collections
+
+`memoryInstances`, `knowledgeInstances`, `databases`, and `filesystems` share these methods:
+
+| Method | Description |
+| - | - |
+| `list()` | Lists the resources. `filesystems.list()` takes an `environmentId`. |
+| `create(input)` | Starts provisioning and returns the resource with status `provisioning`. See the inputs below. |
+| `get(id)` | Returns the resource. |
+| `waitUntilReady(id, options?)` | Polls until the resource is ready and returns it, throwing if provisioning fails or doesn't finish in time. |
+| `delete(id)` | Deletes the resource. `filesystems.delete()` takes the file system record, or `{ id, environmentId }`. |
+
+| Collection | `create()` input |
+| - | - |
+| `memoryInstances` | `{ name, environmentId? }`. Pass `environmentId` to scope the instance to one environment. |
+| `knowledgeInstances` | None. |
+| `databases` | `{ kind: 'turso' \| 'neon', name, regionId?, environmentId? }`, or `{ kind: 'redis' \| 'postgres', name, environmentId }`. |
+| `filesystems` | `{ environmentId, name }`. |
+
+Memory instance and file system names use lowercase letters, numbers, and dashes.
+
+`waitUntilReady()` accepts `timeoutMs`, which defaults to 15 minutes, and `intervalMs`, which defaults to 2 seconds. Creating Memory instances, Knowledge instances, and databases requires the `admin` role in the organization.
+
+## Errors
+
+Requests to project and provisioning APIs throw `MastraPlatformError` when the platform answers with an error status. It has the HTTP `status` and the response `body`.
+
+## Related
+
+- [Platform SDK](/docs/mastra-platform/sdk)
+- [`PlatformAgent`](/reference/platform/platform-agent)
+- [Mastra platform CLI commands](/reference/cli/mastra#mastra-platform-commands)

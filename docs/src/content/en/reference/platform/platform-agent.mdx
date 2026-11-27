@@ -1,0 +1,120 @@
+---
+title: 'Reference: PlatformAgent | Platform'
+description: 'API reference for PlatformAgent, a managed agent on Mastra platform as a Mastra Agent, including its run options, management methods, and how it reports its tools, model, and memory.'
+packages:
+  - '@mastra/platform'
+---
+
+# PlatformAgent
+
+`PlatformAgent` is a managed agent on Mastra platform as a Mastra [`Agent`](/reference/agents/agent). Its runs happen on the platform with the agent's own instructions, model, tools, and memory. Register it with your Mastra instance, give it to another agent as a sub-agent, or run it as a workflow step, as with any other agent.
+
+Get one from [`MastraPlatform`](/reference/platform/mastra-platform) with `createAgent()` or `getAgent()`. See [Platform SDK](/docs/mastra-platform/sdk) for how to use it.
+
+## Usage example
+
+```typescript title="src/support.ts"
+import { MastraPlatform } from '@mastra/platform'
+
+const platform = new MastraPlatform()
+const agent = await platform.getAgent('agent_123')
+
+const response = await agent.generate('Where is my invoice?', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+})
+
+console.log(response.text)
+```
+
+## Run options
+
+`stream()` and `generate()` have the same signatures and return the same output as [`Agent.stream()`](/reference/streaming/agents/stream) and [`Agent.generate()`](/reference/agents/generate). The run happens on the platform, so these options are sent with it:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      "The end user the run acts for. Falls back to the request context's `mastra__resourceId`, then to `memory.resource`. A run with no end user fails with a `400` error.",
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: '{ thread: string | { id: string }; resource: string; options?: MemoryConfig }',
+    description: "The conversation thread to continue or start, saved in the project's platform Memory.",
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext | Record<string, unknown>',
+    description:
+      'Values for the run. Only JSON values are sent, and keys starting with `mastra__` or `__mastra_` are left out.',
+    isOptional: true,
+  },
+  {
+    name: 'structuredOutput',
+    type: 'StructuredOutputOptions',
+    description:
+      "Returns the reply as an object matching `schema`. The `model` option, which repairs output locally, isn't sent.",
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Stops the run and closes the stream.',
+    isOptional: true,
+  },
+]}
+/>
+
+`runId`, `maxSteps`, `modelSettings`, `toolChoice`, `activeTools`, `instructions`, `system`, `context`, `savePerStep`, and `providerOptions` are also sent. `onChunk`, `onStepFinish`, `onFinish`, and `onError` run locally. Other options, such as `tools`, `toolsets`, and `processors`, act on a local run and are ignored.
+
+A run that fails partway through rejects `generate()` and the stream's promises with the platform's reason.
+
+## Methods
+
+### `details()`
+
+Returns the agent's configuration on the platform: its instructions, model, tools, and skills.
+
+### `update(input)`
+
+Updates the agent and publishes a new version. Only the fields you pass change. `input` takes the same fields as [`createAgent()`](/reference/platform/mastra-platform#createagentinput). The agent's `name`, instructions, model, and tools update in place.
+
+### `delete()`
+
+Deletes the agent, its workspace files, and its Gateway key.
+
+### `listThreads(params)`
+
+Returns an end user's threads with the agent, most recently updated first. `params` takes `resourceId`, and optionally `page` and `perPage`.
+
+### `listMessages(threadId, params)`
+
+Returns the messages in one of an end user's threads with the agent. `params` takes `resourceId`, and optionally `page` and `perPage`.
+
+### `listTools()`
+
+Returns the agent's tools as Mastra tools, with their descriptions and input schemas. Executing a tool runs it on the platform with the agent's own connections, for the end user named by the calling agent's `resourceId` or the request context's `mastra__resourceId`.
+
+### `getModel()`
+
+Returns the agent's model. When `MASTRA_GATEWAY_API_KEY` is set, it's the same model through the [Mastra Gateway](/docs/mastra-platform/gateway/overview), billed to that key. Without the key, the model reports its provider and ID, and calling it throws.
+
+### `getMemory()`
+
+Returns the platform Memory the project's managed agents save conversations in, as a `MastraMemory`. Returns `undefined` until the project's agents database is ready. `hasOwnMemory()` always returns `true`.
+
+## Behavior as a sub-agent
+
+When a supervisor delegates to a `PlatformAgent`, the reply keeps the message IDs the platform saved it under. The supervisor's save of the delegated conversation updates those messages instead of adding copies.
+
+As with any sub-agent, the delegated run acts for a resource derived from the supervisor's, such as `user-1-billing`, not the supervisor's end user.
+
+## Related
+
+- [Platform SDK](/docs/mastra-platform/sdk)
+- [`MastraPlatform`](/reference/platform/mastra-platform)
+- [Agent class](/reference/agents/agent)
+- [Sub-agents](/docs/subagents)

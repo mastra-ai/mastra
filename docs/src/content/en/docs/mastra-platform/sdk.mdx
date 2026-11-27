@@ -1,0 +1,234 @@
+---
+title: 'Platform SDK | Mastra platform'
+description: "Run managed agents and use a project's Memory, Knowledge, Connect, sandboxes, file systems, and databases from code with the MastraPlatform client."
+packages:
+  - '@mastra/platform'
+---
+
+# Platform SDK
+
+`MastraPlatform` from `@mastra/platform` is a client for a Mastra platform project. It creates and runs managed agents, which run on the platform, and hands you the project's hosted services as the Mastra types they stand in for: a managed agent is an `Agent`, hosted Memory is a `MastraMemory`, a provisioned database is a `MastraStorage`, and so on. You can pass each one anywhere Mastra accepts that type.
+
+The same client also provisions projects for an organization member. To do the same from a terminal, use the [Mastra platform CLI commands](/reference/cli/mastra#mastra-platform-commands).
+
+:::note
+`@mastra/platform` is in alpha. Its API can change between releases.
+:::
+
+## Install
+
+```bash npm2yarn
+npm install @mastra/platform
+```
+
+## Create a client
+
+[Create an access token](/docs/mastra-platform/access-tokens#create-an-access-token) for your project and add it to your `.env` file:
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=your-access-token
+```
+
+Create the client:
+
+```typescript title="src/platform.ts"
+import { MastraPlatform } from '@mastra/platform'
+
+export const platform = new MastraPlatform()
+```
+
+The client reads the token from `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`, and throws if neither is set. A project access token names its project, so you don't pass a project ID. With an organization API key or a `mastra auth login` session token, pass `projectId` (or set `MASTRA_PROJECT_ID`) for project methods, and pass `organizationId` (or set `MASTRA_ORG_ID`) with a session token. See the [`MastraPlatform` reference](/reference/platform/mastra-platform) for every option.
+
+## Run a managed agent
+
+A managed agent is stored and run on the platform: its instructions, model, tools, and conversations live in your project. Set the project up for managed agents once, then create an agent:
+
+```typescript title="src/support.ts"
+import { platform } from './platform'
+
+await platform.setupAgents()
+
+const agent = await platform.createAgent({
+  name: 'Support',
+  instructions: 'Answer billing questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+`setupAgents()` provisions the project's agents database and waits until it's ready. It returns immediately on a project that's already set up. Save the agent's `id` and load the agent later with `platform.getAgent(id)`.
+
+Run the agent with `stream()` or `generate()`, as with a local agent:
+
+```typescript
+const response = await agent.stream('Where is my invoice?', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+})
+
+for await (const text of response.textStream) {
+  process.stdout.write(text)
+}
+```
+
+Every run acts for an end user, the person your app is answering. Pass it as `memory.resource`, or as `resourceId` when the run doesn't use a thread. A run without an end user fails with a `400` error. The end user scopes the conversation, and the Connect accounts the agent's tools can use.
+
+The run happens on the platform, so only options that can be sent over HTTP apply, such as `memory`, `requestContext`, `structuredOutput`, `maxSteps`, and `modelSettings`. Callbacks such as `onChunk` and `onFinish` run locally. Options that change a local run, such as `tools` or `processors`, are ignored. See [`PlatformAgent`](/reference/platform/platform-agent) for the full list.
+
+## Use a managed agent as a Mastra agent
+
+`PlatformAgent` extends [`Agent`](/reference/agents/agent). A managed agent works anywhere a local agent does. Register it with your Mastra instance, give it to another agent as a [sub-agent](/docs/subagents), or run it as a [workflow](/docs/workflows/overview) step:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { platform } from '../platform'
+
+const billing = await platform.getAgent(process.env.BILLING_AGENT_ID!)
+
+const supervisor = new Agent({
+  id: 'supervisor',
+  name: 'Supervisor',
+  instructions: 'Send billing questions to the billing agent.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  agents: { billing },
+})
+
+export const mastra = new Mastra({ agents: { billing, supervisor } })
+```
+
+A managed agent also reports how it's configured on the platform:
+
+- `listTools()` returns the agent's tools. Calling a tool runs it on the platform for the end user.
+- `getModel()` returns the agent's model. Code that calls the model directly runs it through the [Mastra Gateway](/docs/mastra-platform/gateway/overview) when `MASTRA_GATEWAY_API_KEY` is set. Without the key, the call throws.
+- `getMemory()` returns the platform Memory the agent's conversations are saved in, once the project's agents database is ready.
+
+When a supervisor delegates to a managed agent, the platform saves the delegated conversation and the supervisor's own save updates the same messages, so the conversation isn't stored twice.
+
+As with any sub-agent, a managed agent called by a supervisor runs for a resource derived from the supervisor's, such as `user-1-billing`, not for the supervisor's end user. Connect accounts the end user added aren't available to it. To reach them, call the managed agent directly.
+
+## Manage agents and conversations
+
+```typescript
+const agents = await platform.listAgents()
+
+const agent = await platform.getAgent('agent_123')
+await agent.update({ instructions: 'Answer billing and refund questions.' })
+
+const { threads } = await agent.listThreads({ resourceId: 'user-1' })
+const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1' })
+
+await agent.delete()
+```
+
+`update()` changes only the fields you pass and publishes a new version of the agent. `delete()` also removes the agent's workspace files and Gateway key.
+
+## Use the project's services
+
+The client returns each hosted service as the Mastra type it stands in for:
+
+| Method | Returns | Use it as |
+| - | - | - |
+| `getMemory({ instanceId })` | `PlatformMemory`, a `MastraMemory` | An agent's `memory`. |
+| `getKnowledge({ instanceId })` | `PlatformKnowledge`, a `Knowledge` | An agent's `knowledge`. |
+| `connect` | `ConnectClient` from `@mastra/connect` | Connect an end user's accounts. See [Connect](/docs/mastra-platform/connect). |
+| `createSandbox()`, `getSandbox(id)` | `PlatformSandbox`, a `MastraSandbox` | A workspace's `sandbox`, or run commands directly. |
+| `getFilesystem(id)` | `PlatformFilesystem`, a `MastraFilesystem` | A workspace's `filesystem`. |
+| `getStorage(id)` | `LibSQLStore`, `PostgresStore`, or `RedisStore` | Storage for `new Mastra({ storage })` or `new Memory({ storage })`. |
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Agent } from '@mastra/core/agent'
+import { Workspace } from '@mastra/core/workspace'
+import { platform } from '../platform'
+
+const agent = new Agent({
+  id: 'support',
+  name: 'Support',
+  instructions: 'Answer billing questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: platform.getMemory({ instanceId: process.env.MASTRA_MEMORY_INSTANCE_ID }),
+  workspace: new Workspace({
+    filesystem: await platform.getFilesystem(process.env.UPLOADS_FILESYSTEM_ID!),
+    sandbox: await platform.createSandbox({ environmentId: process.env.MASTRA_ENVIRONMENT_ID }),
+  }),
+})
+
+export const mastra = new Mastra({
+  agents: { agent },
+  storage: await platform.getStorage(process.env.APP_DATABASE_ID!),
+})
+```
+
+`getFilesystem()` and `getStorage()` throw while the resource is still provisioning. `getStorage()` loads the store package for the database's kind, so install it alongside `@mastra/platform`:
+
+| Database kind | Package |
+| - | - |
+| Turso | `@mastra/libsql` |
+| Neon, Postgres | `@mastra/pg` |
+| Redis | `@mastra/redis` |
+
+Connect an end user's accounts through `connect.withResource()`. Connections made this way are visible to, and removable by, only that end user:
+
+```typescript
+const user = platform.connect.withResource('user-1')
+
+const { connectionId } = await user.createConnectSession('github')
+const { connectUrl } = await user.getConnectUrl(connectionId)
+```
+
+Send the end user to `connectUrl` to authorize the account.
+
+## Provision a project
+
+With an organization API key or a session token, the client creates projects and provisions what runs in them. Provisioning runs in the background: `create()` returns the resource while its status is `provisioning`, and `waitUntilReady()` waits until it's ready.
+
+```typescript title="scripts/provision.ts"
+import { MastraPlatform } from '@mastra/platform'
+
+const platform = new MastraPlatform({
+  accessToken: process.env.MASTRA_API_TOKEN,
+  organizationId: 'org_123',
+})
+
+const created = await platform.projects.create({ name: 'Support Desk' })
+const project = platform.project(created.id)
+await project.setupAgents()
+
+const memory = await project.memoryInstances.create({ name: 'support-memory' })
+await project.memoryInstances.waitUntilReady(memory.id)
+
+const database = await project.databases.create({ kind: 'turso', name: 'app-db' })
+await project.databases.waitUntilReady(database.id)
+```
+
+`platform.project(id)` returns a client for another project with the same credentials. `waitUntilReady()` waits up to 15 minutes by default and throws if provisioning fails. Creating Memory instances, Knowledge instances, and databases requires the `admin` role in the organization.
+
+## Handle errors
+
+When the platform rejects a project or provisioning request, such as `projects.create()` or `databases.get()`, the client throws `MastraPlatformError` with the HTTP status as `status` and the response body as `body`:
+
+```typescript
+import { MastraPlatformError } from '@mastra/platform'
+
+try {
+  await platform.databases.get('db_missing')
+} catch (error) {
+  if (error instanceof MastraPlatformError && error.status === 404) {
+    // The database doesn't exist
+  }
+}
+```
+
+Managed agent requests throw the [`@mastra/client-js`](/reference/client-js/mastra-client) error for the response, and a run that fails partway through rejects with the platform's reason.
+
+## Limitations
+
+- Approving or declining a managed agent's tool calls, and resuming or stopping its runs, require a signed-in user's token. Project access tokens and organization API keys can't do this yet.
+- Request context values that aren't JSON, and keys reserved by Mastra (those starting with `mastra__` or `__mastra_`), aren't sent to a managed agent run.
+
+## Related
+
+- [`MastraPlatform` reference](/reference/platform/mastra-platform)
+- [`PlatformAgent` reference](/reference/platform/platform-agent)
+- [Mastra platform CLI commands](/reference/cli/mastra#mastra-platform-commands)
+- [Access tokens](/docs/mastra-platform/access-tokens)
+- [Sub-agents](/docs/subagents)

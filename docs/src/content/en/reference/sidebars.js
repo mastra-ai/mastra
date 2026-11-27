@@ -613,6 +613,15 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Platform',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'platform/mastra-platform', label: 'MastraPlatform' },
+        { type: 'doc', id: 'platform/platform-agent', label: 'PlatformAgent' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Processors',
       collapsed: true,
       items: [
