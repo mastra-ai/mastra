@@ -176,6 +176,20 @@ describe('isReconnectableMCPError', () => {
     expect(isReconnectableMCPError(new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): gone'))).toBe(false);
   });
 
+  it('keeps a numeric JSON-RPC code when a string code and HTTP status sit in error data', () => {
+    // A ProtocolError holds its JSON-RPC code numerically on the error itself, while an upstream
+    // payload can put its own string code and an HTTP status in `data`. The numeric protocol code
+    // must survive extraction so this stays non-reconnectable, instead of the structured 404 in
+    // `data.status` authorizing a reconnect the server's handler already rejected.
+    const protocolError = new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): upstream failed', {
+      code: 'UPSTREAM_HTTP_ERROR',
+      status: 404,
+    });
+
+    expect(getMCPDiscoveryErrorDetails(protocolError)).toMatchObject({ httpStatus: 404, code: -32603 });
+    expect(isReconnectableMCPError(protocolError)).toBe(false);
+  });
+
   it('classifies structured statuses by status value, not by how the status was attached', () => {
     const httpError = (status: number) =>
       new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: rejected', { status });
@@ -221,6 +235,14 @@ describe('isUnsentRequestError', () => {
     ['transport closed', new Error('Connection closed'), false],
     ['not reconnectable', new Error('Validation failed'), false],
     ['JSON-RPC error quoting a refused connection', new ProtocolError(-32603, 'connect ECONNREFUSED 10.0.0.2:5432'), false],
+    [
+      'JSON-RPC error whose data carries a string code and structured 404',
+      new ProtocolError(-32603, 'Error POSTing to endpoint (HTTP 404): gone', {
+        code: 'UPSTREAM_HTTP_ERROR',
+        status: 404,
+      }),
+      false,
+    ],
     [
       'HTTP 500 whose body quotes a refused connection',
       new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, 'Error POSTing to endpoint: connect ECONNREFUSED 10.0.0.2:5432', {

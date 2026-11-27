@@ -173,11 +173,14 @@ export function getMCPDiscoveryErrorDetails(error: unknown): MCPDiscoveryErrorDe
     }
 
     for (const candidate of [getErrorProperty(record, 'code'), getErrorProperty(data, 'code')]) {
-      if (typeof candidate === 'string' || typeof candidate === 'number') {
-        // Prefer the deepest code: outer Mastra errors describe the aggregate
-        // operation, while the innermost SDK/network code classifies the cause.
-        code = candidate;
-      }
+      if (typeof candidate !== 'string' && typeof candidate !== 'number') continue;
+      // A numeric code is a JSON-RPC protocol code: it proves the server's handler ran and is
+      // exactly what isReconnectableMCPError and isUnsentRequestError test for, so it must not
+      // be replaced by a string SDK/application code — including one carried in `data`.
+      if (typeof code === 'number' && typeof candidate !== 'number') continue;
+      // Otherwise prefer the deepest code: outer Mastra errors describe the aggregate
+      // operation, while the innermost SDK/network code classifies the cause.
+      code = candidate;
     }
 
     current = getErrorProperty(record, 'cause');
