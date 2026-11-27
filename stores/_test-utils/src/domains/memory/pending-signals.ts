@@ -625,7 +625,49 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         ]);
       });
 
-      // SQL LIKE treats `_` as a wildcard, and SQLite's LIKE ignores ASCII case.
+      it('deletes nothing when deleteThread gets a reserved id', async () => {
+        const thread = await newThread();
+        const runId = await startRun(thread);
+        const taken = await send(thread);
+        expect(ids(await claim(thread, runId))).toEqual([taken.id]);
+        const pending = await send(thread);
+
+        await memory.deleteThread({ threadId: reservedFor(thread) });
+
+        expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
+        expect(await pendingIds(thread)).toEqual([pending.id]);
+        expect(ids(await claim(thread, runId))).toEqual([taken.id, pending.id]);
+      });
+
+      it('rejects a reserved thread id in every pending-signal method', async () => {
+        const thread = await newThread();
+        const runId = await startRun(thread);
+        const taken = await send(thread);
+        expect(ids(await claim(thread, runId))).toEqual([taken.id]);
+        const pending = await send(thread);
+        const reserved = { ...thread, id: reservedFor(thread) };
+
+        const rejected = [
+          () => memory.setSignalRun({ threadId: reserved.id, runId }),
+          () => memory.getSignalRun({ threadId: reserved.id }),
+          () => memory.enqueuePendingSignal({ message: signalFor(reserved) }),
+          () => memory.enqueuePendingSignal({ message: signalFor(reserved), toRunId: runId }),
+          () => memory.claimPendingSignals({ threadId: reserved.id, runId, consumedIds: [] }),
+          () => memory.closeSignalRun({ threadId: reserved.id, runId, consumedIds: [taken.id] }),
+          () => memory.cancelPendingSignals({ threadId: reserved.id, ids: [pending.id] }),
+          () => memory.listPendingSignals({ threadId: reserved.id }),
+        ];
+        for (const [index, call] of rejected.entries()) {
+          await expect(call(), `call ${index}`).rejects.toThrow(/reserved/);
+        }
+
+        // The real thread's run, its taken row and its pending row are as they were.
+        expect(await memory.getSignalRun({ threadId: thread.id })).toBe(runId);
+        expect(await pendingIds(thread)).toEqual([pending.id]);
+        expect(ids(await claim(thread, runId))).toEqual([taken.id, pending.id]);
+      });
+
+      // SQLite's LIKE ignores ASCII case, so a prefix test built on it would match the first id.
       it.each([
         'MASTRA-PENDING-SIGNALS:',
         'mastra_pending_signals:',
@@ -759,6 +801,38 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         expect(await claim(thread, runId)).toEqual([]);
       });
 
+      // A page read orders by the stored createdAt; a full read re-sorted in JS would not show a stale one.
+      it('orders a saved signal by its saved createdAt in a page read', async () => {
+        const thread = await newThread();
+        const base = Date.now() - 30_000;
+        const signal = await send(thread, { createdAt: new Date(base) });
+        const message = createSampleMessageV2({ ...scope(thread), createdAt: new Date(base + 1_000) });
+        await memory.saveMessages({ messages: [message] });
+        await memory.saveMessages({ messages: [{ ...signal, createdAt: new Date(base + 2_000) }] });
+
+        const first = await memory.listMessages({ threadId: thread.id, perPage: 1 });
+        expect(ids(first.messages)).toEqual([message.id]);
+        const second = await memory.listMessages({ threadId: thread.id, perPage: 1, page: 1 });
+        expect(ids(second.messages)).toEqual([signal.id]);
+      });
+
+      // A prefix test built with LIKE from the thread id would treat `_` in it as a wildcard.
+      it('leaves a pending signal in place when it is saved under a thread whose id matches it as a pattern', async () => {
+        const suffix = randomUUID();
+        const owner = await memory.saveThread({
+          thread: createSampleThread({ id: `pa${suffix}` }) as StorageThreadType,
+        });
+        const pattern = await memory.saveThread({
+          thread: createSampleThread({ id: `p_${suffix}`, resourceId: owner.resourceId }) as StorageThreadType,
+        });
+        const signal = await send(owner);
+
+        await memory.saveMessages({ messages: [{ ...signal, ...scope(pattern) }] });
+
+        expect(await pendingIds(owner)).toEqual([signal.id]);
+        expect(await visibleIds(pattern)).toEqual([]);
+      });
+
       it('keeps a saved row claimed through a second save and a transfer, and returns it once until close', async () => {
         const thread = await newThread();
         const runId = await startRun(thread);
@@ -882,6 +956,23 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
 
         expect(await memory.getSignalRun({ threadId: thread.id })).toBe(current);
         expect(await pendingIds(thread)).toEqual([claimed.id]);
+      });
+
+      it('settles only the rows of the closed thread when one run is the signal run of two threads', async () => {
+        const first = await newThread();
+        const second = await newThread();
+        const runId = await startRun(first);
+        await startRun(second, runId);
+        const firstRow = await send(first);
+        const secondRow = await send(second);
+        expect(ids(await claim(first, runId))).toEqual([firstRow.id]);
+        expect(ids(await claim(second, runId))).toEqual([secondRow.id]);
+
+        await close(first, runId, [firstRow.id]);
+
+        expect(await memory.getSignalRun({ threadId: second.id })).toBe(runId);
+        expect(await pendingIds(second)).toEqual([]);
+        expect(ids(await claim(second, runId))).toEqual([secondRow.id]);
       });
 
       it('is a no-op for a run that never claimed anything', async () => {

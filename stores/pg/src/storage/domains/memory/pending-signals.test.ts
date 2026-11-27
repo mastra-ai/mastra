@@ -325,15 +325,22 @@ function raceTests(ctx: Ctx) {
         const thread = await newThread();
         const other = await newThread(thread.resourceId);
         const runId = await startRun(thread);
-        // Sent in the reverse of the lock order, so a scan of the pending-signal id meets them that way.
+        // Ids in lock order, sent in the reverse order, so a scan of the pending-signal id meets them that way.
         const prefix = `signal-${randomUUID()}`;
-        const sent = Array.from({ length: 12 }, (_, index) => signalFor(thread, { id: `${prefix}-${index}` }));
+        const sent = Array.from({ length: 12 }, (_, index) =>
+          signalFor(thread, { id: `${prefix}-${String(index).padStart(2, '0')}` }),
+        );
         for (const message of reversed(sent)) {
           expect(await ctx.memory.enqueuePendingSignal({ message })).toBe('accepted');
         }
         await claim(thread, runId);
+        // Every other row is saved into the thread, so in lock order the thread's rows alternate
+        // between the pending-signal id and the thread id, starting with a pending row.
+        await ctx.memory.saveMessages({ messages: sent.filter((_, index) => index % 2 === 1) });
         const late = await sendMany(thread, 4);
         const all = [...sent, ...late];
+        // Saved and pending rows, named out of lock order.
+        const toOther = [sent[5]!, sent[0]!, sent[3]!, sent[4]!, sent[1]!, sent[2]!];
 
         const results = await startShifted<unknown>(
           [
@@ -341,8 +348,7 @@ function raceTests(ctx: Ctx) {
               ctx.memory.saveMessages({
                 messages: reversed(all).map(message => ({ ...message, createdAt: new Date() })),
               }),
-            () =>
-              ctx.peer.saveMessages({ messages: all.slice(0, 6).map(message => ({ ...message, threadId: other.id })) }),
+            () => ctx.peer.saveMessages({ messages: toOther.map(message => ({ ...message, threadId: other.id })) }),
             () => ctx.peer.closeSignalRun({ threadId: thread.id, runId, consumedIds: ids(sent.slice(0, 3)) }),
             () => ctx.memory.deleteMessages(reversed(ids(all.slice(4, 10)))),
             () => ctx.peer.deleteThread({ threadId: thread.id }),
@@ -361,7 +367,7 @@ function raceTests(ctx: Ctx) {
         // What survives is in the other thread: rows that had become messages before that save moved them.
         const { messages: moved } = await ctx.memory.listMessages({ threadId: other.id, perPage: false });
         expect(sorted(await existing(ids(all)))).toEqual(sorted(ids(moved)));
-        expect(ids(all.slice(0, 6))).toEqual(expect.arrayContaining(ids(moved)));
+        expect(ids(toOther)).toEqual(expect.arrayContaining(ids(moved)));
       }
     },
     RACE_TIMEOUT,
