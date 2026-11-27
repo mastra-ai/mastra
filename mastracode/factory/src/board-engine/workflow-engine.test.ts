@@ -17,21 +17,36 @@ import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
-import type { FactoryBoardEngine } from './engine.js';
+import { DispatcherBoardEngine } from './engine.js';
+import type { FactoryBoardEngine, FactoryCardRuns } from './engine.js';
 import { WorkflowBoardEngine } from './workflow-engine.js';
 
 const ORG = 'org-1';
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
 /** One process: an engine on the card storage, its workflow run by a Mastra on the shared run storage. */
-function replica(storage: WorkItemsStorage, runsUrl: string, before?: () => Promise<void>) {
+function replica(
+  storage: WorkItemsStorage,
+  runsUrl: string,
+  before?: () => Promise<void>,
+  runs?: FactoryCardRuns,
+  interruptWaitMs?: number,
+) {
   const boards = createBoardRegistry();
-  const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+  const transitionService = new FactoryTransitionService({
+    storage,
+    configVersion: 'rules-v1',
+    boards,
+    ...(runs ? { runInFlight: runs.inFlight } : {}),
+  });
   const transition = async (request: FactoryTransitionRequest) => {
     await before?.();
     return transitionService.transition(request);
   };
-  const engine = new WorkflowBoardEngine({ transitionService: { transition }, workItems: storage, boards });
+  const engine = new WorkflowBoardEngine(
+    { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) },
+    { interruptWaitMs },
+  );
   const mastra = new Mastra({
     storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
     workflows: engine.workflows,
@@ -90,6 +105,178 @@ function personMove(storage: WorkItemsStorage, id: string, stage: string, identi
 }
 
 describe('the workflow board engine', () => {
+  /** A card whose planning run is going until it is stopped, or forever when `ends` is false. */
+  function goingRun(ends: boolean, reached = true) {
+    const calls: string[] = [];
+    const stoppedFor: string[] = [];
+    let inFlight = true;
+    const runs: FactoryCardRuns = {
+      inFlight: async () => inFlight,
+      stop: async (_card, by) => {
+        calls.push('stop');
+        stoppedFor.push(by.userId);
+        if (ends) setTimeout(() => (inFlight = false), 20);
+        return reached;
+      },
+    };
+    return { calls, runs, stoppedFor, again: () => (inFlight = true) };
+  }
+
+  it('stops the run on a card a person moves into another phase that runs, and commits the move once it ended', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(true);
+    const { engine, mastra } = replica(storage, runsUrl, undefined, runs);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(calls).toEqual(['stop']);
+    // That the run was stopped for the move is told to the transition only: nothing keeps it.
+    const kept = JSON.stringify([
+      await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id)),
+      await storage.get({ orgId: ORG, id: item.id }),
+      await storage.listDeferredDecisions(ORG, PROJECT_ID),
+      await storage.getTransitionResultByIngress(ORG, PROJECT_ID, 'drag-1'),
+    ]);
+    expect(kept).toContain('execute');
+    expect(kept).not.toContain('interruptedRun');
+  });
+
+  it('stops no run for a move it already answered, asked again as another move', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs, stoppedFor, again } = goingRun(true);
+    const { engine } = replica(storage, runsUrl, undefined, runs);
+    const first = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+    expect(stoppedFor).toEqual(['user-1']);
+
+    // Building's run is going when the same request id comes back, asking for a move the board allows.
+    again();
+    const repeated = await engine.requestMove(await personMove(storage, item.id, 'planning', 'drag-1')());
+
+    expect(repeated).toEqual(first);
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['execute']);
+  });
+
+  it.each(['workflow', 'dispatcher'] as const)(
+    "refuses a busy card's move that only claims its run was stopped (%s engine)",
+    async kind => {
+      const { storage, runsUrl, item } = await setup();
+      // Neither engine can stop runs here, and the transition service sees one going.
+      const boards = createBoardRegistry();
+      const transitionService = new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards,
+        runInFlight: async () => true,
+      });
+      const context = { transitionService, workItems: storage, boards };
+      const workflow = new WorkflowBoardEngine(context);
+      const mastra = new Mastra({
+        storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
+        workflows: workflow.workflows,
+        logger: false,
+      });
+      onTestFinished(() => mastra.shutdown().catch(() => undefined));
+      const engine = kind === 'workflow' ? workflow : new DispatcherBoardEngine(context);
+
+      // Whatever a caller writes on the request, the card's run was not stopped for it.
+      const result = await engine.requestMove({
+        ...(await personMove(storage, item.id, 'execute', 'drag-1')()),
+        interruptedRun: true,
+      } as FactoryTransitionRequest);
+
+      expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    },
+  );
+
+  it("ends a deleted card's run, after the inputs asked before the delete", async () => {
+    const { storage, engine, mastra, item } = await setup();
+    const workflow = mastra.getWorkflow('factory-board');
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toMatchObject({ status: 'suspended' });
+
+    const move = engine.requestMove(await personMove(storage, item.id, 'done', 'drag-2')());
+    // The move is in the card's queue once its checks, which wait on nothing here, are through.
+    await new Promise(resolve => setImmediate(resolve));
+    const deleted = engine.cardDeleted({ workItemId: item.id });
+
+    expect(await move).toMatchObject({ status: 'accepted' });
+    await deleted;
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toBeNull();
+    expect(await engine.describe({ workItemId: item.id })).toBeUndefined();
+    // A card with no run is nothing to end.
+    await expect(engine.cardDeleted({ workItemId: randomUUID() })).resolves.toBeUndefined();
+  });
+
+  it("starts no run for a card that is gone, when its session's run ends or pauses or it is moved after the delete", async () => {
+    const { storage, engine, mastra, item, binding } = await setup();
+    const workflow = mastra.getWorkflow('factory-board');
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    const late = await personMove(storage, item.id, 'done', 'drag-2')();
+    await storage.delete({ orgId: ORG, id: item.id });
+    await engine.cardDeleted({ workItemId: item.id });
+
+    // Deleting a card doesn't stop its session, whose run can end long after.
+    await expect(engine.runEnded(binding, engine)).resolves.toBe(false);
+    await expect(engine.runPaused(binding)).resolves.toBeUndefined();
+    await expect(engine.requestMove(late)).resolves.toMatchObject({ status: 'rejected' });
+
+    expect(await workflow.getWorkflowRunById(boardRunId(item.id))).toBeNull();
+  });
+
+  it("refuses a person's move as busy, leaving the run be, when the stopped run doesn't end in time", async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(false);
+    const { engine } = replica(storage, runsUrl, undefined, runs, 120);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it("refuses a person's move as busy at once when the run isn't this process's to stop", async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(false, false);
+    // A wait no test would sit through: the refusal must not take it.
+    const { engine } = replica(storage, runsUrl, undefined, runs, 600_000);
+
+    const result = await engine.requestMove(await personMove(storage, item.id, 'execute', 'drag-1')());
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+    expect(calls).toEqual(['stop']);
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+  });
+
+  it('stops nothing for a move the board would refuse, a move no person made, or a move to a phase that runs nothing', async () => {
+    const { storage, runsUrl, item } = await setup();
+    const { calls, runs } = goingRun(true);
+    const { engine } = replica(storage, runsUrl, undefined, runs);
+    const move = (stage: string) => personMove(storage, item.id, stage, `drag-${stage}`)();
+
+    // No such edge, and a revision the card has moved past.
+    expect(await engine.requestMove(await move('pr-review'))).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    expect(await engine.requestMove({ ...(await move('execute')), expectedRevision: 1 })).toMatchObject({
+      status: 'rejected',
+      code: 'stale',
+    });
+    await engine.requestMove({
+      ...(await move('execute')),
+      actor: { type: 'rule', id: 'rule-1' },
+      ingress: { type: 'rule', identity: 'rule-1:execute' },
+      expectedRevision: 1,
+    });
+    expect(calls).toEqual([]);
+    // Intake runs nothing: the run keeps going while the card rests there.
+    expect(await engine.requestMove(await move('intake'))).toMatchObject({ status: 'accepted' });
+    expect(calls).toEqual([]);
+  });
+
   it("moves a card through the card's one board run, answering each request with the transition's result", async () => {
     const { storage, engine, mastra, item } = await setup();
 

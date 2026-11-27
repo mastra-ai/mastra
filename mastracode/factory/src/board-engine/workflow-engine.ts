@@ -1,11 +1,13 @@
 import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/storage';
 
+import { phaseMayStartRun } from '../boards/busy-card.js';
 import { boardForWorkItem } from '../boards/index.js';
 import { startsInAutoPhase } from '../boards/phase-automation.js';
 import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
+import { markRunInterrupted } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import {
@@ -37,6 +39,8 @@ const ENDED_RUN_STATUSES = new Set(['success', 'failed', 'canceled', 'bailed', '
 /** Errors from `resume()` when another caller resumed the run first. */
 const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RESUME_ALREADY_CLAIMED']);
 
+/** How long a person's move waits for the run it stopped to end, before it goes ahead regardless. */
+const INTERRUPT_WAIT_MS = 120_000;
 /** What a card that needs attention tells the person looking at it. */
 const NO_OUTCOME_REASON = "The agent's run ended twice without reporting how the phase ended.";
 const NOT_RUN_AGAIN_REASON =
@@ -97,8 +101,11 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly #pending = new Map<string, PendingInput>();
   readonly #context: FactoryBoardEngineContext;
 
-  constructor(context: FactoryBoardEngineContext) {
+  readonly #interruptWaitMs: number;
+
+  constructor(context: FactoryBoardEngineContext, options: { interruptWaitMs?: number } = {}) {
     this.#context = context;
+    this.#interruptWaitMs = options.interruptWaitMs ?? INTERRUPT_WAIT_MS;
     this.workflow = createFactoryBoardWorkflow({
       apply: async (inputId, workItemId, state) => {
         const pending = this.#pending.get(inputId);
@@ -144,7 +151,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return { [FACTORY_BOARD_WORKFLOW_ID]: this.workflow };
   }
 
-  async requestMove(request: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+  async requestMove(asked: FactoryTransitionRequest): Promise<FactoryTransitionResult> {
+    // A copy, so the mark stays on the request this engine hands the transition service.
+    const request = (await this.#interrupts(asked)) ? markRunInterrupted({ ...asked }) : asked;
     const pending = { request } satisfies PendingInput as Extract<PendingInput, { request: unknown }>;
     await this.#ask(request, pending);
     if (!pending.answer) throw new Error("The card's board run did not apply the move.");
@@ -173,6 +182,46 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       { storage: this.#context.workItems, boards: this.#context.boards, boardEngine: engine },
       binding,
     );
+  }
+
+  /**
+   * Stops the run in flight on a card a person moves into another phase that runs, and waits for it
+   * to end: the person's move wins over the run, instead of being refused while the card is busy.
+   * A run that hasn't ended in time keeps its record and its card, and the move is refused as
+   * busy, and so is a move by a person who may not drive the run's session. A move the board
+   * wouldn't take anyway (another revision, no such edge) or already answered stops nothing.
+   */
+  async #interrupts(request: FactoryTransitionRequest): Promise<boolean> {
+    const runs = this.#context.runs;
+    if (!runs || request.actor.type !== 'human' || request.ingress.type !== 'human') return false;
+    if (request.initialEntry || request.cause === 'run_start') return false;
+    if (request.toBoard !== undefined && request.toBoard !== request.board) return false;
+    const item = await this.#context.workItems.get({ orgId: request.orgId, id: request.workItemId });
+    const from = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !from || item.revision !== request.expectedRevision || boardForWorkItem(item) !== request.board) {
+      return false;
+    }
+    const board = (await toBoardSource(this.#context.boards).load(request)).get(request.board);
+    if (!board || !Object.prototype.hasOwnProperty.call(board.phases, request.stage)) return false;
+    if (from === request.stage ? request.reenter !== true : !board.allowsTransition(from, request.stage)) return false;
+    if (!phaseMayStartRun(board.phaseKind(request.stage)) || !(await runs.inFlight(request))) return false;
+    // A request already answered is answered the same again, whatever it asks now: it moves nothing.
+    const answered = await this.#context.workItems.getTransitionResultByIngress?.(
+      request.orgId,
+      request.factoryProjectId,
+      request.ingress.identity,
+    );
+    if (answered) return false;
+    // A run another process holds, or one on a session the person may not drive, isn't stopped
+    // from here, so the move is refused as busy at once instead of after the wait.
+    if (!(await runs.stop(request, { userId: request.actor.id }))) return false;
+    const deadline = Date.now() + this.#interruptWaitMs;
+    for (let wait = 50; await runs.inFlight(request); wait = Math.min(wait * 2, 1_000)) {
+      // Still going: the run keeps its record and its card, and the move is refused as busy.
+      if (Date.now() >= deadline) return false;
+      await new Promise(resolve => setTimeout(resolve, wait));
+    }
+    return true;
   }
 
   /**
@@ -327,23 +376,31 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     };
   }
 
+  /**
+   * Ends the run of a card that was deleted. Inputs asked before the delete are answered first
+   * (the card is gone, so they move nothing); an input asked after it would start a run that finds
+   * no card.
+   */
+  async cardDeleted(card: CardRef): Promise<void> {
+    if (!this.workflow.mastra) return;
+    await this.#queued(card, () => this.workflow.deleteWorkflowRunById(boardRunId(card.workItemId)));
+  }
+
   async #ask(card: CardRef, pending: PendingInput): Promise<void> {
     const inputId = crypto.randomUUID();
     this.#pending.set(inputId, pending);
     try {
-      await this.#queued(card, inputId, pending);
+      await this.#queued(card, () => this.#resume(card, inputId, pending));
     } finally {
       this.#pending.delete(inputId);
     }
   }
 
-  #queued(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
+  #queued(card: CardRef, work: () => Promise<void>): Promise<void> {
     const previous = this.#queues.get(card.workItemId) ?? Promise.resolve();
     // A run end can be told from work a step of this same run started (the phase's session), which
     // still carries the claim that step held. The input is new work on the run: it claims it afresh.
-    const next = previous
-      .catch(() => undefined)
-      .then(() => runOutsideRunFenceScope(() => this.#resume(card, inputId, pending)));
+    const next = previous.catch(() => undefined).then(() => runOutsideRunFenceScope(work));
     this.#queues.set(card.workItemId, next);
     void next
       .catch(() => undefined)
@@ -351,6 +408,20 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         if (this.#queues.get(card.workItemId) === next) this.#queues.delete(card.workItemId);
       });
     return next;
+  }
+
+  /**
+   * Answers an input for a card that no longer exists, so no run is started to wait on it forever:
+   * the card's session can end a run after the card was deleted.
+   */
+  async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
+    const asked =
+      'runEnded' in pending ? pending.runEnded : 'runPaused' in pending ? pending.runPaused : pending.request;
+    if (await this.#context.workItems.get({ orgId: asked.orgId, id: asked.workItemId })) return false;
+    if ('runEnded' in pending) pending.answer = { outcome: false };
+    else if ('runPaused' in pending) pending.answer = { paused: true };
+    else pending.answer = { result: await this.#context.transitionService.transition(pending.request) };
+    return true;
   }
 
   async #resume(card: CardRef, inputId: string, pending: PendingInput): Promise<void> {
@@ -364,6 +435,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       if (!stored || ENDED_RUN_STATUSES.has(stored.status)) {
         // An ended run keeps nothing the card needs; its next input runs a new one under the same id.
         if (stored) await this.workflow.deleteWorkflowRunById(runId);
+        if (await this.#answeredWithoutCard(pending)) return;
         await this.#start(runId);
         continue;
       }

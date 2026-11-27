@@ -5229,6 +5229,65 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  describe("stopping the runs on a card for a person's move", () => {
+    async function seated() {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: `stop-${crypto.randomUUID()}`,
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, { streamActive: true });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+      const card = { orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item.id };
+      const stopAsked = () => storage.runBindingStopRequested({ orgId: 'org-1', bindingId: binding.id });
+      return { dispatcher, session, card, stopAsked };
+    }
+
+    it('records the stop on the seat and aborts its session, for a person who may drive it', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      const asked: string[] = [];
+
+      const stopped = await dispatcher.stopRunsOnCard(card, async sessionId => {
+        asked.push(sessionId);
+        return true;
+      });
+
+      expect(stopped).toBe(true);
+      expect(asked).toEqual(['session-1']);
+      expect(session.abort).toHaveBeenCalledTimes(1);
+      await expect(stopAsked()).resolves.toBe(true);
+    });
+
+    it('stops nothing, and records no stop, when the person may not drive the session', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+
+      await expect(dispatcher.stopRunsOnCard(card, async () => false)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
+    });
+
+    it("leaves a session alone that is busy with another thread than the card's seat", async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      await session.thread.switch({ threadId: 'another-thread' });
+
+      await expect(dispatcher.stopRunsOnCard(card)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
+    });
+  });
+
   it('accepts clean completion in a working phase without a goal or exit tool', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

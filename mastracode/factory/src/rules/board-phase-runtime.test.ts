@@ -102,6 +102,50 @@ function firstOutcome(text: string): string | undefined {
   return [...text.matchAll(/Outcomes: ([a-z-]+):/g)].at(-1)?.[1];
 }
 
+function toolCallAnswer(calls: number, call: ToolCall): unknown[] {
+  const item = {
+    id: `fc_${calls}`,
+    type: 'function_call',
+    call_id: `call_${calls}`,
+    name: call.name,
+    arguments: JSON.stringify(call.args),
+  };
+  return [
+    { type: 'response.created', response: { id: `resp_${calls}`, created_at: 1, model: 'phase-test' } },
+    { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
+    { type: 'response.function_call_arguments.delta', item_id: item.id, output_index: 0, delta: item.arguments },
+    { type: 'response.output_item.done', output_index: 0, item: { ...item, status: 'completed' } },
+    {
+      type: 'response.completed',
+      response: { id: `resp_${calls}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+    },
+  ];
+}
+
+function textAnswer(): unknown[] {
+  const item = { id: 'msg_ack', type: 'message', role: 'assistant', content: [] };
+  return [
+    { type: 'response.created', response: { id: 'resp_ack', created_at: 1, model: 'phase-test' } },
+    { type: 'response.output_item.added', output_index: 0, item },
+    { type: 'response.output_text.delta', item_id: item.id, output_index: 0, content_index: 0, delta: 'Done.' },
+    { type: 'response.output_item.done', output_index: 0, item },
+    {
+      type: 'response.completed',
+      response: {
+        id: 'resp_ack',
+        status: 'completed',
+        incomplete_details: null,
+        usage: {
+          input_tokens: 1,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens: 1,
+          output_tokens_details: { reasoning_tokens: 0 },
+        },
+      },
+    },
+  ];
+}
+
 /** A fake OpenAI model: `decide` picks a tool call for each request, or the model answers "Done.". */
 function fakeModel(requests: string[], decide: (text: string) => ToolCall | undefined) {
   let calls = 0;
@@ -114,45 +158,9 @@ function fakeModel(requests: string[], decide: (text: string) => ToolCall | unde
     const call = decide(text);
     if (call) {
       calls += 1;
-      const item = {
-        id: `fc_${calls}`,
-        type: 'function_call',
-        call_id: `call_${calls}`,
-        name: call.name,
-        arguments: JSON.stringify(call.args),
-      };
-      return sse([
-        { type: 'response.created', response: { id: `resp_${calls}`, created_at: 1, model: 'phase-test' } },
-        { type: 'response.output_item.added', output_index: 0, item: { ...item, arguments: '' } },
-        { type: 'response.function_call_arguments.delta', item_id: item.id, output_index: 0, delta: item.arguments },
-        { type: 'response.output_item.done', output_index: 0, item: { ...item, status: 'completed' } },
-        {
-          type: 'response.completed',
-          response: { id: `resp_${calls}`, status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
-        },
-      ]);
+      return sse(toolCallAnswer(calls, call));
     }
-    const item = { id: 'msg_ack', type: 'message', role: 'assistant', content: [] };
-    return sse([
-      { type: 'response.created', response: { id: 'resp_ack', created_at: 1, model: 'phase-test' } },
-      { type: 'response.output_item.added', output_index: 0, item },
-      { type: 'response.output_text.delta', item_id: item.id, output_index: 0, content_index: 0, delta: 'Done.' },
-      { type: 'response.output_item.done', output_index: 0, item },
-      {
-        type: 'response.completed',
-        response: {
-          id: 'resp_ack',
-          status: 'completed',
-          incomplete_details: null,
-          usage: {
-            input_tokens: 1,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 1,
-            output_tokens_details: { reasoning_tokens: 0 },
-          },
-        },
-      },
-    ]);
+    return sse(textAnswer());
   });
 }
 
@@ -275,7 +283,19 @@ async function startFactory(
   const read = async (item: Card) => (await workItems.get({ orgId: ORG, id: item.id }))!;
   const decisionsFor = async (item: Card) =>
     (await workItems.listDeferredDecisions(ORG, project.id)).filter(record => record.workItemId === item.id);
-  return { project, workItems, card, read, decisionsFor, close, storage, mastra, send, projectRepository };
+  return {
+    project,
+    workItems,
+    card,
+    read,
+    decisionsFor,
+    close,
+    storage,
+    mastra,
+    send,
+    projectRepository,
+    sourceControl,
+  };
 }
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -451,7 +471,7 @@ it("flags a card on the workflow engine when its phase's agent ends two runs wit
 describe.each([
   ['dispatcher', undefined],
   ['workflow', createWorkflowBoardEngine],
-] as const)('board phase fields at runtime (%s engine)', (_engine, boardEngine) => {
+] as const)('board phase fields at runtime (%s engine)', (engineName, boardEngine) => {
   it('starts a phase only for the cards its condition matches, and moves the card on the outcome the agent reports after the exit tool', async () => {
     const requests: string[] = [];
     fakeModel(requests, publisher());
@@ -511,6 +531,140 @@ describe.each([
       await runtime.close();
     }
   }, 60_000);
+
+  it(
+    engineName === 'workflow'
+      ? "stops the phase's run when a person moves its card on, and commits the move"
+      : "refuses a person's move of a card whose phase's run is going",
+    async () => {
+      // Planning's model call never answers: it ends only when the run is aborted.
+      let planning = 0;
+      let aborted = 0;
+      let built = false;
+      const release = new Set<() => void>();
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
+        const body = input instanceof Request ? await input.clone().text() : String(init?.body ?? '');
+        const text = JSON.stringify(JSON.parse(body).input);
+        if (text.includes('Build the feature.')) {
+          if (built) return sse(textAnswer());
+          built = true;
+          return sse(
+            toolCallAnswer(1, { name: 'factory_report_outcome', args: { outcome: 'delivered', reason: 'Built.' } }),
+          );
+        }
+        planning += 1;
+        const signal = input instanceof Request ? input.signal : init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          const abort = () => {
+            aborted += 1;
+            reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+          };
+          if (signal?.aborted) abort();
+          else signal?.addEventListener('abort', abort, { once: true });
+          release.add(() => reject(new Error('The test ended.')));
+        });
+      });
+      const runtime = await startFactory(delivery, 'planning', deliverySkills, { boardEngine });
+      try {
+        const { project, card, read, send } = runtime;
+        const feature = await card('the feature', []);
+        await vi.waitFor(() => expect(planning).toBeGreaterThan(0), { timeout: 15_000 });
+
+        const drag = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
+          board: 'delivery',
+          stage: 'building',
+          expectedRevision: (await read(feature)).revision,
+          requestId: randomUUID(),
+          cause: 'A person dragged the card',
+        });
+        const answer = await drag.json();
+
+        if (engineName === 'dispatcher') {
+          expect(drag.status, JSON.stringify(answer)).toBe(422);
+          expect(answer.result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+          expect((await read(feature)).stages).toEqual(['planning']);
+          expect(aborted).toBe(0);
+          return;
+        }
+        expect(drag.status, JSON.stringify(answer)).toBe(200);
+        expect(answer.result).toMatchObject({ status: 'accepted', stage: 'building' });
+        expect(aborted).toBeGreaterThan(0);
+        // Building's run starts after the stopped one and ends the card's work; the stopped
+        // Planning run wasn't run again, and the card entered Building once.
+        await vi.waitFor(async () => expect((await read(feature)).stages).toEqual(['delivered']), { timeout: 15_000 });
+        const history = (await read(feature)).stageHistory.map(entry => entry.stage);
+        expect(history.filter(stage => stage === 'building')).toHaveLength(1);
+        expect(history.filter(stage => stage === 'planning')).toHaveLength(1);
+        expect(planning).toBe(1);
+      } finally {
+        for (const end of release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  it.runIf(engineName === 'workflow')(
+    "refuses a person's move as busy, stopping nothing, when the phase's run is in another person's private session",
+    async () => {
+      let planning = 0;
+      let aborted = 0;
+      const release = new Set<() => void>();
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
+        planning += 1;
+        const signal = input instanceof Request ? input.signal : init?.signal;
+        return new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => (aborted += 1), { once: true });
+          release.add(() => reject(new Error('The test ended.')));
+        });
+      });
+      const runtime = await startFactory(delivery, 'planning', deliverySkills, { boardEngine });
+      try {
+        const { project, card, read, send, workItems, sourceControl } = runtime;
+        const feature = await card('the private feature', []);
+        await vi.waitFor(() => expect(planning).toBeGreaterThan(0), { timeout: 15_000 });
+        // The run's session is someone else's, and private: the person dragging may not drive it.
+        const [seat] = (await workItems.listRunBindings(ORG, project.id, feature.id)).filter(
+          binding => binding.status === 'active',
+        );
+        const session = (await sourceControl.sessions.getBySessionId(seat!.sessionId))!;
+        await sourceControl.sessions.transferOwner({
+          sessionId: session.sessionId,
+          expectedUserId: session.userId,
+          toUserId: 'someone-else',
+        });
+        const hidden = await sourceControl.sessions.setVisibility({
+          sessionId: session.sessionId,
+          visibility: 'private',
+          expectedUserId: 'someone-else',
+        });
+        expect(hidden).toMatchObject({ userId: 'someone-else', visibility: 'private' });
+
+        const drag = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
+          board: 'delivery',
+          stage: 'building',
+          expectedRevision: (await read(feature)).revision,
+          requestId: randomUUID(),
+          cause: 'A person dragged the card',
+        });
+        const answer = await drag.json();
+
+        expect(drag.status, JSON.stringify(answer)).toBe(422);
+        expect(answer.result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+        expect((await read(feature)).stages).toEqual(['planning']);
+        expect(aborted).toBe(0);
+        expect((await workItems.listRunBindings(ORG, project.id, feature.id))[0]?.stopRequestedAt ?? null).toBeNull();
+      } finally {
+        for (const end of release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
 
   describe('a custom phase that runs an app skill', () => {
     /** The intake route files cards into Drafting; Drafting runs only `runner.skill`. */

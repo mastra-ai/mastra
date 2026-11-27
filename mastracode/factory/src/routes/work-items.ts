@@ -109,7 +109,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** The board engine every stage move goes through. Stage moves 503 when absent. */
-  boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
+  boardEngine?: Pick<FactoryBoardEngine, 'requestMove' | 'cardDeleted'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   sessionRepository?: (input: {
@@ -1151,6 +1151,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           await workItems.ensureReady();
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
+          // The card is gone either way; what the engine kept for it is cleaned up on a best effort.
+          try {
+            await boardEngine?.cardDeleted?.({ workItemId: deleted.id });
+          } catch (error) {
+            console.warn("[Factory] Unable to end a deleted card's board run.", error);
+          }
           await audit.emit({
             context: loose(c),
             input: {

@@ -151,7 +151,7 @@ import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { createRunStopMarker } from './routes/run-stop-marker.js';
 import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
-import { createSessionAccessGuard } from './routes/session-access.js';
+import { canViewSourceControlSession, createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import { TelemetryRoutes } from './routes/telemetry.js';
@@ -1633,6 +1633,16 @@ export class MastraFactory {
           transitionService,
           workItems: workItemsStorage,
           boards,
+          // `this.#dispatcher` is created with the runtime below; before it, no run can be in flight.
+          runs: {
+            inFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,
+            // A person stops only the runs of sessions they may drive, as the session's Stop does.
+            stop: async (card, by) =>
+              (await this.#dispatcher?.stopRunsOnCard(card, async sessionId => {
+                const session = await sourceControlSessions.getBySessionId(sessionId);
+                return !session || canViewSourceControlSession(session, { orgId: card.orgId, userId: by.userId });
+              })) ?? false,
+          },
         })
       : undefined;
     this.#boardEngineWorkflows = boardEngine?.workflows;
