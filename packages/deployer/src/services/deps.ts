@@ -185,6 +185,10 @@ interface InstallOptions extends ArchitectureOptions {
 
 const PNPM_PATCHES_DIR = 'pnpm-patches';
 const BUN_PATCHES_DIR = 'bun-patches';
+// The fields Bun resolves a `$name` override reference from, highest precedence first.
+const BUN_DEPENDENCY_FIELDS = ['optionalDependencies', 'devDependencies', 'dependencies', 'peerDependencies'];
+// Bun installs a bare path like `vendor/pkg.tgz` as a local tarball, which the output directory doesn't have.
+const BUN_LOCAL_TARBALL_SPEC = /^(?![a-z][\w+.-]*:).*\.(?:tgz|tar|tar\.gz)$/i;
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
@@ -1022,6 +1026,61 @@ export class Deps extends MastraBase {
     await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
   }
 
+  /**
+   * Copies the top-level overrides of the source workspace root into the output package.json, so the
+   * output install keeps the versions the project pinned (#29311). Bun reads `overrides` when it is an
+   * object and `resolutions` otherwise. Packed workspace tarballs win over a source override for the same
+   * package. Nested and `name@range` overrides are not copied.
+   */
+  private async copyBunOverridesToOutput(dir: string): Promise<void> {
+    if (!this.lockFile) return;
+    const sourceRoot = path.resolve(path.dirname(this.lockFile.path));
+    if ([sourceRoot, path.resolve(this.rootDir)].includes(path.resolve(dir))) return;
+
+    const rootPkg: unknown = await readJSON(path.join(sourceRoot, 'package.json')).catch(() => undefined);
+    if (!isRecord(rootPkg)) return;
+    const field = isRecord(rootPkg.overrides) ? 'overrides' : 'resolutions';
+    const sourceOverrides = rootPkg[field];
+    if (!isRecord(sourceOverrides)) return;
+
+    const outputPackageJsonPath = path.join(dir, 'package.json');
+    const outputPkg: unknown = await readJSON(outputPackageJsonPath).catch(() => ({}));
+    if (!isRecord(outputPkg)) return;
+    const packed = isRecord(outputPkg.resolutions) ? outputPkg.resolutions : {};
+    const workspace = { ...rootPkg, ...(isRecord(rootPkg.workspaces) ? rootPkg.workspaces : {}) };
+
+    const copied: Record<string, string> = {};
+    for (const [key, value] of Object.entries(sourceOverrides)) {
+      if (Object.hasOwn(packed, key)) continue;
+      if (typeof value !== 'string' || key.includes('@', 1)) {
+        this.logger.debug(
+          `Not copying Bun override "${key}" into the build output: only top-level overrides are copied.`,
+        );
+        continue;
+      }
+
+      const toSpec = (candidate: unknown) => (typeof candidate === 'string' ? candidate.trim() : undefined);
+      const referenced = value.startsWith('$') ? value.slice(1) : undefined;
+      let spec = toSpec(
+        referenced
+          ? BUN_DEPENDENCY_FIELDS.map(depField => rootPkg[depField])
+              .filter(isRecord)
+              .find(deps => Object.hasOwn(deps, referenced))?.[referenced]
+          : value,
+      );
+      if (spec?.startsWith('catalog:')) spec = toSpec(resolveCatalogSpec(workspace, key, spec));
+      if (!spec || SOURCE_WORKSPACE_SPEC.test(spec) || BUN_LOCAL_TARBALL_SPEC.test(spec)) {
+        this.logger.warn(`Skipping Bun override "${key}": "${value}" can't be resolved in the build output.`);
+        continue;
+      }
+      copied[key] = spec;
+    }
+    if (Object.keys(copied).length === 0) return;
+
+    outputPkg[field] = { ...copied, ...packed };
+    await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
+  }
+
   private getNpmArgs(options: ArchitectureOptions): string[] {
     const args: string[] = [];
     if (options.cpu) args.push(`--cpu=${options.cpu.join(',')}`);
@@ -1112,6 +1171,7 @@ export class Deps extends MastraBase {
         await this.copyYarnPatches(dir);
         break;
       case 'bun':
+        await this.copyBunOverridesToOutput(dir);
         await this.copyBunPatchesToOutput(dir);
         break;
       case 'npm':

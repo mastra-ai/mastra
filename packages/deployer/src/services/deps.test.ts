@@ -3,7 +3,9 @@ import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@internal/core/error';
+import { noopLogger } from '@mastra/core/logger';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { parse, parseAllDocuments } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
@@ -670,6 +672,144 @@ describe('bun patchedDependencies handling', () => {
     await deps.install({ dir: outputDir });
 
     expect(fs.existsSync(join(outputDir, 'bun-patches'))).toBe(false);
+  });
+});
+
+describe('bun overrides handling (#29311)', () => {
+  const PACKED_FOO = 'file:./workspace-module/foo-1.0.0.tgz';
+  const packedOutputManifest = { name: 'server', dependencies: { foo: PACKED_FOO }, resolutions: { foo: PACKED_FOO } };
+  let root: string;
+  let appDir: string;
+  let outputDir: string;
+  let warn: MockInstance;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), 'mastra-deps-bun-overrides-'));
+    tempDirs.push(root);
+    appDir = join(root, 'apps', 'api');
+    outputDir = join(appDir, '.mastra', 'output');
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(root, 'bun.lock'), '{}');
+    warn = vi.spyOn(noopLogger, 'warn');
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  async function installWithRootManifest(
+    rootManifest: Record<string, unknown>,
+    outputManifest: Record<string, unknown> = { name: 'server', dependencies: { uuid: '^9.0.0' } },
+  ) {
+    await writeFile(join(root, 'package.json'), JSON.stringify(rootManifest));
+    await writeFile(join(outputDir, 'package.json'), JSON.stringify(outputManifest));
+    const deps = new DepsService(appDir);
+    deps.__setLogger(noopLogger);
+    await deps.install({ dir: outputDir });
+    expect(runChildProcess).toHaveBeenCalledTimes(1);
+    return JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
+  }
+
+  it('copies a root override into the output manifest', async () => {
+    const output = await installWithRootManifest({ overrides: { uuid: '^11.1.1' } });
+
+    expect(output.overrides).toEqual({ uuid: '^11.1.1' });
+  });
+
+  it('merges root overrides with the packed workspace tarballs, and the tarball wins', async () => {
+    const output = await installWithRootManifest(
+      { overrides: { uuid: '^11.1.1', foo: '^2.0.0' } },
+      packedOutputManifest,
+    );
+
+    expect(output.overrides).toEqual({ uuid: '^11.1.1', foo: PACKED_FOO });
+    expect(output.resolutions).toEqual({ foo: PACKED_FOO });
+  });
+
+  it('copies root resolutions into resolutions when the root has no overrides', async () => {
+    const output = await installWithRootManifest({ resolutions: { uuid: '^11.1.1' } }, packedOutputManifest);
+
+    expect(output.resolutions).toEqual({ uuid: '^11.1.1', foo: PACKED_FOO });
+    expect(output.overrides).toBeUndefined();
+  });
+
+  it('reads only overrides when the root declares both, as Bun does', async () => {
+    const output = await installWithRootManifest({ overrides: { uuid: '^11.1.1' }, resolutions: { ms: '2.1.2' } });
+
+    expect(output.overrides).toEqual({ uuid: '^11.1.1' });
+    expect(output.resolutions).toBeUndefined();
+  });
+
+  it('resolves catalog: and $name overrides from the root manifest', async () => {
+    const output = await installWithRootManifest({
+      workspaces: { packages: ['apps/*'], catalogs: { security: { uuid: '^11.1.1' } } },
+      dependencies: { ms: '^2.1.3' },
+      devDependencies: { ms: '2.1.2' },
+      overrides: { uuid: ' catalog:security', ms: '$ms' },
+    });
+
+    expect(output.overrides).toEqual({ uuid: '^11.1.1', ms: '2.1.2' });
+  });
+
+  it('looks up the catalog entry of the override key when a $name reference points at catalog:', async () => {
+    const output = await installWithRootManifest({
+      workspaces: { packages: ['apps/*'], catalog: { ms: '2.1.1', uuid: '^11.1.1' } },
+      devDependencies: { uuid: 'catalog:' },
+      overrides: { ms: '$uuid' },
+    });
+
+    expect(output.overrides).toEqual({ ms: '2.1.1' });
+  });
+
+  it('skips overrides the build output cannot install, with a warning for each', async () => {
+    const output = await installWithRootManifest({
+      dependencies: { shared: 'workspace:*', padded: ' file:./vendor/padded.tgz' },
+      overrides: {
+        uuid: '^11.1.1',
+        shared: 'workspace:*',
+        local: 'file:../local',
+        tarball: 'vendor/tarball.TGZ',
+        padded: '$padded',
+        linked: '$shared',
+        missing: '$missing',
+        remote: 'https://registry.example/remote-1.0.0.tgz',
+      },
+    });
+
+    expect(output.overrides).toEqual({ uuid: '^11.1.1', remote: 'https://registry.example/remote-1.0.0.tgz' });
+    const warnings = warn.mock.calls.map(([message]) => String(message));
+    expect(warnings).toHaveLength(6);
+    for (const name of ['shared', 'local', 'tarball', 'padded', 'linked', 'missing']) {
+      expect(warnings.some(message => message.includes(`"${name}"`))).toBe(true);
+    }
+  });
+
+  it('does not copy nested or version-qualified overrides', async () => {
+    const output = await installWithRootManifest({
+      overrides: { exceljs: { uuid: '^11.1.1' }, 'uuid@^8.0.0': '8.3.2', '@scope/pkg': '1.0.0' },
+    });
+
+    expect(output.overrides).toEqual({ '@scope/pkg': '1.0.0' });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('leaves the output manifest unchanged when the root declares no overrides', async () => {
+    const output = await installWithRootManifest({ dependencies: { uuid: '^11.1.1' } }, packedOutputManifest);
+
+    expect(output).toEqual(packedOutputManifest);
+  });
+
+  it("never rewrites the project's manifests when installing in the project", async () => {
+    const rootManifest = JSON.stringify({ overrides: { uuid: '$uuid' }, dependencies: { uuid: '^11.1.1' } });
+    const appManifest = JSON.stringify({ name: 'api', dependencies: { uuid: '^9.0.0' } });
+    await writeFile(join(root, 'package.json'), rootManifest);
+    await writeFile(join(appDir, 'package.json'), appManifest);
+
+    await new DepsService(root).install();
+    await new DepsService(appDir).install();
+
+    expect(await readFile(join(root, 'package.json'), 'utf-8')).toBe(rootManifest);
+    expect(await readFile(join(appDir, 'package.json'), 'utf-8')).toBe(appManifest);
   });
 });
 
