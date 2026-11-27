@@ -46,7 +46,8 @@
     "@mastra/hono": "workspace:*",
     "hono": "^4.13.13",
     "@mastra/libsql": "workspace:*",
-    "@mastra/redis": "workspace:*"
+    "@mastra/redis": "workspace:*",
+    "@internal/browser-test-utils": "workspace:*"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.86.0-0 <2.0.0-0",

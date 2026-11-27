@@ -1,10 +1,12 @@
 import { MastraClient } from '@mastra/client-js';
 import { ConnectClient } from '@mastra/connect';
 import type { MastraStorage } from '@mastra/core/storage';
-import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
+import { PlatformClient, PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 import type { PlatformFilesystemOptions, PlatformSandboxOptions } from '@mastra/platform-workspace';
 import { PlatformAgent, toAgentBody } from './agents/platform-agent';
 import type { CreatePlatformAgentInput, PlatformAgentRecord } from './agents/platform-agent';
+import { PlatformBrowser, PlatformBrowserSessions } from './browser/index';
+import type { PlatformBrowserOptions } from './browser/index';
 import { PlatformKnowledge } from './knowledge/index';
 import type { PlatformKnowledgeOptions } from './knowledge/index';
 import { PlatformMemory } from './memory/platform-memory';
@@ -83,6 +85,7 @@ interface ProjectServices {
   databases: PlatformDatabases;
   filesystems: PlatformFilesystems;
   sandboxes: PlatformSandboxes;
+  browsers: PlatformBrowserSessions;
 }
 
 /** Credentials and endpoints from options, falling back to the environment. */
@@ -161,6 +164,9 @@ export class MastraProject {
       databases: new PlatformDatabases(this.#api, projectId),
       filesystems: new PlatformFilesystems(this.#api, projectId),
       sandboxes: new PlatformSandboxes(this.#api, projectId),
+      browsers: new PlatformBrowserSessions(
+        new PlatformClient({ accessToken: this.#accessToken, projectId, fetch: this.#options.fetch }),
+      ),
     };
     return this.#project;
   }
@@ -201,6 +207,11 @@ export class MastraProject {
   /** The Platform's records of the project's sandboxes. Use `createSandbox` or `getSandbox` to run commands. */
   get sandboxes(): PlatformSandboxes {
     return this.#services.sandboxes;
+  }
+
+  /** The project's hosted browser sessions. Use `createBrowser` or `getBrowser` to drive one. */
+  get browsers(): PlatformBrowserSessions {
+    return this.#services.browsers;
   }
 
   /** Whether the project is set up to run managed agents. */
@@ -385,6 +396,43 @@ export class MastraProject {
     // The proxy routes by provider, so a sandbox has to be reached through the one that runs it.
     const sandboxProvider = options.sandboxProvider ?? (await this.sandboxes.get(sandboxId)).provider;
     return this.createSandbox({ ...options, sandboxId, sandboxProvider, reattach: 'required' });
+  }
+
+  /**
+   * Starts a hosted browser session and resolves once the browser is connected. Hand it to an
+   * agent's `browser`. Pass `environmentId` or set `MASTRA_ENVIRONMENT_ID`. The session ends after
+   * `session.idleTimeoutSeconds` (default 300) with nothing connected, or with `browsers.end(id)`.
+   */
+  async createBrowser(
+    options: ProjectScoped<Omit<PlatformBrowserOptions, 'cdpUrl' | 'sessionId'>> = {},
+  ): Promise<PlatformBrowser> {
+    const browser = new PlatformBrowser({
+      ...options,
+      accessToken: this.#accessToken,
+      projectId: this.projectId,
+      fetch: this.#options.fetch,
+    });
+    await browser.ensureReady();
+    return browser;
+  }
+
+  /**
+   * Connects to a browser session started earlier, by its ID. Throws instead of starting a
+   * replacement when the session is no longer running.
+   */
+  async getBrowser(
+    sessionId: string,
+    options: ProjectScoped<Omit<PlatformBrowserOptions, 'cdpUrl' | 'sessionId' | 'environmentId' | 'session'>> = {},
+  ): Promise<PlatformBrowser> {
+    const browser = new PlatformBrowser({
+      ...options,
+      sessionId,
+      accessToken: this.#accessToken,
+      projectId: this.projectId,
+      fetch: this.#options.fetch,
+    });
+    await browser.ensureReady();
+    return browser;
   }
 }
 
