@@ -115,7 +115,7 @@ Creating Memory instances, Knowledge instances, and databases requires the `admi
 
 `project.datasets` has the same methods as `mastra.datasets`, and the datasets it returns have the same methods as `Dataset` from `@mastra/core/datasets`. Reads and writes go to the project's datasets, which Studio shows. Code written against `mastra.datasets` works when given `{ datasets: project.datasets }`.
 
-`startExperiment` runs the experiment in your process and uploads each result, with its scores, as the item finishes. Pass `mastra` to run an agent or workflow registered on it; with `task`, no Mastra is needed. Nothing is written to that Mastra's own storage.
+Experiments are driven by your code: create one, run each item however you like, submit its result with any scores, and finalize it. Results and scores show in Studio.
 
 ```ts
 const project = new MastraProject({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
@@ -123,33 +123,26 @@ const project = new MastraProject({ accessToken: process.env.MASTRA_PLATFORM_ACC
 const dataset = await project.datasets.create({ name: 'Billing questions' });
 await dataset.addItems({ items: [{ input: 'Where is my invoice?', groundTruth: 'Billing > Invoices' }] });
 
-const summary = await dataset.startExperiment({
-  mastra,
-  targetType: 'agent',
-  targetId: 'support',
-  scorers: [answerMatches],
-});
-```
-
-To run items yourself, create an experiment, submit each result, and finalize it:
-
-```ts
-const { experimentId } = await dataset.createExperiment({ name: 'baseline', provenance: { source: 'ci' } });
-await dataset.submitExperimentResult({
-  experimentId,
-  itemId,
-  output,
-  scores: [{ scorerId: 'accuracy', score: 1 }],
-  completedAt: new Date(),
-});
+const { version } = await dataset.getDetails();
+const { experimentId } = await dataset.createExperiment({ name: 'baseline', version });
+for (const item of await dataset.listItems({ version })) {
+  const output = await answer(item.input);
+  await dataset.submitExperimentResult({
+    experimentId,
+    itemId: item.id,
+    output,
+    scores: [{ scorerId: 'accuracy', score: output === item.groundTruth ? 1 : 0 }],
+    completedAt: new Date(),
+  });
+}
 await dataset.finalizeExperiment({ experimentId });
 ```
 
 The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`. Some core options aren't available and throw a `MastraPlatformError` (status 400, with `body.code` naming the refusal) instead of being ignored:
 
 - The Platform assigns dataset IDs, so `create` takes no `id`.
-- Experiments created from code have no target. `startExperiment` records the target you ran in the experiment's `metadata.target`.
-- `startExperimentAsync`, `runExperimentItem`, and `compareExperiments` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
+- Experiments created from code have no target, so `createExperiment` takes no `targetType`, `targetId`, or `scorers`. Record what ran in `metadata` or `provenance`.
+- `startExperiment`, `startExperimentAsync`, `runExperimentItem`, and `compareExperiments` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
 
 Errors the Platform answers with also throw `MastraPlatformError`, carrying its status and body. As with `mastra.datasets`, `get` throws core's `DATASET_NOT_FOUND` for a missing dataset, and `getItem` and `getExperiment` return `null`.
 

@@ -45,7 +45,12 @@ function toJsonSchema(schema: unknown): Record<string, unknown> | undefined {
  * ```ts
  * const dataset = await project.datasets.get({ id: 'ds_123' });
  * await dataset.addItems({ items: [{ input: 'What is 2 + 2?', groundTruth: '4' }] });
- * const summary = await dataset.startExperiment({ task: ({ input }) => answer(input), scorers: [exactMatch] });
+ *
+ * const { experimentId } = await dataset.createExperiment({ name: 'baseline' });
+ * for (const item of await dataset.listItems({ version: (await dataset.getDetails()).version })) {
+ *   await dataset.submitExperimentResult({ experimentId, itemId: item.id, output: await answer(item.input) });
+ * }
+ * await dataset.finalizeExperiment({ experimentId });
  * ```
  */
 export class PlatformDatasets extends DatasetsManager {
@@ -54,8 +59,7 @@ export class PlatformDatasets extends DatasetsManager {
 
   /** @internal Use `project.datasets`. */
   constructor(client: MastraClient) {
-    // Core's manager reads storage from this Mastra; every method is overridden, so it never does.
-    // Datasets created here also use it to run `startExperiment` tasks that need no Mastra of their own.
+    // Core's manager and datasets read storage from this Mastra; every method is overridden, so they never do.
     const mastra = new Mastra({ logger: false });
     super(mastra);
     this.#http = new DatasetsHttp(client);

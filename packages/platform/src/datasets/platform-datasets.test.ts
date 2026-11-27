@@ -1,12 +1,8 @@
 import type { AddressInfo } from 'node:net';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
 import { Dataset, DatasetsManager } from '@mastra/core/datasets';
-import type { ExperimentEvent } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
-import { createScorer } from '@mastra/core/evals';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraServer } from '@mastra/hono';
@@ -32,7 +28,6 @@ async function startPlatform() {
   const mastra = new Mastra({ logger: false, storage });
   const prefix = `/v1/server/projects/${PROJECT_ID}`;
   const submitted: SubmittedResult[] = [];
-  const failSubmitFor = new Set<string>();
   const app = new Hono();
 
   app.use('/v1/server/projects/:projectId/*', async (c, next) => {
@@ -49,7 +44,6 @@ async function startPlatform() {
   });
   app.post(`${prefix}/datasets/:datasetId/experiments/:experimentId/results`, async (c, next) => {
     const body = (await c.req.raw.clone().json()) as SubmittedResult;
-    if (failSubmitFor.has(body.itemId)) return c.json({ error: 'Scores could not be stored' }, 502);
     if (body.scores && (body.scores.length > MAX_RESULT_SCORES || !body.completedAt)) {
       return c.json({ error: 'invalid_dataset_request' }, 400);
     }
@@ -66,7 +60,6 @@ async function startPlatform() {
     apiUrl: `http://127.0.0.1:${port}`,
     mastra,
     submitted,
-    failSubmitFor,
     close: () => new Promise<void>(resolve => server.close(() => resolve())),
   };
 }
@@ -84,16 +77,11 @@ afterAll(async () => {
 
 afterEach(() => {
   platform.submitted.length = 0;
-  platform.failSubmitFor.clear();
 });
 
 beforeAll(() => {
   project = new MastraProject({ accessToken: ACCESS_TOKEN, projectId: PROJECT_ID, apiUrl: platform.apiUrl });
 });
-
-const exactMatch = createScorer({ id: 'exact-match', description: 'Output equals the ground truth' }).generateScore(
-  ({ run }) => (run.output === run.groundTruth ? 1 : 0),
-);
 
 async function expectMastraError(promise: Promise<unknown>, id: string) {
   const error = await promise.then(
@@ -250,12 +238,12 @@ describe('PlatformDatasets', () => {
       'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
     );
     await expectRefusal(dataset.listExperiments({ status: 'completed' }), 'PLATFORM_DATASETS_UNSUPPORTED_OPTION');
+    await expectRefusal(
+      dataset.startExperiment({ task: ({ input }) => input }),
+      'PLATFORM_DATASETS_UNSUPPORTED_METHOD',
+    );
     await expectRefusal(dataset.startExperimentAsync(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
     await expectRefusal(dataset.runExperimentItem(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
-    await expectRefusal(
-      dataset.startExperiment({ targetType: 'agent', targetId: 'support' }),
-      'PLATFORM_DATASETS_MASTRA_REQUIRED',
-    );
     await project.datasets.delete({ id: dataset.id });
   });
 });
@@ -350,118 +338,6 @@ describe('experiments uploaded from code', () => {
     expect(await ds.getExperiment({ experimentId: 'missing' })).toBeNull();
     await ds.deleteExperiment({ experimentId });
     expect(await project.datasets.getExperiment({ experimentId })).toBeNull();
-    await project.datasets.delete({ id: dataset.id });
-  });
-
-  it('startExperiment runs the task here and uploads each result with its scores', async () => {
-    const dataset = await project.datasets.create({ name: 'arithmetic' });
-    await dataset.addItems({
-      items: [
-        { input: '2 + 2', groundTruth: '4' },
-        { input: '3 + 3', groundTruth: '6' },
-        { input: 'divide by zero', groundTruth: 'error' },
-      ],
-    });
-    const local = new Mastra({ logger: false, storage: new InMemoryStore() });
-    const events: ExperimentEvent['type'][] = [];
-
-    const summary = await dataset.startExperiment({
-      mastra: local,
-      name: 'calculator v1',
-      metadata: { model: 'calc' },
-      scorers: [exactMatch],
-      task: async ({ input }) => {
-        if (input === 'divide by zero') throw new Error('cannot divide by zero');
-        return input === '2 + 2' ? '4' : '7';
-      },
-      onEvent: event => {
-        events.push(event.type);
-      },
-    });
-
-    expect(summary).toMatchObject({ status: 'completed', succeededCount: 2, failedCount: 1, persistenceFailures: 0 });
-    expect(events.filter(type => type === 'experiment.item.completed')).toHaveLength(3);
-
-    // What reached the Platform: three results, scored items carrying their scores.
-    const byInput = (input: string) =>
-      platform.submitted.find(r => (r as { input?: unknown }).input === input) as Record<string, unknown>;
-    expect(platform.submitted).toHaveLength(3);
-    expect(byInput('2 + 2')).toMatchObject({ output: '4', scores: [{ scorerId: 'exact-match', score: 1 }] });
-    expect(byInput('3 + 3')).toMatchObject({ output: '7', scores: [{ scorerId: 'exact-match', score: 0 }] });
-    expect(byInput('divide by zero')).toMatchObject({ error: { message: 'cannot divide by zero' } });
-    expect(byInput('divide by zero').error).not.toHaveProperty('stack');
-
-    const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
-    expect(experiment).toMatchObject({
-      name: 'calculator v1',
-      metadata: { model: 'calc' },
-      status: 'completed',
-      succeededCount: 2,
-      failedCount: 1,
-      targetType: null,
-    });
-    const { results } = await dataset.listExperimentResults({ experimentId: summary.experimentId });
-    expect(results).toHaveLength(3);
-
-    // Nothing was written to the local Mastra's storage.
-    const localExperiments = await (await local.getStorage()!.getStore('experiments'))!.listExperiments({
-      pagination: { page: 0, perPage: 10 },
-    });
-    expect(localExperiments.experiments).toEqual([]);
-    await project.datasets.delete({ id: dataset.id });
-  });
-
-  it('startExperiment runs a target registered on the given Mastra and records it in metadata', async () => {
-    const dataset = await project.datasets.create({ name: 'support' });
-    await dataset.addItem({ input: 'Where is my invoice?', groundTruth: 'Billing > Invoices' });
-    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
-    const model = new MockLanguageModelV2({
-      doGenerate: async () => ({
-        finishReason: 'stop',
-        usage,
-        content: [{ type: 'text', text: 'Billing > Invoices' }],
-        warnings: [],
-      }),
-      doStream: async () => ({
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'text-start', id: 't' },
-          { type: 'text-delta', id: 't', delta: 'Billing > Invoices' },
-          { type: 'text-end', id: 't' },
-          { type: 'finish', finishReason: 'stop', usage },
-        ] as never[]),
-      }),
-    });
-    const support = new Agent({ id: 'support', name: 'Support', instructions: 'Answer billing questions', model });
-    const local = new Mastra({ logger: false, agents: { support } });
-
-    const summary = await dataset.startExperiment({ mastra: local, targetType: 'agent', targetId: 'support' });
-
-    expect(summary.results[0]?.error).toBeNull();
-    expect(summary).toMatchObject({ status: 'completed', succeededCount: 1 });
-    expect(JSON.stringify(platform.submitted[0])).toContain('Billing > Invoices');
-    const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
-    expect(experiment?.metadata).toEqual({ target: { type: 'agent', id: 'support' } });
-    await project.datasets.delete({ id: dataset.id });
-  });
-
-  it('startExperiment counts a failed upload, keeps running, and still finalizes', async () => {
-    const dataset = await project.datasets.create({ name: 'flaky uploads' });
-    const [kept, dropped] = await dataset.addItems({
-      items: [
-        { input: 'a', groundTruth: 'a' },
-        { input: 'b', groundTruth: 'b' },
-      ],
-    });
-    platform.failSubmitFor.add(dropped!.id);
-
-    const summary = await dataset.startExperiment({ task: ({ input }) => input, scorers: [exactMatch] });
-
-    expect(summary).toMatchObject({ status: 'completed', succeededCount: 2, persistenceFailures: 1 });
-    expect(summary.results.find(r => r.itemId === dropped!.id)?.persistenceError?.message).toContain('502');
-    expect(summary.results.find(r => r.itemId === kept!.id)?.persistenceError).toBeNull();
-    const experiment = await dataset.getExperiment({ experimentId: summary.experimentId });
-    expect(experiment).toMatchObject({ status: 'completed', succeededCount: 1, skippedCount: 1 });
     await project.datasets.delete({ id: dataset.id });
   });
 });

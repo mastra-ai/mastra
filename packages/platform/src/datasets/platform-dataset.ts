@@ -1,13 +1,4 @@
-import { Dataset, runExperiment } from '@mastra/core/datasets';
-import type {
-  DataItem,
-  ExperimentConfig,
-  ExperimentEvent,
-  ExperimentItemCompletedEvent,
-  ExperimentSummary,
-  StartExperimentConfig,
-} from '@mastra/core/datasets';
-import { MastraError } from '@mastra/core/error';
+import { Dataset } from '@mastra/core/datasets';
 import type { Mastra } from '@mastra/core/mastra';
 import type {
   DatasetItem,
@@ -44,7 +35,6 @@ import {
   isNotFound,
   notFound,
   readAllPages,
-  refusal,
   rejectUnsupported,
   revive,
   unsupportedMethod,
@@ -52,65 +42,27 @@ import {
 
 type ItemsPage = { items: object[]; pagination: PaginationInfo };
 
-type SubmittedScore = { scorerId: string; scorerName?: string; score: number; reason?: string };
-
-/** Options for {@link PlatformDataset.startExperiment}: core's options plus the Mastra that owns the target. */
-export type PlatformStartExperimentConfig<I = unknown, O = unknown, E = unknown> = StartExperimentConfig<I, O, E> & {
-  /**
-   * Mastra to run the experiment in. Required with `targetType`/`targetId`, which name an agent,
-   * workflow, scorer or processor registered on it. With `task`, it is passed to the task.
-   */
-  mastra?: Mastra;
-};
+const DRIVE_IT_YOURSELF =
+  'Run the items yourself, then save them with createExperiment, submitExperimentResult and finalizeExperiment.';
 
 function toJsonSchema(schema: unknown): Record<string, unknown> | null | undefined {
   if (schema === undefined || schema === null) return schema;
   return isZodType(schema) ? (zodToJsonSchema(schema) as Record<string, unknown>) : (schema as Record<string, unknown>);
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-/** Scores from an item event in the shape the Platform stores; unscored and failed scorers are left out. */
-function submittedScores(scores: ExperimentItemCompletedEvent['scores']): SubmittedScore[] {
-  if (!Array.isArray(scores)) return [];
-  return scores.flatMap(s => {
-    if (!isRecord(s) || typeof s.scorerId !== 'string' || typeof s.score !== 'number' || s.error) return [];
-    return [
-      {
-        scorerId: s.scorerId,
-        ...(typeof s.scorerName === 'string' ? { scorerName: s.scorerName } : {}),
-        score: s.score,
-        ...(typeof s.reason === 'string' ? { reason: s.reason } : {}),
-      },
-    ];
-  });
-}
-
-/** The item error without its stack, which would send local file paths to the Platform. */
-function submittedError(error: ExperimentItemCompletedEvent['error']): { message: string; code?: string } | null {
-  if (!isRecord(error)) return null;
-  return {
-    message: typeof error.message === 'string' ? error.message : 'Unknown error',
-    ...(typeof error.code === 'string' ? { code: error.code } : {}),
-  };
-}
-
 /**
  * A Mastra Platform dataset with the same methods as core's `Dataset`. Reads and writes go to the
- * project's datasets over HTTP; `startExperiment` runs in this process and uploads each result as
- * it finishes. Get one from `project.datasets.get({ id })` or `project.datasets.create(...)`.
+ * project's datasets over HTTP. Experiments are driven by the caller: create one, submit each
+ * item's result, and finalize it. Get one from `project.datasets.get({ id })` or `project.datasets.create(...)`.
  */
 export class PlatformDataset extends Dataset {
   readonly #http: DatasetsHttp;
-  readonly #mastra: Mastra;
 
   /** @internal Use `project.datasets.get({ id })`. */
   constructor(id: string, http: DatasetsHttp, mastra: Mastra) {
     // Core's Dataset reads storage from `mastra`; every method is overridden, so it never does.
     super(id, mastra);
     this.#http = http;
-    this.#mastra = mastra;
   }
 
   // ---------------------------------------------------------------------------
@@ -442,137 +394,23 @@ export class PlatformDataset extends Dataset {
     return revive<Experiment>(experiment, EXPERIMENT_DATES);
   }
 
-  /**
-   * Runs an experiment in this process over the dataset's items and uploads each result, with its
-   * scores, to the Platform as it finishes. Takes core's options; pass `mastra` when using
-   * `targetType`/`targetId`. Nothing is written to `mastra`'s own storage.
-   *
-   * A failed upload doesn't stop the run: the item gets a `persistenceError` and is counted in
-   * `persistenceFailures`. The experiment is finalized when the run ends, including when it fails
-   * or is aborted.
-   */
-  override async startExperiment<I = unknown, O = unknown, E = unknown>(
-    config: PlatformStartExperimentConfig<I, O, E>,
-  ): Promise<ExperimentSummary> {
-    const { mastra: configMastra, onEvent, ...experiment } = config;
-    if (experiment.targetType !== undefined && !configMastra) {
-      throw refusal(
-        `startExperiment: pass \`mastra\` to run ${experiment.targetType} "${experiment.targetId}"; it is looked up in that Mastra`,
-        { code: 'PLATFORM_DATASETS_MASTRA_REQUIRED', method: 'startExperiment', options: ['targetType', 'targetId'] },
-      );
-    }
-    const mastra = configMastra ?? this.#mastra;
-
-    const details = await this.getDetails();
-    const version = experiment.version ?? details.version;
-    const items = await this.#itemsAt(version);
-    if (items.length === 0) {
-      throw new MastraError({
-        id: 'EXPERIMENT_NO_ITEMS',
-        text: `No items in dataset ${this.id} at version ${version}`,
-        domain: 'STORAGE',
-        category: 'USER',
-      });
-    }
-
-    const target =
-      experiment.targetType !== undefined ? { type: experiment.targetType, id: experiment.targetId } : undefined;
-    const { experimentId } = await this.createExperiment({
-      ...(experiment.name !== undefined ? { name: experiment.name } : {}),
-      ...(experiment.description !== undefined ? { description: experiment.description } : {}),
-      ...(experiment.metadata !== undefined || target
-        ? { metadata: { ...(target ? { target } : {}), ...experiment.metadata } }
-        : {}),
-      ...(experiment.provenance !== undefined ? { provenance: experiment.provenance } : {}),
-      ...(experiment.grouping !== undefined ? { grouping: experiment.grouping } : {}),
-      version,
-    });
-
-    const uploadErrors = new Map<string, string>();
-    const upload = async (event: ExperimentItemCompletedEvent) => {
-      const scores = submittedScores(event.scores);
-      try {
-        await this.submitExperimentResult({
-          experimentId,
-          itemId: event.itemId,
-          input: event.input,
-          output: event.output,
-          groundTruth: event.groundTruth,
-          error: submittedError(event.error),
-          startedAt: new Date(event.startedAt),
-          completedAt: new Date(event.completedAt),
-          ...(event.traceId ? { traceId: event.traceId } : {}),
-          ...(scores.length ? { scores } : {}),
-        });
-      } catch (error) {
-        uploadErrors.set(event.itemId, error instanceof Error ? error.message : String(error));
-        mastra
-          .getLogger()
-          ?.error(`Failed to upload experiment result for item ${event.itemId} in experiment ${experimentId}`, {
-            error,
-          });
-      }
-    };
-
-    // Items keep their dataset ids so uploads land on them. Inline data skips the dataset-level
-    // scorers core would use, so they are copied onto items that name none.
-    const data: DataItem[] = items.map(item => ({
-      id: item.id,
-      input: item.input,
-      groundTruth: item.groundTruth,
-      ...(item.expectedTrajectory != null
-        ? { expectedTrajectory: item.expectedTrajectory as DataItem['expectedTrajectory'] }
-        : {}),
-      ...(item.metadata ? { metadata: item.metadata } : {}),
-      ...(item.requestContext ? { requestContext: item.requestContext } : {}),
-      ...(item.toolMocks ? { toolMocks: item.toolMocks } : {}),
-      ...(item.unmockedToolPolicy ? { unmockedToolPolicy: item.unmockedToolPolicy } : {}),
-      ...((item.scorerIds ?? details.scorerIds) ? { scorerIds: (item.scorerIds ?? details.scorerIds)! } : {}),
-    }));
-
-    let summary: ExperimentSummary | undefined;
-    try {
-      summary = await runExperiment(mastra, {
-        ...experiment,
-        data,
-        experimentId,
-        persistence: { experiments: 'none', scores: 'none' },
-        onEvent: async (event: ExperimentEvent) => {
-          if (event.type === 'experiment.item.completed') await upload(event);
-          await onEvent?.(event);
-        },
-        // Same widening as core's Dataset.startExperiment: runExperiment isn't generic over I/O/E.
-      } as ExperimentConfig);
-    } finally {
-      await this.finalizeExperiment({ experimentId }).catch(error => {
-        // Don't hide the run's own error, or fail a run whose results were uploaded.
-        mastra.getLogger()?.error(`Failed to finalize experiment ${experimentId}`, { error });
-      });
-    }
-
-    if (uploadErrors.size === 0) return summary;
-    return {
-      ...summary,
-      persistenceFailures: (summary.persistenceFailures ?? 0) + uploadErrors.size,
-      results: summary.results.map(result => {
-        const message = uploadErrors.get(result.itemId);
-        return message ? { ...result, persistenceError: { message } } : result;
-      }),
-    };
-  }
-
   // ---------------------------------------------------------------------------
   // Not available on the Platform
   // ---------------------------------------------------------------------------
 
+  /**
+   * Not supported yet. Run the items yourself, then save them with {@link createExperiment},
+   * {@link submitExperimentResult} and {@link finalizeExperiment}.
+   */
+  override async startExperiment(): Promise<never> {
+    throw unsupportedMethod('startExperiment', DRIVE_IT_YOURSELF);
+  }
+
   override async startExperimentAsync(): Promise<never> {
-    throw unsupportedMethod('startExperimentAsync', 'Use startExperiment, which runs here and uploads results.');
+    throw unsupportedMethod('startExperimentAsync', DRIVE_IT_YOURSELF);
   }
 
   override async runExperimentItem(): Promise<never> {
-    throw unsupportedMethod(
-      'runExperimentItem',
-      'Run the item yourself and save it with submitExperimentResult, or use startExperiment.',
-    );
+    throw unsupportedMethod('runExperimentItem', DRIVE_IT_YOURSELF);
   }
 }

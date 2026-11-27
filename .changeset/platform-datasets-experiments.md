@@ -4,22 +4,27 @@
 
 Added `project.datasets` to `MastraProject`, for a Platform project's datasets and experiments. It has the same methods as `mastra.datasets`, and its datasets have the same methods as core's `Dataset`, so code written for `mastra.datasets` works with `{ datasets: project.datasets }`.
 
-`startExperiment` runs the experiment in your process and uploads each result, with its scores, to the project as it finishes. The results show in Studio.
+Run experiments from your own code and save them to the project: create an experiment, submit each item's result with its scores, and finalize it. The results show in Studio.
 
 ```ts
 import { MastraProject } from '@mastra/platform';
 
 const project = new MastraProject({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+const dataset = await project.datasets.get({ id: 'ds_123' });
 
-const dataset = await project.datasets.create({ name: 'Billing questions' });
-await dataset.addItems({ items: [{ input: 'Where is my invoice?', groundTruth: 'Billing > Invoices' }] });
-
-const summary = await dataset.startExperiment({
-  mastra,
-  targetType: 'agent',
-  targetId: 'support',
-  scorers: [answerMatches],
-});
+const { version } = await dataset.getDetails();
+const { experimentId } = await dataset.createExperiment({ name: 'baseline', version });
+for (const item of await dataset.listItems({ version })) {
+  const output = await answer(item.input);
+  await dataset.submitExperimentResult({
+    experimentId,
+    itemId: item.id,
+    output,
+    scores: [{ scorerId: 'accuracy', score: output === item.groundTruth ? 1 : 0 }],
+    completedAt: new Date(),
+  });
+}
+await dataset.finalizeExperiment({ experimentId });
 ```
 
-To run items yourself, use `createExperiment`, `submitExperimentResult`, and `finalizeExperiment`. Options the Platform can't honor, such as a caller-chosen dataset `id`, throw a `MastraPlatformError` instead of being ignored.
+`startExperiment` isn't supported yet. It, and other options the Platform can't honor such as a caller-chosen dataset `id`, throw a `MastraPlatformError` instead of being ignored.
