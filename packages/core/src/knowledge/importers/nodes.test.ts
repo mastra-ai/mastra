@@ -58,9 +58,11 @@ describe("importer links read their targets' nodes in one call", () => {
     expect(await run([upsert({ sourceId: 'l', links })])).toMatchObject({ outcome: 'succeeded' });
     expect(await body('notion/l')).toBe(expected);
     const linkReads = getNodes.mock.calls.filter(([, ids]) => ids.includes('a'));
-    // Rendered once with the body, and again by the settle pass that retries the unresolved link.
+    // Each render reads all its targets before the pages and the resolved ones after: rendered
+    // once with the body, and again by the settle pass that retries the unresolved link.
     expect(linkReads.length).toBeGreaterThan(0);
-    for (const call of linkReads) expect(call).toEqual(['b1', ['a', 'b', 'missing']]);
+    expect(linkReads.length % 2).toBe(0);
+    linkReads.forEach((call, i) => expect(call).toEqual(['b1', i % 2 ? ['a', 'b'] : ['a', 'b', 'missing']]));
     expect(getNode.mock.calls.filter(([, id]) => id === 'a' || id === 'b')).toEqual([]);
   });
 

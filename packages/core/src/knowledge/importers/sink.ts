@@ -490,22 +490,28 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const renderLinks = async (links: KnowledgeImporterNodeLink[]) => {
     const lines: string[] = [];
     const unresolved: string[] = [];
-    // Where the targets are now, in one read made for this render and kept no longer: another
-    // binding may take a target over between renders. A store that only implements getNode (it
-    // predates getNodes) gets the base class's loop.
+    // Where the targets are, in one read before the pages and one after: another binding's flush
+    // can take a target over and commit while this renders, and its node is then gone. A link
+    // whose node did not survive to the second read waits, as it would have had it been read
+    // last. A store that only implements getNode (it predates getNodes) gets the base class's loop.
     const getNodes =
       (importers as Partial<KnowledgeImportersStorage>).getNodes ?? KnowledgeImportersStorage.prototype.getNodes;
-    const found = links.length
-      ? await getNodes.call(
-          importers,
-          binding.id,
-          links.map(link => link.sourceId),
-        )
-      : [];
-    const nodes = new Map(found.map(node => [node.sourceId, node]));
+    const read = async (sourceIds: string[]) =>
+      new Map(
+        (sourceIds.length ? await getNodes.call(importers, binding.id, sourceIds) : []).map(node => [
+          node.sourceId,
+          node,
+        ]),
+      );
+    const before = await read(links.map(link => link.sourceId));
+    const rendered: { link: KnowledgeImporterNodeLink; line: string | null; pageId?: string }[] = [];
     for (const link of links) {
-      const line = await linkLine(link, nodes.get(link.sourceId));
-      if (line) lines.push(line);
+      const node = before.get(link.sourceId);
+      rendered.push({ link, line: await linkLine(link, node), pageId: node?.pageId });
+    }
+    const after = await read(rendered.filter(each => each.line).map(each => each.link.sourceId));
+    for (const { link, line, pageId } of rendered) {
+      if (line && after.get(link.sourceId)?.pageId === pageId) lines.push(line);
       else unresolved.push(encodeLink(link));
     }
     return { section: linkSection(lines), unresolved };
