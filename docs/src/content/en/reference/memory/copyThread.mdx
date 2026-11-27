@@ -83,7 +83,7 @@ const { thread, messageIdMap } = await memory.copyThread({
             name: 'messageFilter',
             type: 'MessageFilter',
             description:
-              'Filter criteria for selecting which messages to copy, by date range or message IDs. With Observational Memory, the default is the messages after `lastObservedAt`; pass `{}` to copy every message.',
+              'Filter criteria for selecting which messages to copy, by date range or message IDs. With Observational Memory configured, the default is the messages after `lastObservedAt`; pass `{}` to copy every message.',
             isOptional: true,
           },
         ],

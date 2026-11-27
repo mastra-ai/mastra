@@ -429,7 +429,7 @@ const clone = await session.thread.clone({
 })
 ```
 
-Pass `metadata` to set the clone's metadata. Pass `options` to choose which messages to copy: it takes the same `messageFilter` and `messageLimit` as `memory.cloneThread()`. The clone keeps the source thread's observational and working memory. With observational memory and no `options`, the clone copies only the messages after `lastObservedAt`, the ones still in the context window. A filter that keeps no messages clones the memory without the conversation.
+Pass `metadata` to set the clone's metadata. Pass `options` to choose which messages to copy: it takes the same `messageFilter` and `messageLimit` as `memory.cloneThread()`. The clone keeps the source thread's observational and working memory. With observational memory configured and no `options`, the clone copies only the messages after `lastObservedAt`, the ones still in the context window. A filter that keeps no messages clones the memory without the conversation.
 
 ```typescript
 const clone = await session.thread.clone({

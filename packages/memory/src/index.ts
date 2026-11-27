@@ -3386,9 +3386,7 @@ Notes:
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
     const sourceResourceId = sourceThread?.resourceId;
 
-    const result = await memoryStore.copyThread(
-      await this.withContextWindowFilter(memoryStore, args, sourceResourceId),
-    );
+    const result = await memoryStore.copyThread(await this.withContextWindowFilter(args, sourceResourceId));
 
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
@@ -3708,23 +3706,22 @@ Notes:
 
   /**
    * With observational memory, the context window is the observations plus the messages created
-   * after `lastObservedAt` (the same boundary `getContext` loads by). When the caller names no
-   * message filter or limit, copy only those messages: the observations carry the rest.
+   * after `lastObservedAt`. `getContext` reads that boundary from the configured engine's record,
+   * so read it the same way. When the caller names no message filter or limit, copy only those
+   * messages: the observations carry the rest.
    */
   private async withContextWindowFilter(
-    memoryStore: MemoryStorage,
     args: StorageCloneThreadInput,
     sourceResourceId: string | undefined,
   ): Promise<StorageCloneThreadInput> {
-    if (!memoryStore.supportsObservationalMemory || !sourceResourceId) return args;
+    if (!sourceResourceId) return args;
     if (args.options?.messageFilter !== undefined || args.options?.messageLimit !== undefined) return args;
 
-    const sourceOM =
-      (await memoryStore.getObservationalMemory(args.sourceThreadId, sourceResourceId)) ??
-      (await memoryStore.getObservationalMemory(null, sourceResourceId));
-    if (!sourceOM?.lastObservedAt) return args;
+    const omEngine = await this.omEngine;
+    const contextOM = omEngine ? await omEngine.getRecord(args.sourceThreadId, sourceResourceId) : null;
+    if (!contextOM?.lastObservedAt) return args;
 
-    const startDate = new Date(new Date(sourceOM.lastObservedAt).getTime() + 1);
+    const startDate = new Date(new Date(contextOM.lastObservedAt).getTime() + 1);
     return { ...args, options: { ...args.options, messageFilter: { startDate } } };
   }
 
@@ -3740,8 +3737,14 @@ Notes:
     sourceResourceId: string,
     result: StorageCopyThreadOutput,
   ): Promise<void> {
-    // Look up OM for thread-scoped first (threadId + resourceId), then resource-scoped (null + resourceId)
-    let sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);
+    // Prefer the record the configured engine reads for context, so the clone carries the
+    // observations that go with the messages copied. Otherwise look up thread-scoped OM first
+    // (threadId + resourceId), then resource-scoped (null + resourceId).
+    const omEngine = await this.omEngine;
+    let sourceOM = omEngine ? await omEngine.getRecord(sourceThreadId, sourceResourceId) : null;
+    if (!sourceOM) {
+      sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);
+    }
     if (!sourceOM) {
       sourceOM = await memoryStore.getObservationalMemory(null, sourceResourceId);
     }
