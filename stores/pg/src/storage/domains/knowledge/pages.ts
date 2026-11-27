@@ -1211,13 +1211,18 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
     const core = await loadPagesCore();
     return this.#tx(async tx => {
+      if (input.parentId === input.id) {
+        throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
+      }
+      // The parent before the page, as marking a sequence, merging and locking a subtree do, so a
+      // move can't hold its page while waiting on a parent that a writer of its children holds.
+      const parent = await this.#requireLivePage(tx, input.parentId);
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be moved`);
-      if (input.parentId === input.id || (await this.#isInSubtree(tx, input.id, input.parentId))) {
+      if (await this.#isInSubtree(tx, input.id, input.parentId)) {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
-      const parent = await this.#requireLivePage(tx, input.parentId);
       const live = await this.#lockStableSubtree(tx, input.id, core.MAX_KNOWLEDGE_MOVE_PAGES);
       const stats = await this.#subtreeStats(tx, input.id);
       if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {

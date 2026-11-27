@@ -346,6 +346,7 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     const {
       createKnowledgeUlid,
       knowledgePositionBetween,
+      knowledgeSequenceItemSearchText,
       knowledgeSequencePageItemId,
       refuseKnowledgeSequencePagePosition,
     } = await loadCore();
@@ -376,13 +377,15 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
     }
     const occurredAt = orderBy === 'timeline' ? new Date(page.createdAt).getTime() : null;
     const title = String(page.name);
+    // A page item is found by its page's name, like any item by its title.
+    const searchText = knowledgeSequenceItemSearchText({ title, body: null, links: [], properties: null });
     const writtenBy = String(page.updatedBy.author);
     const stored = await this.#item(tx, sequenceId, externalId);
     if (!stored) {
       await tx.none(
         `INSERT INTO ${this.#t.items} ("id", "sequenceId", "externalId", "writtenAt", "version", "occurredAt", "position", "title", "searchText", "writtenBy", "pageId")
-          VALUES ($1, $2, $3, now(), 1, $4, $5, $6, '', $7, $8)`,
-        [createKnowledgeUlid(), sequenceId, externalId, occurredAt, position, title, writtenBy, pageId],
+          VALUES ($1, $2, $3, now(), 1, $4, $5, $6, $7, $8, $9)`,
+        [createKnowledgeUlid(), sequenceId, externalId, occurredAt, position, title, searchText, writtenBy, pageId],
       );
       return;
     }
@@ -395,8 +398,8 @@ export class PgKnowledgeSequences implements KnowledgeSequencesStorage {
       return;
     }
     await tx.none(
-      `UPDATE ${this.#t.items} SET "occurredAt" = $1, "position" = $2, "title" = $3, "writtenBy" = $4, "deletedAt" = NULL, "version" = "version" + 1 WHERE "id" = $5`,
-      [occurredAt, position, title, writtenBy, stored.id],
+      `UPDATE ${this.#t.items} SET "occurredAt" = $1, "position" = $2, "title" = $3, "searchText" = $4, "writtenBy" = $5, "deletedAt" = NULL, "version" = "version" + 1 WHERE "id" = $6`,
+      [occurredAt, position, title, searchText, writtenBy, stored.id],
     );
   }
 

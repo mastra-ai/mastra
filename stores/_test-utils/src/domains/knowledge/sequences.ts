@@ -945,6 +945,55 @@ export function createKnowledgeSequenceTests(createStore: () => Promise<Knowledg
         await consistent();
       });
 
+      it("records the deleting writer on a deleted page's item tombstone", async () => {
+        const { store, list, sequences, read } = await withChildren('timeline');
+        await sequences.markSequence({ pageId: list.id });
+        const page = await store.createPage({
+          parentId: list.id,
+          name: 'Doomed',
+          provenance: { author: 'agent:creator' },
+        });
+        await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'agent:deleter' });
+        expect((await read({ includeDeleted: true })).find(i => i.pageId === page.id)).toMatchObject({
+          writtenBy: 'agent:deleter',
+        });
+      });
+
+      it("finds a page item by its page's name, follows renames, and drops it once the page leaves", async () => {
+        for (const orderBy of ['timeline', 'position'] as const) {
+          const { store, scope, list, make, sequences } = await withChildren(orderBy);
+          const seeded = await make('Postgres runbook');
+          await sequences.markSequence({ pageId: list.id, orderBy });
+          const created = await make('Redis runbook');
+          const search = async (query: string) =>
+            (await sequences.searchItems({ query, read: 'all', sequenceIds: [list.id], limit: 10 })).map(i => i.pageId);
+          expect(await search('runbook')).toEqual(expect.arrayContaining([seeded.id, created.id]));
+          expect(await search('POSTGRES')).toEqual([seeded.id]);
+          await store.updatePage({
+            id: created.id,
+            name: 'Valkey notes',
+            expectedVersion: created.version,
+            provenance: host,
+          });
+          expect(await search('redis')).toEqual([]);
+          expect(await search('valkey')).toEqual([created.id]);
+          const moved = await store.getPage({ id: seeded.id, read: 'all' });
+          await store.movePage({
+            id: seeded.id,
+            parentId: scope.id,
+            expectedVersion: moved!.version,
+            provenance: host,
+          });
+          expect(await search('postgres')).toEqual([]);
+          const back = await store.getPage({ id: seeded.id, read: 'all' });
+          await store.movePage({ id: seeded.id, parentId: list.id, expectedVersion: back!.version, provenance: host });
+          expect(await search('postgres')).toEqual([seeded.id]);
+          const renamed = await store.getPage({ id: created.id, read: 'all' });
+          await store.deletePage({ id: created.id, expectedVersion: renamed!.version, deletedBy: 'host' });
+          expect(await search('valkey')).toEqual([]);
+        }
+      });
+
       it('shows a renamed page by its new name, and refuses item writes to a page item', async () => {
         const { store, list, make, sequences, titles } = await withChildren('position');
         await sequences.markSequence({ pageId: list.id, orderBy: 'position' });

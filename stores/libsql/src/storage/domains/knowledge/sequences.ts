@@ -349,6 +349,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     const {
       createKnowledgeUlid,
       knowledgePositionBetween,
+      knowledgeSequenceItemSearchText,
       knowledgeSequencePageItemId,
       refuseKnowledgeSequencePagePosition,
     } = await loadCore();
@@ -382,12 +383,14 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
     }
     const occurredAt = orderBy === 'timeline' ? Date.parse(String(page.createdAt)) : null;
     const title = String(page.name);
+    // A page item is found by its page's name, like any item by its title.
+    const searchText = knowledgeSequenceItemSearchText({ title, body: null, links: [], properties: null });
     const writtenBy = String(JSON.parse(String(page.updatedBy)).author);
     const stored = await this.#item(tx, sequenceId, externalId);
     if (!stored) {
       await tx.execute({
         sql: `INSERT INTO "${T.items}" (id, sequenceId, externalId, writtenAt, version, occurredAt, position, title, searchText, writtenBy, pageId)
-          VALUES (?, ?, ?, ?, 1, ?, ?, ?, '', ?, ?)`,
+          VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)`,
         args: [
           createKnowledgeUlid(),
           sequenceId,
@@ -396,6 +399,7 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
           occurredAt,
           position,
           title,
+          searchText,
           writtenBy,
           pageId,
         ],
@@ -411,8 +415,8 @@ export class LibSQLKnowledgeSequences implements KnowledgeSequencesStorage {
       return;
     }
     await tx.execute({
-      sql: `UPDATE "${T.items}" SET occurredAt = ?, position = ?, title = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
-      args: [occurredAt, position, title, writtenBy, stored.id],
+      sql: `UPDATE "${T.items}" SET occurredAt = ?, position = ?, title = ?, searchText = ?, writtenBy = ?, deletedAt = NULL, version = version + 1 WHERE id = ?`,
+      args: [occurredAt, position, title, searchText, writtenBy, stored.id],
     });
   }
 

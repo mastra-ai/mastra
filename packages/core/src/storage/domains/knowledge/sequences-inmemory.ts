@@ -145,7 +145,8 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
           ...stored,
           title: null,
           deletedAt: page.deletedAt ?? new Date(),
-          writtenBy: page.updatedBy.author,
+          // A deleted page keeps its last editor in `updatedBy` here; the tombstone is the deleter's.
+          writtenBy: (page.deletedAt && page.deletedBy) || page.updatedBy.author,
           version: stored.version + 1,
         });
       }
@@ -448,8 +449,7 @@ export class InMemoryKnowledgeSequencesStorage extends KnowledgeSequencesStorage
     const until = input.until?.getTime();
     return [...this.#s.items.values()]
       .filter(item => {
-        // A page item is found as its page, by page search.
-        if (!visible.has(item.sequenceId) || item.deletedAt || item.pageId) return false;
+        if (!visible.has(item.sequenceId) || item.deletedAt) return false;
         if (!knowledgeSequenceTypeMatches(typeFilter, item.type)) return false;
         const time = item.occurredAt?.getTime();
         if (time === undefined) return since === undefined && until === undefined;

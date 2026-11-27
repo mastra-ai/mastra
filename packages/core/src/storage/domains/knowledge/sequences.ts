@@ -492,7 +492,7 @@ export abstract class KnowledgeSequencesStorage {
   abstract listItems(input: ListKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemsPage>;
   /**
    * Keyword search over item text ({@link knowledgeSequenceItemSearchText}). Ranked by how many query words match, then newest
-   * `occurredAt` (undated last), then `id`. Deleted items never match. The visibility filter applies before the
+   * `occurredAt` (undated last), then `id`. A page item matches on its page's name. Deleted items never match. The visibility filter applies before the
    * limit, so a hidden sequence can't take a slot.
    */
   abstract searchItems(input: SearchKnowledgeSequenceItemsInput): Promise<KnowledgeSequenceItemRecord[]>;
