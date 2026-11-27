@@ -1,11 +1,9 @@
 import type { BoardPhaseKind } from '@mastra/factory/boards';
 import { CardSourceIcon, phaseIconKind } from '@mastra/playground-ui/domains/factory';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ComponentType } from 'react';
 
 import { phaseKindOf } from '../boardFlow';
 import type { BoardInfo } from '../boardFlow';
-import { CARD_SOURCES } from '../cardSources';
 import type { WorkItemSource } from '../services/workItems';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';

@@ -22,5 +22,10 @@ describe('cardSourceOf', () => {
     expect(cardSourceOf({ integrationId: 'incidentio', type: 'follow-up' })).toBe('incidentio-follow-up');
     expect(cardSourceOf({ integrationId: 'vanta', type: 'vulnerability' })).toBe('vanta-vulnerability');
     expect(cardSourceOf({ integrationId: 'slack', type: 'thread' })).toBe('slack-thread');
+    expect(cardSourceOf({ integrationId: 'detail', type: 'finding' })).toBe('detail-finding');
+  });
+
+  it('shows a card whose upstream is missing as filed by hand', () => {
+    expect(cardSourceOf(undefined)).toBe('manual');
   });
 });
