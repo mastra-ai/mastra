@@ -1,7 +1,7 @@
 {
   "attachment": ["jad-ai", "jad-code", "jad-go"],
   "reasoning": {
-    "jad-go": [
+    "jad-code": [
       {
         "type": "toggle"
       }
@@ -11,7 +11,7 @@
         "type": "toggle"
       }
     ],
-    "jad-code": [
+    "jad-go": [
       {
         "type": "toggle"
       }
