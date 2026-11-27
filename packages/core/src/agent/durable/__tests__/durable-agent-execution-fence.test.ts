@@ -75,11 +75,24 @@ function gatedModel(text: string) {
     signalEntered = resolve;
   });
   let calls = 0;
+  const enter = async () => {
+    calls++;
+    signalEntered();
+    await gate;
+  };
   const model = new MockLanguageModelV2({
+    doGenerate: async () => {
+      await enter();
+      return {
+        content: [{ type: 'text', text }],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        response: { id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+        warnings: [],
+      };
+    },
     doStream: async () => {
-      calls++;
-      signalEntered();
-      await gate;
+      await enter();
       return {
         stream: convertArrayToReadableStream([
           { type: 'stream-start', warnings: [] },
@@ -103,36 +116,37 @@ function gatedModel(text: string) {
  */
 function recordingModel(gates: Array<Promise<void> | undefined>, firstCalls?: string) {
   const prompts: string[] = [];
+  const usage = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
+  const answer = async (prompt: unknown) => {
+    const call = prompts.push(JSON.stringify(prompt));
+    await gates[call - 1];
+    return call;
+  };
+  const toolCall = (toolName: string) => ({
+    type: 'tool-call' as const,
+    toolCallId: 'call-1',
+    toolName,
+    input: '{}',
+    providerExecuted: false,
+  });
   const model = new MockLanguageModelV2({
+    doGenerate: async ({ prompt }) => {
+      const call = await answer(prompt);
+      const response = { id: `resp-${call}`, modelId: 'mock', timestamp: new Date(0) };
+      return call === 1 && firstCalls
+        ? { content: [toolCall(firstCalls)], finishReason: 'tool-calls', usage, response, warnings: [] }
+        : { content: [{ type: 'text', text: `answer ${call}` }], finishReason: 'stop', usage, response, warnings: [] };
+    },
     doStream: async ({ prompt }) => {
-      const call = prompts.push(JSON.stringify(prompt));
-      await gates[call - 1];
+      const call = await answer(prompt);
       const body =
         call === 1 && firstCalls
-          ? [
-              {
-                type: 'tool-call' as const,
-                toolCallType: 'function' as const,
-                toolCallId: 'call-1',
-                toolName: firstCalls,
-                input: '{}',
-                providerExecuted: false,
-              },
-              {
-                type: 'finish' as const,
-                finishReason: 'tool-calls' as const,
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
-            ]
+          ? [toolCall(firstCalls), { type: 'finish' as const, finishReason: 'tool-calls' as const, usage }]
           : [
               { type: 'text-start' as const, id: 'text-1' },
               { type: 'text-delta' as const, id: 'text-1', delta: `answer ${call}` },
               { type: 'text-end' as const, id: 'text-1' },
-              {
-                type: 'finish' as const,
-                finishReason: 'stop' as const,
-                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-              },
+              { type: 'finish' as const, finishReason: 'stop' as const, usage },
             ];
       return {
         stream: convertArrayToReadableStream([

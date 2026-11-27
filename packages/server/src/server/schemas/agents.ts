@@ -125,21 +125,6 @@ export const agentIdPathParams = z.object({
   agentId: z.string().describe('Unique identifier for the agent'),
 });
 
-export const durableAgentRunPathParams = agentIdPathParams.extend({
-  runId: z.string().describe('Server-issued durable run identifier'),
-});
-
-export const durableAgentStartResponseSchema = z.object({
-  runId: z.string(),
-  status: z.literal('running'),
-});
-
-export const durableAgentRunResponseSchema = z.object({
-  runId: z.string(),
-  status: z.string(),
-  outcome: z.unknown().optional(),
-});
-
 /**
  * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
  * When `status` and `versionId` are both provided, `versionId` takes precedence.
@@ -486,8 +471,6 @@ export const agentExecutionBodySchema = z
     untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
-
-export const durableAgentStartBodySchema = agentExecutionBodySchema.omit({ runId: true });
 
 /**
  * Legacy body schema for deprecated endpoints that still use threadId/resourceId

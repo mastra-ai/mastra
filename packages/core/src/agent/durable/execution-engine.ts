@@ -988,18 +988,8 @@ export class DefaultAgentExecutionEngine {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     return workflowsStore ? (await this.loadPersistedRunSnapshot(workflowsStore, runId))?.snapshot : undefined;
   }
-  createRun(
-    workflow: DurableWorkflow,
-    options: Parameters<DurableWorkflow['createRun']>[0],
-    retainOutcome = false,
-  ): Promise<DurableRun> {
-    return workflow.createRun({
-      ...options,
-      ...(retainOutcome && {
-        shouldPersistSnapshot: ({ workflowStatus }: { workflowStatus: WorkflowRunStatus }) =>
-          ['pending', 'running', 'paused', 'suspended'].includes(workflowStatus),
-      }),
-    });
+  createRun(workflow: DurableWorkflow, options: Parameters<DurableWorkflow['createRun']>[0]): Promise<DurableRun> {
+    return workflow.createRun(options);
   }
 
   releaseRun(workflow: DurableWorkflow, runId: string, run: DurableRun, status: string | undefined): void {

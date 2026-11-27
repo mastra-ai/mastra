@@ -118,60 +118,6 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/runs": {
-    "method": "POST",
-    "path": "/agents/:agentId/runs",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [
-      "activeTools",
-      "clientTools",
-      "context",
-      "instructions",
-      "maxSteps",
-      "memory",
-      "messages",
-      "model",
-      "modelSettings",
-      "output",
-      "providerOptions",
-      "requestContext",
-      "requireToolApproval",
-      "returnScorerData",
-      "savePerStep",
-      "scorers",
-      "stopWhen",
-      "structuredOutput",
-      "system",
-      "toolChoice",
-      "toolsets",
-      "tracingOptions",
-      "untilIdle",
-      "versions"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "GET /agents/:agentId/runs/:runId": {
-    "method": "GET",
-    "path": "/agents/:agentId/runs/:runId",
-    "pathParams": [
-      "agentId",
-      "runId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "POST /agents/:agentId/generate/vnext": {
     "method": "POST",
     "path": "/agents/:agentId/generate/vnext",

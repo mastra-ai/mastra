@@ -290,7 +290,6 @@ export function serializeToolsetToolNames(
  */
 export function serializeDurableOptions(options: {
   modelCallMode?: SerializableDurableOptions['modelCallMode'];
-  retainOutcome?: boolean;
   clientTools?: SerializableDurableOptions['clientTools'];
   toolsetToolNames?: string[];
   maxSteps?: number;
@@ -336,7 +335,6 @@ export function serializeDurableOptions(options: {
 
   return {
     modelCallMode: options.modelCallMode,
-    retainOutcome: options.retainOutcome,
     clientTools: options.clientTools,
     toolsetToolNames: options.toolsetToolNames,
     maxSteps: options.maxSteps,

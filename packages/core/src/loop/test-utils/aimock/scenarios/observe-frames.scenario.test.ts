@@ -55,6 +55,29 @@ describeForAllEngines('AIMock loop scenario: observe frames', engine => {
     }
   });
 
+  // Technical: durable generate() used to clear its run log on return, so a
+  // caller whose HTTP request dropped could not read the answer back by run ID.
+  if (isDurableEngineVariant(engine) && engine !== 'inngest') {
+    it('lets a generate() caller read its finished answer again by run ID', async () => {
+      const llm = getMock();
+      llm.on({ endpoint: 'chat' }, { content: REPLY });
+      const { agent } = await createSharedAgent(llm, { engine });
+      const result = await agent.generate('Go', { maxSteps: 2 });
+      expect(result.text).toBe(REPLY);
+
+      const observation = await agent.observe(result.runId!);
+      try {
+        const replayed = await observation.output.getFullOutput();
+        expect(replayed.text).toBe(result.text);
+        expect(replayed.finishReason).toBe(result.finishReason);
+        expect(replayed.usage).toEqual(result.usage);
+        expect(replayed.steps.map(step => step.text)).toEqual(result.steps.map(step => step.text));
+      } finally {
+        observation.detach();
+      }
+    });
+  }
+
   if (engine === 'evented') {
     it('caches each evented step frame once with a prewrapped pubsub', async () => {
       const llm = getMock();

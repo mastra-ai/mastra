@@ -239,8 +239,6 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Provider call method, pinned across workflow turns and recovery. Absent on older runs means stream. */
   modelCallMode?: 'generate' | 'stream';
-  /** Retain a server-retrievable terminal outcome for an acknowledged run. */
-  retainOutcome?: boolean;
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
   /**
@@ -1198,12 +1196,6 @@ export type DurableToolCallOutputSchema = z.ZodType<DurableToolCallOutput>;
  * Options for DurableAgent.stream()
  */
 export interface DurableAgentStreamOptions<OUTPUT = undefined> {
-  /** Provider method for an asynchronously observed run; transport remains a stream. */
-  modelCallMode?: 'generate' | 'stream';
-  /** Internal: convert tools using the generate path. */
-  __methodType?: 'generate';
-  /** Internal: retain the outcome of an acknowledged run. */
-  retainOutcome?: boolean;
   /** Signal chunks to hide from this caller's stream. Does not affect generated results. */
   hideSignals?: AgentExecutionOptions<OUTPUT>['hideSignals'];
   /** Custom instructions that override the agent's default instructions for this execution */

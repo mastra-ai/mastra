@@ -1,4 +1,4 @@
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Agent } from '../../agent';
@@ -205,33 +205,17 @@ describe('remote step execution for nested workflows', () => {
   it('runs an evented agent whose model and tool steps execute remotely', async () => {
     const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
     const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
-        const hasToolResult = JSON.stringify(prompt).includes('"type":"tool-result"');
-        return {
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream<any>([
-            { type: 'stream-start', warnings: [] },
-            ...(hasToolResult
-              ? [
-                  { type: 'text-start', id: 't' },
-                  { type: 'text-delta', id: 't', delta: 'C costs 89' },
-                  { type: 'text-end', id: 't' },
-                  { type: 'finish', finishReason: 'stop', usage },
-                ]
-              : [
-                  {
-                    type: 'tool-call',
-                    toolCallType: 'function',
-                    toolCallId: 'call-1',
-                    toolName: 'searchPrice',
-                    input: '{"vendor":"C"}',
-                  },
-                  { type: 'finish', finishReason: 'tool-calls', usage },
-                ]),
-          ]),
-        };
-      },
+      doGenerate: async ({ prompt }) => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        usage,
+        ...(JSON.stringify(prompt).includes('"type":"tool-result"')
+          ? { content: [{ type: 'text', text: 'C costs 89' }], finishReason: 'stop' }
+          : {
+              content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'searchPrice', input: '{"vendor":"C"}' }],
+              finishReason: 'tool-calls',
+            }),
+      }),
     });
     const searchPrice = createTool({
       id: 'search-price',
