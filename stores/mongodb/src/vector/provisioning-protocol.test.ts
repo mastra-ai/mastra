@@ -327,6 +327,13 @@ describe('provisioning protocol', () => {
         const name = uniqueName('psdm');
         colls.push(name);
         await a.createIndex({ indexName: name, dimension: 4 });
+        // Atlas Local keeps listing a search index that was still building when its collection was
+        // dropped as DOES_NOT_EXIST once the collection is recreated, until it is dropped by hand, so
+        // the recreate below would never succeed. Let the build finish first.
+        await waitFor(async () => {
+          const rows = await db.collection(name).listSearchIndexes().toArray();
+          return rows.length > 0 && rows.every(row => row.status === 'READY');
+        });
         const original = (await entry(name))?.generation;
         const p = parkDelete(a);
         try {

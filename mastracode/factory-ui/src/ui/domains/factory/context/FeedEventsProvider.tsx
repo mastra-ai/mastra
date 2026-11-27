@@ -9,6 +9,7 @@ import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { streamFeedEvents } from '../services/feedEvents';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { RequestError } from '../services/request';
+import { moveAnswered, moveAnswersMayBeMissed } from '../services/submittedMoves';
 
 const RETRY_MS = 3_000;
 /** Frames this close together refresh the board once. */
@@ -104,8 +105,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
         factoryProjectId,
         {
           onEvent: refreshBoard,
+          onMove: moveAnswered,
           onConnected: () => {
             streaming = true;
+            // So was the answer to a move submitted before the stream dropped.
+            moveAnswersMayBeMissed();
             // Whatever landed while this tab held no stream was never announced.
             refreshBoard();
           },

@@ -129,16 +129,19 @@ describe('Scores Handlers', () => {
   });
 
   describe('listScoresByEntityIdHandler', () => {
-    it('should get scores by entity ID successfully', async () => {
-      const mockScores = [createSampleScore({ entityType: 'AGENT', entityId: 'test-agent', scorerId: 'foo-scorer' })];
+    it.each([
+      ['should get scores by entity ID successfully', 'AGENT', 'test-agent'],
+      ['should work with different entity types', 'WORKFLOW', 'test-workflow'],
+    ] as const)('%s', async (_title, entityType, entityId) => {
+      const mockScores = [createSampleScore({ entityType, entityId, scorerId: 'foo-scorer' })];
       const pagination = createPagination({ page: 0, perPage: 10 });
 
       await scoresStore.saveScore(mockScores[0]);
 
       const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
         ...createTestServerContext({ mastra }),
-        entityId: 'test-agent',
-        entityType: 'AGENT',
+        entityId,
+        entityType,
         page: pagination.page,
         perPage: pagination.perPage as number,
       });
@@ -188,31 +191,6 @@ describe('Scores Handlers', () => {
           perPage: pagination.perPage as number,
         }),
       ).rejects.toThrow(HTTPException);
-    });
-
-    it('should work with different entity types', async () => {
-      const mockScores = [
-        createSampleScore({ entityType: 'WORKFLOW', entityId: 'test-workflow', scorerId: 'foo-scorer' }),
-      ];
-      const pagination = createPagination({ page: 0, perPage: 10 });
-
-      await scoresStore.saveScore(mockScores[0]);
-
-      const result = await LIST_SCORES_BY_ENTITY_ID_ROUTE.handler({
-        ...createTestServerContext({ mastra }),
-        entityId: 'test-workflow',
-        entityType: 'WORKFLOW',
-        page: pagination.page,
-        perPage: pagination.perPage as number,
-      });
-
-      expect(result.scores).toHaveLength(1);
-      expect(result.pagination).toEqual({
-        total: 1,
-        page: 0,
-        perPage: 10,
-        hasMore: false,
-      });
     });
   });
 

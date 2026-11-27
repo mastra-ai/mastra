@@ -1,4 +1,7 @@
+import type { PlatformConnectActions } from '@mastra/playground-ui/domains/factory';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -49,83 +52,92 @@ export function activePlatformConnectionQueryOptions(baseUrl: string, provider: 
 }
 
 /** Invalidate everything that reflects a provider's connection state. */
-function useInvalidateProviderState(provider: PlatformConnectProviderId) {
-  const queryClient = useQueryClient();
-  return async () => {
-    const gitlab = provider === 'gitlab' || provider === 'gitlab-self-hosted';
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections(provider) }),
-      ...(provider === 'jira'
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.jiraStatus() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.jiraProjects() }),
-          ]
-        : []),
-      ...(provider === 'incident-io'
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioStatus() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
-          ]
-        : []),
-      ...(provider === 'linear'
-        ? [
-            queryClient.invalidateQueries({ queryKey: queryKeys.linearStatus() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.linearProjects() }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.linearTeams() }),
-            queryClient.invalidateQueries({ queryKey: ['linear', 'issue'] }),
-          ]
-        : []),
-      ...(gitlab
-        ? [
-            // GitLab lists self-hosted connections too, so either flow changes both listings.
-            queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab') }),
-            queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab-self-hosted') }),
-            queryClient.invalidateQueries({ queryKey: ['gitlab', 'status'] }),
-            queryClient.invalidateQueries({ queryKey: ['gitlab', 'projects'] }),
-          ]
-        : []),
-    ]);
-  };
+async function invalidateProviderState(queryClient: QueryClient, provider: PlatformConnectProviderId) {
+  const gitlab = provider === 'gitlab' || provider === 'gitlab-self-hosted';
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections(provider) }),
+    ...(provider === 'jira'
+      ? [
+          queryClient.invalidateQueries({ queryKey: queryKeys.jiraStatus() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.jiraProjects() }),
+        ]
+      : []),
+    ...(provider === 'incident-io'
+      ? [
+          queryClient.invalidateQueries({ queryKey: queryKeys.incidentioStatus() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.incidentioSources() }),
+        ]
+      : []),
+    ...(provider === 'linear'
+      ? [
+          queryClient.invalidateQueries({ queryKey: queryKeys.linearStatus() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.linearProjects() }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.linearTeams() }),
+          queryClient.invalidateQueries({ queryKey: ['linear', 'issue'] }),
+        ]
+      : []),
+    ...(gitlab
+      ? [
+          // GitLab lists self-hosted connections too, so either flow changes both listings.
+          queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab') }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.platformConnections('gitlab-self-hosted') }),
+          queryClient.invalidateQueries({ queryKey: ['gitlab', 'status'] }),
+          queryClient.invalidateQueries({ queryKey: ['gitlab', 'projects'] }),
+        ]
+      : []),
+  ]);
 }
 
 /**
- * Connect a new provider account: mint a session server-side, run the
- * headless Nango auth (OAuth popup, or direct API-key submission when
- * `credentials` are passed), then wait for the connection to activate.
+ * How Factory connects provider accounts, for the shared Platform connect
+ * buttons. Connect mints a session server-side, runs the headless Nango auth
+ * (OAuth popup, or direct API-key submission when `credentials` are passed),
+ * then waits for the connection to activate. Reconnect reauthorizes an
+ * existing connection through the same flow.
  */
-export function useConnectPlatformProviderMutation(provider: PlatformConnectProviderId) {
+export function usePlatformConnectActions(): PlatformConnectActions {
   const { baseUrl } = useApiConfig();
-  const invalidate = useInvalidateProviderState(provider);
-  return useMutation({
-    mutationFn: async (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) => {
-      const session = await createPlatformConnectSession(baseUrl, provider);
-      await runHeadlessAuth({
-        session,
-        ...(input.credentials ? { credentials: input.credentials } : {}),
-        ...(input.params ? { params: input.params } : {}),
-      });
-      return waitForActiveConnection(baseUrl, provider, session.connectionId);
-    },
-    onSettled: invalidate,
-  });
+  const queryClient = useQueryClient();
+  return useMemo(
+    () => ({
+      connect: async (provider, input) => {
+        try {
+          const session = await createPlatformConnectSession(baseUrl, provider);
+          await runHeadlessAuth({
+            session,
+            ...(input.credentials ? { credentials: input.credentials } : {}),
+            ...(input.params ? { params: input.params } : {}),
+          });
+          return await waitForActiveConnection(baseUrl, provider, session.connectionId);
+        } finally {
+          await invalidateProviderState(queryClient, provider);
+        }
+      },
+      reconnect: async (provider, input) => {
+        try {
+          const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
+          // A reconnect renews the credential only: connection settings come from
+          // the server, so the connection cannot be moved to another instance.
+          await runHeadlessAuth({
+            session,
+            ...(input.credentials ? { credentials: input.credentials } : {}),
+            ...(session.params ? { params: session.params } : {}),
+          });
+          return await waitForActiveConnection(baseUrl, provider, input.connectionId);
+        } finally {
+          await invalidateProviderState(queryClient, provider);
+        }
+      },
+    }),
+    [baseUrl, queryClient],
+  );
 }
 
-/** Reauthorize an existing connection through the same headless flow. */
-export function useReconnectPlatformProviderMutation(provider: PlatformConnectProviderId) {
-  const { baseUrl } = useApiConfig();
-  const invalidate = useInvalidateProviderState(provider);
+/** Connect a new provider account (see `usePlatformConnectActions`). */
+export function useConnectPlatformProviderMutation(provider: PlatformConnectProviderId) {
+  const actions = usePlatformConnectActions();
   return useMutation({
-    mutationFn: async (input: { connectionId: string; credentials?: Record<string, string> }) => {
-      const session = await createPlatformReconnectSession(baseUrl, provider, input.connectionId);
-      // A reconnect renews the credential only: connection settings come from
-      // the server, so the connection cannot be moved to another instance.
-      await runHeadlessAuth({
-        session,
-        ...(input.credentials ? { credentials: input.credentials } : {}),
-        ...(session.params ? { params: session.params } : {}),
-      });
-      return waitForActiveConnection(baseUrl, provider, input.connectionId);
-    },
-    onSettled: invalidate,
+    mutationFn: (input: { credentials?: Record<string, string>; params?: Record<string, string> } = {}) =>
+      actions.connect(provider, input),
   });
 }

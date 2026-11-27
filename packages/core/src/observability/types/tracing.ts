@@ -332,7 +332,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    */
   tools?: ModelToolDefinition[];
   /** Type of result/output this LLM call produced */
-  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
+  resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning' | 'title_generation';
   /** Token usage statistics */
   usage?: UsageStats;
   /** Whether one or more model steps omitted a primary token count */

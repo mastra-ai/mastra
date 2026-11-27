@@ -59,7 +59,7 @@ import type {
 } from './state';
 import type { MastraToolInvocation, MastraToolInvocationPart } from './state/types';
 import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageListInput } from './types';
-import { dropCrossProviderExecutedParts } from './utils/provider-compat';
+import { dropCrossProviderExecutedParts, pruneOpenAICompactionHistory } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import {
@@ -1422,6 +1422,7 @@ export class MessageList {
         }
 
         messages = dropCrossProviderExecutedParts(messages, this.messages, options.targetProvider, this.logger);
+        messages = pruneOpenAICompactionHistory(messages, options.targetProvider);
 
         return messages
           .filter(message => message != null)

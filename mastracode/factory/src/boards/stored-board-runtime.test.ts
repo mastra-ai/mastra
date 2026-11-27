@@ -8,12 +8,14 @@ import { Mastra } from '@mastra/core/mastra';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LocalFilesystem, MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
+import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MCPClient } from '@mastra/mcp';
 import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
-import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
+import type { FactoryBoardEngine, FactoryBoardEngineFactory } from '../board-engine/engine.js';
 import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { MastraFactory } from '../factory.js';
 import { resolveGithubRules } from '../integrations/github/default-rules.js';
@@ -275,6 +277,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage,
         github,
         send,
+        mastra,
+        middleware: [args.server?.middleware ?? []].flat(),
         sandboxHome,
         boards: storage.getDomain<StoredBoardsStorage>('boards'),
         workItems: storage.getDomain<WorkItemsStorage>('work-items'),
@@ -799,6 +803,197 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       it("runs Shipyard's configuration on the workflow board engine", async () => {
         await runShipyard(createWorkflowBoardEngine);
+      }, 120_000);
+
+      it("keeps cards' board runs off the host's workflow routes and MCP endpoint, where no org owns them", async () => {
+        stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId, { boardEngine: createWorkflowBoardEngine });
+        const projectId = await runnableProject(replica, orgId);
+        const created = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+          title: 'Private to its org',
+        });
+        expect(created.status, JSON.stringify(created.json)).toBe(200);
+        const card = created.json.workItem as { id: string; revision: number };
+        const moved = await replica.send(
+          'POST',
+          `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
+          { board: 'work', stage: 'done', expectedRevision: card.revision, requestId: randomUUID(), cause: 'test' },
+        );
+        // Answered with the move made, or taken on to be made: either way the card's run hears of it.
+        expect([200, 202], JSON.stringify(moved.json)).toContain(moved.status);
+        // The card's run holds its state by the time the move has landed.
+        await vi.waitFor(async () => {
+          const run = await replica.mastra.getWorkflow('factory-board').getWorkflowRunById(`factory-board:${card.id}`);
+          expect(run?.steps?.phase?.payload).toMatchObject({ state: 'terminal', phase: 'done' });
+        });
+
+        // The host's server, as anyone who reaches it does.
+        const host = new Hono();
+        for (const entry of replica.middleware) {
+          if (typeof entry === 'function') host.use('*', entry);
+          else host.use(entry.path, entry.handler);
+        }
+        host.all('/api/*', c => c.json({ served: true }));
+        const list = await host.request('/api/workflows/factory-board/runs');
+        const one = await host.request(
+          `/api/workflows/factory-board/runs/${encodeURIComponent(`factory-board:${card.id}`)}`,
+        );
+        const resume = await host.request(`/api/workflows/factory-board/resume?runId=factory-board:${card.id}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ step: 'phase', resumeData: { inputId: randomUUID() } }),
+        });
+
+        expect([list.status, one.status, resume.status]).toEqual([404, 404, 404]);
+        expect(await list.json()).toEqual({ error: 'Not found' });
+
+        // The host's built-in MCP endpoint reads runs in-process, past the middleware above.
+        vi.stubEnv('MASTRA_DEV', 'true');
+        const served = await createHonoServer(replica.mastra, { tools: {} });
+        const mcp = new MCPClient({
+          id: `board-runs-${randomUUID()}`,
+          servers: {
+            host: {
+              url: new URL('http://localhost/api/mcp'),
+              // The in-memory host is asked directly, so the Host header a socket would carry is added.
+              fetch: (input, init) =>
+                Promise.resolve(
+                  served.request(String(input), {
+                    ...init,
+                    headers: { ...Object.fromEntries(new Headers(init?.headers)), host: 'localhost' },
+                  }),
+                ),
+            },
+          },
+        });
+        onTestFinished(() => mcp.disconnect());
+        const tools = await mcp.listTools();
+        const read = await tools.host_get_workflow_run
+          ?.execute?.({ workflowId: 'factory-board', runId: `factory-board:${card.id}` }, {})
+          .catch((error: unknown) => ({ error: String(error) }));
+        // The tool is there for the host's other workflows, and knows no board workflow.
+        expect(read).toBeDefined();
+        const answer = JSON.stringify(read);
+        expect(answer).toContain('workflowId');
+        expect(answer).not.toContain('terminal');
+        expect(answer).not.toContain('appliedMoves');
+      }, 60_000);
+
+      it('leaves a card awaiting approval on the workflow board engine until a person approves its plan', async () => {
+        // Planning submits its plan, and Building reports `done`, whatever the card's labels.
+        const requests = stubModel(input => {
+          const call = shipyardAgent(input);
+          if (call) return call;
+          const items = JSON.parse(input) as { type?: string; role?: string }[];
+          const lastTurn = items.findLastIndex(
+            item => item.type?.startsWith('function_call') || item.role === 'assistant',
+          );
+          return JSON.stringify(items.slice(lastTurn + 1)).includes('<skill name=\\"factory-build\\">')
+            ? { name: 'factory_report_outcome', args: { outcome: 'done', reason: 'Nothing left to change.' } }
+            : undefined;
+        });
+        const orgId = `org-${randomUUID()}`;
+        let engine!: FactoryBoardEngine;
+        let pauseAsked!: () => void;
+        const asked = new Promise<void>(resolve => (pauseAsked = resolve));
+        let releasePause!: () => void;
+        const pauseHeld = new Promise<void>(resolve => (releasePause = resolve));
+        // What the card's run says the card is doing after each move it accepted.
+        const afterMoves: string[] = [];
+        const replica = await boot(database(), orgId, {
+          boardEngine: context => {
+            const inner = createWorkflowBoardEngine(context);
+            engine = {
+              requestPlacement: placement => inner.requestPlacement(placement),
+              runEnded: (binding, held) => inner.runEnded(binding, held),
+              // The card's run may be busy with another input when the wait is told.
+              runPaused: async (binding, reason) => {
+                pauseAsked();
+                await pauseHeld;
+                return inner.runPaused(binding, reason);
+              },
+              describe: card => inner.describe(card),
+              workflows: inner.workflows,
+              requestMove: async request => {
+                const result = await inner.requestMove(request);
+                const doing = await inner.describe(request);
+                if (result.status === 'accepted') afterMoves.push(`${doing?.phase}:${doing?.state}`);
+                return result;
+              },
+            };
+            return engine;
+          },
+        });
+        const projectId = await runnableProject(replica, orgId);
+        await configureShipyard(replica, projectId);
+        seedPlan(replica, 'acme/shipyard');
+        const doing = () => engine.describe!({ workItemId: card.id });
+        const followers = vi.spyOn(replica.workItems, 'listWorkItemSubscribers');
+
+        const card = await githubIssue(replica, projectId, 'Large rewrite', { trusted: true, labels: [] });
+        const startOf = async (skillName: string) =>
+          (await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id })).find(
+            record => record.decision.type === 'invokeSkill' && record.decision.skillName === skillName,
+          );
+        await vi.waitFor(async () => expect((await startOf('factory-triage'))?.status).toBe('succeeded'), {
+          timeout: 20_000,
+        });
+
+        // A rule's move into Planning carries nobody's go-ahead: the card waits for someone to start it.
+        await ruleMoves(replica, orgId, projectId, card, 'planning');
+        await vi.waitFor(async () => expect((await startOf('factory-plan'))?.status).toBe('proposed'), {
+          timeout: 20_000,
+        });
+        await vi.waitFor(
+          async () => expect(await doing()).toMatchObject({ state: 'awaiting_start', phase: 'planning' }),
+          {
+            timeout: 20_000,
+          },
+        );
+
+        // Started, its session submits a plan nothing approves for it: the card awaits approval.
+        followers.mockClear();
+        const started = await replica.send(
+          'POST',
+          `/web/factory/projects/${projectId}/decisions/${(await startOf('factory-plan'))!.id}/approve`,
+        );
+        expect(started.status, JSON.stringify(started.json)).toBe(200);
+        // People following the card hear of the wait without the card's run having recorded it.
+        await asked;
+        await vi.waitFor(() => expect(followers).toHaveBeenCalledWith({ orgId, workItemId: card.id }), {
+          timeout: 30_000,
+        });
+        expect(await doing()).toMatchObject({ state: 'awaiting_start' });
+        releasePause();
+        await vi.waitFor(
+          async () => expect(await doing()).toMatchObject({ state: 'awaiting_approval', phase: 'planning', probes: 0 }),
+          { timeout: 30_000 },
+        );
+        expect((await replica.workItems.get({ orgId, id: card.id }))!.stages).toEqual(['planning']);
+
+        // A person approves the plan: the card moves to Building, running, and on to Done by its outcome.
+        const [binding] = (await replica.workItems.listRunBindings(orgId, projectId, card.id)).filter(
+          candidate => candidate.role === 'work' && candidate.status === 'active',
+        );
+        const approved = await replica.send('POST', `/web/user-sessions/${binding!.sessionId}/parked-approval`, {
+          decision: 'approve',
+        });
+        expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+        await vi.waitFor(
+          async () => expect((await replica.workItems.get({ orgId, id: card.id }))!.stages).toEqual(['done']),
+          { timeout: 30_000 },
+        );
+        // The run end that moves the card to Done is told twice, and answered alike.
+        await vi.waitFor(() =>
+          expect([...new Set(afterMoves)].slice(-3)).toEqual([
+            'planning:awaiting_start',
+            'execute:running',
+            'done:terminal',
+          ]),
+        );
+        expect(await doing()).toMatchObject({ state: 'terminal', phase: 'done', lastOutcome: 'done' });
+        expect(runsOf(requests, 'factory-build', 'Large rewrite')).not.toEqual([]);
       }, 120_000);
 
       it("moves a card through a new project's Work, which has no Triage, starting Planning's run from Intake", async () => {
