@@ -73,6 +73,8 @@ describe('truncateStringByTokens on large input', () => {
     for (const text of [
       prose(2_000_000),
       JSON.stringify({ rows: Array.from({ length: 60_000 }, (_, i) => ({ i, s: `row ${i}` })) }),
+      // Object tool results reach the observer pretty-printed, so indentation counts too.
+      JSON.stringify({ rows: Array.from({ length: 20_000 }, (_, i) => ({ i, s: `row ${i}` })) }, null, 2),
     ]) {
       const exact = referenceTruncate(text, 5_000);
       const fast = truncateStringByTokens(text, 5_000);

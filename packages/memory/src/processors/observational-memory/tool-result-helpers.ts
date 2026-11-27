@@ -147,8 +147,9 @@ function isWhitespaceCode(code: number): boolean {
   );
 }
 
-function runTokens(kind: number, length: number, onlyDigits: boolean): number {
-  if (kind === WS) return 0;
+/** tokenx counts a whitespace run as 1 token when it holds a newline followed by more whitespace (indentation, blank lines). */
+function runTokens(kind: number, length: number, onlyDigits: boolean, structured: boolean): number {
+  if (kind === WS) return structured ? 1 : 0;
   if (length <= 3) return 1;
   if (kind === PUNCT) return Math.ceil(length / 2);
   return onlyDigits ? Math.ceil(length / 3) : Math.ceil(length / 6);
@@ -156,7 +157,8 @@ function runTokens(kind: number, length: number, onlyDigits: boolean): number {
 
 /**
  * One allocation-free pass: an approximate token count of the whole text (tokenx's
- * rules for ASCII, close for other scripts; used only for the "~N tokens" total)
+ * rules for ASCII; non-ASCII words count as English, so accented and Cyrillic text
+ * is undercounted and CJK much more so; used only for the "~N tokens" total)
  * and the index just past the first `nonWhitespaceLimit` non-whitespace chars.
  */
 function scanText(text: string, nonWhitespaceLimit: number, windowCap: number): { approx: number; windowEnd: number } {
@@ -166,21 +168,25 @@ function scanText(text: string, nonWhitespaceLimit: number, windowCap: number): 
   let kind = -1;
   let length = 0;
   let onlyDigits = true;
+  let structured = false;
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     const cls = code < 128 ? CHAR_CLASS[code]! : isWhitespaceCode(code) ? WS : WORD;
     if (cls !== kind) {
-      if (length) approx += runTokens(kind, length, onlyDigits);
+      if (length) approx += runTokens(kind, length, onlyDigits, structured);
       kind = cls;
       length = 0;
       onlyDigits = true;
+      structured = false;
+    } else if (cls === WS && text.charCodeAt(i - 1) === 10) {
+      structured = true;
     }
     length++;
     if (cls !== WS) nonWhitespace++;
     if (code < 48 || code > 57) onlyDigits = false;
     if (windowEnd < 0 && (nonWhitespace > nonWhitespaceLimit || i + 1 >= windowCap)) windowEnd = i + 1;
   }
-  if (length) approx += runTokens(kind, length, onlyDigits);
+  if (length) approx += runTokens(kind, length, onlyDigits, structured);
   return { approx, windowEnd: windowEnd < 0 ? text.length : windowEnd };
 }
 
