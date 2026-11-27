@@ -358,5 +358,17 @@ describe('ModelPicker', () => {
 
       expect(optionNames(list)).toEqual([expect.stringMatching(/legacy 249/i)]);
     });
+
+    it('given an older model whose id every newer one contains, finds it first by its exact id', () => {
+      const previews = Array.from({ length: 250 }, (_, j) => ({ id: `claude-3-opus-${j}`, releaseDate: '2026-09-01' }));
+      const list = openPicker([{ ...anthropicCatalog, models: [...anthropicCatalog.models, ...previews] }]);
+      const search = screen.getByPlaceholderText('Search models');
+
+      fireEvent.change(search, { target: { value: 'claude-3-opus' } });
+      expect(optionNames(list)[0]).toBe('Claude 3 Opus');
+
+      fireEvent.change(search, { target: { value: 'anthropic/claude-3-opus' } });
+      expect(optionNames(list)[0]).toBe('Claude 3 Opus');
+    });
   });
 });

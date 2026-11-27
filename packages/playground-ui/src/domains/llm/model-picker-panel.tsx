@@ -61,24 +61,35 @@ const isSameModel = (a: ModelPickerValue | undefined, provider: string, model: s
 // "Opus 4.6" finds claude-opus-4-6: ids and queries compare as plain words.
 const searchWords = (text: string) => text.toLowerCase().replace(/[-_./:]/g, ' ');
 
+const searchPhrase = (text: string) => searchWords(text).split(' ').filter(Boolean).join(' ');
+
+type ModelMatch = { provider: ModelPickerProvider; model: ModelPickerModel };
+
 /**
  * Models whose provider name, provider id or model id hold every word of the query, in the order of
- * `providers`. Runs on each keystroke over catalogs of thousands, so it sorts only the matches and stops
- * once it has more than the list shows.
+ * `providers`, after the models whose id or `provider/id` is the query itself. Newer models can share
+ * every word of an older one's id, so the exact id is the only query that reaches it once the list is
+ * capped. Runs on each keystroke over catalogs of thousands, so it sorts only the matches and stops
+ * collecting them once it has more than the list shows.
  */
 function searchModels(providers: ModelPickerProvider[], query: string) {
-  const words = searchWords(query).split(' ').filter(Boolean);
-  const matches: { provider: ModelPickerProvider; model: ModelPickerModel }[] = [];
+  const phrase = searchPhrase(query);
+  const words = phrase.split(' ');
+  const exact: ModelMatch[] = [];
+  const matches: ModelMatch[] = [];
   for (const provider of providers) {
+    const providerId = searchPhrase(provider.id);
     const providerText = searchWords(`${provider.name} ${provider.id}`);
-    const found = provider.models.filter(model => {
-      const text = `${providerText} ${searchWords(model.id)}`;
-      return words.every(word => text.includes(word));
-    });
+    const found: ModelPickerModel[] = [];
+    for (const model of provider.models) {
+      const modelId = searchPhrase(model.id);
+      if (modelId === phrase || `${providerId} ${modelId}` === phrase) exact.push({ provider, model });
+      else if (matches.length <= MAX_SEARCH_RESULTS && words.every(word => `${providerText} ${modelId}`.includes(word)))
+        found.push(model);
+    }
     for (const model of found.toSorted(byReleaseDate)) matches.push({ provider, model });
-    if (matches.length > MAX_SEARCH_RESULTS) break;
   }
-  return matches;
+  return [...exact, ...matches];
 }
 
 export interface ModelPickerPanelProps {
