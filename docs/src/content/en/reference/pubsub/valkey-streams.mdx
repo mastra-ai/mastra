@@ -89,7 +89,8 @@ export const mastra = new Mastra({
   {
     name: 'reclaimIdleMs',
     type: 'number',
-    description: 'Minimum idle time before an event can be reclaimed.',
+    description:
+      'Minimum idle time before an event can be reclaimed. Keep this well above typical processing time to avoid double delivery.',
     isOptional: true,
     defaultValue: '60000',
   },
