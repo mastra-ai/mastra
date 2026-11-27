@@ -8885,6 +8885,7 @@ export class Agent<
     requestContext,
     toolsets,
     clientTools,
+    unknownToolNames,
     runId,
     method,
   }: {
@@ -8894,6 +8895,8 @@ export class Agent<
     requestContext: RequestContext | undefined;
     toolsets?: Record<string, Record<string, unknown>>;
     clientTools?: Record<string, unknown>;
+    /** Tools whose executing definition cannot be resolved here; their resume data is left to the tool-call step. */
+    unknownToolNames?: ReadonlySet<string>;
     runId: string;
     method: string;
   }): Promise<void> {
@@ -8909,7 +8912,7 @@ export class Agent<
         : suspended.length === 1
           ? suspended[0]
           : undefined;
-    if (!target?.toolName || target.requiresApproval) return;
+    if (!target?.toolName || target.requiresApproval || unknownToolNames?.has(target.toolName)) return;
 
     const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
     const tools: Record<string, any> = {
@@ -15686,20 +15689,33 @@ export class Agent<
         });
       }
       if (current) {
+        // A warm run executes the tools it was registered with, so call-time tools of either
+        // call may shadow the agent's tool with a definition this resume cannot see.
+        const runOptions = (current.context?.input as DurableAgenticWorkflowInput | undefined)?.options;
+        const unknownToolNames = coldSnapshot
+          ? undefined
+          : new Set([
+              ...Object.values(resolvedOptions.toolsets ?? {}).flatMap(toolset => Object.keys(toolset)),
+              ...Object.keys(resolvedOptions.clientTools ?? {}),
+              ...(runOptions?.toolsetToolNames ?? []),
+              ...Object.keys(runOptions?.clientTools ?? {}),
+            ]);
         try {
           await this.#validateToolResumeData({
             snapshot: current,
             toolCallId: options?.toolCallId,
             resumeData,
             requestContext: resumeRequestContext,
-            toolsets: resolvedOptions.toolsets,
-            clientTools: resolvedOptions.clientTools,
+            toolsets: coldSnapshot ? resolvedOptions.toolsets : undefined,
+            clientTools: coldSnapshot ? resolvedOptions.clientTools : undefined,
+            unknownToolNames,
             runId,
             method: 'resume',
           });
         } catch (error) {
-          // A rejected cold resume must not leave behind the entry prepare() registered for it.
-          if (coldSnapshot) {
+          // A rejected resume of a run this process never executed (a cold resume, or the
+          // idle loop re-entering one) must not leave behind the entry prepare() registered for it.
+          if (!priorExecution) {
             this.executionRunRegistry.cleanup(runId);
             deleteRunRegistryEntry(runId, this.#mastra);
           }

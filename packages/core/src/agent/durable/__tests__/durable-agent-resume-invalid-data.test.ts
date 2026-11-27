@@ -141,13 +141,39 @@ describe.each(['durable', 'evented'] as const)(
       ).rejects.toThrow(FGADeniedError);
     });
 
-    it('rejects the outer call when untilIdle is set', async () => {
+    it.each(['warm', 'cold'] as const)('%s: rejects the outer call when untilIdle is set', async mode => {
       const run = await suspend(engine);
+      let agent = run.agent;
+      if (mode === 'cold') {
+        globalRunRegistry.clear();
+        agent = startProcess(engine, run.storage, run.seen);
+      }
 
-      await expect(run.agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle: true })).rejects.toMatchObject({
-        id: 'AGENT_RESUME_INVALID_DATA',
-      });
+      await expect(
+        agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle: true, requestContext: tenant('rejected') }),
+      ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
       expect(run.seen).toEqual([]);
+
+      expect(await drain(await agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
+      expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
+    });
+
+    it('does not validate a warm resume against a call-time tool that shadows the suspended one', async () => {
+      const run = await suspend(engine);
+      const replacement = createTool({
+        id: 'confirm',
+        description: 'Not the tool the run suspended in',
+        inputSchema: z.object({}),
+        resumeSchema: z.object({ confirmed: z.string() }),
+        execute: async () => ({ ok: true }),
+      });
+
+      const resumed = await run.agent.resumeStream(
+        { confirmed: true },
+        { runId: run.runId, toolsets: { replacement: { confirm: replacement } } },
+      );
+      expect(await drain(resumed)).toBe('done');
+      expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
     });
   },
 );
