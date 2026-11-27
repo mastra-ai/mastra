@@ -62,7 +62,7 @@ export const supportAgent = new Agent({
 
 To change these instructions, see [Tool instructions](/reference/knowledge/tool-instructions).
 
-When the agent has Memory, it also learns which scopes it holds before it calls a tool. Each turn's context lists each scope the run holds and has a role on, with that role. A role in one scope can also grant access to others, such as a team's docs through its org. Those aren't listed. Viewers can read, and contributors, editors and owners can also write. Scopes with no pages yet are listed too. This list is a [state signal](/docs/signals/state-signals): the first turn gets the full list, and later turns get only what changed, such as a scope added, a role changed, or a scope removed.
+When the agent has Memory, it also learns which scopes it holds before it calls a tool. Each turn's context lists each scope the run holds and has a role on, with that role. A role in one scope can also grant access to others, such as a team's docs through its org. Those aren't listed. Viewers can read, and contributors, editors and owners can also write. Scopes with no pages yet are listed too. This list is a [state signal](/docs/signals/state-signals): the first turn gets the full list, and later turns get only what changed, such as a scope added, a role changed, or a scope removed. When the previous snapshot has left the context window, the full list is sent again.
 
 ### Add the tools yourself
 
