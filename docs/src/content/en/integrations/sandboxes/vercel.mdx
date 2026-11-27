@@ -126,6 +126,65 @@ await sandbox.executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "line $i"; sl
 
 Both callbacks are optional and can be used independently.
 
+#### Region and failover regions
+
+Vercel runs sandboxes in many regions. Set `region` to pin creation to one region, and `failoverRegions` to list the regions Vercel may use as fallbacks, in order:
+
+```typescript
+const sandbox = new VercelSandbox({
+  region: 'fra1',
+  failoverRegions: ['iad1', 'sfo1'],
+})
+```
+
+Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a sandbox that is created by a later process with the same sandbox name lands in the same regions. Passing an empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when failover is involved, the SDK's session object reports the region the running VM landed in:
+
+```typescript
+await sandbox.start()
+console.log(sandbox.sandbox.region)
+```
+
+#### Mounting Vercel Drives
+
+Vercel [Drives](https://vercel.com/docs/vercel-sandbox/concepts/drives) are persistent volumes that sandboxes can attach at a path. Pass `mounts` to attach them:
+
+```typescript
+import { Drive } from '@vercel/sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+const drive = await Drive.getOrCreate({ name: 'agent-data' })
+
+const sandbox = new VercelSandbox({
+  mounts: { '/data': drive },
+})
+
+await sandbox.start()
+await sandbox.executeCommand('sh', ['-c', 'echo hello > /data/marker.txt'])
+```
+
+Mount paths must be absolute and can't overlap. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or a `{ drive, mode }` pair where `mode` is `'read-write'` or `'snapshot'`:
+
+```typescript
+const sandbox = new VercelSandbox({
+  mounts: {
+    '/data': drive,
+    '/snapshot': drive.snapshot(),
+  },
+})
+```
+
+Files written to a read-write mount persist in the Drive, so another sandbox that mounts the same Drive reads them back:
+
+```typescript
+const reader = new VercelSandbox({ mounts: { '/data': drive } })
+await reader.start()
+
+const result = await reader.executeCommand('cat', ['/data/marker.txt'])
+console.log(result.stdout) // hello
+```
+
+Mounts are applied when the sandbox starts. A sandbox that is already running keeps the mounts it started with.
+
 ### Constructor parameters
 
 <PropertiesTable
@@ -169,6 +228,20 @@ Both callbacks are optional and can be used independently.
     defaultValue: "'node24'",
   },
   {
+    name: 'region',
+    type: 'SandboxRegion',
+    description: 'Vercel region to create the sandbox in, for example `fra1`. Accepts any Vercel region.',
+    isOptional: true,
+    defaultValue: "'iad1' (Vercel API default)",
+  },
+  {
+    name: 'failoverRegions',
+    type: 'SandboxRegion[]',
+    description:
+      'Regions the sandbox can fail over to, in order. Must not include `region`. An empty array creates the sandbox with no failover regions.',
+    isOptional: true,
+  },
+  {
     name: 'timeout',
     type: 'number',
     description: 'Timeout in milliseconds before the sandbox auto-terminates.',
@@ -186,6 +259,13 @@ Both callbacks are optional and can be used independently.
     type: 'number[]',
     description:
       'Ports to expose from the sandbox (up to 15). Public HTTPS domains are available via getInfo().metadata.domains.',
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'SandboxMounts',
+    description:
+      'Vercel Drives to mount inside the sandbox. Keys are absolute paths inside the sandbox, values are a `Drive` or `{ drive, mode }`.',
     isOptional: true,
   },
   {
@@ -299,7 +379,7 @@ See the [`SandboxProcessManager` reference](/reference/workspace/process-manager
 
 The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.
 
-The Mastra adapter doesn't implement the Workspace filesystem mounting API. The underlying Vercel Sandbox product supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage). You can configure a mount directly through the underlying SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage its lifecycle.
+The Mastra adapter doesn't implement the Workspace filesystem mounting API, so mounts configured on a `Workspace` aren't attached to the sandbox. Attach Vercel Drives with the `mounts` constructor option instead (see [Mounting Vercel Drives](#mounting-vercel-drives)). The underlying Vercel Sandbox product also supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage), which you can configure through the SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage their lifecycle.
 
 :::
 

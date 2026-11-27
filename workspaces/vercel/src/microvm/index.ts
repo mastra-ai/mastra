@@ -25,6 +25,7 @@ import type {
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox } from '@vercel/sandbox';
+import type { SandboxMounts, SandboxRegion } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[VercelSandbox]';
@@ -66,6 +67,28 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   resources?: { vcpus?: number };
   /** Ports to expose from the sandbox (up to 4). Access via `getInfo().metadata.domains`. */
   ports?: number[];
+  /**
+   * Vercel region to create the sandbox in, e.g. `'fra1'`, `'sfo1'`, `'hnd1'`.
+   * Any Vercel region is accepted.
+   * @default 'iad1'
+   */
+  region?: SandboxRegion;
+  /**
+   * Additional regions the sandbox can fail over to, in order.
+   *
+   * Must not include `region`. An empty array creates the sandbox with no
+   * failover regions.
+   */
+  failoverRegions?: SandboxRegion[];
+  /**
+   * Vercel Drive mounts, keyed by the mount path inside the sandbox, e.g.
+   * `{ '/data': drive }` or `{ '/data': { drive: 'drv_...', mode: 'read-write' } }`.
+   *
+   * Mounts are creation-time inputs: the SDK applies them when the sandbox is
+   * created or resumed, so they cannot be added to a running sandbox. Creating,
+   * sharing, and deleting the Drive itself stays with the caller.
+   */
+  mounts?: SandboxMounts;
   /** Default environment variables inherited by all commands. */
   env?: Record<string, string>;
   /** Custom metadata surfaced via `getInfo()`. */
@@ -139,6 +162,9 @@ export class VercelSandbox extends MastraSandbox {
   private readonly _timeout: number;
   private readonly _vcpus?: number;
   private readonly _ports?: number[];
+  private readonly _region?: SandboxRegion;
+  private readonly _failoverRegions?: SandboxRegion[];
+  private readonly _mounts?: SandboxMounts;
   private readonly _env: Record<string, string>;
   private readonly _metadata: Record<string, unknown>;
   private readonly _instructionsOverride?: InstructionsOption;
@@ -160,6 +186,9 @@ export class VercelSandbox extends MastraSandbox {
     this._timeout = options.timeout ?? 300_000;
     this._vcpus = options.resources?.vcpus;
     this._ports = options.ports;
+    this._region = options.region;
+    this._failoverRegions = options.failoverRegions;
+    this._mounts = options.mounts;
     this._env = options.env ?? {};
     this._metadata = options.metadata ?? {};
     this._instructionsOverride = options.instructions;
@@ -259,6 +288,12 @@ export class VercelSandbox extends MastraSandbox {
       timeout: this._timeout,
       ...(this._vcpus ? { resources: { vcpus: this._vcpus } } : {}),
       ...(this._ports?.length ? { ports: this._ports } : {}),
+      // `region`/`failoverRegions`/`mounts` are forwarded only when configured,
+      // so unset options stay absent from the SDK request. The `!== undefined`
+      // checks keep an explicit empty `failoverRegions` array meaningful.
+      ...(this._region !== undefined ? { region: this._region } : {}),
+      ...(this._failoverRegions !== undefined ? { failoverRegions: this._failoverRegions } : {}),
+      ...(this._mounts !== undefined ? { mounts: this._mounts } : {}),
       ...(Object.keys(this._env).length ? { env: this._env } : {}),
       ...this.credentialParams(),
     };
