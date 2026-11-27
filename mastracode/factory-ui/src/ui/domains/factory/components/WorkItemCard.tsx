@@ -1,14 +1,12 @@
 import { BoardCard } from '@mastra/playground-ui/domains/factory';
-import { HrefLink } from '../../../ui/HrefLink';
 import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
 import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { ReactElement } from 'react';
 
-import { useParams } from 'react-router';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { cardPath, threadPath } from '../../workspaces/services/factoryPaths';
+import { useBoardNavigation } from '../boardNavigation';
 import type { BoardCardOwner } from '../boardCardState';
 import type { DragPayload } from '../boardDrag';
 import { reworkReason } from '../reworkReason';
@@ -17,7 +15,7 @@ import { itemBoard } from '../boardStages';
 import { cardControls } from '../cardControls';
 import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
-import { relationshipPath } from '../services/relationships';
+import { relationshipBoardId } from '../services/relationships';
 import type { BoardStageId } from '../stages';
 import { workItemActivity } from '../workItemActivity';
 import { REVEAL_ON_CARD_HOVER } from './BoardCardParts';
@@ -90,7 +88,7 @@ export function WorkItemCard({
   onRemove: () => void;
   layout: BoardLayout;
 }) {
-  const { factoryId = '' } = useParams<{ factoryId: string }>();
+  const { LinkComponent, cardHref, sessionHref, boardHref } = useBoardNavigation();
   const catalog = useBoardCatalog(item.githubProjectId);
   const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
@@ -117,7 +115,7 @@ export function WorkItemCard({
     onRetryDecision,
     onMove,
   });
-  const href = cardPath(factoryId, item.id, cardThreadSession(item, definition?.phases, columnStage));
+  const href = cardHref(item.id, cardThreadSession(item, definition?.phases, columnStage));
   const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
   const activity = workItemActivity(item, activityPage);
   const { status, owner, wick } = state;
@@ -154,15 +152,37 @@ export function WorkItemCard({
 
     if (relatedSession !== undefined) {
       return (
-        <RelatedWorkItemLink key={related.id} {...link} href={threadPath(factoryId, relatedSession)} kind="session" />
+        <RelatedWorkItemLink
+          key={related.id}
+          {...link}
+          LinkComponent={LinkComponent}
+          href={sessionHref(relatedSession)}
+          kind="session"
+        />
       );
     }
 
     if (related.url !== null) {
-      return <RelatedWorkItemLink key={related.id} {...link} href={related.url} kind="external" />;
+      return (
+        <RelatedWorkItemLink
+          key={related.id}
+          {...link}
+          LinkComponent={LinkComponent}
+          href={related.url}
+          kind="external"
+        />
+      );
     }
 
-    return <RelatedWorkItemLink key={related.id} {...link} href={relationshipPath(related, factoryId)} kind="board" />;
+    return (
+      <RelatedWorkItemLink
+        key={related.id}
+        {...link}
+        LinkComponent={LinkComponent}
+        href={boardHref(relationshipBoardId(related))}
+        kind="board"
+      />
+    );
   };
   const relatedLinks = relatedItems.map(relatedLink);
   const upstreamLinks = (
@@ -209,7 +229,7 @@ export function WorkItemCard({
       highlighted={highlighted}
       related={relatedItems.length > 0}
       activityStatus={wick}
-      LinkComponent={HrefLink}
+      LinkComponent={LinkComponent}
     >
       <WorkItemCardRows
         item={item}

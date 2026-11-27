@@ -3,9 +3,8 @@ import type { RunQueueMenuRun } from '@mastra/playground-ui/domains/factory';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { HrefLink } from '../../../ui/HrefLink';
+import { useBoardNavigation } from '../boardNavigation';
 import type { RunQueueResponse } from '@internal/factory-contract';
-import { factoryAttentionTargetPath } from '../services/attention';
 
 type QueuedRun = RunQueueResponse['queued'][number];
 
@@ -27,6 +26,7 @@ function slotLines(slots: RunQueueResponse['slots']): string[] {
 
 export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; queue: RunQueueResponse | undefined }) {
   const catalog = useBoardCatalog(factoryId);
+  const { LinkComponent, boardCardHref } = useBoardNavigation();
   if (!queue) return null;
 
   const phaseName = (board: string | null, phase: string | null) => {
@@ -43,9 +43,7 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
         (detail): detail is string => Boolean(detail),
       ),
       queuedSince: { dateTime: run.queuedSince, label: relativeTime(run.queuedSince) },
-      href: card?.board
-        ? factoryAttentionTargetPath(factoryId, { kind: 'work-item', workItemId: card.id, board: card.board })
-        : undefined,
+      href: card?.board ? boardCardHref(card.board, card.id) : undefined,
     };
   };
 
@@ -56,7 +54,7 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
       automated={queue.queued.filter(run => run.lane !== 'interactive').map(toRun)}
       running={queue.slots ? `, ${queue.slots.inUse + queue.slots.interactive.inUse} running on this server` : ''}
       slotLines={slotLines(queue.slots)}
-      LinkComponent={HrefLink}
+      LinkComponent={LinkComponent}
     />
   );
 }

@@ -2,8 +2,7 @@ import { PhaseSetup as SharedPhaseSetup } from '@mastra/playground-ui/domains/fa
 import type { PhaseSetupHandle } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledPhaseInfo } from '../../../../api/types';
-import { HrefLink } from '../../../ui/HrefLink';
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
+import { useBoardNavigation } from '../boardNavigation';
 import { approvalText, startsText } from '../../boardConfig/phaseSummary';
 import { ruleCount } from '../../boardRules/ruleLanes';
 import { usePhaseArrivals } from '../hooks/usePhaseArrivals';
@@ -21,6 +20,7 @@ export function PhaseSetup({
   phase: InstalledPhaseInfo;
   phases: readonly InstalledPhaseInfo[];
 }) {
+  const { LinkComponent, boardConfigHref } = useBoardNavigation();
   const { into } = usePhaseArrivals(factoryId, boardId, phases[0]?.id);
   const arriving = into?.get(phase.id) ?? [];
   const { skill, autoStart, exitTool } = phase;
@@ -36,13 +36,13 @@ export function PhaseSetup({
     <SharedPhaseSetup
       handle={handle}
       phaseId={phase.id}
-      href={boardConfigPath(factoryId, boardId, phase.id)}
+      href={boardConfigHref(boardId, phase.id)}
       summary={summary}
       arriving={arriving.length}
       agent={!!skill}
       autoStart={!!autoStart}
       exitTool={!!exitTool}
-      LinkComponent={HrefLink}
+      LinkComponent={LinkComponent}
     />
   );
 }

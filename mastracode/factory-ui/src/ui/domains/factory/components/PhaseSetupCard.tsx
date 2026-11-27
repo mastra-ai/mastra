@@ -4,10 +4,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Link } from 'react-router';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
+import { useBoardNavigation } from '../boardNavigation';
 import { Muted } from '../../boardConfig/components/PhaseTimeline';
 import { outlineOfInstalled, sharedOutline } from '../../boardConfig/components/PhaseWalkthrough';
 import { PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
@@ -42,6 +41,7 @@ export function PhaseSetupCard({
   rulesLoading: boolean;
   boards: readonly InstalledBoardInfo[] | undefined;
 }) {
+  const { LinkComponent: Link, boardConfigHref } = useBoardNavigation();
   return (
     <SharedPhaseSetupCard
       boardId={boardId}
@@ -53,7 +53,7 @@ export function PhaseSetupCard({
           variant="ghost"
           size="icon-sm"
           tooltip="Phase settings"
-          render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} />}
+          render={<Link href={boardConfigHref(boardId, phase.id)} />}
         >
           <IconSettingsSliderHor />
         </Button>
@@ -75,7 +75,7 @@ export function PhaseSetupCard({
               </ul>
               {arriving.length > SHOWN_RULES && (
                 <Link
-                  to={boardConfigPath(factoryId, boardId, phase.id)}
+                  href={boardConfigHref(boardId, phase.id)}
                   className={cn(focusRing, 'text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs')}
                 >
                   {arriving.length - SHOWN_RULES} more

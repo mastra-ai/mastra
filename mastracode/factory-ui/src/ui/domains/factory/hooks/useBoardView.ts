@@ -1,7 +1,5 @@
 import { useSavedViews } from '@mastra/playground-ui/components/SavedViews';
 import type { SavedViewsController } from '@mastra/playground-ui/components/SavedViews';
-import { useSearchParams } from 'react-router';
-import type { SetURLSearchParams } from 'react-router';
 
 import {
   boardFilterItems,
@@ -11,6 +9,7 @@ import {
   clearOpenCard,
 } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
+import { useBoardNavigation } from '../boardNavigation';
 import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
 import { withPeopleFolded, withPeopleUnfolded } from '../boardPeople';
@@ -26,7 +25,6 @@ export const BOARD_SEARCH_QUERY = 'search';
 
 export interface BoardView {
   searchParams: URLSearchParams;
-  setSearchParams: SetURLSearchParams;
   savedViews: SavedViewsController<BoardViewSettings>;
   filters: BoardFilterState;
   search: string;
@@ -56,11 +54,11 @@ export function useBoardView({
   currentUserId?: string;
   personId: PersonIdentity;
 }): BoardView {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const { searchParams, replaceSearchParams } = useBoardNavigation();
 
   const replaceParams = (params: URLSearchParams) => {
     saveBoardView(factoryProjectId, kind, params);
-    setSearchParams(params, { replace: true });
+    replaceSearchParams(params);
   };
 
   const savedViews = useSavedViews<BoardViewSettings>({
@@ -91,7 +89,6 @@ export function useBoardView({
 
   return {
     searchParams,
-    setSearchParams,
     savedViews,
     filters,
     search: searchParams.get(BOARD_SEARCH_QUERY) ?? '',
@@ -103,7 +100,7 @@ export function useBoardView({
       if (next) params.set(BOARD_SEARCH_QUERY, next);
       else params.delete(BOARD_SEARCH_QUERY);
       clearOpenCard(params);
-      setSearchParams(params, { replace: true });
+      replaceSearchParams(params);
     },
     setFilters: (next: BoardFilterState) => {
       const stored = withPeopleUnfolded(next, personId);

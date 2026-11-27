@@ -1,3 +1,4 @@
+import { HrefLink } from '../../../ui/HrefLink';
 import type { SessionRowStatus } from '@internal/factory-contract';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
@@ -110,6 +111,7 @@ function SessionPreview({
           />
           {card?.url != null && (
             <RelatedWorkItemLink
+              LinkComponent={HrefLink}
               item={card}
               href={card.url}
               kind="external"

@@ -1,23 +1,20 @@
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
-import { Link } from 'react-router';
 
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { useBoardNavigation } from '../boardNavigation';
 import type { IntakeSetup } from './BoardColumnEmptyState';
 
 export function BoardEmptyStateActions({
-  factoryId,
   boardId,
   intakeSetup,
   onCreate,
   onClearFilters,
 }: {
-  factoryId: string;
   boardId: string;
   intakeSetup?: IntakeSetup;
   onCreate?: () => void;
   onClearFilters?: () => void;
 }) {
+  const { LinkComponent: Link, intakeSettingsHref, newIntakeRuleHref } = useBoardNavigation();
   if (onClearFilters) {
     return (
       <Button size="sm" onClick={onClearFilters}>
@@ -34,15 +31,12 @@ export function BoardEmptyStateActions({
         </Button>
       )}
       {intakeSetup === 'source' && (
-        <Link to={settingsSectionPath(factoryId, 'intake')} className={buttonVariants({ size: 'sm' })}>
+        <Link href={intakeSettingsHref()} className={buttonVariants({ size: 'sm' })}>
           Connect issue source
         </Link>
       )}
       {intakeSetup === 'route' && (
-        <Link
-          to={boardConfigPath(factoryId, boardId, undefined, { newRule: {} })}
-          className={buttonVariants({ size: 'sm' })}
-        >
+        <Link href={newIntakeRuleHref(boardId)} className={buttonVariants({ size: 'sm' })}>
           Add intake rule
         </Link>
       )}

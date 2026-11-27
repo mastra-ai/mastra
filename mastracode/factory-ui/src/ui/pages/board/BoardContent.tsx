@@ -256,7 +256,6 @@ export function BoardContent({
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions
-                factoryId={factoryProjectId}
                 boardId={definition.id}
                 intakeSetup={stageIntakeSetup}
                 onCreate={canCreate ? () => composer.open(stage.id) : undefined}
@@ -358,7 +357,7 @@ export function BoardContent({
             aside={
               <div className="flex items-center gap-2">
                 <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />
-                <ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />
+                <ConfigureBoardButton boardId={definition.id} />
               </div>
             }
           />

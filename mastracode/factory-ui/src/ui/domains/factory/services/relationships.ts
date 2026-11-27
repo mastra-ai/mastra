@@ -36,13 +36,16 @@ export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: Work
 }
 
 /** A pull request opens the board that holds its card; an unfiled one, or one with no board, opens the default board. */
+export function relationshipBoardId(item: Pick<WorkItem, 'source'> & { readonly board?: string | null }): string {
+  if (!isPullRequestSource(item.source) || item.board === undefined) return DEFAULT_BOARD_ID;
+  return item.board ?? DEFAULT_BOARD_ID;
+}
+
 export function relationshipPath(
   item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
   factoryId: string,
 ): string {
-  if (!isPullRequestSource(item.source) || item.board === undefined)
-    return rememberedBoardPath(factoryId, DEFAULT_BOARD_ID);
-  return rememberedBoardPath(factoryId, item.board ?? DEFAULT_BOARD_ID);
+  return rememberedBoardPath(factoryId, relationshipBoardId(item));
 }
 
 export function relationshipLabel(item: WorkItem, contextRepository?: string): string {

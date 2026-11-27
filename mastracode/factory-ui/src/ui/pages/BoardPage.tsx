@@ -8,7 +8,9 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import type { BoardKind } from '../domains/factory/boardStages';
 import type { FactoryProject } from '../domains/workspaces/services/github';
+import { BoardNavigationProvider } from '../domains/factory/boardNavigation';
 import { BoardContent } from './board/BoardContent';
+import { useRouterBoardNavigation } from './board/useRouterBoardNavigation';
 import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
 import { LoadErrorState } from '../ui/LoadErrorState';
 
@@ -69,6 +71,11 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
   const kind = definition.id;
+  const navigation = useRouterBoardNavigation(factory.id);
   if (factory.repositories.length === 0) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
-  return <BoardContent key={`${factory.id}:${kind}`} factory={factory} kind={kind} definition={definition} />;
+  return (
+    <BoardNavigationProvider value={navigation}>
+      <BoardContent key={`${factory.id}:${kind}`} factory={factory} kind={kind} definition={definition} />
+    </BoardNavigationProvider>
+  );
 }

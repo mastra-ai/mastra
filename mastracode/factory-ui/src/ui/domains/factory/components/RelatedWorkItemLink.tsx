@@ -1,7 +1,7 @@
 import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
 import { RelatedItemLink } from '@mastra/playground-ui/domains/factory';
 
-import { HrefLink } from '../../../ui/HrefLink';
+import type { BoardNavigation } from '../boardNavigation';
 import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
@@ -18,12 +18,14 @@ export function RelatedWorkItemLink({
   kind,
   contextRepository,
   subscriptions,
+  LinkComponent,
 }: {
   item: WorkItem;
   href: string;
   kind: 'board' | 'external' | 'session';
   contextRepository?: string;
   subscriptions?: readonly PullRequestSubscription[];
+  LinkComponent: BoardNavigation['LinkComponent'];
 }) {
   const live = kind === 'session';
   const external = kind === 'external';
@@ -59,7 +61,7 @@ export function RelatedWorkItemLink({
       ]}
       live={live}
       external={external}
-      LinkComponent={HrefLink}
+      LinkComponent={LinkComponent}
     />
   );
 }
