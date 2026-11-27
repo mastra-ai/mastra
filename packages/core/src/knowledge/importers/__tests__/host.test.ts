@@ -189,6 +189,44 @@ describe('parseKnowledgeImporterFlushBody', () => {
       });
     });
 
+    // Storage keeps properties at any depth that fits in 16 KB, so the wire and the digest must too.
+    const nest = (depth: number, wrap: (inner: unknown) => unknown) => {
+      let value: unknown = 'leaf';
+      for (let level = 0; level < depth; level++) value = wrap(value);
+      return value;
+    };
+    it.each([
+      ['object', nest(2_500, inner => ({ a: inner }))],
+      ['array', { list: nest(2_500, inner => [inner]) }],
+    ])('carries %s properties nested 2,500 deep through parse and digest', async (_kind, properties) => {
+      const body = {
+        ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem: { externalId: 'd', properties, title: 'D' } }],
+      };
+      const wire = JSON.parse(JSON.stringify(body));
+      expect(JSON.stringify(wire).length).toBeLessThan(16 * 1024);
+      expect(canonicalJson(parseKnowledgeImporterFlushBody(wire).ops)).toBe(JSON.stringify(wire.ops));
+      // Keys are already sorted and one per level, so the canonical form is what JSON.stringify writes.
+      expect(canonicalJson(wire)).toBe(JSON.stringify(wire));
+      await expect(knowledgeImporterFlushDigest(wire)).resolves.toBe(
+        createHash('sha256')
+          .update(JSON.stringify({ ops: wire.ops, state: null }))
+          .digest('hex'),
+      );
+    });
+
+    it('copies a value repeated across properties, which is not a cycle', () => {
+      const shared = { id: 1 };
+      const [op] = parseKnowledgeImporterFlushBody(withItem({ properties: { a: shared, b: [shared, shared] } })).ops;
+      expect(op).toMatchObject({ sequenceItem: { properties: { a: { id: 1 }, b: [{ id: 1 }, { id: 1 }] } } });
+      expect(canonicalJson({ a: shared, b: [shared] })).toBe('{"a":{"id":1},"b":[{"id":1}]}');
+    });
+
+    it('refuses a cycle in canonical JSON with a TypeError', () => {
+      const loop: unknown[] = [];
+      loop.push(loop);
+      expect(() => canonicalJson(loop)).toThrow(TypeError);
+    });
+
     it('takes a sequence declaration on a declare and on an upsert', () => {
       const ops = [
         { op: 'declare', item: declaration },
@@ -211,6 +249,16 @@ describe('parseKnowledgeImporterFlushBody', () => {
       ['a sparse array in properties', withItem({ properties: { list: Array(1) } })],
       ['a non-finite number in properties', withItem({ properties: { n: Number.NaN } })],
       ['a lone surrogate in a property key', withItem({ properties: { '\ud800': 1 } })],
+      [
+        'a cycle in properties',
+        withItem({
+          properties: (() => {
+            const loop: Record<string, unknown> = {};
+            loop.self = loop;
+            return loop;
+          })(),
+        }),
+      ],
       ['an empty type', withItem({ type: '' })],
       ['an empty position', withItem({ position: '' })],
       ['an unknown orderBy', withSequence({ orderBy: 'alphabetical' })],

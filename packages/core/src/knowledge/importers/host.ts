@@ -203,35 +203,69 @@ export function normalizeKnowledgeImporterFinish(
  * §3.2.2.2).
  */
 export function canonicalJson(value: unknown): string {
-  if (value === null) return 'null';
-  switch (typeof value) {
-    case 'boolean':
-      return value ? 'true' : 'false';
-    case 'number':
-      if (!Number.isFinite(value)) throw new TypeError('Canonical JSON has no NaN or Infinity.');
-      return JSON.stringify(value);
-    case 'string':
-      return JSON.stringify(wellFormed(value));
-    case 'object': {
-      if (Array.isArray(value)) {
-        // Index every slot, as JSON.stringify does: a hole or undefined is null on the wire.
-        const items: string[] = [];
-        for (let index = 0; index < value.length; index++) {
-          const item: unknown = value[index];
-          items.push(item === undefined ? 'null' : canonicalJson(item));
-        }
-        return `[${items.join(',')}]`;
-      }
-      const record = value as Record<string, unknown>;
-      const members = Object.keys(record)
-        .filter(key => record[key] !== undefined)
-        .sort()
-        .map(key => `${JSON.stringify(wellFormed(key))}:${canonicalJson(record[key])}`);
-      return `{${members.join(',')}}`;
+  // An explicit stack instead of recursion, so any depth JSON.parse can produce serializes.
+  const out: string[] = [];
+  const open = new Set<object>();
+  const stack: Array<{ value: unknown } | { text: string } | { leave: object }> = [{ value }];
+  while (stack.length) {
+    const task = stack.pop()!;
+    if ('text' in task) {
+      out.push(task.text);
+      continue;
     }
-    default:
-      throw new TypeError(`Canonical JSON can't hold a ${typeof value}.`);
+    if ('leave' in task) {
+      open.delete(task.leave);
+      continue;
+    }
+    const current = task.value;
+    if (current === null) {
+      out.push('null');
+      continue;
+    }
+    switch (typeof current) {
+      case 'boolean':
+        out.push(current ? 'true' : 'false');
+        continue;
+      case 'number':
+        if (!Number.isFinite(current)) throw new TypeError('Canonical JSON has no NaN or Infinity.');
+        out.push(JSON.stringify(current));
+        continue;
+      case 'string':
+        out.push(JSON.stringify(wellFormed(current)));
+        continue;
+      case 'object': {
+        if (open.has(current)) throw new TypeError("Canonical JSON can't hold a cycle.");
+        open.add(current);
+        const next: Array<{ value: unknown } | { text: string } | { leave: object }> = [];
+        if (Array.isArray(current)) {
+          // Index every slot, as JSON.stringify does: a hole or undefined is null on the wire.
+          next.push({ text: '[' });
+          for (let index = 0; index < current.length; index++) {
+            if (index) next.push({ text: ',' });
+            const item: unknown = current[index];
+            next.push(item === undefined ? { text: 'null' } : { value: item });
+          }
+          next.push({ text: ']' });
+        } else {
+          const record = current as Record<string, unknown>;
+          const keys = Object.keys(record)
+            .filter(key => record[key] !== undefined)
+            .sort();
+          next.push({ text: '{' });
+          keys.forEach((key, index) => {
+            next.push({ text: `${index ? ',' : ''}${JSON.stringify(wellFormed(key))}:` }, { value: record[key] });
+          });
+          next.push({ text: '}' });
+        }
+        next.push({ leave: current });
+        for (let index = next.length - 1; index >= 0; index--) stack.push(next[index]!);
+        continue;
+      }
+      default:
+        throw new TypeError(`Canonical JSON can't hold a ${typeof current}.`);
+    }
   }
+  return out.join('');
 }
 
 /**
@@ -334,29 +368,80 @@ function checkDenseArray(value: unknown, where: string): unknown[] {
  * numbers and well-formed strings. Undefined members are left out, as JSON.stringify leaves them.
  */
 function checkJson(value: unknown, where: string): unknown {
-  try {
-    return copyJson(value, where);
-  } catch (error) {
-    if (error instanceof RangeError) throw new TypeError(`${where} nests too deeply.`);
-    throw error;
+  // An explicit stack instead of recursion, so any depth JSON.parse can produce is copied. Paths
+  // are built only for an error, so a deep value costs no path strings.
+  type Frame = { parent?: Frame; key: string | number };
+  const pathOf = (frame: Frame | undefined): string => {
+    const keys: Array<string | number> = [];
+    for (let at = frame; at?.parent; at = at.parent) keys.push(at.key);
+    return (
+      where +
+      keys
+        .reverse()
+        .map(key => (typeof key === 'number' ? `[${key}]` : `.${key}`))
+        .join('')
+    );
+  };
+  const root: Frame = { key: '' };
+  const holder: Record<string, unknown> = {};
+  const open = new Set<object>();
+  const stack: Array<
+    { value: unknown; frame: Frame; set: (copy: unknown) => void } | { leave: object; finish?: () => void }
+  > = [{ value, frame: root, set: copy => (holder.value = copy) }];
+  while (stack.length) {
+    const task = stack.pop()!;
+    if ('leave' in task) {
+      open.delete(task.leave);
+      task.finish?.();
+      continue;
+    }
+    const { value: current, frame, set } = task;
+    if (current === null || typeof current === 'boolean') {
+      set(current);
+      continue;
+    }
+    if (typeof current === 'number') {
+      if (!Number.isFinite(current)) throw new TypeError(`${pathOf(frame)} holds a non-finite number.`);
+      set(current);
+      continue;
+    }
+    if (typeof current === 'string') {
+      set(wellFormed(current));
+      continue;
+    }
+    if (typeof current === 'object' && open.has(current)) throw new TypeError(`${pathOf(frame)} holds a cycle.`);
+    if (Array.isArray(current)) {
+      checkDenseArray(current, pathOf(frame));
+      const copy: unknown[] = new Array(current.length);
+      set(copy);
+      open.add(current);
+      stack.push({ leave: current });
+      for (let index = current.length - 1; index >= 0; index--) {
+        stack.push({
+          value: current[index],
+          frame: { parent: frame, key: index },
+          set: inner => (copy[index] = inner),
+        });
+      }
+      continue;
+    }
+    if (!isPlainObject(current)) throw new TypeError(`${pathOf(frame)} must be plain JSON.`);
+    // Built on a null prototype so a "__proto__" key stays data, then spread to a plain object.
+    const members: Record<string, unknown> = Object.create(null);
+    open.add(current);
+    stack.push({ leave: current, finish: () => set({ ...members }) });
+    const keys = Object.keys(current).filter(key => current[key] !== undefined);
+    for (const key of keys) members[wellFormed(key)] = undefined;
+    for (let index = keys.length - 1; index >= 0; index--) {
+      const key = keys[index]!;
+      stack.push({
+        value: current[key],
+        frame: { parent: frame, key },
+        set: inner => (members[wellFormed(key)] = inner),
+      });
+    }
   }
-}
-
-function copyJson(value: unknown, where: string): unknown {
-  if (value === null || typeof value === 'boolean') return value;
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new TypeError(`${where} holds a non-finite number.`);
-    return value;
-  }
-  if (typeof value === 'string') return wellFormed(value);
-  if (Array.isArray(value))
-    return checkDenseArray(value, where).map((inner, index) => copyJson(inner, `${where}[${index}]`));
-  if (!isPlainObject(value)) throw new TypeError(`${where} must be plain JSON.`);
-  const out: Record<string, unknown> = Object.create(null);
-  for (const key of Object.keys(value)) {
-    if (value[key] !== undefined) out[wellFormed(key)] = copyJson(value[key], `${where}.${key}`);
-  }
-  return { ...out };
+  return holder.value;
 }
 
 function checkFields<T>(
