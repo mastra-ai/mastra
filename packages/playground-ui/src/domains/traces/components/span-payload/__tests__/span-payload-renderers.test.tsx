@@ -31,10 +31,6 @@ afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
 const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
-const sectionTitles = () =>
-  [...document.querySelectorAll('[data-slot="span-payload-section"]')].map(
-    section => section.firstElementChild?.firstElementChild?.textContent,
-  );
 
 describe('Span metadata JSON sections', () => {
   const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };

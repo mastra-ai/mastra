@@ -37,7 +37,7 @@ export function DataPanelMeta({ as, icon, tooltip, children, className, ...props
       aria-label={!isInteractive && typeof tooltip === 'string' ? tooltip : undefined}
       tabIndex={!isInteractive && hasTooltip ? 0 : undefined}
       className={cn(
-        // Same box as a `size="sm"` ghost `Button` (e.g. `TraceIdButton`), so pills line up
+        // Same box as a `size="sm"` ghost `Button`, so pills line up
         // with the heading and the trace ID on the same header row.
         'inline-flex min-w-0 items-center gap-1.5 overflow-hidden rounded-full px-2',
         controlSizeClasses.sm,
