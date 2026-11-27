@@ -85,7 +85,7 @@ export function RenameExperimentDialog({ experiment, open, onOpenChange, onRenam
           <DialogFooter>
             <DialogCancel>Cancel</DialogCancel>
             <DialogAction type="submit" disabled={!canSave}>
-              {isSaving ? 'Saving...' : 'Save'}
+              Save
             </DialogAction>
           </DialogFooter>
         </Form>

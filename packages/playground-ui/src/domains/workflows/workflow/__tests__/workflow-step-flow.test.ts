@@ -177,23 +177,15 @@ describe('isLastRunnableStep', () => {
     expect(isLastRunnableStep({ nextStepKey: 'b', stepNodesInOrder, isStepSuccess, isStepBypassed })).toBe(true);
   });
 
-  it('is false when a later step still needs to run', () => {
+  it.each([
+    ['is false when a later step still needs to run', 'a', false],
+    ['is false when there is no next step', undefined, true],
+  ] as const)('%s', (_title, nextStepKey, value) => {
     expect(
       isLastRunnableStep({
-        nextStepKey: 'a',
+        nextStepKey,
         stepNodesInOrder,
-        isStepSuccess: () => false,
-        isStepBypassed: () => false,
-      }),
-    ).toBe(false);
-  });
-
-  it('is false when there is no next step', () => {
-    expect(
-      isLastRunnableStep({
-        nextStepKey: undefined,
-        stepNodesInOrder,
-        isStepSuccess: () => true,
+        isStepSuccess: () => value,
         isStepBypassed: () => false,
       }),
     ).toBe(false);

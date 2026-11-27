@@ -29,6 +29,22 @@ export interface E2BFactorySandboxSettings extends Record<string, unknown> {
 /** Applied when neither the environment setting nor a host default is set. */
 const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
 
+/**
+ * vCPU counts a sandbox can be created with: one, or an even number. An odd
+ * count above one fails at creation. How high an account can go depends on its
+ * E2B plan, so the list runs to 64 and the account's own limit applies.
+ */
+const CPU_COUNTS = [1, ...Array.from({ length: 32 }, (_, index) => (index + 1) * 2)];
+
+/**
+ * The first of `counts` that is offered, else the built-in default. A count saved
+ * before the list existed, or passed as a default, may not be on it; a saved one
+ * falls back to the configured default, the same as once Factory drops it.
+ */
+function offeredCpuCount(...counts: Array<number | undefined>): number {
+  return counts.find(count => count !== undefined && CPU_COUNTS.includes(count)) ?? DEFAULT_SETTINGS.cpuCount;
+}
+
 const SETTINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -37,8 +53,7 @@ const SETTINGS_SCHEMA = {
       title: 'CPU',
       description: 'vCPUs for the sandbox template',
       default: DEFAULT_SETTINGS.cpuCount,
-      minimum: 1,
-      maximum: 8,
+      oneOf: CPU_COUNTS.map(count => ({ const: count })),
     },
     memoryMb: {
       type: 'integer',
@@ -80,6 +95,7 @@ function settingsSchema(options: E2BFactorySandboxOptions): PublicSchema<E2BFact
     ...(timeout !== undefined ? { idleTimeoutMinutes: Math.ceil(timeout / 60_000) } : {}),
     ...defaults,
   };
+  effective.cpuCount = offeredCpuCount(effective.cpuCount);
   const properties = Object.fromEntries(
     Object.entries(SETTINGS_SCHEMA.properties).map(([key, property]) => [
       key,
@@ -170,7 +186,7 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
     return {
       ...rest,
       ...(buildEnvRevision ? { buildEnvRevision, ...(buildEnv ? { buildEnv } : {}) } : {}),
-      cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
+      cpuCount: offeredCpuCount(settings.cpuCount, defaults?.cpuCount),
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
     };
   }

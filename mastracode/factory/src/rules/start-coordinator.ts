@@ -3,6 +3,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import { boardForWorkItem, hasPullRequest, isPullRequestReviewPhase, REVIEW_CONTEXT } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -25,7 +26,6 @@ import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/dom
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FactoryDispatchError } from './dispatch-errors.js';
-import type { FactoryTransitionService } from './transition-service.js';
 import { externallyAuthoredWorkItem } from './types.js';
 import type { FactoryRuleActor, FactoryRuleStage, FactoryTransitionResult } from './types.js';
 
@@ -160,7 +160,7 @@ async function configureThread(session: FactorySession, request: FactoryStartReq
 export class FactoryStartCoordinator {
   readonly #controller: FactoryController;
   readonly #storage: WorkItemsStorage;
-  readonly #transitionService?: Pick<FactoryTransitionService, 'transition'>;
+  readonly #boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
   readonly #sourceControl?:
     | SourceControlStorageHandle
     | ((
@@ -175,7 +175,7 @@ export class FactoryStartCoordinator {
   constructor(
     controller: FactoryController,
     storage: WorkItemsStorage,
-    transitionService?: Pick<FactoryTransitionService, 'transition'>,
+    boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>,
     sourceControl?:
       | SourceControlStorageHandle
       | ((
@@ -191,7 +191,7 @@ export class FactoryStartCoordinator {
     this.#vaultSandboxes = sandboxHostMayUseCredentialVault(sandboxProvider);
     this.#controller = controller;
     this.#storage = storage;
-    this.#transitionService = transitionService;
+    this.#boardEngine = boardEngine;
     this.#sourceControl = sourceControl;
     this.#intake = intake;
     this.#projects = sessionModel?.projects;
@@ -370,10 +370,10 @@ export class FactoryStartCoordinator {
       ownerUserId: sourceSession.userId,
       defaultModelId: sessionModel.modelId,
     });
-    // The tool is `requireApproval`, and that prompt parks the run whether or not
-    // someone pressed Start — a person is reading the plan, not an approval queue.
-    // Starting the run was already the say-so; the rules engine still governs.
-    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
+    // Factory tools ask by default, and that prompt would park the run whether or not
+    // someone pressed Start. Reporting an outcome moves nothing until the board engine
+    // accepts the move, so the session reports without asking.
+    await session.permissions.setForTool({ toolName: 'factory_report_outcome', policy: 'allow' });
     const threadId = await configureThread(session, request);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,
@@ -392,8 +392,8 @@ export class FactoryStartCoordinator {
     let revision = prepared.item.revision;
     const destinationStage = request.destinationStage;
     if (destinationStage && (prepared.item.stages.length !== 1 || prepared.item.stages[0] !== destinationStage)) {
-      if (!this.#transitionService) throw new Error('Factory transition service is unavailable.');
-      const transition = await this.#transitionService.transition({
+      if (!this.#boardEngine) throw new Error('Factory board engine is unavailable.');
+      const transition = await this.#boardEngine.requestMove({
         orgId: request.orgId,
         factoryProjectId: request.factoryProjectId,
         workItemId: prepared.item.id,

@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
 import { ActionRow } from '../ActionRow';
+import { BrandLoader } from '../BrandLoader';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
 import { EmptyState } from '../EmptyState';
@@ -167,6 +168,37 @@ export const LongPage: Story = {
   },
 };
 
+export const PageWithFullHeightList: Story = {
+  args: {
+    children: (
+      <ul className="border-border1 h-full overflow-auto rounded-lg border">
+        {Array.from({ length: 40 }, (_, index) => (
+          <li key={index} className="border-border1 border-b px-3 py-2 last:border-b-0">
+            <Txt>Run {index + 1}</Txt>
+          </li>
+        ))}
+      </ul>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A last child that fills the page height and scrolls on its own, like a traces or logs table. It ends on the same gutter as its sides, without the end space a scrolling page gets.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const list = within(canvasElement).getByText('Run 1').closest('ul');
+    const body = list?.closest<HTMLElement>('[style*="overflow"]');
+    if (!list || !body) throw new Error('Missing the page parts');
+    // The side gutter is the body's padding: on wide screens the content also centers, which is not part of it.
+    const gutter = parseFloat(getComputedStyle(body).paddingLeft);
+    await expect(body.getBoundingClientRect().bottom - list.getBoundingClientRect().bottom).toBeCloseTo(gutter, 0);
+    await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
+  },
+};
+
 export const PageWithActionRow: Story = {
   args: {
     actionRow: (
@@ -241,6 +273,32 @@ export const PageWithSectionsAndEmptyState: Story = {
     await expect(fill.getBoundingClientRect().top).toBeCloseTo(list.getBoundingClientRect().bottom, 0);
     await expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   },
+};
+
+async function expectLoaderInPageCenter({ canvasElement }: { canvasElement: HTMLElement }) {
+  const card = canvasElement.querySelector('[data-slot=main-card]')?.getBoundingClientRect();
+  const loader = within(canvasElement).getByRole('status').getBoundingClientRect();
+  if (!card) throw new Error('Missing the page parts');
+  await expect(loader.top + loader.height / 2).toBeCloseTo(card.top + card.height / 2, 0);
+  await expect(loader.left + loader.width / 2).toBeCloseTo(card.left + card.width / 2, 0);
+}
+
+export const PageLoading: Story = {
+  args: { children: <BrandLoader fill /> },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A page that hasn't shown yet centers its loader on the whole page, header included, so it takes over from the route's loader without a jump.",
+      },
+    },
+  },
+  play: expectLoaderInPageCenter,
+};
+
+export const FixedPageLoading: Story = {
+  args: { body: 'fixed', children: <BrandLoader fill /> },
+  play: expectLoaderInPageCenter,
 };
 
 function ComparisonHeader({

@@ -11,7 +11,6 @@ import { Input } from '@/ds/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@/ds/components/JSONSchemaForm';
 import type { SchemaField } from '@/ds/components/JSONSchemaForm';
 import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Spinner } from '@/ds/components/Spinner';
 
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
@@ -198,32 +197,34 @@ export function PromptBlockEditSidebar({
         {mode === 'edit' && onSaveDraft ? (
           <div className="flex gap-2">
             <Button
-              icon={isSavingDraft ? <Spinner /> : <IconFloppyDisk1 />}
               onClick={onSaveDraft}
-              disabled={!isDirty || isSavingDraft || isSubmitting}
+              disabled={!isDirty || isSubmitting}
               className="flex-1"
+              icon={<IconFloppyDisk1 />}
+              loading={isSavingDraft}
             >
-              {isSavingDraft ? 'Saving...' : 'Save'}
+              Save
             </Button>
             <Button
-              icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
               variant="primary"
               onClick={onPublish}
-              disabled={(!hasDraft && !isDirty) || isSubmitting || isSavingDraft}
+              disabled={(!hasDraft && !isDirty) || isSavingDraft}
               className="flex-1"
+              icon={<IconCheckmark2Medium />}
+              loading={isSubmitting}
             >
-              {isSubmitting ? 'Publishing...' : 'Publish'}
+              Publish
             </Button>
           </div>
         ) : (
           <Button
-            icon={isSubmitting ? <Spinner /> : <IconCheckmark2Medium />}
             variant="primary"
             onClick={onPublish}
-            disabled={isSubmitting}
             className="w-full"
+            icon={<IconCheckmark2Medium />}
+            loading={isSubmitting}
           >
-            {isSubmitting ? 'Creating...' : 'Create prompt block'}
+            Create prompt block
           </Button>
         )}
       </div>

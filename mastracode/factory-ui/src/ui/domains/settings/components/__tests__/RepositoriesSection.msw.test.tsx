@@ -406,7 +406,7 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` })).toBeEnabled());
     await user.click(screen.getByRole('button', { name: 'Show settings for acme/other' }));
     await user.click(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
-    expect(await screen.findByText('Removing…')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: `Remove ${PRIMARY_PROJECT}`, busy: true })).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: 'Clone acme/other into every session' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled();
     releaseRemoval();

@@ -1,5 +1,6 @@
 import { addDays, differenceInCalendarDays, format, isValid, parseISO } from 'date-fns';
 import type { DateRangeValue, DateRangeBounds } from '../types';
+import { formatDate } from '@/utils/date-format';
 
 const API_DATE_FORMAT = 'yyyy-MM-dd';
 
@@ -143,10 +144,11 @@ export function buildTimelineTicks(domainFrom: Date, domainTo: Date): TimelineTi
 
   return buildTimelineTickOffsets(span).map(dayOffset => {
     const date = addDays(domainFrom, dayOffset);
-    const labelFormat = span > 365 || crossesYears ? 'MMM yyyy' : 'MMM d';
+    const labelFormat: Intl.DateTimeFormatOptions =
+      span > 365 || crossesYears ? { month: 'short', year: 'numeric' } : { month: 'short', day: 'numeric' };
 
     return {
-      label: format(date, labelFormat),
+      label: date.toLocaleDateString(undefined, labelFormat),
       date: format(date, API_DATE_FORMAT),
       position: span === 0 ? 50 : (dayOffset / span) * 100,
     };
@@ -191,5 +193,5 @@ export function formatDateRangeValueText(value: DateRangeValue) {
   const from = parseDate(value.from);
   const to = parseDate(value.to);
   if (!from || !to) return `${value.from} through ${value.to}`;
-  return `${format(from, 'MMMM d, yyyy')} through ${format(to, 'MMMM d, yyyy')}`;
+  return `${formatDate(from, 'date-long')} through ${formatDate(to, 'date-long')}`;
 }

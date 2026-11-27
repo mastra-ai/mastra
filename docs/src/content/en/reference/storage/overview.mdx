@@ -346,14 +346,14 @@ The schema definitions below cover the built-in database-backed tables documente
   },
   {
     name: 'global_run_id',
-    type: 'uuidv4',
+    type: 'text',
     description: 'Groups related evaluation runs (e.g. all unit tests in a CI run)',
     constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'run_id',
-    type: 'uuidv4',
-    description: 'Unique identifier for the run being evaluated (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)',
+    type: 'text',
+    description: 'Unique identifier for the run being evaluated',
     constraints: [{ type: 'nullable', value: false }],
   },
   {

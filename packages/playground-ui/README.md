@@ -98,6 +98,24 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 </Button>
 ```
 
+### Loading buttons
+
+Pass `loading` to the button whose action is in progress. Don't put a `Spinner` in a button, swap its icon or change its label.
+
+```tsx
+<Button variant="primary" icon={<IconPlusMedium />} loading={createProject.isPending} onClick={create}>
+  Create project
+</Button>
+```
+
+- The loader takes the place of the button's icon (`icon`, else `iconEnd`, else the glyph of an icon-only button), so the button keeps its size. A button without an icon gets the loader on the left. Pass the icon through `icon`, not as a child, or it stays beside the loader.
+- The label stays: "Create project", not "Creating project…". The person sees which action is running, and the button's name doesn't change under a screen reader.
+- Clicks and submits do nothing, and the button keeps focus (`aria-disabled` and `aria-busy` instead of `disabled`). `disabled` only needs the other reasons the button can't be used.
+- The button keeps its own colours and the loader takes the icon's: loading isn't the disabled look, which is too faint to read in a light theme.
+- The loader appears after 150ms, so an action that finishes sooner changes nothing on screen.
+- Other buttons that must wait (Cancel, the second action) are `disabled`, not `loading`.
+- In a `Dialog` with `pending`, `DialogAction` is loading on its own. With two actions, pass `loading` to each. `AlertDialog.Action` closes the dialog when clicked; to keep it open while loading, use `Dialog` with `pending`.
+
 ### Central Icons
 
 Interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `Network`. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
@@ -630,6 +648,7 @@ export default defineConfig({
 | `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
 | `playground-ui/no-text-separators`     | Decorative pipes, middots, bullets, spaced or double hyphens, and em dashes in authored UI copy  |
 | `playground-ui/no-text-layout-spacing` | Repeated spaces, tabs, or nonbreaking spaces used to lay out UI copy                             |
+| `playground-ui/date-locale`            | A pinned locale, a forced 12/24-hour clock or a date-fns display pattern on a date or time       |
 
 Turn rules off per glob in `overrides`, for example for tests and stories.
 

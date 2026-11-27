@@ -1,5 +1,6 @@
 import type { Lock, QueueEntry, StateAdapter } from 'chat';
 
+import type { IMastraLogger } from '../logger/logger';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 
 interface CachedValue<T = unknown> {
@@ -19,6 +20,7 @@ interface CachedValue<T = unknown> {
 export class MastraStateAdapter implements StateAdapter {
   private memoryStore: MemoryStorage;
   private getOwnerId?: () => string | null;
+  private logger?: IMastraLogger;
   private connected = false;
   private connectPromise: Promise<void> | null = null;
 
@@ -28,9 +30,10 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
-  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null) {
+  constructor(memoryStore: MemoryStorage, getOwnerId?: () => string | null, logger?: IMastraLogger) {
     this.memoryStore = memoryStore;
     this.getOwnerId = getOwnerId;
+    this.logger = logger;
   }
 
   async connect(): Promise<void> {
@@ -59,7 +62,12 @@ export class MastraStateAdapter implements StateAdapter {
   async subscribe(threadId: string): Promise<void> {
     // Find the Mastra thread mapped to this external thread ID and mark it
     const thread = await this.findThreadByExternalId(threadId);
-    if (!thread) return; // Thread not yet mapped — subscribe will be a no-op
+    if (!thread) {
+      this.logger?.warn(
+        `subscribe(${threadId}) ignored: no Mastra thread is mapped to this chat thread. Use AgentChannels.subscribeThread() for threads the bot started itself.`,
+      );
+      return;
+    }
     await this.memoryStore.patchThread({
       id: thread.id,
       metadata: {

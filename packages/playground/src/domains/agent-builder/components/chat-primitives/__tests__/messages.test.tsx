@@ -528,36 +528,23 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('openai/gpt-4o');
   });
 
-  it('renders MessageSetAgentBrowserEnabled (enabled) for streaming dynamic-tool', () => {
+  it.each([
+    ['renders MessageSetAgentBrowserEnabled (enabled) for streaming dynamic-tool', 'call-browser', true, 'enabled'],
+    ['renders MessageSetAgentBrowserEnabled (disabled) for persisted tool part', 'call-browser-r', false, 'disabled'],
+  ] as const)('%s', (_title, toolCallId, browserEnabled, expected) => {
     const { container } = renderRow(
       [
         builderToolPart({
-          toolCallId: 'call-browser',
+          toolCallId,
           toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
-          input: { browserEnabled: true },
+          input: { browserEnabled },
           output: { success: true },
         }),
       ],
-      { browserEnabled: true },
+      { browserEnabled },
     );
     expect(container.textContent).toContain('Browser access');
-    expect(container.textContent).toContain('enabled');
-  });
-
-  it('renders MessageSetAgentBrowserEnabled (disabled) for persisted tool part', () => {
-    const { container } = renderRow(
-      [
-        builderToolPart({
-          toolCallId: 'call-browser-r',
-          toolName: SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
-          input: { browserEnabled: false },
-          output: { success: true },
-        }),
-      ],
-      { browserEnabled: false },
-    );
-    expect(container.textContent).toContain('Browser access');
-    expect(container.textContent).toContain('disabled');
+    expect(container.textContent).toContain(expected);
   });
 
   it('renders MessageSetAgentWorkspaceId for streaming dynamic-tool', () => {

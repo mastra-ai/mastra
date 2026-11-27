@@ -19,7 +19,7 @@ const trace = await mastraClient.getTrace('trace-id-123')
 
 ## Getting traces with filtering
 
-Retrieve a paginated list of trace root spans with optional filtering:
+Retrieve a paginated list of trace root spans with optional filtering. `getTraces()` is deprecated: use `listTraces()` for new code, which also supports ordering and more filters.
 
 ```typescript
 const traces = await mastraClient.getTraces({

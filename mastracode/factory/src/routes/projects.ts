@@ -7,8 +7,6 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { ProjectBoardCache } from '../boards/project-boards.js';
-import { createBoardRegistry } from '../boards/registry.js';
-import { workItemPhaseSemantics } from '../boards/semantics.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -36,7 +34,6 @@ const MAX_NAME_LENGTH = 200;
 const MAX_REPOSITORY_COMMAND_LENGTH = 2_000;
 const MAX_BRANCH_LENGTH = 255;
 const CONTROL_CHAR_RE = /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/;
-const applyDefaultModelRuns = new Map<string, Promise<void>>();
 
 async function readJson(context: Context): Promise<unknown | undefined> {
   try {
@@ -110,18 +107,6 @@ function parseRepositoryLinkInput(value: unknown): {
   };
 }
 
-interface ModelApplySession {
-  thread: {
-    getById: (args: { threadId: string }) => Promise<{ metadata?: Record<string, unknown> | null } | null>;
-    setSettingOn: (args: { threadId: string; key: string; value: unknown }) => Promise<unknown> | unknown;
-  };
-}
-
-interface ModelApplyController {
-  getSession: (sessionId: string) => Promise<ModelApplySession | undefined>;
-  setThreadModel: (args: { resourceId: string; threadId: string; modelId: string }) => Promise<unknown>;
-}
-
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -145,10 +130,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   onProjectRepositoryLinked?: (args: { orgId: string; projectRepository: ProjectRepository }) => void;
   /** Shared lifecycle for retiring sessions before their owning records are deleted. */
   sessionRetirement?: SessionRetirementCoordinator;
-  /** Work-items domain used by session retirement and running-thread model updates. */
+  /** Work-items domain used by session retirement. */
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
-  /** Controller used to reach the thread store behind each active binding. */
-  controller?: ModelApplyController;
   /** The factory's normalized sandbox; describes and validates the environment settings. */
   sandbox?: FactorySandbox;
   /** Environment builds, present only when the sandbox has a `builds` capability. */
@@ -156,7 +139,7 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings' | 'addSources'>;
   /** The per-project boards; loading a new project stores its copies of the code boards. */
-  boards?: Pick<ProjectBoardCache, 'describe' | 'seedNewProject'>;
+  boards?: Pick<ProjectBoardCache, 'seedNewProject'>;
 }
 
 /**
@@ -170,6 +153,17 @@ function redactBuild<T extends { error?: string; logs?: string[] }>(build: T, bu
     ...(build.error !== undefined ? { error: redact(build.error) } : {}),
     ...(build.logs ? { logs: build.logs.map(redact) } : {}),
   };
+}
+
+let warnedAdditionalProject = false;
+
+/** Warns once per process when an organization that already has a Factory project creates another. */
+function warnAdditionalProject(): void {
+  if (warnedAdditionalProject) return;
+  warnedAdditionalProject = true;
+  console.warn(
+    '[Mastra Factory] Creating more than one Factory project in an organization is deprecated: each organization will have one Factory project. The project is still created; see the README "One project per Factory" section.',
+  );
 }
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
@@ -430,9 +424,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const parsed = FACTORY_ROUTE_CONTRACTS.projectCreate.bodySchema.safeParse(await readJson(context));
           if (!parsed.success) return context.json({ error: 'invalid_project' }, 400);
-          const project = await (
-            await this.#projects()
-          ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          const projects = await this.#projects();
+          if ((await projects.list({ orgId: tenant.orgId })).length > 0) warnAdditionalProject();
+          const project = await projects.create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
           // A new project gets today's Work, without Triage; a project that existed before keeps the
           // Work it had. The project's first board load retries anything this misses, with Work as
           // it was for older projects, as this one can't be told apart from them by then.
@@ -470,15 +464,15 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
           // Scope decides whose credentials every session bills against, so only
-          // admins may switch a shared Factory onto owners' personal keys. The
-          // thinking default sets the reasoning spend of every run that has not
-          // picked its own, so it is admin-only too.
+          // admins may switch a shared Factory onto owners' personal keys.
           const adminField =
             parsedBody.data.modelScope !== undefined
               ? 'model scope'
-              : parsedBody.data.defaultThinkingLevel !== undefined
-                ? 'thinking default'
-                : undefined;
+              : parsedBody.data.modelPackSet !== undefined
+                ? 'model packs'
+                : parsedBody.data.defaultModelId !== undefined
+                  ? 'default model'
+                  : undefined;
           if (
             adminField &&
             this.deps.auth.enabled() &&
@@ -504,120 +498,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } = parsedBody.data;
           const project = await (await this.#projects()).update({ orgId: tenant.orgId, id: parsedPath.data.id, input });
           return project ? context.json({ project }) : context.json({ error: 'Project not found' }, 404);
-        },
-      }),
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
-        method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
-        requiresAuth: false,
-        handler: async routeContext => {
-          const context = loose(routeContext);
-          const tenant = await this.#resolveTenant(context);
-          if ('response' in tenant) return tenant.response;
-          if (!(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))) {
-            return context.json(
-              {
-                error: 'forbidden',
-                message: 'Organization administrator access is required to update running sessions.',
-              },
-              403,
-            );
-          }
-          const parsedPath = FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.pathSchema.safeParse({
-            id: context.req.param('id'),
-          });
-          if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
-          const project = await this.#project(tenant.orgId, parsedPath.data.id);
-          if (!project) return context.json({ error: 'Project not found' }, 404);
-          const modelId = project.defaultModelId;
-          if (!modelId) {
-            return context.json(
-              { error: 'default_model_not_set', message: 'Set a default model on the project first.' },
-              400,
-            );
-          }
-          const { workItems, controller } = this.deps;
-          if (!workItems || !controller) return context.json({ error: 'model_apply_unavailable' }, 503);
-
-          // Do not hold the HTTP request open while visiting every running session: a slow
-          // session gateway can take longer than the proxy timeout.
-          // Serialize updates for a project so an older slow write cannot overwrite a newer request.
-          const runKey = `${tenant.orgId}:${project.id}`;
-          const priorRun = applyDefaultModelRuns.get(runKey);
-          const run = (priorRun ? priorRun.catch(() => {}) : Promise.resolve()).then(async () => {
-            const bindings = (await workItems.listRunBindings(tenant.orgId, project.id)).filter(
-              binding => binding.status === 'active',
-            );
-            const boards =
-              (await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }))?.registry ??
-              createBoardRegistry();
-            const seen = new Set<string>();
-            let applied = 0;
-            let skipped = 0;
-
-            for (const binding of bindings) {
-              try {
-                // A default changed while this job was queued or running must not be written by this job.
-                if ((await this.#project(tenant.orgId, project.id))?.defaultModelId !== modelId) break;
-                const key = `${binding.sessionId}:${binding.threadId}`;
-                if (seen.has(key)) continue;
-                seen.add(key);
-
-                const item = await workItems.get({ orgId: tenant.orgId, id: binding.workItemId });
-                if (!item || item.factoryProjectId !== project.id) {
-                  skipped++;
-                  continue;
-                }
-                // A bound run can still act on its card anywhere short of a terminal phase.
-                const phaseKind = workItemPhaseSemantics(boards, item)?.kind;
-                if (phaseKind === undefined || phaseKind === 'terminal') {
-                  skipped++;
-                  continue;
-                }
-                const session = await controller.getSession(binding.sessionId);
-                if (!session) {
-                  // An unloaded session reads the thread's model when it loads again, so store it on the thread.
-                  await controller.setThreadModel({
-                    resourceId: binding.resourceId,
-                    threadId: binding.threadId,
-                    modelId,
-                  });
-                  applied++;
-                  continue;
-                }
-                const thread = await session.thread.getById({ threadId: binding.threadId });
-                if (!thread) {
-                  skipped++;
-                  continue;
-                }
-                // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
-                await session.thread.setSettingOn({
-                  threadId: binding.threadId,
-                  key: 'currentModelId',
-                  value: modelId,
-                });
-                applied++;
-              } catch (error) {
-                console.warn('[factory] apply-default-model failed for thread', binding.threadId, error);
-                skipped++;
-              }
-            }
-            console.info('[factory] apply-default-model completed', {
-              projectId: project.id,
-              modelId,
-              applied,
-              skipped,
-            });
-          });
-          applyDefaultModelRuns.set(runKey, run);
-          void run
-            .catch(error => {
-              console.error('[factory] apply-default-model failed', { projectId: project.id, modelId, error });
-            })
-            .finally(() => {
-              if (applyDefaultModelRuns.get(runKey) === run) applyDefaultModelRuns.delete(runKey);
-            });
-
-          return context.json({ modelId, status: 'started' }, 202);
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {

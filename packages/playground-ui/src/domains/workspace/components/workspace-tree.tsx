@@ -1,272 +1,99 @@
-import type { WorkspaceFsListResponse } from '@mastra/client-js';
-import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
+import { useWorkspaceDirectories, useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { ROOT_PATH, joinPath, parentOf } from '../path';
-import { MountIcon } from './mount-icon';
-import type { WorkspaceMount } from './mount-icon';
+import { ROOT_PATH, ancestorsOf, parentOf } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import type { WorkspaceEntryRef } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
+import { describeWorkspaceError } from './workspace-error-message';
+import { WorkspaceNewFolderInput } from './workspace-new-folder-input';
+import { FileRow } from './workspace-tree-file-row';
+import { FolderRow } from './workspace-tree-folder-row';
+import type { WorkspaceTreeRowActions } from './workspace-tree-row-actions';
+import { buildWorkspaceTreeRows } from './workspace-tree-rows';
+import type { WorkspaceFolderListing } from './workspace-tree-rows';
 import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Button } from '@/ds/components/Button';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Spinner } from '@/ds/components/Spinner';
-import { Tree } from '@/ds/components/Tree';
-import { Txt } from '@/ds/components/Txt';
-import { FileIcon, FolderIcon, TrashIcon } from '@/ds/icons';
+import { Button } from '@/ds/components/Button/Button';
+import { Skeleton } from '@/ds/components/Skeleton/skeleton';
+import { Txt } from '@/ds/components/Txt/Txt';
+import { VirtualTree } from '@/ds/components/VirtualTree/virtual-tree';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
-import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
-import { IconLock } from '@/ds/icons/central/IconLock';
 
-const formatBytes = (bytes: number) => {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = bytes > 0 ? Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1) : 0;
-  return `${parseFloat((bytes / 1024 ** i).toFixed(1))} ${units[i]}`;
-};
-
-type RequestDelete = (entry: WorkspaceEntryRef) => void;
+const PENDING_LISTING: WorkspaceFolderListing = { isLoading: true };
 
 export function WorkspaceTree() {
-  const { workspaceId, activeFilePath, setActiveFilePath } = useWorkspaceContext();
+  const { workspaceId, activeFilePath, setActiveFilePath, openFolders, setFolderOpen } = useWorkspaceContext();
   const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: ROOT_PATH });
-  const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
+  const openPaths = [...openFolders].filter(path => ancestorsOf(path).every(folder => openFolders.has(folder)));
+  const results = useWorkspaceDirectories({ workspaceId, paths: openPaths });
+  const [creatingIn, setCreatingIn] = useState<string>();
+  const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef>();
 
   if (isLoading) return <TreeSkeleton />;
   // A failed background refetch keeps showing the last listing.
-  if (!data) return <WorkspaceError error={error} fallback="Could not load files." className="m-2" />;
+  if (!data) return <WorkspaceError error={error ?? undefined} fallback="Could not load files." className="m-2" />;
 
-  return (
-    <>
-      <Tree aria-label="Workspace files" selectedId={activeFilePath} onSelect={setActiveFilePath} className="py-1">
-        <Entries entries={data} parent={ROOT_PATH} onRequestDelete={setPendingDelete} />
-      </Tree>
-      <DeleteDialog entry={pendingDelete} onClose={() => setPendingDelete(null)} />
-    </>
+  const listings = new Map(
+    openPaths.map((path, index): [string, WorkspaceFolderListing] => {
+      const result = results[index];
+      return [
+        path,
+        result ? { data: result.data, error: result.error ?? undefined, isLoading: result.isLoading } : PENDING_LISTING,
+      ];
+    }),
   );
-}
-
-function Entries({
-  entries,
-  parent,
-  onRequestDelete,
-}: {
-  entries: WorkspaceFsListResponse['entries'];
-  parent: string;
-  onRequestDelete: RequestDelete;
-}) {
-  return entries.map(entry => {
-    const path = joinPath(parent, entry.name);
-    return entry.type === 'directory' ? (
-      <FolderNode
-        key={entry.name}
-        name={entry.name}
-        path={path}
-        mount={entry.mount}
-        onRequestDelete={onRequestDelete}
-      />
-    ) : (
-      <FileNode key={entry.name} name={entry.name} size={entry.size} path={path} onRequestDelete={onRequestDelete} />
-    );
-  });
-}
-
-/** Trailing row details, revealed on hover or keyboard focus. */
-function RowActions({ children }: { children: ReactNode }) {
-  return (
-    <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-      {children}
-    </span>
-  );
-}
-
-function DeleteButton({ name, onClick }: { name: string; onClick: () => void }) {
-  return (
-    <Button
-      variant="destructive-ghost"
-      size="icon-sm"
-      tooltip={`Delete ${name}`}
-      onClick={event => {
-        event.stopPropagation();
-        onClick();
-      }}
-      onKeyDown={event => event.stopPropagation()}
-    >
-      <TrashIcon />
-    </Button>
-  );
-}
-
-interface NodeProps {
-  name: string;
-  path: string;
-  onRequestDelete: RequestDelete;
-}
-
-function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?: WorkspaceMount }) {
-  const { workspaceId, onDelete, onCreateDirectory, isReadOnly, openFolders, setFolderOpen } = useWorkspaceContext();
-  const open = openFolders.has(path);
-  // Shares the query with FolderChildren; only used to flag the first load next to the name.
-  const { isLoading } = useWorkspaceDirectory({
-    workspaceId: workspaceId,
-    path: path,
-    queryOptions: { enabled: open },
-  });
-  const [creating, setCreating] = useState(false);
-  const canDelete = onDelete && !isReadOnly(path);
-  const canCreate = onCreateDirectory && !isReadOnly(path);
-
-  return (
-    <Tree.Folder id={path} open={open} onOpenChange={next => setFolderOpen(path, next)}>
-      <Tree.FolderTrigger
-        actions={
-          canDelete || canCreate ? (
-            <RowActions>
-              {canCreate ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  tooltip={`New folder in ${name}`}
-                  onClick={event => {
-                    event.stopPropagation();
-                    setFolderOpen(path, true);
-                    setCreating(true);
-                  }}
-                  onKeyDown={event => event.stopPropagation()}
-                >
-                  <IconFolderAddRight />
-                </Button>
-              ) : null}
-              {canDelete ? (
-                <DeleteButton name={name} onClick={() => onRequestDelete({ path, type: 'directory' })} />
-              ) : null}
-            </RowActions>
-          ) : undefined
-        }
-      >
-        <Tree.Icon>
-          {mount ? (
-            <span
-              role="img"
-              aria-label={`Mount: ${mount.displayName ?? mount.provider}`}
-              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(': ')}
-              className="flex"
-            >
-              <MountIcon mount={mount} />
-            </span>
-          ) : (
-            <FolderIcon />
-          )}
-        </Tree.Icon>
-        <Tree.Label>{name}</Tree.Label>
-        {mount?.status === 'error' ? (
-          <span
-            role="img"
-            aria-label={`Mount error: ${mount.error ?? 'unavailable'}`}
-            title={mount.error}
-            className="flex shrink-0"
-          >
-            <IconExclamationCircle className="size-icon-xs text-destructive-foreground" />
-          </span>
-        ) : null}
-        {mount && isReadOnly(path) ? (
-          <span role="img" aria-label="Read-only" title="Read-only" className="flex shrink-0">
-            <IconLock className="size-icon-xs text-muted-foreground" />
-          </span>
-        ) : null}
-        {open && isLoading ? (
-          <span className="flex shrink-0 animate-in delay-200 fill-mode-backwards fade-in">
-            <Spinner size="sm" aria-label={`Loading ${name}`} className="size-3 text-muted-foreground" />
-          </span>
-        ) : null}
-      </Tree.FolderTrigger>
-      <Tree.FolderContent>
-        {open ? (
-          <FolderChildren
-            path={path}
-            creating={creating}
-            onCreated={() => setCreating(false)}
-            onRequestDelete={onRequestDelete}
-          />
-        ) : null}
-      </Tree.FolderContent>
-    </Tree.Folder>
-  );
-}
-
-/** Mounted only once its folder is opened, so unopened folders are never listed. */
-function FolderChildren({
-  path,
-  creating,
-  onCreated,
-  onRequestDelete,
-}: {
-  path: string;
-  creating: boolean;
-  onCreated: () => void;
-  onRequestDelete: RequestDelete;
-}) {
-  const { workspaceId, onCreateDirectory } = useWorkspaceContext();
-  const queryClient = useQueryClient();
-  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: path });
-
-  const create = async (name: string) => {
-    try {
-      await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
-    } catch {
-      // The caller reports the failure; keep the input open so the user can retry or cancel.
-      return;
-    }
-    onCreated();
-    await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', path] });
+  const rows = buildWorkspaceTreeRows(data, ROOT_PATH, { open: openFolders, listings, creatingIn });
+  const rowActions: WorkspaceTreeRowActions = {
+    onRequestDelete: setPendingDelete,
+    onRequestCreate: path => {
+      setFolderOpen(path, true);
+      setCreatingIn(path);
+    },
   };
 
   return (
     <>
-      {creating ? (
-        <Tree.Input type="folder" placeholder="Folder name" onSubmit={name => void create(name)} onCancel={onCreated} />
-      ) : null}
-      {isLoading ? null : data ? (
-        <Entries entries={data} parent={path} onRequestDelete={onRequestDelete} />
-      ) : (
-        <WorkspaceError error={error} fallback="Could not load folder." className="my-1 mr-1" />
-      )}
+      <VirtualTree
+        aria-label="Workspace files"
+        rows={rows}
+        selectedId={activeFilePath}
+        onActivate={row => {
+          if (row.kind !== 'entry') return;
+          if (row.expanded === undefined) setActiveFilePath(row.path);
+          else setFolderOpen(row.path, !row.expanded);
+        }}
+        onExpandedChange={(row, expanded) => {
+          if (row.kind === 'entry') setFolderOpen(row.path, expanded);
+        }}
+        renderRow={row => {
+          if (row.kind === 'input') {
+            return <WorkspaceNewFolderInput parent={row.parent} onDone={() => setCreatingIn(undefined)} />;
+          }
+          if (row.kind === 'error') {
+            return (
+              <>
+                <IconExclamationCircle className="size-icon-xs shrink-0 text-destructive-foreground" />
+                <Txt as="span" variant="caption" tone="muted" className="truncate">
+                  {describeWorkspaceError(row.error, 'Could not load folder.')}
+                </Txt>
+              </>
+            );
+          }
+          return row.entry.type === 'directory' ? (
+            <FolderRow row={row} actions={rowActions} />
+          ) : (
+            <FileRow row={row} actions={rowActions} />
+          );
+        }}
+      />
+      <DeleteDialog entry={pendingDelete} onClose={() => setPendingDelete(undefined)} />
     </>
   );
 }
 
-function FileNode({ name, size, path, onRequestDelete }: NodeProps & { size?: number }) {
-  const { onDelete, isReadOnly, activeFilePath } = useWorkspaceContext();
-  const canDelete = onDelete && !isReadOnly(path);
-  const isActive = path === activeFilePath;
-  const ref = useRef<HTMLLIElement>(null);
-
-  // Parents load lazily, so the active row may only appear after the selection changed.
-  useEffect(() => {
-    if (isActive) ref.current?.scrollIntoView?.({ block: 'nearest' });
-  }, [isActive]);
-
-  return (
-    <Tree.File ref={ref} id={path}>
-      <Tree.Icon>
-        <FileIcon />
-      </Tree.Icon>
-      <Tree.Label>{name}</Tree.Label>
-      <RowActions>
-        {size !== undefined ? (
-          <Txt as="span" variant="caption" tone="faint" font="mono">
-            {formatBytes(size)}
-          </Txt>
-        ) : null}
-        {canDelete ? <DeleteButton name={name} onClick={() => onRequestDelete({ path, type: 'file' })} /> : null}
-      </RowActions>
-    </Tree.File>
-  );
-}
-
-function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onClose: () => void }) {
-  const { workspaceId, activeFilePath, setActiveFilePath, onDelete } = useWorkspaceContext();
+function DeleteDialog({ entry, onClose }: { entry?: WorkspaceEntryRef; onClose: () => void }) {
+  const { workspaceId, activeFilePath, setActiveFilePath, onDelete, setFolderOpen } = useWorkspaceContext();
   const queryClient = useQueryClient();
   const [isDeleting, setIsDeleting] = useState(false);
   const name = entry?.path.split('/').pop();
@@ -283,6 +110,7 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
       setIsDeleting(false);
     }
     if (activeFilePath === entry.path || activeFilePath?.startsWith(`${entry.path}/`)) setActiveFilePath(undefined);
+    if (entry.type === 'directory') setFolderOpen(entry.path, false);
     queryClient.removeQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', entry.path] });
     await queryClient.invalidateQueries({ queryKey: ['workspace', workspaceId, 'fs', 'list', parentOf(entry.path)] });
     onClose();
@@ -298,7 +126,7 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
 
   return (
     <AlertDialog
-      open={entry !== null}
+      open={entry !== undefined}
       onOpenChange={open => {
         if (!open && !isDeleting) onClose();
       }}
@@ -310,8 +138,8 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
         </AlertDialog.Header>
         <AlertDialog.Footer>
           <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-          <Button variant="destructive" disabled={isDeleting} onClick={() => void confirm()}>
-            {isDeleting ? 'Deleting…' : 'Delete'}
+          <Button variant="destructive" onClick={() => void confirm()} loading={isDeleting}>
+            Delete
           </Button>
         </AlertDialog.Footer>
       </AlertDialog.Content>

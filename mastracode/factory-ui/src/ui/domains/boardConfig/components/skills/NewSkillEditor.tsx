@@ -1,3 +1,4 @@
+import { InlineText } from '@mastra/playground-ui/domains/factory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -6,7 +7,6 @@ import { useState } from 'react';
 import { useFactorySkillCreateMutation } from '../../../../../hooks/useFactorySkills';
 import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { DiscardChangesDialog } from '../DiscardChangesDialog';
-import { InlineText } from '../InlineText';
 import { SaveBar } from '../SaveBar';
 import { composeSkillMarkdown } from './skillMarkdown';
 import { SkillDescription } from './SkillDescription';
@@ -91,8 +91,14 @@ export function NewSkillEditor({ factoryId, onCreated }: { factoryId: string; on
           <Button size="sm" variant="ghost" onClick={discard} disabled={create.isPending}>
             Discard
           </Button>
-          <Button size="sm" variant="primary" onClick={submit} disabled={problem !== undefined || create.isPending}>
-            {create.isPending ? 'Creating…' : 'Create'}
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={submit}
+            disabled={problem !== undefined}
+            loading={create.isPending}
+          >
+            Create
           </Button>
         </SaveBar>
       )}

@@ -25,12 +25,15 @@ describe('formatRelativeSpan', () => {
     return formatRelativeSpan({ start: date, end: date }, now);
   };
 
-  it('returns "today" for the same day', () => {
-    expect(daysAway(0)).toBe('today');
-  });
-
-  it('returns "yesterday" for 1 day ago', () => {
-    expect(daysAway(-1)).toBe('yesterday');
+  it.each([
+    ['returns "today" for the same day', 0, 'today'],
+    ['returns "yesterday" for 1 day ago', -1, 'yesterday'],
+    ['returns "1 year ago" for exactly 365 days', -365, '1 year ago'],
+    ['returns \"tomorrow\" for 1 day in the future', 1, 'tomorrow'],
+    ['returns \"in 1 month\" for 30-59 days in the future', 30, 'in 1 month'],
+    ['returns \"in N months\" for 60-364 days in the future', 90, 'in 3 months'],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(daysAway(input)).toBe(expected);
   });
 
   it('returns "N days ago" for 2-6 days', () => {
@@ -58,17 +61,9 @@ describe('formatRelativeSpan', () => {
     expect(daysAway(-180)).toBe('6 months ago');
   });
 
-  it('returns "1 year ago" for exactly 365 days', () => {
-    expect(daysAway(-365)).toBe('1 year ago');
-  });
-
   it('returns \"N years ago\" with plural for multiple years', () => {
     expect(daysAway(-730)).toBe('2 years ago');
     expect(daysAway(-1095)).toBe('3 years ago');
-  });
-
-  it('returns \"tomorrow\" for 1 day in the future', () => {
-    expect(daysAway(1)).toBe('tomorrow');
   });
 
   it('returns \"in N days\" for 2-6 days in the future', () => {
@@ -84,14 +79,6 @@ describe('formatRelativeSpan', () => {
   it('returns \"in N weeks\" for 14-29 days in the future', () => {
     expect(daysAway(14)).toBe('in 2 weeks');
     expect(daysAway(21)).toBe('in 3 weeks');
-  });
-
-  it('returns \"in 1 month\" for 30-59 days in the future', () => {
-    expect(daysAway(30)).toBe('in 1 month');
-  });
-
-  it('returns \"in N months\" for 60-364 days in the future', () => {
-    expect(daysAway(90)).toBe('in 3 months');
   });
 
   it('returns \"in N years\" for 365+ days in the future', () => {
@@ -286,31 +273,38 @@ describe('formatRelativeSpan', () => {
 describe('annotateObservationTextDates', () => {
   const now = new Date(2025, 2, 26, 12);
 
-  it('annotates a dated event in observation text', () => {
-    expect(annotateObservationTextDates('* User had an exam on January 10, 2024 at 3:00 PM.', now)).toBe(
+  it.each([
+    [
+      'annotates a dated event in observation text',
+      '* User had an exam on January 10, 2024 at 3:00 PM.',
       '* User had an exam on January 10, 2024 at 3:00 PM (1 year ago).',
-    );
-  });
-
-  it('annotates month-year dates and ranges that state their year', () => {
-    expect(annotateObservationTextDates('EduCon Apr 2020; Phase 1 (Mar 1–15, 2025)', now)).toBe(
+    ],
+    [
+      'annotates month-year dates and ranges that state their year',
+      'EduCon Apr 2020; Phase 1 (Mar 1–15, 2025)',
       'EduCon Apr 2020 (4 years ago); Phase 1 (Mar 1–15, 2025 - 3 weeks ago to 1 week ago)',
-    );
-  });
-
-  it('annotates a range that crosses New Year with one stated year', () => {
-    expect(annotateObservationTextDates('* Trip Dec 27 – Jan 3, 2025.', now)).toBe(
+    ],
+    [
+      'annotates a range that crosses New Year with one stated year',
+      '* Trip Dec 27 – Jan 3, 2025.',
       '* Trip Dec 27 – Jan 3, 2025 (2 months ago).',
-    );
+    ],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(annotateObservationTextDates(input, now)).toBe(expected);
   });
 
-  it('skips dates without a year', () => {
-    const input = '* Daughter Brittany (5; bday Oct 19). Timeline: Feb 24 50%, Feb 27 75% (Nov 2 20:36).';
-    expect(annotateObservationTextDates(input, now)).toBe(input);
-  });
-
-  it('skips bare years, which are too ambiguous in free text', () => {
-    const input = '* Target of 2035 users by 2030.';
+  it.each([
+    [
+      'skips dates without a year',
+      '* Daughter Brittany (5; bday Oct 19). Timeline: Feb 24 50%, Feb 27 75% (Nov 2 20:36).',
+    ],
+    ['skips bare years, which are too ambiguous in free text', '* Target of 2035 users by 2030.'],
+    [
+      'leaves Date: headers and meaning/estimated notes to their own passes',
+      'Date: Mar 20, 2025\n* Launch (meaning Mar 22, 2025) and (estimated June 2025).',
+    ],
+  ] as const)('%s', (_title, inputValue) => {
+    const input = inputValue;
     expect(annotateObservationTextDates(input, now)).toBe(input);
   });
 
@@ -320,11 +314,6 @@ describe('annotateObservationTextDates', () => {
       '* Added migrations/2024-01-10-add-users.sql on release/2025-09-01; see https://example.com/blog/2024-05-01-launch.',
       '* Ran `date -d 2024-01-10`.',
     ].join('\n');
-    expect(annotateObservationTextDates(input, now)).toBe(input);
-  });
-
-  it('leaves Date: headers and meaning/estimated notes to their own passes', () => {
-    const input = 'Date: Mar 20, 2025\n* Launch (meaning Mar 22, 2025) and (estimated June 2025).';
     expect(annotateObservationTextDates(input, now)).toBe(input);
   });
 });
@@ -340,33 +329,20 @@ describe('isFutureIntentObservation', () => {
     expect(isFutureIntentObservation('They plan to refactor the code')).toBe(true);
   });
 
-  it('detects "planning to"', () => {
-    expect(isFutureIntentObservation('User is planning to move')).toBe(true);
-  });
-
-  it('detects "looking forward to"', () => {
-    expect(isFutureIntentObservation('Looking forward to the concert')).toBe(true);
-  });
-
-  it('detects "going to"', () => {
-    expect(isFutureIntentObservation('User is going to start a new project')).toBe(true);
+  it.each([
+    ['detects "planning to"', 'User is planning to move'],
+    ['detects "looking forward to"', 'Looking forward to the concert'],
+    ['detects "going to"', 'User is going to start a new project'],
+    ['detects "wants to" and "want to"', 'User wants to learn Rust'],
+    ['detects "needs to" and "need to"', 'User needs to file taxes'],
+    ['detects "about to"', 'User is about to leave'],
+  ] as const)('%s', (_title, input) => {
+    expect(isFutureIntentObservation(input)).toBe(true);
   });
 
   it('detects "intends to" and "intend to"', () => {
     expect(isFutureIntentObservation('User intends to apply')).toBe(true);
     expect(isFutureIntentObservation('They intend to finish by Friday')).toBe(true);
-  });
-
-  it('detects "wants to" and "want to"', () => {
-    expect(isFutureIntentObservation('User wants to learn Rust')).toBe(true);
-  });
-
-  it('detects "needs to" and "need to"', () => {
-    expect(isFutureIntentObservation('User needs to file taxes')).toBe(true);
-  });
-
-  it('detects "about to"', () => {
-    expect(isFutureIntentObservation('User is about to leave')).toBe(true);
   });
 
   it('returns false for non-future-intent lines', () => {
@@ -391,16 +367,22 @@ describe('expandInlineEstimatedDates', () => {
     expect(result).toContain('ago)');
   });
 
-  it('expands "(meaning May 30, 2023)" with relative time', () => {
-    const input = 'Started the job (meaning May 30, 2023)';
+  it.each([
+    [
+      'expands "(meaning May 30, 2023)" with relative time',
+      'Started the job (meaning May 30, 2023)',
+      'meaning May 30, 2023 -',
+    ],
+    [
+      'adds "likely already happened" for past future-intent observations',
+      'User will attend the conference (estimated May 30, 2023)',
+      'likely already happened',
+    ],
+    ['uses forward-looking strings for future dates', `Event scheduled (estimated July 15, 2025)`, 'in 1 month'],
+  ] as const)('%s', (_title, inputValue, expected) => {
+    const input = inputValue;
     const result = expandInlineEstimatedDates(input, now);
-    expect(result).toContain('meaning May 30, 2023 -');
-  });
-
-  it('adds "likely already happened" for past future-intent observations', () => {
-    const input = 'User will attend the conference (estimated May 30, 2023)';
-    const result = expandInlineEstimatedDates(input, now);
-    expect(result).toContain('likely already happened');
+    expect(result).toContain(expected);
   });
 
   it('does not add "likely already happened" for non-future-intent lines', () => {
@@ -477,12 +459,6 @@ describe('expandInlineEstimatedDates', () => {
     expandInlineEstimatedDates(`(meaning a${spaces}b 2024)`, now);
     addRelativeTimeToObservations(`Date: a${spaces}b`, now);
     expect(performance.now() - started).toBeLessThan(100);
-  });
-
-  it('uses forward-looking strings for future dates', () => {
-    const input = `Event scheduled (estimated July 15, 2025)`;
-    const result = expandInlineEstimatedDates(input, now);
-    expect(result).toContain('in 1 month');
   });
 });
 

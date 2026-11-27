@@ -489,6 +489,10 @@ export interface DurableToolCallInput {
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */
   stepUsage?: LanguageModelUsage;
+  /** Response of that step: the model that answered and the cost its provider reported */
+  response?: ResponseRecord;
+  /** Other tool calls of the step run at the same time, so a suspension of this one reports no model usage */
+  sideBySide?: boolean;
 }
 
 /**
@@ -633,6 +637,8 @@ export interface DurableAgenticExecutionOutput {
   tracingTermination?: SpanTermination;
   /** Failure behind this iteration's delegation bail, see DurableToolCallOutput */
   tracingDelegationFailure?: SpanTermination;
+  /** An earlier segment's suspension ended this iteration's MODEL_STEP and reported the run's usage so far */
+  suspensionReportedUsage?: boolean;
 }
 
 /**
@@ -780,6 +786,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** MODEL_STEP a tool-calling iteration leaves open until its mapping step, so a failed run can end it. */
+  openStepSpan?: Span<SpanType.MODEL_STEP>;
   /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
   tracingTermination?: SpanTermination;
   tracingDelegationFailure?: SpanTermination;
@@ -839,6 +847,10 @@ export interface RunRegistryEntry {
   workspace?: Workspace;
   /** Request context for forwarding auth data, feature flags, etc. to tools */
   requestContext?: RequestContext;
+  /** The stored context was rebuilt from a workflow snapshot, not supplied by the active caller. */
+  requestContextRebuilt?: boolean;
+  /** Segment identity for engines that do not carry a Core execution claim. */
+  requestContextSegment?: string;
   /** MCP protocol context for in-process tool execution (non-serializable). */
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */

@@ -33,7 +33,7 @@ overrides:
   better-auth: ^1.7.22
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.22
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
-  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.45
+  '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.46
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
@@ -44,8 +44,8 @@ overrides:
   undici@<8.12.4: 8.12.4
   nanoid@<5.1.16: 5.1.16
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
-  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.66
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.81
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.67
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.83
 
 importers:
 
@@ -289,8 +289,8 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/provider-utils@4.0.66':
-    resolution: {integrity: sha512-tITCIYBJlxD4PmDIAI2VXb67yEbWRepvJBJrv2pIY5vMRUta51AFRxLlxm0IexRGdIBGuQ10+ClClZMXtawkbA==}
+  '@ai-sdk/provider-utils@4.0.67':
+    resolution: {integrity: sha512-0WV1upni0SUAKdsMTOADbPFU0CBji/XjNPcG0J+LWb5DZFtTWRrflj/oY7qi3zbJswvE1aWv/d+h/A8BEWnAWA==}
     engines: {node: '>=18.17'}
     peerDependencies:
       zod: 4.6.7
@@ -1866,7 +1866,7 @@ snapshots:
   '@ai-sdk/openai@3.0.88(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.14
-      '@ai-sdk/provider-utils': 4.0.66(zod@4.6.7)
+      '@ai-sdk/provider-utils': 4.0.67(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@4.0.108(zod@4.6.7)':
@@ -1898,7 +1898,7 @@ snapshots:
       undici: 8.12.4
       zod: 4.6.7
 
-  '@ai-sdk/provider-utils@4.0.66(zod@4.6.7)':
+  '@ai-sdk/provider-utils@4.0.67(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0

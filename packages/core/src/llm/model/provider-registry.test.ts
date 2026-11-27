@@ -21,6 +21,22 @@ import {
 // test that still does.
 const fixture = vi.hoisted(() => ({ home: '', packageRoot: '' }));
 
+// The developer's shell must not decide which gateways sync or whether the registry auto-refreshes
+// on import: a real MASTRA_GATEWAY_API_KEY enables the Mastra gateway and adds a `mastra` provider
+// to every sync. Hoisted so the module-level auto-refresh check in provider-registry.ts sees it too.
+const REGISTRY_ENV = vi.hoisted(() => {
+  const keys = [
+    'MASTRA_GATEWAY_API_KEY',
+    'MASTRA_GATEWAY_VERSION',
+    'MASTRA_GATEWAY_URL',
+    'MASTRA_DEV',
+    'MASTRA_AUTO_REFRESH_PROVIDERS',
+    'MASTRA_OFFLINE',
+  ];
+  for (const key of keys) vi.stubEnv(key, undefined);
+  return keys;
+});
+
 vi.mock('node:os', async importOriginal => {
   const actual = await importOriginal<typeof import('node:os')>();
   const { join } = await import('node:path');
@@ -53,6 +69,7 @@ beforeEach(() => {
   // No test here may reach models.dev or Netlify: a sync that is not mocked fails instead of
   // writing live provider data into whichever fixture is current when it resolves.
   vi.stubGlobal('fetch', () => Promise.reject(new Error('provider-registry tests must not use the network')));
+  for (const key of REGISTRY_ENV) vi.stubEnv(key, undefined);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-provider-registry-'));
   fixtureRoots.push(root);
   fixture.home = path.join(root, 'home');
@@ -81,6 +98,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 afterAll(() => {
@@ -313,24 +331,21 @@ describe('modelSupportsStructuredOutput', () => {
     _resetCapabilityCaches();
   });
 
-  it('returns true for a model with known native support', () => {
-    expect(modelSupportsStructuredOutput('openai/gpt-4o')).toBe(true);
-  });
-
-  it('returns false for a known unsupported route override', () => {
-    expect(modelSupportsStructuredOutput('deepseek/deepseek-v4-pro')).toBe(false);
-  });
-
-  it('returns false for an unlisted model from a provider with capability data', () => {
-    expect(modelSupportsStructuredOutput('openai/not-a-real-model')).toBe(false);
+  it.each([
+    ['returns true for a model with known native support', 'openai/gpt-4o', true],
+    ['returns false for a known unsupported route override', 'deepseek/deepseek-v4-pro', false],
+    ['returns false for an unlisted model from a provider with capability data', 'openai/not-a-real-model', false],
+    [
+      'uses underlying provider data for nested gateway routes without a route override',
+      'openrouter/openai/gpt-4o',
+      true,
+    ],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(modelSupportsStructuredOutput(input)).toBe(expected);
   });
 
   it('returns undefined when the provider has no capability data', () => {
     expect(modelSupportsStructuredOutput('unknown-provider/some-model')).toBeUndefined();
-  });
-
-  it('uses underlying provider data for nested gateway routes without a route override', () => {
-    expect(modelSupportsStructuredOutput('openrouter/openai/gpt-4o')).toBe(true);
   });
 });
 

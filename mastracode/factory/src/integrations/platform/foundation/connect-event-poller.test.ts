@@ -117,7 +117,7 @@ describe('PlatformConnectEventPoller', () => {
       expect.objectContaining({
         id: '1500-0',
         connectionId: 'conn-1',
-        integrationId: 'gitlab',
+        provider: 'gitlab',
         eventType: 'Issue Hook',
         sourceEventId: 'gl-1',
         payload: { n: '1500-0' },

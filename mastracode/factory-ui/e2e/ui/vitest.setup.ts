@@ -104,6 +104,11 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// jsdom lays out no SVG; null is what a browser returns for an SVG it doesn't render.
+if (!SVGGraphicsElement.prototype.getScreenCTM) {
+  SVGGraphicsElement.prototype.getScreenCTM = () => null;
+}
+
 // jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.
 window.scrollTo = () => {};
 

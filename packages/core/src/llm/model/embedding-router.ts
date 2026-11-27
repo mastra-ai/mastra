@@ -13,6 +13,30 @@ import type { OpenAICompatibleConfig } from './shared.types.js';
 
 const MASTRA_GATEWAY_ID = 'mastra';
 
+/**
+ * Embedding-specific default base URLs for providers whose generated registry
+ * entry carries an API key variable but no URL. Registry and environment URLs
+ * stay authoritative; these only fill the gap.
+ */
+const DEFAULT_EMBEDDING_PROVIDER_URLS: Record<string, string> = {
+  deepinfra: 'https://api.deepinfra.com/v1/openai',
+};
+
+/**
+ * Parse a non-gateway `provider/model` identifier. The provider is the first
+ * segment and the model is everything after the first `/`, so namespaced model
+ * ids like `deepinfra/Qwen/Qwen3-Embedding-8B` resolve to provider
+ * `deepinfra` and model `Qwen/Qwen3-Embedding-8B`. Empty provider and model
+ * segments are rejected.
+ */
+function parseEmbeddingModelId(modelId: string): { providerId: string; modelId: string } {
+  const separatorIndex = modelId.indexOf('/');
+  if (separatorIndex <= 0 || separatorIndex === modelId.length - 1) {
+    throw new Error(`Invalid model string format: "${modelId}". Expected format: "provider/model"`);
+  }
+  return { providerId: modelId.slice(0, separatorIndex), modelId: modelId.slice(separatorIndex + 1) };
+}
+
 function trimTrailingSlashes(value: string): string {
   let end = value.length;
   while (end > 0 && value.charCodeAt(end - 1) === 47) {
@@ -142,11 +166,7 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         }
         normalizedConfig = { providerId: MASTRA_GATEWAY_ID, modelId: parts.slice(1).join('/') };
       } else {
-        if (parts.length !== 2) {
-          throw new Error(`Invalid model string format: "${config}". Expected format: "provider/model"`);
-        }
-        const [providerId, modelId] = parts as [string, string];
-        normalizedConfig = { providerId, modelId };
+        normalizedConfig = parseEmbeddingModelId(config);
       }
     } else if ('providerId' in config && 'modelId' in config) {
       normalizedConfig = {
@@ -171,13 +191,8 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
           headers: config.headers,
         };
       } else {
-        if (parts.length !== 2) {
-          throw new Error(`Invalid model string format: "${config.id}". Expected format: "provider/model"`);
-        }
-        const [providerId, modelId] = parts as [string, string];
         normalizedConfig = {
-          providerId,
-          modelId,
+          ...parseEmbeddingModelId(config.id),
           url: config.url,
           apiKey: config.apiKey,
           headers: config.headers,
@@ -251,13 +266,14 @@ export class ModelRouterEmbeddingModel<VALUE extends string = string> implements
         this.providerModel = createGoogleGenerativeAI({ apiKey }).embeddingModel(normalizedConfig.modelId);
       } else {
         // Use OpenAI-compatible provider for other providers
-        if (!providerConfig.url) {
+        const providerUrl = providerConfig.url ?? DEFAULT_EMBEDDING_PROVIDER_URLS[normalizedConfig.providerId];
+        if (!providerUrl) {
           throw new Error(`Provider ${normalizedConfig.providerId} does not have a URL configured`);
         }
         this.providerModel = createOpenAICompatible({
           name: normalizedConfig.providerId,
           apiKey,
-          baseURL: interpolateUrlTemplate(providerConfig.url),
+          baseURL: interpolateUrlTemplate(providerUrl),
         }).embeddingModel(normalizedConfig.modelId);
       }
     }

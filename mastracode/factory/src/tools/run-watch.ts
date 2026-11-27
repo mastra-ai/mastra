@@ -1,8 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 
-import { FACTORY_OPEN_RUN_STALE_MS, heartbeatSessionOpenRun } from '../session/run-audit.js';
-import type { RunEndCaptureSession } from '../session/run-audit.js';
 import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
@@ -120,37 +118,6 @@ export function observeSessionRunReports(
 }
 
 /**
- * Renew a kicked-off run's open-run entry until the run ends, like the
- * dispatcher's heartbeat, so no dispatcher starts the role again meanwhile.
- * `endReason` is how that run ended, once it has; `stop` is for a kickoff that fails.
- */
-export function heartbeatOpenRunUntilEnd(
-  session: RunEndCaptureSession,
-  kickoffId: string,
-): { endReason: () => RunEndReason; stop: () => void } {
-  let endReason: RunEndReason;
-  let unsubscribe = () => {};
-  const timer = setInterval(
-    () => void heartbeatSessionOpenRun(session, kickoffId),
-    Math.floor(FACTORY_OPEN_RUN_STALE_MS / 3),
-  );
-  timer.unref?.();
-  let stopped = false;
-  const stop = () => {
-    if (stopped) return;
-    stopped = true;
-    clearInterval(timer);
-    unsubscribe();
-  };
-  unsubscribe = session.subscribe(event => {
-    if (event.type !== 'agent_end') return;
-    endReason ??= event.reason;
-    stop();
-  });
-  return { endReason: () => endReason, stop };
-}
-
-/**
  * `null` for an aborted run: someone stopped or steered it, which is not an outcome. A run
  * that a memory-model failure stopped did not end by anyone's choice, so it failed.
  */
@@ -188,4 +155,40 @@ export function runOutcome(
     default:
       return { status: 'done' };
   }
+}
+
+/**
+ * The reports of a session's runs, for a session whose card's board engine is told when a run
+ * waits on a person. The engine may take the card's other inputs first, so nothing waits on that
+ * telling: the person hears of the wait, and the run's end is reported, without it.
+ */
+export function reportsTellingOfWaits({
+  reportRunEnd,
+  notifyApproval,
+  runPaused,
+  answersItself,
+}: {
+  reportRunEnd: SessionRunEndReport;
+  notifyApproval: SessionApprovalReport;
+  /** Tells the board engine that the session's run waits for a person's answer. */
+  runPaused: () => Promise<void>;
+  answersItself: (toolCallId: string) => boolean;
+}): { report: SessionRunEndReport; onApprovalRequested: SessionApprovalReport } {
+  const paused = () =>
+    void (async () => runPaused())().catch(error => {
+      console.warn('[Factory] Unable to tell the board engine a session waits for approval.', error);
+    });
+  return {
+    report: async (outcome, since) => {
+      const reported = reportRunEnd(outcome, since);
+      if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) paused();
+      await reported;
+    },
+    onApprovalRequested: async request => {
+      const notified = notifyApproval(request);
+      // A call Factory answers itself waits on nobody.
+      if (!answersItself(request.toolCallId)) paused();
+      await notified;
+    },
+  };
 }

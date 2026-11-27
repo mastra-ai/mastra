@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Skeleton, SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import {
   useEnvironmentBuildQuery,
@@ -9,8 +10,7 @@ import {
   useRequestEnvironmentBuildMutation,
 } from '../../../../hooks/useFactoryEnvironment';
 import type { FactoryEnvironmentPayload } from '../../workspaces/services/environment';
-import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
-import { BuildStatusBlock } from './environment/BuildStatusBlock';
+import { EnvironmentBuildHistory, EnvironmentBuildStatus } from '@mastra/playground-ui/components/EnvironmentBuild';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { AddSandboxEnvButton, SandboxEnvsBlock } from './environment/SandboxEnvsBlock';
@@ -28,17 +28,33 @@ export function EnvironmentSection({ factoryId }: { factoryId: string }) {
       </Notice>
     );
   }
-  if (!environmentQuery.data) {
-    return (
-      <SettingsSubsection scope="factory" title="Environment">
-        <SettingsContainer>
-          <SettingsSkeleton label="Loading environment" rows={3} />
-        </SettingsContainer>
-      </SettingsSubsection>
-    );
-  }
+  if (!environmentQuery.data) return <EnvironmentSkeleton label="Loading environment" />;
 
   return <EnvironmentBlocks key={factoryId} factoryId={factoryId} environment={environmentQuery.data} />;
+}
+
+export function EnvironmentSkeleton({ label }: { label: string }) {
+  return (
+    <SettingsSubsection scope="factory" title="Environment">
+      <SettingsContainer>
+        <SettingsSkeleton
+          label={label}
+          rows={3}
+          placeholder={
+            <SettingsRow
+              aria-hidden
+              label={<SkeletonText line="text-label" className="w-28 motion-reduce:before:animate-none" />}
+              description={
+                <SkeletonText line="text-caption" className="w-48 max-w-full motion-reduce:before:animate-none" />
+              }
+            >
+              <Skeleton className="h-control-sm w-55 max-w-full rounded-full motion-reduce:before:animate-none" />
+            </SettingsRow>
+          }
+        />
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
 }
 
 function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
@@ -106,7 +122,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
     );
 
   return (
-    <BuildStatusBlock
+    <EnvironmentBuildStatus
       lastBuild={environment.build}
       build={buildQuery.data}
       requesting={requestBuild.isPending}
@@ -118,7 +134,7 @@ function BuildNow({ factoryId, environment }: { factoryId: string; environment: 
 function BuildHistory({ factoryId }: { factoryId: string }) {
   const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
   return (
-    <BuildHistoryBlock
+    <EnvironmentBuildHistory
       builds={buildsQuery.data}
       error={
         buildsQuery.isError

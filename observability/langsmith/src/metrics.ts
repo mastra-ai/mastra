@@ -88,3 +88,30 @@ export function formatUsageMetrics(usage?: UsageStats): LangSmithUsageMetrics {
 
   return metrics;
 }
+
+type Counts = { [key: string]: number | Counts | undefined };
+
+function combine(a: Counts, b: Counts, operation: (x: number, y: number) => number): Counts {
+  return Object.fromEntries(
+    [...new Set([...Object.keys(a), ...Object.keys(b)])].map(key => {
+      const [x, y] = [a[key], b[key]];
+      return typeof (x ?? y) === 'object'
+        ? [key, combine((x ?? {}) as Counts, (y ?? {}) as Counts, operation)]
+        : [key, operation((x ?? 0) as number, (y ?? 0) as number)];
+    }),
+  );
+}
+
+export function addUsage(a: LangSmithUsageMetrics, b: LangSmithUsageMetrics): LangSmithUsageMetrics {
+  return combine(a as Counts, b as Counts, (x, y) => x + y);
+}
+
+/** What `total` has on top of `counted`, or undefined when nothing is left. */
+export function usageLeft(
+  total: LangSmithUsageMetrics,
+  counted: LangSmithUsageMetrics,
+): LangSmithUsageMetrics | undefined {
+  const left: LangSmithUsageMetrics = combine(total as Counts, counted as Counts, (x, y) => Math.max(0, x - y));
+  left.total_tokens = (left.input_tokens ?? 0) + (left.output_tokens ?? 0);
+  return left.total_tokens > 0 ? left : undefined;
+}

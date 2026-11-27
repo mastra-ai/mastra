@@ -130,6 +130,7 @@ export class MastraLLMV1 extends MastraBase {
     threadId,
     resourceId,
     requestContext,
+    resultType,
     ...rest
   }: GenerateTextWithMessagesArgs<Tools, Z>): Promise<GenerateTextResult<Tools, Z>> {
     const model = this.#model;
@@ -200,6 +201,7 @@ export class MastraLLMV1 extends MastraBase {
           presencePenalty: rest.presencePenalty,
         },
         streaming: false,
+        ...(resultType ? { resultType } : {}),
       },
       metadata: {
         runId,

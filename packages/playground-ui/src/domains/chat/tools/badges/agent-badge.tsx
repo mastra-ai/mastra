@@ -152,10 +152,10 @@ export const AgentBadge = ({
               variant="ghost"
               size="sm"
               onClick={onLoadPrevious}
-              disabled={isLoadingPrevious}
               data-testid="agent-badge-load-previous"
+              loading={isLoadingPrevious}
             >
-              {isLoadingPrevious ? 'Loading earlier messages…' : 'Load earlier messages'}
+              Load earlier messages
             </Button>
           )}
 

@@ -6,7 +6,8 @@ level: warning
 # `mostly`, `various`, `substantially`, `relatively`, `significantly`,
 # `largely`, `fairly`) are intentionally omitted. In technical docs they
 # describe real behavior or frequency, and replacing them either loses
-# information or invents false precision.
+# information or invents false precision. write-good 1.0.8 added `few` and
+# `many`, which are left out for the same reason.
 tokens:
   - clearly
   - completely
@@ -15,6 +16,7 @@ tokens:
   - extremely
   - huge
   - interestingly
+  - are a number
   - is a number
   - obviously
   - quite

@@ -65,8 +65,9 @@ export const Small: Story = {
   },
 };
 
+// A button draws its own loader: pass `loading` instead of a Spinner.
 export const InButton: Story = {
-  render: () => <Button icon={<Spinner />}>Loading...</Button>,
+  render: () => <Button loading>Save</Button>,
 };
 
 export const Sizes: Story = {

@@ -10,11 +10,13 @@ import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } f
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
+  KnowledgeListedPin,
   KnowledgeNote,
   KnowledgeNoteListOutput,
   KnowledgePage,
   KnowledgePageActivityAction,
   KnowledgePageActivityEvent,
+  KnowledgePageActivityInput,
   KnowledgePageBodyLink,
   KnowledgePageLinkCounts,
   KnowledgePageLinkEdge,
@@ -22,13 +24,12 @@ import type {
   KnowledgePageListOutput,
   KnowledgePageSearchHit,
   KnowledgePageStore,
-  KnowledgeListedPin,
-  KnowledgeScopeDeclarationCount,
-  KnowledgeScopeDeclarationRename,
   KnowledgePin,
   KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
+  KnowledgeScopeDeclarationCount,
+  KnowledgeScopeDeclarationRename,
   MaterializeKnowledgeScopeInput,
   MaterializeKnowledgeScopeResult,
   MergeKnowledgePagesInput,
@@ -1586,13 +1587,13 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     return hits;
   }
 
-  async listPageActivity(input: {
-    read: KnowledgeReadScope;
-    scopeId?: string;
-    pageId?: string;
-    cursor?: string;
-    limit?: number;
-  }): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+  async listPageActivity(
+    input: KnowledgePageActivityInput,
+  ): Promise<{ events: KnowledgePageActivityEvent[]; nextCursor?: string }> {
+    // This store doesn't report supportsActivityAscending: refuse rather than answer newest first.
+    if (input.order === 'asc' || input.after !== undefined) {
+      throw new RangeError('This Knowledge store does not support oldest-first activity (supportsActivityAscending)');
+    }
     const core = await loadPagesCore();
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 1);

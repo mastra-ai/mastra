@@ -1,0 +1,232 @@
+import { Canvas, Meta } from '@storybook/addon-docs/blocks';
+import * as LogViewStories from './log-view.stories';
+
+<Meta of={LogViewStories} />
+
+# LogView
+
+`LogView` is a log panel for plain log output: a sandbox's processes, a deploy's build, a worker's stdout. Each line has a time, a level, a message and optional fields. Use it wherever a page shows those lines.
+
+Use `LogsListView` instead for Observe logs, where each row also has an entity, a trace and a span and the page is a full-width table. To build your own log list, the lines, header and frame are `LogStream` in `@mastra/playground-ui/components/LogStream`; `LogView.List` is `LogStream` with virtualization and paging added.
+
+```tsx
+import {
+  LogDataPanel,
+  LogView,
+  filterLogsByFields,
+  logViewSearchText,
+  useLogsListNavigation,
+} from '@mastra/playground-ui/domains/logs';
+```
+
+<Canvas of={LogViewStories.Default} />
+
+## Parts
+
+`LogView` is built from parts. Keep the ones the page needs and leave the rest out. Nothing in it fetches: the page loads the logs, keeps the filter state, and passes both in.
+
+| Part                   | What it is                                                                           | Props                                                                                                                                          |
+| ---------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LogView`              | The card. 36rem tall, so the page doesn't jump between loading, lines and empty.     | `label` names the region for screen readers (default `Logs`). `height="fill"` fills the container instead.                                     |
+| `LogView.Header`       | The row above the list. Lays out whatever you put in it and wraps on narrow screens. | `children`                                                                                                                                     |
+| `LogView.Title`        | The panel's heading.                                                                 | `children` (default `Logs`)                                                                                                                    |
+| `LogView.LevelToggles` | One toggle per level, all on by default.                                             | `levels`, `value`, `onValueChange`                                                                                                             |
+| `LogView.Filters`      | A filter bar for text search and chips built from the logs' fields.                  | `logs`, `value`, `onValueChange`, `search`, `fieldChips`                                                                                       |
+| `LogView.Actions`      | Groups the header's trailing controls at the right edge.                             | `children`                                                                                                                                     |
+| `LogView.Count`        | The number of lines, as "1,204 lines".                                               | `count`                                                                                                                                        |
+| `LogView.Copy`         | An icon button that copies every line.                                               | `content`                                                                                                                                      |
+| `LogView.Refresh`      | An icon button that spins while refreshing.                                          | `onRefresh`, `refreshing`                                                                                                                      |
+| `LogView.List`         | The lines, in a sunken frame with a Time, Level and Message header.                  | `logs`, `logIdMap`, `order`, `wrap`, `onLogClick`, `featuredLogId`, `isLoading`, `hasNextPage`, `isFetchingNextPage`, `onFetchNextPage`, `ref` |
+| `LogView.Empty`        | The empty state, in the same frame as the list.                                      | `onClearFilters`                                                                                                                               |
+| `LogView.Fill`         | The same frame with nothing in it, for your own state, such as a load error.         | `children`                                                                                                                                     |
+
+## A full panel
+
+This is the sandbox Logs panel in Platform, trimmed. The page owns the query and the filter state. A body component picks exactly one of error, empty or list with early returns, so the panel's frame is written once.
+
+```tsx
+const LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
+
+function SandboxLogsBody({ logs, lines, logIdMap, openLogId, onLogClick, onClearFilters }: SandboxLogsBodyProps) {
+  if (logs.error) {
+    return (
+      <LogView.Fill>
+        <YourLoadError error={logs.error} onRetry={logs.refetch} />
+      </LogView.Fill>
+    );
+  }
+  if (!logs.isLoading && lines.length === 0 && !logs.hasNextPage) {
+    return <LogView.Empty onClearFilters={onClearFilters} />;
+  }
+  return (
+    <LogView.List
+      logs={lines}
+      logIdMap={logIdMap}
+      order="oldest-first"
+      isLoading={logs.isLoading}
+      hasNextPage={logs.hasNextPage}
+      isFetchingNextPage={logs.isFetchingNextPage}
+      onFetchNextPage={logs.fetchNextPage}
+      featuredLogId={openLogId}
+      onLogClick={onLogClick}
+    />
+  );
+}
+
+function SandboxLogs({ sandboxId }: { sandboxId: string }) {
+  const [levels, setLevels] = useState<LogLevel[]>(LEVELS);
+  const [filters, setFilters] = useState<FilterBarItem[]>([]);
+  const [openLogId, setOpenLogId] = useState<string>();
+
+  const logs = useSandboxLogs(sandboxId, { search: logViewSearchText(filters) });
+  const loaded = toLogRecords(logs.data);
+  const lines = filterLogsByFields(
+    loaded.filter(log => levels.includes(log.level)),
+    filters,
+  );
+  const { logIdMap, featuredLog, handleLogClick, handlePreviousLog, handleNextLog } = useLogsListNavigation(
+    lines,
+    openLogId ?? null,
+    ({ logId }) => setOpenLogId(logId ?? undefined),
+  );
+  const filtered = filters.length > 0 || levels.length !== LEVELS.length;
+  const clearFilters = () => {
+    setFilters([]);
+    setLevels(LEVELS);
+  };
+
+  return (
+    <LogView>
+      <LogView.Header>
+        <LogView.Title />
+        <LogView.LevelToggles size="sm" levels={LEVELS} value={levels} onValueChange={setLevels} />
+        <LogView.Filters logs={loaded} value={filters} onValueChange={setFilters} />
+        <LogView.Actions>
+          <LogView.Count count={lines.length} />
+          <LogView.Refresh onRefresh={logs.refetch} refreshing={logs.isFetching} />
+        </LogView.Actions>
+      </LogView.Header>
+
+      <SandboxLogsBody
+        logs={logs}
+        lines={lines}
+        logIdMap={logIdMap}
+        openLogId={openLogId}
+        onLogClick={handleLogClick}
+        onClearFilters={filtered ? clearFilters : undefined}
+      />
+
+      <LogDataPanel
+        log={featuredLog ?? undefined}
+        onClose={() => setOpenLogId(undefined)}
+        onPrevious={handlePreviousLog}
+        onNext={handleNextLog}
+      />
+    </LogView>
+  );
+}
+```
+
+A log is a `LogRecord`. Only `timestamp`, `level` and `message` are required. Whatever is in `data` shows after the message as `key: value` fields, and becomes a filter chip.
+
+Keep the empty check tied to `hasNextPage`. While older pages are left, render `LogView.List` even with no lines, so it can keep loading pages until filters find a match.
+
+## Lines
+
+A line is a `LogViewLine`. Only `message` is required, so build output with no time or level still lines up in the same columns; its level bar is neutral. An Observe `LogRecord` is a `LogViewLine` too.
+
+| Field       | Shows                                                                                                                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `message`   | The text. Terminal color and bold codes render with theme colors; other escape codes are dropped.                                                                                                    |
+| `timestamp` | The time to the hundredth of a second; `timeFractionDigits` on `LogView.List` changes the digits. Hover it for the date and time in your zone and in UTC.                                            |
+| `level`     | The level word in its color, and the color of the bar.                                                                                                                                               |
+| `icon`      | `{ element, label }`: a muted icon before the message, such as build or runtime, with its `label` on hover and for screen readers. Optional; leave it out when every line comes from the same place. |
+| `data`      | `key: value` fields after the message, which also become filter chips.                                                                                                                               |
+
+<Canvas of={LogViewStories.BuildOutput} />
+
+## Jumping to a line
+
+Pass a ref to `LogView.List` and call `scrollToLog(id)` with an id from `logIdMap` to bring that line into view, for example the line that matches a deploy error.
+
+```tsx
+const list = useRef<LogViewListHandle>(null);
+
+<LogView.List ref={list} logs={lines} logIdMap={logIdMap} />;
+
+list.current?.scrollToLog(errorLineId);
+```
+
+## Order and loading older logs
+
+`order` says which end of `logs` is newest. Pass `logs` already sorted that way.
+
+- `oldest-first` reads like a terminal. The list opens on the newest line at the bottom, and older logs load when the top scrolls into view. The line you were reading stays put when they arrive. Use it for process and build output.
+- `newest-first` reads like an audit log. Older logs load when the bottom scrolls into view. This is the default.
+
+<Canvas of={LogViewStories.NewestFirst} />
+
+Pass `hasNextPage`, `isFetchingNextPage` and `onFetchNextPage` from your infinite query. The list calls `onFetchNextPage` when the older end comes into view, and also on its own when the lines fit without scrolling. While a page loads, a spinner shows centered at that end, and screen readers hear "Loading older logs". The row keeps its height between pages, so the lines don't shift.
+
+<Canvas of={LogViewStories.LoadingOlder} />
+
+Some APIs page forward in time instead, returning newer logs on each page. Pass `nextPage="newer"` with `order="oldest-first"`. The list then opens on the oldest line at the top, and the next page loads when the bottom comes into view, with the spinner there while it loads.
+
+<Canvas of={LogViewStories.LoadingNewer} />
+
+## Wrapping
+
+Long lines wrap by default, so nothing is hidden. Pass `wrap={false}` to keep each line on one row and scroll the list sideways, which keeps columns of similar lines aligned.
+
+<Canvas of={LogViewStories.NoWrap} />
+
+Either way, a message of five or more lines shows its first three and `+N more lines`, and a message that is a JSON object shows as `key: value` fields. The full message is in the detail panel.
+
+## Opening a log
+
+Pass `onLogClick` and every line becomes a button that opens the log, usually in `LogDataPanel`. Arrow keys move between lines and Enter opens one. `featuredLogId` highlights the open line.
+
+Leave `onLogClick` out and the lines are read-only: they can't be focused or clicked, and stack traces show in full because nothing can open them.
+
+<Canvas of={LogViewStories.ReadOnly} />
+
+## Levels
+
+`LogView.LevelToggles` shows one toggle per level in `levels`, with every level on at the start. Clicking a level hides or shows it. Cmd-click or Ctrl-click shows only that level, and doing it again shows them all. Turning off the last level also shows them all, so the list is never empty because of the toggles alone. Each toggle's tooltip names its ⌘ or Ctrl shortcut, matched to the platform, the same way other shortcut hints in the app do.
+
+The toggles only report which levels are on. Filter `logs` yourself before passing them to the list. If the server filters by a minimum level, request the lowest level that's on and filter the rest out on the page.
+
+## Search and field filters
+
+`LogView.Filters` offers two kinds of filter in one bar:
+
+- **Search** sends text to the server. Read it with `logViewSearchText(value)` and pass it to your query.
+- **Field chips** match a field's exact value on the page. Typing a field name lists the values seen in the loaded logs. Apply the chips with `filterLogsByFields(logs, value)`.
+
+Turn either off: `search={false}` for chips only, or `fieldChips={false}` for search only. The placeholder changes to match. Leave `LogView.Filters` out to drop filtering entirely.
+
+<Canvas of={LogViewStories.SearchOnly} />
+
+Pass all loaded logs to `LogView.Filters`, not the filtered lines. It lists fields and values from what you pass, so passing the filtered lines would hide every other value once a chip is set.
+
+## Header actions
+
+Put `LogView.Count`, `LogView.Copy` and `LogView.Refresh` inside `LogView.Actions` so they sit together at the right edge of the header, after the toggles and filters.
+
+## Empty, loading and error
+
+These states sit in the same frame as the list, at the same height, so nothing moves when data arrives.
+
+- `LogView.List` with `isLoading` shows skeleton lines.
+- `LogView.Empty` says "No logs in this period". Pass `onClearFilters` when filters hid the lines: the title changes to "No logs match these filters" and a Clear filters button appears.
+- `LogView.Fill` holds anything else, such as your app's load error with a retry.
+
+<Canvas of={LogViewStories.FilteredEmpty} />
+
+## Accessibility
+
+- The panel is a region named by `label`.
+- The level toggles are a labelled group of buttons with `aria-pressed`.
+- Clickable lines are buttons with one tab stop for the list; arrow keys move between them.
+- Levels read as words, not just colors. The colored bar is decorative.
+- Every button in the panel is `type="button"`, so a panel inside a form never submits it.

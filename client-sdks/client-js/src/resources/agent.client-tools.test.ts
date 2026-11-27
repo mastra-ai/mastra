@@ -2350,15 +2350,17 @@ describe('Agent client-side tools', () => {
 
     const resp = await agent.stream('hi');
 
-    // Capture error chunks
+    // Capture error chunks; the error is still delivered to onChunk before processing rejects
     let errorChunk: any = null;
-    await resp.processDataStream({
-      onChunk: async chunk => {
-        if (chunk.type === 'error') {
-          errorChunk = chunk;
-        }
-      },
-    });
+    await expect(
+      resp.processDataStream({
+        onChunk: async chunk => {
+          if (chunk.type === 'error') {
+            errorChunk = chunk;
+          }
+        },
+      }),
+    ).rejects.toThrow('API Error');
 
     // Verify error chunk was received
     expect(errorChunk).not.toBeNull();
@@ -2611,6 +2613,60 @@ describe('Agent stream cancellation', () => {
     expect(secondSpy).not.toHaveBeenCalled();
     expect(global.fetch).toHaveBeenCalledTimes(2);
     expect(vi.mocked(global.fetch).mock.calls[1]![0]).toContain('/abort');
+  });
+
+  it('streamLegacy: processDataStream rejects after partial text when the connection drops', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (global.fetch as any).mockImplementationOnce(async () => {
+      let sentHead = false;
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (!sentHead) {
+            sentHead = true;
+            controller.enqueue(encoder.encode(formatDataStreamPart('start_step', { messageId: 'm1' })));
+            controller.enqueue(encoder.encode(formatDataStreamPart('text', 'Here is the first half of')));
+            return;
+          }
+          await new Promise(resolve => setTimeout(resolve, 10));
+          controller.error(new Error('connection reset'));
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, { status: 200 });
+    });
+
+    const resp = await agent.streamLegacy({ messages: 'hi' });
+    const text: string[] = [];
+    await expect(resp.processDataStream({ onTextPart: value => void text.push(value) })).rejects.toThrow(
+      'connection reset',
+    );
+    expect(text.join('')).toBe('Here is the first half of');
+  });
+
+  it('streamLegacy: processDataStream rejects after partial text when the server sends an error part', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(formatDataStreamPart('start_step', { messageId: 'm1' })));
+          controller.enqueue(encoder.encode(formatDataStreamPart('text', 'Here is the first half of')));
+          controller.enqueue(encoder.encode(formatDataStreamPart('error', 'upstream 529 overloaded')));
+          controller.close();
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, { status: 200 });
+    });
+
+    const resp = await agent.streamLegacy({ messages: 'hi' });
+    const text: string[] = [];
+    const errors: string[] = [];
+    await expect(
+      resp.processDataStream({
+        onTextPart: value => void text.push(value),
+        onErrorPart: value => void errors.push(value),
+      }),
+    ).rejects.toThrow('upstream 529 overloaded');
+    expect(text.join('')).toBe('Here is the first half of');
+    expect(errors).toEqual(['upstream 529 overloaded']);
   });
 
   it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {

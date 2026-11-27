@@ -1,4 +1,4 @@
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
@@ -12,6 +12,7 @@ import { useId, useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderInfo } from '../../../../../api/types';
+import { useCustomProviderSavePending } from '../../../../../hooks/use-custom-providers';
 import { CustomProviderForm } from '../../../settings/components/CustomProviderForm';
 import type { OnboardingModelLane } from '../../hooks/useOnboardingModelLane';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../../hooks/useProviderConnection';
@@ -38,6 +39,7 @@ export function OnboardingProviderPicker({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ProviderConnectionMethod>('api_key');
   const [addingCustom, setAddingCustom] = useState(false);
+  const savingCustom = useCustomProviderSavePending();
   const { connection, connectedProvider } = lane;
   const customReasonId = useId();
 
@@ -176,23 +178,22 @@ export function OnboardingProviderPicker({
           )}
         </PopoverContent>
       </Popover>
-      <Dialog open={addingCustom} onOpenChange={setAddingCustom}>
+      {/* Closing mid-save is refused, so a save that lands always belongs to an open dialog. */}
+      <Dialog open={addingCustom} onOpenChange={setAddingCustom} pending={savingCustom}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add a custom provider</DialogTitle>
           </DialogHeader>
-          <DialogBody>
-            <CustomProviderForm
-              requireModels
-              scope={connection.credentialScope}
-              onCancel={() => setAddingCustom(false)}
-              onSaved={provider => {
-                setAddingCustom(false);
-                connection.chooseCustomProvider(provider.id);
-                onPreviewProvider(provider.id, 'api_key');
-              }}
-            />
-          </DialogBody>
+          <CustomProviderForm
+            requireModels
+            scope={connection.credentialScope}
+            onCancel={() => setAddingCustom(false)}
+            onSaved={provider => {
+              setAddingCustom(false);
+              connection.chooseCustomProvider(provider.id);
+              onPreviewProvider(provider.id, 'api_key');
+            }}
+          />
         </DialogContent>
       </Dialog>
     </>

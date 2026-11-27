@@ -8,6 +8,7 @@ import {
   ensureAnthropicCompatibleMessages,
   findToolCallArgs,
   pairOrphanedToolCalls,
+  pruneOpenAICompactionHistory,
   sanitizeOrphanedToolPairs,
 } from './provider-compat';
 
@@ -423,6 +424,23 @@ describe('dropCrossProviderExecutedParts', () => {
     } as ModelMessage,
   ];
 
+  const promptWithCustomParts = (): ModelMessage[] =>
+    [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'summary' },
+          {
+            type: 'custom',
+            kind: 'openai.compaction',
+            providerOptions: { openai: { encryptedContent: 'opaque-state' } },
+          },
+          { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+        ],
+      },
+      // AI SDK v5's ModelMessage type predates provider custom parts.
+    ] as unknown as ModelMessage[];
+
   it('drops a provider-executed part produced by a different provider', () => {
     const messages = promptWithSearch('ws_1');
     const result = dropCrossProviderExecutedParts(
@@ -465,6 +483,28 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(result).toEqual(messages);
+  });
+
+  it('drops OpenAI compaction state when the target is not an OpenAI provider', () => {
+    const result = dropCrossProviderExecutedParts(promptWithCustomParts(), [], ANTHROPIC);
+    const content = result[0]?.content;
+
+    expect(Array.isArray(content) ? content : []).toEqual([
+      { type: 'text', text: 'summary' },
+      { type: 'custom', kind: 'other-provider.state', providerOptions: { other: { state: 'keep-me' } } },
+    ]);
+  });
+
+  it.each(['openai', 'openai.responses'])('keeps OpenAI compaction state for the %s provider', targetProvider => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], targetProvider)).toBe(messages);
+  });
+
+  it('keeps custom provider state when the target provider is unknown', () => {
+    const messages = promptWithCustomParts();
+
+    expect(dropCrossProviderExecutedParts(messages, [], undefined)).toBe(messages);
   });
 
   it('returns the input array by identity when the target provider is unknown', () => {
@@ -589,5 +629,70 @@ describe('dropCrossProviderExecutedParts', () => {
     );
 
     expect(messages).toEqual(snapshot);
+  });
+});
+
+describe('pruneOpenAICompactionHistory', () => {
+  const compactionPart = (id: string) => ({
+    type: 'custom',
+    kind: 'openai.compaction',
+    providerOptions: { openai: { itemId: id, encryptedContent: `encrypted-${id}` } },
+  });
+
+  it('sends only the latest checkpoint and subsequent messages to OpenAI Responses', () => {
+    const messages = [
+      { role: 'system', content: 'instructions' },
+      { role: 'user', content: 'old question' },
+      {
+        role: 'assistant',
+        content: [compactionPart('cmp_old'), { type: 'text', text: 'old answer' }],
+      },
+      { role: 'user', content: 'newer question' },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'discarded pre-checkpoint output' },
+          compactionPart('cmp_latest'),
+          { type: 'text', text: 'kept post-checkpoint output' },
+        ],
+      },
+      { role: 'system', content: 'later instructions' },
+      { role: 'user', content: 'continue' },
+    ] as unknown as ModelMessage[];
+    const snapshot = structuredClone(messages);
+
+    const result = pruneOpenAICompactionHistory(messages, 'openai.responses');
+
+    expect(result).toEqual([
+      { role: 'system', content: 'instructions' },
+      {
+        role: 'assistant',
+        content: [compactionPart('cmp_latest'), { type: 'text', text: 'kept post-checkpoint output' }],
+      },
+      { role: 'system', content: 'later instructions' },
+      { role: 'user', content: 'continue' },
+    ]);
+    expect(messages).toEqual(snapshot);
+  });
+
+  it.each([undefined, 'anthropic.messages', 'openai.chat'])(
+    'leaves history unchanged for the %s target provider',
+    targetProvider => {
+      const messages = [
+        { role: 'user', content: 'question' },
+        { role: 'assistant', content: [compactionPart('cmp_1')] },
+      ] as unknown as ModelMessage[];
+
+      expect(pruneOpenAICompactionHistory(messages, targetProvider)).toBe(messages);
+    },
+  );
+
+  it('leaves OpenAI history unchanged when it has no compaction checkpoint', () => {
+    const messages: ModelMessage[] = [
+      { role: 'user', content: 'question' },
+      { role: 'assistant', content: 'answer' },
+    ];
+
+    expect(pruneOpenAICompactionHistory(messages, 'openai.responses')).toBe(messages);
   });
 });

@@ -5,6 +5,8 @@ import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { DispatcherBoardEngine } from '../board-engine/engine.js';
+import { createBoardRegistry } from '../boards/index.js';
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -104,6 +106,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       new IntakeRouteRoutes({
         auth,
         audit: new AuditDomain({ auth, audit: domains.audit, projects: domains.projects }),
+        boardEngine: new DispatcherBoardEngine({
+          workItems: domains.workItems,
+          boards: createBoardRegistry(),
+          transitionService: {
+            transition: () => Promise.reject(new Error('An intake check moves no card.')),
+          },
+        }),
         projects: domains.projects,
         workItems: domains.workItems,
         storage: domains.boards,

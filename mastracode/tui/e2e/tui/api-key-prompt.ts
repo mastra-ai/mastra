@@ -5,6 +5,10 @@ export const apiKeyPromptScenario: McE2eScenario = {
   name: 'api-key-prompt',
   description: 'Exercise API key masked input through the real TUI.',
   testName: 'masks API key entry and saves the raw value through the real TUI',
+  // Saving the key exports it to process.env; listing it here restores it for the next scenario in this worker.
+  env() {
+    return { '302AI_API_KEY': '' };
+  },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     runtime.printScreen('spawned', terminal);
@@ -15,7 +19,7 @@ export const apiKeyPromptScenario: McE2eScenario = {
 
     terminal.submit('/api-keys');
     await runtime.waitForScreenText(/API Keys/i, terminal);
-    await runtime.waitForScreenText(/No key configured\. Press Enter to add one\.|Enter add\/update/i, terminal);
+    await runtime.waitForScreenText(/No key configured\. Press Enter to add one\./i, terminal);
     runtime.printScreen('after /api-keys', terminal);
 
     terminal.write('\r');

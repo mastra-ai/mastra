@@ -1,0 +1,11 @@
+---
+'@mastra/factory': minor
+---
+
+Added model packs to the Factory UI. A model pack is a named list of up to 4 models, each with its own thinking level. The first model runs the session, and the others are fallbacks, tried in order when it can't answer. Under Settings → Models, each Factory or person can keep up to 8 packs. The default pack is shown first; open Other packs to see the rest or choose a new default. Change models and thinking inline with the same picker as chat, and set the thinking level while adding a model. When a pack has fallbacks, the connectors show the order they're tried in.
+
+Each pack sits in its own box, and its menu renames it in place, makes it the default, or deletes it. With no packs, the list names the model new sessions start on, such as `Claude Fable 5`, and says they have no fallbacks. Choosing a model there creates the default pack, named "Default". Under Model routing, the Personal and Factory defaults cards stack vertically like the other settings, and each card's header shows which lanes use it. Add a provider from the "+" next to the Providers heading. Provider menus now have icons, and removing a key or signing out is styled as destructive.
+
+The chat model picker lists the packs above the models. Each pack shows its models in fallback order, with the same connectors and thinking icons as Settings. A session runs either a pack or an exact model, so the picker shows one check: on the pack, or on the model. Picking a pack runs its models in order and puts the pack's name on the trigger. Picking a model or a thinking level, even while on a pack, runs that model alone with no fallbacks. In a new draft, the pick is applied as soon as the session starts. Edits to a pack reach the sessions on it on their next message, so the "Switch running sessions" and "Apply to my running chats" prompts are gone. When a run switches to a fallback, the reply shows one muted line such as `Claude Opus 5.5 is rate-limited, switched to GPT-5.6 Sol`.
+
+Every model picker in settings, including the Observer and Reflector models, now only saves a `provider/model` ID such as `anthropic/claude-opus-5.5`. Before, a search typed into a model picker and submitted with Enter, such as `sonnet 5.5`, was saved as the model ID.

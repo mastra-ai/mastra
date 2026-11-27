@@ -75,7 +75,7 @@ export const loginPreservesModelPackScenario = {
     await runtime.waitForScreenText(/\bbuild · login-preserve-e2e\/build-model/i, terminal, 8_000);
 
     terminal.submit('/login');
-    await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/select provider to login/i, terminal, 8_000);
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\)/i, terminal, 8_000);
     terminal.write('\r');
 

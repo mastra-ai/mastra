@@ -7,12 +7,18 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
 import type { RepositoryPushEvent } from '../integrations/base.js';
+import type { FactoryProject } from '../storage/domains/projects/base.js';
 import { probeSchedulesAvailable } from './build-schedule.js';
 import type { ScheduleService } from './build-schedule.js';
 import { createEnvironmentBuildWorkflow, ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
 import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
-import { environmentBuildContextWithEnv, errorReason, resolveEnvironmentHeads } from './build.js';
+import {
+  environmentBuildContextWithEnv,
+  environmentBuildDebounced,
+  errorReason,
+  resolveEnvironmentHeads,
+} from './build.js';
 import { resolveProjectEnvironment } from './session-environment.js';
 
 /** Longest wait between `settings` runs that find another process holding the build-start lease. */
@@ -141,6 +147,21 @@ export class EnvironmentBuildRunner {
           reason: errorReason(error),
         });
       });
+  };
+
+  /**
+   * A new sandbox created from the project's built template asks for a
+   * `session` run, so the template follows the default branches without a
+   * push event. The run builds only when a head moved since the last build and
+   * no push or session build started inside the debounce window. The window is
+   * checked here first, so a sandbox created inside it costs nothing. Fire and
+   * forget: the session never waits on it.
+   */
+  readonly onSandboxCreated = (
+    project: Pick<FactoryProject, 'id' | 'lastPushBuildAt' | 'buildPushDebounceMinutes'>,
+  ): void => {
+    if (environmentBuildDebounced(project, new Date())) return;
+    void this.start(project.id, 'session');
   };
 
   /**

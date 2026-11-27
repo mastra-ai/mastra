@@ -28,3 +28,6 @@ static/llms.txt
 /.generated/
 /src/content/en/docs/mastra-platform/gateway/api/*
 !/src/content/en/docs/mastra-platform/gateway/api/_guides/
+
+# Tree-sitter grammar that `vale sync` installs; our config lints no source code
+/styles/config/grammars/

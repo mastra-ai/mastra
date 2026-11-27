@@ -121,7 +121,7 @@ function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<I
 ]}
 />
 
-Failed checks and errors thrown by the handler are returned as a status and body, not thrown.
+Failed checks and errors thrown by the handler are returned as a status and body, not thrown. The exception is a request schema that fails with an error other than a `ZodError`: that error is thrown.
 
 ## Behavior
 

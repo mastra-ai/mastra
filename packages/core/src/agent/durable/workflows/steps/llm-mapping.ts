@@ -20,7 +20,7 @@ import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { getRunRegistryEntry } from '../../run-registry';
-import { segmentOwnsStep, segmentSpanData } from '../../segment-spans';
+import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -31,6 +31,7 @@ import type {
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { responseRecordSchema } from '../shared/schemas';
+import { toolCallsRunSideBySide } from '../shared/tool-call-concurrency';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -74,6 +75,7 @@ const durableLLMMappingOutputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   timeToFirstTokenMs: z.number().optional(),
   response: responseRecordSchema.optional(),
+  suspensionReportedUsage: z.boolean().optional(),
 });
 
 /**
@@ -225,13 +227,23 @@ export function createDurableLLMMappingStep() {
             >['rebuildSpan']
           >
         | undefined;
+      let suspensionReportedUsage = false;
       if (llmOutput.stepSpanData) {
         try {
           const initData = getInitData() as DurableAgenticWorkflowInput;
-          const segment = segmentSpanData(requestContext, _runId, initData, getRunRegistryEntry(_runId, mastra));
+          const reg = getRunRegistryEntry(_runId, mastra);
+          const segment = segmentSpanData(requestContext, _runId, initData, reg);
           if (segmentOwnsStep(segment, llmOutput.stepSpanData)) {
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-            stepSpan = observability?.rebuildSpan(llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>);
+            const stepSpanData = llmOutput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>;
+            stepSpan = liveSegmentSpan(stepSpanData, reg?.openStepSpan) ?? observability?.rebuildSpan(stepSpanData);
+          } else {
+            // A suspension ended the step. It reported no usage when the tool calls ran side by side.
+            suspensionReportedUsage = !toolCallsRunSideBySide({
+              options: initData.options,
+              toolsMetadata: initData.toolsMetadata,
+              toolCalls: llmOutput.toolCalls,
+            });
           }
         } catch {
           // Span bookkeeping must never break the merge step.
@@ -516,6 +528,7 @@ export function createDurableLLMMappingStep() {
         delegationBailed,
         tracingDelegationFailure,
         tracingTermination: llmOutput.tracingTermination,
+        ...(suspensionReportedUsage ? { suspensionReportedUsage } : {}),
         ...(deadlineTimeout ? { deadlineTimeout } : {}),
         ...(runAborted ? { runAborted } : {}),
         deferredStepFinishChunk,
@@ -599,7 +612,9 @@ export function createDurableLLMMappingStep() {
               mastra: mastra as Mastra,
               runId: _runId,
               agentId: _agentId,
+              agentVersionId: getInitData<DurableAgenticWorkflowInput>()?.agentVersionId,
               state,
+              options: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options,
               requestContext,
             });
             saveQueueManager = rebuilt?.saveQueueManager;

@@ -70,7 +70,10 @@ export class InMemoryDB {
   /** Storage v2 run entries in `seq` order, keyed like `workflowRunHeaders`. */
   readonly workflowRunEntries = new Map<string, WorkflowRunEntry[]>();
   /** Workflows-domain run ownership, keyed by runId. */
-  readonly runOwners = new Map<string, { generation: number; ownerId: string; leaseExpiresAt: Date | null }>();
+  readonly runOwners = new Map<
+    string,
+    { generation: number; ownerId: string; leaseExpiresAt: Date | null; updatedAt: Date }
+  >();
   /** Memory-domain run fences, keyed by runId. */
   readonly runFences = new Map<string, { generation: number; ownerId: string }>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();

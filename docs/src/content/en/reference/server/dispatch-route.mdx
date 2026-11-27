@@ -147,7 +147,8 @@ A `DispatchRouteResult`, which is one of two shapes:
   {
     name: 'body',
     type: 'unknown',
-    description: 'When `ok` is `false`: the JSON error body an adapter would have sent.',
+    description:
+      'When `ok` is `false`: the error body an adapter would have sent. Parsed as JSON, or a string when an `HTTPException` carries a non-JSON response.',
   },
 ]}
 />

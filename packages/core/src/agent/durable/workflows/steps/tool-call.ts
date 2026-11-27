@@ -40,8 +40,14 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
-import type { ExportedSpan, ObservabilityContext, SpanTermination } from '../../../../observability';
+import type {
+  AIModelGenerationSpan,
+  ExportedSpan,
+  ObservabilityContext,
+  SpanTermination,
+} from '../../../../observability';
 import { compactStopReasonContext } from '../../../../observability/outcome-schema';
+import { extractUsageMetrics, isUsageIncomplete, subtractReportedUsage } from '../../../../observability/usage';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { isProcessorWorkflow } from '../../../../processors/is-processor-workflow';
@@ -86,8 +92,15 @@ import {
   runFencedToClaim,
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
-import { liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
+import {
+  clearResumeInFlight,
+  DURABLE_CONTEXT_SEGMENT_KEY,
+  getLiveRunRequestContext,
+  getRunRegistryEntry,
+  globalRunRegistry,
+  markRunActive,
+} from '../../run-registry';
+import { claimSegmentEnd, liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -106,8 +119,10 @@ import {
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
 import { recordBackgroundResult } from '../shared/background-results';
-import { carriedSpanClocks } from '../shared/iteration-state';
+import { calculateAccumulatedUsage, carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
+import { responseRecordSchema } from '../shared/schemas';
+import type { AccumulatedUsage, BaseIterationState } from '../shared/schemas';
 
 /**
  * Input schema for the durable tool call step.
@@ -134,6 +149,10 @@ const durableToolCallInputSchema = z.object({
   timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
+  // Other tool calls of the step run at the same time, so a suspension reports no model usage
+  sideBySide: z.boolean().optional(),
+  // The model that answered the step that produced this call, and the cost its provider reported
+  response: responseRecordSchema.optional(),
 });
 
 /**
@@ -308,6 +327,20 @@ async function flushMessagesBeforeSuspension({
   }
 }
 
+/**
+ * Context for output processors on a tool result. A live context is reused only for the execution that
+ * owns it. A context rebuilt from the run snapshot is returned as before; whether a rebuilt entry can
+ * outlive a resume by another caller is tracked in COR-1660.
+ */
+function toolResultRequestContext(
+  registryEntry: RunRegistryEntry | undefined,
+  runId: string,
+  stepRequestContext: RequestContext | undefined,
+) {
+  if (registryEntry?.requestContextRebuilt) return registryEntry.requestContext;
+  return getLiveRunRequestContext(registryEntry, runId, stepRequestContext) ?? stepRequestContext;
+}
+
 class DurableOutputProcessorError extends Error {
   constructor(error: unknown) {
     super(error instanceof Error ? error.message : String(error), { cause: error });
@@ -334,6 +367,7 @@ class DurableChunkPublishError extends Error {
 async function processChunkThroughOutputProcessors(
   chunk: ChunkType,
   registryEntry: RunRegistryEntry | undefined,
+  stepRequestContext: RequestContext | undefined,
   pubsub: PubSub | undefined,
   runId: string,
   agentName: string,
@@ -359,7 +393,7 @@ async function processChunkThroughOutputProcessors(
     runner,
     processorStates: registryEntry?.processorStates as Map<string, ProcessorState> | undefined,
     observabilityContext,
-    requestContext: registryEntry?.requestContext,
+    requestContext: toolResultRequestContext(registryEntry, runId, stepRequestContext),
     messageList,
     streamWriter: pubsub
       ? {
@@ -494,6 +528,7 @@ export function createDurableToolCallStep() {
       const initData = getInitData<{
         runId: string;
         agentId: string;
+        agentVersionId?: string;
         options: SerializableDurableOptions;
         state: {
           threadId?: string;
@@ -506,6 +541,11 @@ export function createDurableToolCallStep() {
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
         timeToFirstTokenMs?: number;
+        accumulatedUsage: AccumulatedUsage;
+        generationReportedUsage?: AccumulatedUsage;
+        generationReportedSteps?: number;
+        reportedCosts?: BaseIterationState['reportedCosts'];
+        iterationCount?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -514,7 +554,7 @@ export function createDurableToolCallStep() {
       // End the open MODEL_STEP + MODEL_GENERATION + AGENT_RUN as `suspended` before
       // pausing — stores persist only span-end events, so an un-ended root is dropped if
       // the run is never resumed. On resume a fresh root is opened (see DurableAgent.resume).
-      const endSpansAsSuspended = (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
+      const endSpansAsSuspended = async (info: { toolCallId?: string; toolName?: string; reason?: string }) => {
         try {
           const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
           if (!obs) return;
@@ -528,6 +568,23 @@ export function createDurableToolCallStep() {
           // recovery carried on the request context.
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const segment = segmentSpanData(requestContext, runId, initData, reg);
+          if (typedInput.sideBySide && !segment.carried) {
+            const claimed = await claimSegmentEnd({
+              mastra: mastra as Mastra,
+              requestContext,
+              runId,
+              iterationCount: initData.iterationCount,
+              outcome: 'suspend',
+            });
+            // Without a claim, a run this execution no longer owns has failed, which ended its spans.
+            const owned =
+              claimed ??
+              (await assertOwned().then(
+                () => true,
+                error => !isExecutionFenceError(error),
+              ));
+            if (!owned) return;
+          }
           const { agentSpanData, modelSpanData } = segment;
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
@@ -542,9 +599,24 @@ export function createDurableToolCallStep() {
                 },
             segment.carried,
           );
-          if (typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData)) {
-            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
+          // This segment made the suspended step's model call only when it owns the step; a later
+          // suspension of the same step, after a resume, made none. The generation records the
+          // run total so far less what earlier suspensions recorded, like the regular agent.
+          // Tool calls that run side by side can each suspend here, so none of them records it.
+          // A total the provider left partly unknown is not recorded either: its known detail
+          // counts would be reported without the total they are part of.
+          const ownsStep = !!typedInput.stepSpanData && segmentOwnsStep(segment, typedInput.stepSpanData);
+          const reported = initData.generationReportedUsage;
+          const total = calculateAccumulatedUsage(initData.accumulatedUsage, typedInput.stepUsage);
+          const usage =
+            reported && ownsStep && !typedInput.sideBySide && !isUsageIncomplete(total)
+              ? subtractReportedUsage(total, reported)
+              : undefined;
+          if (ownsStep) {
+            const stepSpanData = typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>;
+            (liveSegmentSpan(stepSpanData, reg?.openStepSpan) ?? obs.rebuildSpan(stepSpanData))?.end({
               output,
+              ...(reported ? { attributes: { usage: extractUsageMetrics(typedInput.stepUsage) } } : {}),
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
@@ -556,12 +628,13 @@ export function createDurableToolCallStep() {
                   : null,
             });
           }
+          const agentSpan = agentSpanData && obs.rebuildSpan(agentSpanData);
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData)?.end({
+            const end = {
               output,
               attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              outcome: 'suspend' as const,
+              stopReason: info.reason === 'approval' ? ('approval_required' as const) : null,
               stopReasonContext:
                 info.reason === 'approval'
                   ? compactStopReasonContext('approval_required', {
@@ -569,23 +642,40 @@ export function createDurableToolCallStep() {
                       toolName: info.toolName,
                     })
                   : null,
-            });
+            };
+            const modelSpan = obs.rebuildSpan(modelSpanData) as AIModelGenerationSpan | undefined;
+            // A hidden generation reports its usage on its parent; a rebuilt one has no live parent.
+            if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
+            if (usage) {
+              // As at the end of the run: the model that answered, and the cost its provider reported.
+              const servedBy = typedInput.response?.servedBy;
+              const servedName = servedBy && `llm: '${servedBy.modelId}'`;
+              if (servedName && modelSpan && modelSpan.name !== servedName) modelSpan.update({ name: servedName });
+              const costs = initData.reportedCosts?.slice(initData.generationReportedSteps ?? 0) ?? [];
+              modelSpan?.createTracker()?.endGeneration({
+                ...end,
+                attributes: {
+                  ...attributes,
+                  ...(servedBy ? { model: servedBy.modelId, provider: servedBy.provider } : {}),
+                },
+                usage,
+                stepProviderMetadata: [...costs, typedInput.response?.reportedCost].map(cost => cost ?? undefined),
+              });
+            } else modelSpan?.end(end);
           }
-          if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData)?.end({
-              output,
-              attributes,
-              outcome: 'suspend',
-              stopReason: info.reason === 'approval' ? 'approval_required' : null,
-              stopReasonContext:
-                info.reason === 'approval'
-                  ? compactStopReasonContext('approval_required', {
-                      toolCallId: info.toolCallId,
-                      toolName: info.toolName,
-                    })
-                  : null,
-            });
-          }
+          agentSpan?.end({
+            output,
+            attributes,
+            outcome: 'suspend',
+            stopReason: info.reason === 'approval' ? 'approval_required' : null,
+            stopReasonContext:
+              info.reason === 'approval'
+                ? compactStopReasonContext('approval_required', {
+                    toolCallId: info.toolCallId,
+                    toolName: info.toolName,
+                  })
+                : null,
+          });
         } catch (error) {
           // Span bookkeeping must never break suspension.
           logger?.warn?.(`[DurableAgent] Failed to end spans on suspend: ${error}`);
@@ -686,6 +776,7 @@ export function createDurableToolCallStep() {
           mastra: mastra as Mastra,
           runId,
           agentId: initData.agentId,
+          agentVersionId: initData.agentVersionId,
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
@@ -722,12 +813,15 @@ export function createDurableToolCallStep() {
       // miss: tool ids are not unique across agents, so a global lookup first
       // could execute another agent's same-id tool. A hydrated registry's
       // per-step snapshot is authoritative and must not fall back to this full
-      // catalog when prepareStep or an input processor omitted a tool.
-      if (!tool && !hasAuthoritativeToolSnapshot) {
+      // catalog when prepareStep or an input processor omitted a tool. If a
+      // pinned agent could not be rebuilt, only an already-resolved tool is safe.
+      const canUseGlobalTools =
+        !hasAuthoritativeToolSnapshot && (!initData.agentVersionId || rebuiltTools !== undefined);
+      if (!tool && canUseGlobalTools) {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool && !hasAuthoritativeToolSnapshot && mastra) {
+      if (!tool && canUseGlobalTools && mastra) {
         mastraTools = (mastra as Mastra).listTools?.() as Record<string, any> | undefined;
         if (mastraTools) {
           tool = findProviderToolByName(mastraTools as any, toolName) as typeof tool;
@@ -927,8 +1021,11 @@ export function createDurableToolCallStep() {
           state.resourceId &&
           !state.memoryConfig?.readOnly
         ) {
-          const authorizationRequestContext =
-            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+          const authorizationRequestContext = restoreRequestContext(
+            initData.requestContextEntries,
+            requestContext,
+            getLiveRunRequestContext(registryEntry, runId, requestContext),
+          );
           const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
             authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
               mastra: mastra as Mastra | undefined,
@@ -988,12 +1085,17 @@ export function createDurableToolCallStep() {
       // persisted `requestContextEntries` snapshot — the same source the tool
       // rebuild uses — so context-aware approval predicates still see the
       // request scope captured when the run started.
-      const approvalRequestContext =
-        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+      const approvalRequestContext = restoreRequestContext(
+        initData.requestContextEntries,
+        requestContext,
+        getLiveRunRequestContext(registryEntry, runId, requestContext),
+      );
       const requiresApproval = await toolRequiresApproval(tool, effectiveRequireToolApproval, args, {
         toolName,
         requestContext: Object.fromEntries(
-          [...approvalRequestContext.entries()].filter(([key]) => !INTERNAL_APPROVAL_KEYS.has(key)),
+          [...approvalRequestContext.entries()].filter(
+            ([key]) => key !== DURABLE_CONTEXT_SEGMENT_KEY && !INTERNAL_APPROVAL_KEYS.has(key),
+          ),
         ),
         // Use the same rebuilt-workspace fallback as execution (above), so
         // workspace-aware approval policies see their workspace cross-process.
@@ -1245,6 +1347,7 @@ export function createDurableToolCallStep() {
               await processChunkThroughOutputProcessors(
                 resultChunk,
                 registryEntry,
+                requestContext,
                 pubsub,
                 runId,
                 initData.agentId,
@@ -1320,7 +1423,7 @@ export function createDurableToolCallStep() {
         }
 
         // End the trace's open spans as suspended before pausing.
-        endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
+        await endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
 
         // Suspend and wait for approval
         return suspend(
@@ -1408,6 +1511,7 @@ export function createDurableToolCallStep() {
               await processChunkThroughOutputProcessors(
                 deniedChunk as ChunkType,
                 registryEntry,
+                requestContext,
                 pubsub,
                 runId,
                 initData.agentId,
@@ -1741,7 +1845,7 @@ export function createDurableToolCallStep() {
             );
           }
 
-          endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
+          await endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
           return suspend(
             {
@@ -1804,7 +1908,7 @@ export function createDurableToolCallStep() {
           await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
         }
 
-        endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+        await endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
         return suspend(
           {
@@ -2125,9 +2229,11 @@ export function createDurableToolCallStep() {
                   toolCallId: params.toolCallId,
                   toolName: params.toolName,
                   status: params.status === 'failed' ? 'failed' : 'completed',
-                  requestContext:
-                    registryEntry?.requestContext ??
-                    restoreRequestContext(initData.requestContextEntries, requestContext),
+                  requestContext: restoreRequestContext(
+                    initData.requestContextEntries,
+                    requestContext,
+                    getLiveRunRequestContext(registryEntry, runId, requestContext),
+                  ),
                 });
               }
             } catch (error) {
@@ -2540,7 +2646,7 @@ export function createDurableToolCallStep() {
               result,
               modelOutput: readModelOutput(providerMetadata),
               ...(processorObservabilityContext ?? {}),
-              requestContext: registryEntry.requestContext,
+              requestContext: toolResultRequestContext(registryEntry, runId, requestContext),
               retryCount: 0,
               writer: pubsub
                 ? {
@@ -2684,6 +2790,7 @@ export function createDurableToolCallStep() {
             await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
+              requestContext,
               pubsub,
               runId,
               initData.agentId,
@@ -2801,6 +2908,7 @@ export function createDurableToolCallStep() {
             await processChunkThroughOutputProcessors(
               errorChunk,
               registryEntry,
+              requestContext,
               pubsub,
               runId,
               initData.agentId,

@@ -14,13 +14,39 @@ interface BoardSourceOptionShape {
   color: string;
 }
 
+/** The providers intake takes new issues and pull requests from, with their names. */
+export const INTAKE_PROVIDERS = {
+  github: 'GitHub',
+  gitlab: 'GitLab',
+  linear: 'Linear',
+  jira: 'Jira',
+  incidentio: 'incident.io',
+} as const;
+
+export type IntakeProvider = keyof typeof INTAKE_PROVIDERS;
+
+/** Whether an integration is one intake takes items from. */
+export function isIntakeProvider(id: string): id is IntakeProvider {
+  return Object.hasOwn(INTAKE_PROVIDERS, id);
+}
+
 /** The board's source filter, in menu order. */
 export const BOARD_SOURCE_OPTIONS = [
-  { value: 'github', label: 'GitHub', Icon: CARD_SOURCES['github-issue'].Icon, color: 'var(--foreground)' },
-  { value: 'gitlab', label: 'GitLab', Icon: CARD_SOURCES['gitlab-issue'].Icon, color: '#FC6D26' },
-  { value: 'linear', label: 'Linear', Icon: CARD_SOURCES['linear-issue'].Icon, color: '#5E6AD2' },
-  { value: 'jira', label: 'Jira', Icon: CARD_SOURCES['jira-issue'].Icon, color: '#1868DB' },
-  { value: 'incidentio', label: 'incident.io', Icon: CARD_SOURCES['incidentio-follow-up'].Icon, color: '#F2555A' },
+  {
+    value: 'github',
+    label: INTAKE_PROVIDERS.github,
+    Icon: CARD_SOURCES['github-issue'].Icon,
+    color: 'var(--foreground)',
+  },
+  { value: 'gitlab', label: INTAKE_PROVIDERS.gitlab, Icon: CARD_SOURCES['gitlab-issue'].Icon, color: '#FC6D26' },
+  { value: 'linear', label: INTAKE_PROVIDERS.linear, Icon: CARD_SOURCES['linear-issue'].Icon, color: '#5E6AD2' },
+  { value: 'jira', label: INTAKE_PROVIDERS.jira, Icon: CARD_SOURCES['jira-issue'].Icon, color: '#1868DB' },
+  {
+    value: 'incidentio',
+    label: INTAKE_PROVIDERS.incidentio,
+    Icon: CARD_SOURCES['incidentio-follow-up'].Icon,
+    color: '#F2555A',
+  },
   { value: 'vanta', label: 'Vanta', Icon: CARD_SOURCES['vanta-vulnerability'].Icon, color: '#7B4DFF' },
   { value: 'detail', label: 'Detail', Icon: CARD_SOURCES['detail-finding'].Icon, color: 'var(--muted-foreground)' },
   { value: 'manual', label: 'Manual', Icon: CARD_SOURCES.manual.Icon, color: 'var(--muted-foreground)' },

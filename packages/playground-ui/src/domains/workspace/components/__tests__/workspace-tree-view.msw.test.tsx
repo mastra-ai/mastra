@@ -12,6 +12,10 @@ import {
   WORKSPACE_ID,
   WORKSPACE_URL,
   docsListing,
+  LOG_COUNT,
+  logsListing,
+  rootWithLogsListing,
+  fileContents,
   mountedRootListing,
   fileSearchResponse,
   guidesListing,
@@ -133,7 +137,7 @@ describe('WorkspaceTreeView', () => {
       const paths = spyListedPaths({ '.': rootListing, src: srcListing });
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       expect(await screen.findByRole('treeitem', { name: /^index\.ts/ })).toBeTruthy();
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('true');
@@ -149,11 +153,85 @@ describe('WorkspaceTreeView', () => {
       );
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
 
       const folder = screen.getByRole('treeitem', { name: /^src/ });
       expect(await within(folder).findByRole('status', { name: 'Loading src' })).toBeTruthy();
       expect(screen.queryByTestId('workspace-folder-skeleton')).toBeNull();
+    });
+  });
+
+  describe('when a folder holds thousands of files', () => {
+    it('draws only the rows near the view, each with its place in the folder', async () => {
+      server.use(listHandler({ '.': rootWithLogsListing, logs: logsListing }));
+      renderView();
+
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^logs/ }));
+
+      const first = await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      expect(first.getAttribute('aria-level')).toBe('2');
+      expect(first.getAttribute('aria-posinset')).toBe('1');
+      expect(first.getAttribute('aria-setsize')).toBe(String(LOG_COUNT));
+      expect(screen.getAllByRole('treeitem').length).toBeLessThan(60);
+      expect(screen.queryByRole('treeitem', { name: new RegExp(`^run-${LOG_COUNT - 1}\\.json`) })).toBeNull();
+    });
+
+    it('moves one tab stop with the arrow keys, up to the parent with Left, and closes it with Left again', async () => {
+      server.use(listHandler({ '.': rootWithLogsListing, logs: logsListing }));
+      renderView();
+      const folder = await screen.findByRole('treeitem', { name: /^logs/ });
+      fireEvent.click(folder);
+      await screen.findByRole('treeitem', { name: /^run-0\.json/ });
+      folder.focus();
+
+      fireEvent.keyDown(folder, { key: 'ArrowDown' });
+      const first = screen.getByRole('treeitem', { name: /^run-0\.json/ });
+      expect(document.activeElement).toBe(first);
+      expect(first.tabIndex).toBe(0);
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).tabIndex).toBe(-1);
+
+      fireEvent.keyDown(first, { key: 'ArrowLeft' });
+      expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /^logs/ }));
+
+      fireEvent.keyDown(document.activeElement ?? folder, { key: 'ArrowLeft' });
+      expect(screen.getByRole('treeitem', { name: /^logs/ }).getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByRole('treeitem', { name: /^run-0\.json/ })).toBeNull();
+    });
+  });
+
+  describe('when an open folder is empty', () => {
+    it('keeps focus on it with Right instead of jumping to the next row', async () => {
+      server.use(listHandler({ '.': rootListing, docs: { path: 'docs', entries: [] } }));
+      renderView();
+      const docs = await screen.findByRole('treeitem', { name: /^docs/ });
+      fireEvent.click(docs);
+      await waitFor(() => expect(docs.getAttribute('aria-expanded')).toBe('true'));
+      docs.focus();
+
+      fireEvent.keyDown(docs, { key: 'ArrowRight' });
+
+      expect(document.activeElement).toBe(screen.getByRole('treeitem', { name: /^docs/ }));
+    });
+  });
+
+  describe('when a folder fails to load', () => {
+    it('still offers the new folder field inside it, beside the error', async () => {
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path');
+          return path === 'src'
+            ? HttpResponse.json({ error: 'boom' }, { status: 500 })
+            : HttpResponse.json(rootListing);
+        }),
+      );
+      renderView({ onCreateDirectory: vi.fn() });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'New folder in src' }));
+
+      const error = (await screen.findByText('Could not load folder.')).closest('[role="treeitem"]');
+      const field = screen.getByPlaceholderText('Folder name').closest('[role="treeitem"]');
+      expect([field?.getAttribute('aria-posinset'), field?.getAttribute('aria-setsize')]).toEqual(['1', '2']);
+      expect([error?.getAttribute('aria-posinset'), error?.getAttribute('aria-setsize')]).toEqual(['2', '2']);
     });
   });
 
@@ -252,7 +330,7 @@ describe('WorkspaceTreeView', () => {
         </MastraReactProvider>
       );
       const { rerender } = render(view());
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       await screen.findByRole('treeitem', { name: /^index\.ts/ });
 
       rerender(view('docs/guides/intro.md'));
@@ -267,7 +345,7 @@ describe('WorkspaceTreeView', () => {
       server.use(listHandler({ '.': rootListing, src: srcListing }), readHandler());
       renderView();
 
-      fireEvent.click(await screen.findByRole('button', { name: /^src/ }));
+      fireEvent.click(await screen.findByRole('treeitem', { name: /^src/ }));
       const file = await screen.findByRole('treeitem', { name: /^index\.ts/ });
       fireEvent.click(file);
 
@@ -289,6 +367,18 @@ describe('WorkspaceTreeView', () => {
     });
   });
 
+  describe('when a markdown file shows images', () => {
+    it('loads images next to it from the workspace and leaves web images as they are', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'docs/guides/images.md' });
+
+      const logo = await screen.findByRole('img', { name: 'Logo' });
+      await waitFor(() => expect(logo.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo='));
+      expect(screen.getByRole('img', { name: 'Badge' }).getAttribute('src')).toBe('https://example.com/badge.svg');
+      expect(await screen.findByText('Missing')).toBeTruthy();
+    });
+  });
+
   describe('when a markdown file starts with frontmatter', () => {
     it('shows the frontmatter as YAML above the rendered markdown', async () => {
       server.use(listHandler({ '.': rootListing }), readHandler());
@@ -301,6 +391,93 @@ describe('WorkspaceTreeView', () => {
       expect(frontmatter.textContent).toContain('description: Reviews code');
       expect(frontmatter.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(screen.queryByText(/name: review/, { selector: 'p' })).toBeNull();
+    });
+  });
+
+  describe('when the active file is minified JSON', () => {
+    it('shows it indented without changing a value, and Raw shows the file as stored', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/digest.json' });
+
+      const formatted = [
+        '{',
+        '  "rows": [',
+        '    {',
+        '      "id": 12345678901234567890,',
+        '      "2": 1.0,',
+        '      "1": "a,b:{c} \\"q\\""',
+        '    }',
+        '  ],',
+        '  "empty": {},',
+        '  "list": []',
+        '}',
+      ].join('\n');
+      await waitFor(() => expect(document.querySelector('figure pre')?.textContent).toBe(formatted));
+      expect(screen.getByRole('tab', { name: 'Formatted' }).getAttribute('aria-selected')).toBe('true');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Raw' }));
+
+      await waitFor(() =>
+        expect(document.querySelector('figure pre')?.textContent).toBe(fileContents['cache/digest.json']),
+      );
+    });
+  });
+
+  describe('when the active file is JSON too large to color in a code block', () => {
+    it('shows it colored in a read-only editor that draws only part of the file', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/large.json' });
+
+      const editor = await screen.findByRole('textbox', { name: 'cache/large.json' });
+      expect(editor.getAttribute('contenteditable')).toBe('false');
+      expect(editor.textContent).toContain('"id": "row-0",');
+      expect(editor.textContent).not.toContain('"id": "row-999",');
+      expect(document.querySelector('figure pre')).toBeNull();
+    });
+  });
+
+  describe('when the active file is source code too large to color in a code block', () => {
+    it('shows it in a read-only editor that draws only part of the file', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'src/large.ts' });
+
+      const editor = await screen.findByRole('textbox', { name: 'src/large.ts' });
+      expect(editor.getAttribute('contenteditable')).toBe('false');
+      expect(editor.textContent).toContain('export const value0 = compute(0, "row 0");');
+      expect(editor.textContent).not.toContain('value1999');
+      expect(document.querySelector('figure pre')).toBeNull();
+    });
+  });
+
+  describe('when a JSON file is not valid JSON', () => {
+    it('shows it as stored, with no formatted view', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/broken.json' });
+
+      await waitFor(() => expect(document.querySelector('figure pre')?.textContent).toBe('{"rows":[1,2'));
+      expect(screen.queryByRole('tab', { name: 'Formatted' })).toBeNull();
+    });
+  });
+
+  describe('when a JSON file is nested too deep to indent', () => {
+    it('shows it as stored instead of building an indented copy', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'cache/nested.json' });
+
+      await waitFor(() =>
+        expect(document.querySelector('figure pre')?.textContent).toBe(fileContents['cache/nested.json']),
+      );
+      expect(screen.queryByRole('tab', { name: 'Formatted' })).toBeNull();
+    });
+  });
+
+  describe('when the active file is binary', () => {
+    it('says it cannot be previewed instead of printing its bytes', async () => {
+      server.use(listHandler({ '.': rootListing }), readHandler());
+      renderView({ initialFile: 'sfx/applause.wav' });
+
+      expect(await screen.findByText('No preview available')).toBeTruthy();
+      expect(document.body.textContent).not.toContain('WAVEfmt');
     });
   });
 
@@ -674,6 +851,32 @@ describe('WorkspaceTreeView', () => {
       await waitFor(() => expect(deleted).toEqual([{ path: 'src', type: 'directory' }]));
       expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('false');
       expect([...paths]).toEqual(['.']);
+    });
+
+    it('closes an open folder it deleted, so its listing is not requested again', async () => {
+      const requests: string[] = [];
+      server.use(
+        http.get(`${WORKSPACE_URL}/fs/list`, ({ request }) => {
+          const path = new URL(request.url).searchParams.get('path') ?? '.';
+          requests.push(path);
+          return HttpResponse.json(path === 'src' ? srcListing : rootListing);
+        }),
+      );
+      renderView({ onDelete: () => {} });
+      const src = await screen.findByRole('treeitem', { name: /^src/ });
+      fireEvent.click(src);
+      await screen.findByRole('treeitem', { name: /^index\.ts/ });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete src' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+
+      await waitFor(() =>
+        expect(screen.getByRole('treeitem', { name: /^src/ }).getAttribute('aria-expanded')).toBe('false'),
+      );
+      const before = requests.filter(path => path === 'src').length;
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(requests.filter(path => path === 'src').length).toBe(before);
+      expect(screen.queryByRole('treeitem', { name: /^index\.ts/ })).toBeNull();
     });
   });
 

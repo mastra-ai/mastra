@@ -20,6 +20,7 @@ import { apiKeyReopenStoredScenario } from './api-key-reopen-stored.js';
 import { approvalOverlayFocusScenario } from './approval-overlay-focus.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { askUserAnswerHoldsPromptScenario } from './ask-user-answer-holds-prompt.js';
+import { askUserRecommendedOptionScenario } from './ask-user-recommended-option.js';
 import { autocompleteWrappingNavigationScenario } from './autocomplete-wrapping-navigation.js';
 import { automatedChatUnixPubSubScenario } from './automated-chat-unix-pubsub.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -64,6 +65,7 @@ import { customPackImportRenameScenario } from './custom-pack-import-rename.js';
 import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
+import { customProviderEndpointChecksScenario } from './custom-provider-endpoint-checks.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customProviderModalValidationScenario } from './custom-provider-modal-validation.js';
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
@@ -290,6 +292,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-reopen-stored': apiKeyReopenStoredScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'ask-user-answer-holds-prompt': askUserAnswerHoldsPromptScenario,
+  'ask-user-recommended-option': askUserRecommendedOptionScenario,
   'automated-chat': automatedChatScenario,
   'automated-chat-unix-pubsub': automatedChatUnixPubSubScenario,
   'background-adoption-deferred': backgroundAdoptionDeferredScenario,
@@ -326,6 +329,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-pack-rename-active': customPackRenameActiveScenario,
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,
+  'custom-provider-endpoint-checks': customProviderEndpointChecksScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-provider-modal-validation': customProviderModalValidationScenario,
   'custom-provider-model-selector': customProviderModelSelectorScenario,

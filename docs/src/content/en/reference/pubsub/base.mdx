@@ -188,7 +188,7 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     name: 'supportsOffsets',
     type: 'boolean',
     description:
-      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
+      'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and logs a warning with `console.warn`. Implementations can override `onUnsupportedOffset()` to use their own logger.',
   },
   {
     name: 'deliversAcrossProcesses',
@@ -342,7 +342,7 @@ Per-subscription batching policy. The callback signature doesn't change. A batch
 
 ### `EventCallback`
 
-The callback signature for subscribers: `(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => void`.
+The callback signature for subscribers: `(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>, extend?: () => Promise<void>) => void | Promise<void>`.
 
 <PropertiesTable
   content={[
@@ -361,6 +361,13 @@ The callback signature for subscribers: `(event: Event, ack?: () => Promise<void
     name: 'nack',
     type: '() => Promise<void>',
     description: 'Negative acknowledge. The event is requeued for redelivery after a delay.',
+    isOptional: true,
+  },
+  {
+    name: 'extend',
+    type: '() => Promise<void>',
+    description:
+      "Renew the delivery's lease so the broker doesn't redeliver the event while the handler is still running. Omitted by backends that can't extend a delivery.",
     isOptional: true,
   },
 ]}

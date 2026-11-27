@@ -37,7 +37,7 @@ export async function handleAskQuestion(
   ctx: EventHandlerContext,
   toolCallId: string,
   question: string,
-  options?: Array<{ label: string; description?: string }>,
+  options?: Array<{ label: string; description?: string; recommended?: boolean }>,
   selectionMode?: AskUserSelectionMode,
 ): Promise<void> {
   const { state } = ctx;

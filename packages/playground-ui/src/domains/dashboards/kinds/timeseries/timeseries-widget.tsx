@@ -77,8 +77,8 @@ function TimeseriesView({ widget, view, heading: own, page, onDrilldown, alert, 
       view.queries,
       results.map(r => r?.data),
     ),
+    queries: view.queries,
     window: page.window,
-    hasTraceQueries,
   });
   const format = FORMATTERS[options.format];
   const lines: MetricsLineChartSeries[] = shaped.series.map(s => ({
