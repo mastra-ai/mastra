@@ -487,8 +487,9 @@ export function describeResumeOccurrenceCases({
 
     // T7. The nested body of a time-travelled loop must complete under the occurrence that started
     // it, or the next iteration's start is refused and the run hangs. Time travel to the loop starts
-    // a fresh child (on storage v2 this hung before the guards covered time travel); time travel to
-    // the step inside the body time-travels the child too.
+    // a fresh child; that form hangs on main on storage v2 and passes on main on v1. Time travel to
+    // the step inside the body time-travels the child too; that form passes on main on both, and
+    // hangs once time travel is guarded without the nested loop hand-back passing its occurrence.
     it.each(['loop', 'nested step'] as const)(
       'runs further iterations of a loop over a nested workflow after a time travel to the %s',
       async target => {
@@ -522,9 +523,10 @@ export function describeResumeOccurrenceCases({
       20_000,
     );
 
-    // T8. A nested run started after a parent resume inherits the resume. When it declines
-    // snapshots it had no stored run, so its first guarded step failed the run as `missing`.
-    // Storage v2 always stores a running run, so there the case passes whatever the guards do.
+    // T8. A nested run started after a parent resume inherits the resume. On main its steps were not
+    // guarded, so it needed no stored run. Once they are, a child that declines snapshots needs one,
+    // or its first guarded step fails the run as `missing`. Storage v2 always stores a running run,
+    // so there the case passes whatever the guards do.
     it('finishes a nested workflow that declines snapshots and starts after a parent resume', async () => {
       const inner = createStep({
         id: 'inner',

@@ -1390,8 +1390,8 @@ export function describeFinishedOccurrenceCases({
     // A workflow that skips running snapshots leaves the stored active path at the step that last
     // saved one, here the step that suspended. The check can't tell from it whether the run went
     // past a finished step, so a late delivery runs the step again instead of leaving the run stuck.
-    // On a store with step guards the step after the resume is guarded too, and the guard continues
-    // the run from the result this delivery saved instead.
+    // On a store with step guards the step after the resume is guarded too. The redelivery shares
+    // the ID of the first delivery, which saved the result, so the guard continues the run from it.
     it('finishes the run after a late delivery when the workflow does not save running snapshots', async () => {
       const executions: string[] = [];
       const build = (replica: string) => {

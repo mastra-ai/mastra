@@ -1866,8 +1866,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
         step,
         prevResult,
-        // A restarted, resumed or time-travelled child re-drives the stored occurrence, so it completes under
-        // that occurrence too; otherwise the leaf stays 'running' and the next iteration is stale.
+        // The child completes the loop leaf under the occurrence stored for it, which a restart or a
+        // resume re-drives as well; otherwise the leaf stays 'running' and the next iteration is stale.
         loopStepResults[getEntryId(step.step)]?.metadata?.startedBy,
       );
       return;
@@ -3079,7 +3079,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     };
     if (shouldPersistRunning || guardStart) {
       // A resumed step skips this generic write (it is claimed separately
-      // below, keeping its record fields intact): its suspendPayload is
+      // below, keeping a suspended or running record whole): its suspendPayload is
       // the richer resume artifact (stream state, nested-run ids) and a
       // redelivered step.run must not clobber it. Same for a step timeTravel
       // resumes into. Foreach iterations are also skipped — the aggregate
@@ -3201,8 +3201,10 @@ export class WorkflowEventProcessor extends EventProcessor {
         // the step with the same resume data instead of re-suspending it
         // (#25365). With step guards the claim is guarded and stamps this
         // delivery, whatever the stored status: a retry finds its own failed
-        // attempt, and a repeated resume finds the step already claimed and is
-        // refused before the step runs. Without them only a still-suspended
+        // attempt. On storage v1 a repeated resume finds the step already
+        // claimed and is refused before the step runs; on v2 its expected
+        // occurrence is read from the stored step, so only the trigger check in
+        // the start handler stops it (COR-1666). Without guards only a still-suspended
         // record is claimed, and like the guard above, read-then-write narrows
         // the race window rather than closing it — closing it needs an
         // expectedStatus compare-and-set on `updateWorkflowResults` across all
