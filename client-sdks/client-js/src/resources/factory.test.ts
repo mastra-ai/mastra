@@ -110,15 +110,13 @@ describe('Factory resource', () => {
   it('throws a move the server failed without answering', async () => {
     mockFetch({ status: 500, body: { error: 'boom' } });
     await expect(
-      client
-        .getFactory('fp-1')
-        .transitionWorkItem('w1', {
-          board: 'work',
-          stage: 'build',
-          expectedRevision: 1,
-          requestId: 'r',
-          cause: 'drag',
-        }),
+      client.getFactory('fp-1').transitionWorkItem('w1', {
+        board: 'work',
+        stage: 'build',
+        expectedRevision: 1,
+        requestId: 'r',
+        cause: 'drag',
+      }),
     ).rejects.toThrow(/boom/);
   });
 
