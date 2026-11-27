@@ -26,9 +26,8 @@ import type {
   SandboxNetworking,
 } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
-import type { NetworkPolicy } from '@vercel/sandbox';
 import { Sandbox } from '@vercel/sandbox';
-import type { SandboxMounts, SandboxRegion } from '@vercel/sandbox';
+import type { NetworkPolicy, SandboxMounts, SandboxRegion } from '@vercel/sandbox';
 import { VercelSandboxProcessManager } from './process-manager';
 
 const LOG_PREFIX = '[VercelSandbox]';
