@@ -1322,16 +1322,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     // longer save it. It then updates only the run's header: rewriting the run from what the caller
     // read would undo results saved since, and would reopen a run that ended since.
     const takesOver = guardsSteps && !!restart && !completed && !restart.isPreFirstStepRestart && !!header && !!eventId;
+    // On stores with step guards, a restart leaves a run that ended or suspended since its caller read
+    // it as it is.
+    if (takesOver && !['running', 'waiting'].includes(header.status)) {
+      return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow });
+    }
     if (takesOver && restart) {
-      if (header.status !== 'running' && header.status !== 'waiting') {
-        this.mastra.getLogger()?.warn('Not restarting a workflow run: it is no longer active', {
-          workflowId,
-          runId,
-          eventId,
-          storedStatus: header.status,
-        });
-        return;
-      }
       const claim = await this.#takeOverRestartTargets({
         workflow,
         workflowId,
@@ -1368,14 +1364,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           appliedTriggerEventId: eventId,
           expectedStatus: ['running', 'waiting'],
         });
-        if (!updated) {
-          this.mastra.getLogger()?.warn('Not restarting a workflow run: it is no longer active', {
-            workflowId,
-            runId,
-            eventId,
-          });
-          return;
-        }
+        if (!updated) return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow });
       }
     }
 
@@ -2775,6 +2764,48 @@ export class WorkflowEventProcessor extends EventProcessor {
       return undefined;
     }
     return { stepResults: claimed, outcome: claimedAny ? 'claimed' : 'all saved' };
+  }
+
+  /**
+   * Drops a restart of a run that is no longer active, writing nothing to the run. Its caller waits
+   * for the run's finish, which already went out before the restart applied, so it is sent the
+   * stored outcome as a finish: the ended run's result, or its suspension. A nested run's restart
+   * has no caller of its own.
+   */
+  async #declineRestart({
+    workflowId,
+    runId,
+    eventId,
+    requestContext,
+    parentWorkflow,
+  }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'eventId' | 'requestContext' | 'parentWorkflow'>) {
+    const snapshot = await this.#runStorage(workflowId, runId).loadFull();
+    this.mastra.getLogger()?.warn('Not restarting a workflow run: it is no longer active', {
+      workflowId,
+      runId,
+      eventId,
+      storedStatus: snapshot?.status,
+    });
+    const settled = hasRunEnded(snapshot) || snapshot?.status === 'suspended' || snapshot?.status === 'paused';
+    if (parentWorkflow || !snapshot || !settled) return;
+    const ended = snapshot.status === 'failed' || snapshot.status === 'tripwire';
+    await this.publishFinishEvent({
+      type: ended ? 'workflow.fail' : snapshot.status === 'suspended' ? 'workflow.suspend' : 'workflow.end',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        prevResult: ended
+          ? { status: 'failed', error: snapshot.error }
+          : snapshot.status === 'success' || snapshot.status === 'paused'
+            ? (snapshot.result ?? { status: 'success' })
+            : { status: snapshot.status },
+        workflowStatus: snapshot.status,
+        stepResults: snapshot.context,
+        state: snapshot.context?.__state ?? snapshot.value,
+        requestContext,
+      },
+    });
   }
 
   /**

@@ -30,6 +30,15 @@ function deferred() {
 
 type Host = { driver: RedeliveryDriver; warn: MockInstance };
 
+/** `promise`, or a rejection naming `what` when it has not settled within `ms`. */
+function within<T>(promise: Promise<T>, what: string, ms = 5_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Waited ${ms} ms for ${what}`)), ms);
+  });
+  return Promise.race([promise, expired]).finally(() => clearTimeout(timer));
+}
+
 /** Steps that count their executions and can be held inside their body at a given execution. */
 function holdableSteps() {
   const calls: Record<string, number> = {};
@@ -180,6 +189,31 @@ export function describeRestartOccurrenceCases({
         },
         restore: () => spy.mockRestore(),
       };
+    }
+
+    /**
+     * Calls `restart()` and holds it after it read the run, before it waits for the run's finish and
+     * publishes its event. `proceed` lets it go on.
+     */
+    async function restartHeldAfterRead(
+      workflow: { createRun: (options: { runId: string }) => Promise<any> },
+      runId: string,
+    ) {
+      const run = await workflow.createRun({ runId });
+      const engine = run.executionEngine;
+      const execute = engine.execute.bind(engine);
+      const read = deferred();
+      const go = deferred();
+      const spy = vi.spyOn(engine, 'execute').mockImplementation(async (params: any) => {
+        if (!params.restart) return execute(params);
+        spy.mockRestore();
+        read.resolve();
+        await go.promise;
+        return execute(params);
+      });
+      const restarted: Promise<any> = run.restart();
+      await read.promise;
+      return { restarted, proceed: go.resolve, restore: () => spy.mockRestore() };
     }
 
     const isStepRun = (event: any, workflowId: string, path: number[]) =>
@@ -706,17 +740,21 @@ export function describeRestartOccurrenceCases({
         const started = run.start({ inputData: { n: 0 } });
         await oldB.entered;
 
-        const restart = holdRestartEvents(driver);
-        // Nothing ends the run again once the restart is refused, so its caller is left waiting.
-        void restartRun(wf.workflow, run.runId).catch(() => {});
-        await restart.captured;
+        // The caller reads the run while b runs, and the run ends before the caller waits for its
+        // finish. The caller then gets the run's stored result instead of waiting for a finish that
+        // already went out.
+        const { restarted, proceed } = await restartHeldAfterRead(wf.workflow, run.runId);
         oldB.release();
         expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
         await drainHandlers();
         const ended = await storedRun(wf.workflow.id, run.runId);
 
         const from = driver.events.length;
-        await restart.release();
+        proceed();
+        expect(await within(restarted, 'the restart caller to settle')).toMatchObject({
+          status: 'success',
+          result: { n: 3 },
+        });
         await drainHandlers();
         expect(driver.events.slice(from).filter(e => e.type === 'workflow.step.run')).toEqual([]);
         expect(await storedRun(wf.workflow.id, run.runId)).toMatchObject({
@@ -725,6 +763,54 @@ export function describeRestartOccurrenceCases({
           context: { b: ended?.context.b, c: ended?.context.c },
         });
         expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+      });
+    }, 20_000);
+
+    // R7 for a run that suspended in that window: it stays suspended, the caller gets the suspension,
+    // and the run is resumed as usual.
+    it('leaves a run that suspended between the restart read and the restart suspended', async () => {
+      const steps = holdableSteps();
+      const gate = createStep({
+        id: 'gate',
+        inputSchema: Num,
+        outputSchema: Num,
+        resumeSchema: z.object({ ok: z.boolean() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (!resumeData) return suspend({ reason: 'approval' });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const workflow = createWorkflow({ id: `restart-suspend-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(steps.step('a'))
+        .then(gate)
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async () => {
+        const run = await workflow.createRun();
+        // The restart reads the run while it is still in a, which then goes on into the suspension.
+        const oldA = steps.holdAt('a');
+        const started = run.start({ inputData: { n: 0 } });
+        await oldA.entered;
+        const { restarted, proceed } = await restartHeldAfterRead(workflow, run.runId);
+        oldA.release();
+        const suspended = await started;
+        expect(suspended).toMatchObject({ status: 'suspended' });
+        await drainHandlers();
+
+        proceed();
+        // The same suspension the run's own caller got.
+        expect(await within(restarted, 'the restart caller to settle')).toMatchObject({
+          status: 'suspended',
+          suspended: (suspended as { suspended?: unknown }).suspended,
+        });
+        await drainHandlers();
+        expect(await storedRun(workflow.id, run.runId)).toMatchObject({
+          status: 'suspended',
+          context: { gate: { status: 'suspended', suspendPayload: { reason: 'approval' } } },
+        });
+        expect(
+          await (await workflow.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: { ok: true } }),
+        ).toMatchObject({ status: 'success', result: { n: 2 } });
+        expect(steps.calls).toEqual({ a: 1 });
       });
     }, 20_000);
   });
