@@ -2030,12 +2030,22 @@ export class MessageList {
       const msg = this.messages[m]!;
       if (msg.role !== 'assistant' || !msg.content?.parts) continue;
 
+      // A response may reuse a toolCallId that an earlier step already finished (some gateways
+      // restart tool-call numbering every step, #31609). The result belongs to the invocation that
+      // is still pending; the finished one only matches when nothing else does.
+      let finishedIndex = -1;
       for (let i = 0; i < msg.content.parts.length; i++) {
         const part = msg.content.parts[i];
-        if (part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId) {
+        if (part?.type !== 'tool-invocation' || part.toolInvocation?.toolCallId !== toolCallId) continue;
+        if (!isTerminalToolInvocationState(part.toolInvocation.state)) {
           this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
           return true;
         }
+        if (finishedIndex === -1) finishedIndex = i;
+      }
+      if (finishedIndex !== -1) {
+        this.mergeToolResultIntoPart(msg, finishedIndex, inputPart, metadata);
+        return true;
       }
     }
 
@@ -2820,7 +2830,9 @@ export class MessageList {
           );
           if (storedPart?.type === 'text') storedPart.text = incomingPart.text;
         }
-        MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget));
+        MessageMerger.merge(messageV2, withoutStaleToolStates(messageV2, replacementTarget), {
+          openNewOccurrences: false,
+        });
       }
       this.stateManager.removeMessage(replacementTarget);
       this.replaceMessageAt(replacementIndex, messageV2);

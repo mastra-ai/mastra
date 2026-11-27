@@ -35,6 +35,16 @@ function expectParts(list: MessageList, expected: Part[]) {
   expect(parts).toMatchObject(expected);
 }
 
+/** Merge the initial message, then one incoming message per array, in order. */
+function mergeSequence(initial: Part[], ...incomings: Part[][]) {
+  const list = new MessageList();
+  list.add(message(initial), 'response');
+  incomings.forEach((parts, i) => {
+    list.add({ ...message(parts), createdAt: new Date(createdAt.getTime() + (i + 1) * 1000) }, 'response');
+  });
+  return list;
+}
+
 describe('MessageMerger insertion positions', () => {
   it('keeps a tool anchor after inserted text and before its following text', () => {
     expectParts(merge([step, tool('c1'), tool('c2')], [tool('c1', true), text('mid'), tool('c2', true), text('end')]), [
@@ -243,6 +253,146 @@ describe('MessageMerger insertion positions', () => {
       text(`${i}-B`),
     ]);
     expectParts(merge([step, ...calls], incoming), [step, ...expected]);
+  });
+});
+
+describe('MessageMerger tool call id reuse across steps', () => {
+  const call = (id: string, q: string): Part => ({
+    type: 'tool-invocation',
+    toolInvocation: { state: 'call', toolCallId: id, toolName: 'lookup', args: { q } },
+  });
+  const answer = (id: string, q: string): Part => ({
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: id,
+      toolName: 'lookup',
+      args: { q },
+      result: { answer: `result-${q}` },
+    },
+  });
+  const modelParts = (list: MessageList) =>
+    list.get.all.aiV5.model().flatMap(msg => {
+      if (typeof msg.content === 'string') return [msg.content];
+      return msg.content.map(part => {
+        if (part.type === 'text') return part.text;
+        if (part.type === 'tool-call' || part.type === 'tool-result') return `${part.type}:${part.toolCallId}`;
+        return part.type;
+      });
+    });
+
+  // A gateway that numbers tool calls per response reuses call_0 for every
+  // single-call step. Both invocations and their own results must survive.
+  it('keeps a later-step call that reuses a completed toolCallId and pairs each result', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'b')],
+      [answer('call_0', 'b')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'b')]);
+  });
+
+  // Arguments must not decide what counts as a new occurrence.
+  it('treats a reused toolCallId with identical arguments in a later step as a new call', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'a')],
+      [answer('call_0', 'a')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'a')]);
+  });
+
+  // Two occurrences share the same cache content, so the merge-gate counts must keep the second
+  // response's parts out rather than inserting them a third time when the runtime re-adds it.
+  it('adds nothing when the later-step response is merged again', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'b')],
+      [answer('call_0', 'b')],
+      [text('done')],
+    );
+    const before = structuredClone(list.get.all.db());
+    const stored = structuredClone(before[0]!.content.parts) as Part[];
+    // The runtime re-adds the later step's result and then its accumulated response.
+    list.add({ ...message([answer('call_0', 'b')]), createdAt: new Date(createdAt.getTime() + 5000) }, 'response');
+    list.add({ ...message(stored), createdAt: new Date(createdAt.getTime() + 7000) }, 'response');
+    expect(list.get.all.db()).toEqual(before);
+  });
+
+  it('sends both reused-call pairs to the model', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'b')],
+      [answer('call_0', 'b')],
+    );
+    expect(modelParts(list)).toEqual([
+      'tool-call:call_0',
+      'tool-result:call_0',
+      'tool-call:call_0',
+      'tool-result:call_0',
+    ]);
+  });
+
+  // Each later step that reuses the id opens its own occurrence, not just the second one.
+  it('keeps a third step that reuses the same id as its own invocation', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'b')],
+      [answer('call_0', 'b')],
+      [call('call_0', 'c')],
+      [answer('call_0', 'c')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'b'), step, answer('call_0', 'c')]);
+  });
+
+  // A call that is still streaming when the id is reused is a new invocation too.
+  it('opens a new occurrence for a reused id whose call is still streaming', () => {
+    const partial: Part = {
+      type: 'tool-invocation',
+      toolInvocation: { state: 'partial-call', toolCallId: 'call_0', toolName: 'lookup', args: { q: 'b' } },
+    };
+    const list = mergeSequence([step, call('call_0', 'a')], [answer('call_0', 'a')], [partial]);
+    expectParts(list, [step, answer('call_0', 'a'), step, partial]);
+  });
+
+  // Folding already-stored history runs the live copy's parts over the stored row after
+  // `withoutStaleToolStates` dressed every stale tool part as a pending call. Those parts are
+  // anchors only: they must never add an invocation.
+  it('anchors an echoed pending call instead of adding an invocation when folding stored history', () => {
+    const list = mergeSequence([step, call('call_0', 'a')], [answer('call_0', 'a')]);
+    const stored = list.get.all.db()[0]!;
+    MessageMerger.merge(
+      stored,
+      { ...message([call('call_0', 'a'), text('echoed')]), createdAt: new Date(createdAt.getTime() + 3000) },
+      { openNewOccurrences: false },
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, text('echoed')]);
+  });
+
+  // Control: a result for a call already in the list still updates it in place.
+  it('still updates an existing call in place when its result arrives', () => {
+    expectParts(mergeSequence([step, call('c1', 'a')], [answer('c1', 'a')]), [step, answer('c1', 'a')]);
+  });
+
+  // Control: a result without a matching call is appended rather than dropped.
+  it('appends a result whose call is not in the list', () => {
+    expectParts(mergeSequence([step], [answer('c1', 'a')]), [step, answer('c1', 'a')]);
+  });
+
+  // Control: distinct ids in the second step stay separate invocations.
+  it('keeps distinct second-step ids as separate invocations', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_1', 'b')],
+      [answer('call_1', 'b')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_1', 'b')]);
   });
 });
 

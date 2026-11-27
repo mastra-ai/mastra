@@ -1,8 +1,22 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
 import { stampPart, stampToolPartUpdate } from '../utils/stamp-part';
+import { isTerminalToolInvocationState } from '../utils/tool-invocation-state';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
+
+export type MessageMergeOptions = {
+  /**
+   * Whether a pending call whose id already has a finished invocation in `latestMessage` opens a new
+   * occurrence of that id instead of anchoring in place. Defaults to true: a gateway can restart
+   * tool-call numbering in a later step of the same run, so one id can name two invocations (#31609).
+   *
+   * Folding stored history passes false. That merge runs the live copy's own parts over the stored
+   * row after `withoutStaleToolStates` dressed every stale tool part as a bare pending call purely
+   * so the merger keeps it as a positional anchor; such a part must never add an invocation.
+   */
+  openNewOccurrences?: boolean;
+};
 
 /**
  * Per-merge index over both messages' parts. Every part is keyed once and the per-key counts
@@ -119,7 +133,12 @@ export class MessageMerger {
    * - Inserting step-start markers where needed
    * - Updating content strings
    */
-  static merge(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): void {
+  static merge(
+    latestMessage: MastraDBMessage,
+    incomingMessage: MastraDBMessage,
+    options: MessageMergeOptions = {},
+  ): void {
+    const openNewOccurrences = options.openNewOccurrences ?? true;
     if (incomingMessage.content.metadata) {
       latestMessage.content.metadata = {
         ...(latestMessage.content.metadata ?? {}),
@@ -130,16 +149,52 @@ export class MessageMerger {
     // Used for mapping indexes for incomingMessage parts to corresponding indexes in latestMessage
     const toolResultAnchorMap = new Map<number, number>();
     const partsToAdd = new Map<number, MastraMessageContentV2['parts'][number]>();
+    // Invocations this incoming response opens for a toolCallId whose stored invocation already
+    // finished. A gateway can restart tool-call numbering every response, so a later step reuses an
+    // id; a result in the same response must pair with the call it belongs to instead of overwriting
+    // the earlier, already-finished invocation (#31609).
+    const openedInvocations = new Map<string, Extract<MessagePart, { type: 'tool-invocation' }>>();
 
     for (const [index, part] of incomingMessage.content.parts.entries()) {
       // If the incoming part is a tool-invocation result, find the corresponding call in the latest message
       if (part.type === 'tool-invocation') {
         if (!part.toolInvocation) continue;
-        const existingCallPart = [...latestMessage.content.parts]
-          .reverse()
-          .find(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === part.toolInvocation.toolCallId);
+        const toolCallId = part.toolInvocation.toolCallId;
+        // A call this response opened for the id is the match for any later part carrying it,
+        // ahead of the invocations already stored in the message.
+        const openedPart = openedInvocations.get(toolCallId);
+        const existingCallPart =
+          openedPart ??
+          [...latestMessage.content.parts]
+            .reverse()
+            .find(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId);
 
         const existingCallToolInvocation = !!existingCallPart && existingCallPart.type === 'tool-invocation';
+
+        if (part.toolInvocation.state === 'call' || part.toolInvocation.state === 'partial-call') {
+          if (openedPart) continue; // same invocation this response already opened
+          if (
+            existingCallToolInvocation &&
+            (!openNewOccurrences || !isTerminalToolInvocationState(existingCallPart.toolInvocation.state))
+          ) {
+            // Repeating an invocation that is still running - or folding already-stored history, whose
+            // pending parts exist only to anchor their siblings - keeps the stored one and anchors it.
+            const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
+            toolResultAnchorMap.set(index, existingIndex);
+            continue;
+          }
+          // Repeating an id whose stored invocation already finished starts a new occurrence: add it,
+          // and remember it so a result later in this same response updates this call, not the stored one.
+          const newPart: Extract<MessagePart, { type: 'tool-invocation' }> = {
+            ...part,
+            toolInvocation: { ...part.toolInvocation },
+          };
+          partsToAdd.set(index, newPart);
+          if (existingCallToolInvocation) {
+            openedInvocations.set(toolCallId, newPart);
+          }
+          continue;
+        }
 
         if (existingCallToolInvocation) {
           const before = existingCallPart.toolInvocation;
@@ -163,19 +218,22 @@ export class MessageMerger {
                 ...part.providerMetadata,
               };
             }
-            if (!latestMessage.content.toolInvocations) {
-              latestMessage.content.toolInvocations = [];
-            }
-            const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
-              t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
-            );
-            if (toolInvocationIndex === -1) {
-              latestMessage.content.toolInvocations.push(
-                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
+            // Only an invocation that is already stored has a legacy entry to sync.
+            if (!openedPart) {
+              if (!latestMessage.content.toolInvocations) {
+                latestMessage.content.toolInvocations = [];
+              }
+              const toolInvocationIndex = latestMessage.content.toolInvocations.findIndex(
+                t => t.toolCallId === existingCallPart.toolInvocation.toolCallId,
               );
-            } else {
-              latestMessage.content.toolInvocations[toolInvocationIndex] =
-                existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number];
+              if (toolInvocationIndex === -1) {
+                latestMessage.content.toolInvocations.push(
+                  existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number],
+                );
+              } else {
+                latestMessage.content.toolInvocations[toolInvocationIndex] =
+                  existingCallPart.toolInvocation as NonNullable<MastraDBMessage['content']['toolInvocations']>[number];
+              }
             }
           } else if (
             part.toolInvocation.state === 'approval-requested' ||
@@ -218,10 +276,12 @@ export class MessageMerger {
               existingCallPart.preliminary = part.preliminary;
             }
           }
-          // Map the index of the tool call in incomingMessage to the index of the tool call in latestMessage
-          const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
-          toolResultAnchorMap.set(index, existingIndex);
-          // Otherwise we do nothing, as we're not updating the tool call
+          // Map the index of the tool call in incomingMessage to the index of the tool call in latestMessage.
+          // A call this response opened is inserted from partsToAdd instead, so it has no stored index.
+          if (!openedPart) {
+            const existingIndex = latestMessage.content.parts.findIndex(p => p === existingCallPart);
+            toolResultAnchorMap.set(index, existingIndex);
+          }
         } else {
           partsToAdd.set(index, part);
         }
