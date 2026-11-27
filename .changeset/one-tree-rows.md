@@ -1,10 +1,10 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': minor
 ---
 
 `Tree` now draws only the rows in view, so a folder with thousands of files opens without freezing the page. On a 5,000-file folder the slowest frame went from 3.8 s to under 100 ms.
 
-**Breaking:** `Tree` takes a flat list of rows instead of nested `Tree.Folder` and `Tree.File` children. `Tree.Folder`, `Tree.FolderTrigger`, `Tree.FolderContent` and `Tree.File` are removed. `Tree.Icon`, `Tree.Label` and `Tree.Input` stay as the parts of a row. `flattenTreeRows` turns nested data into rows.
+`Tree` takes a flat list of rows instead of nested `Tree.Folder` and `Tree.File` children. `Tree.Folder`, `Tree.FolderTrigger`, `Tree.FolderContent` and `Tree.File` are removed. `Tree.Icon`, `Tree.Label` and `Tree.Input` stay as the parts of a row. `flattenTreeRows` turns nested data into rows.
 
 ```tsx
 // Before
