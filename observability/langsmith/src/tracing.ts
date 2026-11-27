@@ -701,15 +701,25 @@ export class LangSmithExporter extends TrackingExporter<
       }
 
       // The answer as a message, which is how LangSmith recognizes it. A call that waits for tools
-      // is left as it is: LangSmith pairs it with their results from the next call's input.
+      // and wrote nothing is left as it is: LangSmith pairs it with their results from the next
+      // call's input.
       const text: unknown = payload.outputs?.text;
       if (usage && text && !(isInference && waitsForTools(payload.outputs!))) {
         payload.outputs = { ...payload.outputs, role: 'assistant', content: text };
+      } else if (usage && text && isInference) {
+        // Text before tool calls: one message with them, as the next call replays it.
+        payload.outputs = { ...payload.outputs, ...messageOfCall(payload.outputs as ModelStepResult) };
       }
 
       // Not part of the conversation: a generation whose calls already show it, and the call
-      // that names the thread, whose input is a transcript.
-      const isShownByCalls = !isInference && conversation?.counted;
+      // that names the thread, whose input is a transcript. When a filter dropped the call that
+      // gave the answer, only the generation holds it: its text, which ends with the answer, then
+      // does not end with the last exported call's.
+      const lastText = conversation?.calls.at(-1)?.message.content;
+      const isAnswerShown =
+        typeof text === 'string' && typeof lastText === 'string' && !!lastText && text.endsWith(lastText);
+      const holdsAnswer = usage && text && !isAnswerShown;
+      const isShownByCalls = !isInference && conversation?.counted && !holdsAnswer;
       const isTitle = 'resultType' in modelAttr && modelAttr.resultType === 'title_generation';
       if (isShownByCalls || isTitle) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
 

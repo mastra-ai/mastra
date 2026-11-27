@@ -23,43 +23,51 @@ const ANSWER = 'It is sunny in Paris.';
 const FORECAST = { city: 'Paris', condition: 'sunny' };
 const CALL_USAGE = { inputTokens: 10, outputTokens: 5, totalTokens: 15 };
 
-/** Calls getWeather until it has a result, then answers. */
-const model = {
-  specificationVersion: 'v2',
-  provider: 'openai',
-  modelId: 'gpt-4o-mini',
-  supportedUrls: {},
-  doGenerate: async () => ({
-    content: [{ type: 'text', text: ANSWER }],
-    finishReason: 'stop',
-    usage: CALL_USAGE,
-    warnings: [],
-  }),
-  doStream: async ({ prompt }: { prompt: Array<{ role: string }> }) => {
-    // A provider call never ends in the tick it started; a resumed run depends on that.
-    await new Promise(resolve => setTimeout(resolve, 20));
-    const answered = prompt.some(message => message.role === 'tool');
-    const parts = answered
-      ? [
-          { type: 'text-start', id: 't' },
-          { type: 'text-delta', id: 't', delta: ANSWER },
-          { type: 'text-end', id: 't' },
-          { type: 'finish', finishReason: 'stop', usage: CALL_USAGE },
-        ]
-      : [
-          { type: 'tool-call', toolCallId: 'call-1', toolName: 'getWeather', input: '{"city":"Paris"}' },
-          { type: 'finish', finishReason: 'tool-calls', usage: CALL_USAGE },
-        ];
-    return {
-      stream: new ReadableStream({
-        start(controller) {
-          for (const part of [{ type: 'stream-start', warnings: [] }, ...parts]) controller.enqueue(part);
-          controller.close();
-        },
-      }),
-    };
-  },
-} as any;
+/** Calls getWeather until it has a result, then answers. Some models write text before the call. */
+const createModel = (textBeforeTools?: string) =>
+  ({
+    specificationVersion: 'v2',
+    provider: 'openai',
+    modelId: 'gpt-4o-mini',
+    supportedUrls: {},
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: ANSWER }],
+      finishReason: 'stop',
+      usage: CALL_USAGE,
+      warnings: [],
+    }),
+    doStream: async ({ prompt }: { prompt: Array<{ role: string }> }) => {
+      // A provider call never ends in the tick it started; a resumed run depends on that.
+      await new Promise(resolve => setTimeout(resolve, 20));
+      const answered = prompt.some(message => message.role === 'tool');
+      const parts = answered
+        ? [
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: ANSWER },
+            { type: 'text-end', id: 't' },
+            { type: 'finish', finishReason: 'stop', usage: CALL_USAGE },
+          ]
+        : [
+            ...(textBeforeTools
+              ? [
+                  { type: 'text-start', id: 'p' },
+                  { type: 'text-delta', id: 'p', delta: textBeforeTools },
+                  { type: 'text-end', id: 'p' },
+                ]
+              : []),
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'getWeather', input: '{"city":"Paris"}' },
+            { type: 'finish', finishReason: 'tool-calls', usage: CALL_USAGE },
+          ];
+      return {
+        stream: new ReadableStream({
+          start(controller) {
+            for (const part of [{ type: 'stream-start', warnings: [] }, ...parts]) controller.enqueue(part);
+            controller.close();
+          },
+        }),
+      };
+    },
+  }) as any;
 
 interface SetupOptions {
   requireApproval?: boolean;
@@ -69,6 +77,7 @@ interface SetupOptions {
   spanFilter?: (span: AnyExportedSpan) => boolean;
   toModelOutput?: () => unknown;
   outputProcessors?: OutputProcessor[];
+  textBeforeTools?: string;
 }
 
 function setup({
@@ -78,6 +87,7 @@ function setup({
   spanFilter,
   toModelOutput,
   outputProcessors,
+  textBeforeTools,
 }: SetupOptions = {}) {
   const runs = new Map<string, any>();
   const save = (run: any) => runs.set(run.id, { ...runs.get(run.id), ...run });
@@ -101,7 +111,7 @@ function setup({
     id: 'weather',
     name: 'Weather',
     instructions: 'Use the tools.',
-    model,
+    model: createModel(textBeforeTools),
     tools: {
       getWeather: createTool({
         id: 'getWeather',
@@ -225,14 +235,28 @@ describe('LangSmith trajectory of an agent turn', () => {
     expect(calls[1].inputs.messages).toEqual(expect.arrayContaining(toolSteps));
   });
 
-  it('shows the answer of a generation whose calls are not exported', async () => {
-    const { agent, llmRuns } = setup({ excludeSpanTypes: [SpanType.MODEL_INFERENCE] });
+  it.each<[string, SetupOptions]>([
+    ['none of its calls are exported', { excludeSpanTypes: [SpanType.MODEL_INFERENCE] }],
+    ['a filter drops the call that gave it', { spanFilter: span => span.name !== 'inference: 1' }],
+  ])('shows the answer of a generation when %s', async (_, options) => {
+    const { agent, llmRuns } = setup(options);
     const stream = await agent.stream(QUESTION);
     await stream.consumeStream();
 
-    expect(await llmRuns()).toMatchObject([
-      { name: "llm: 'gpt-4o-mini'", outputs: { role: 'assistant', content: ANSWER } },
-    ]);
+    const generation = (await llmRuns()).find(run => run.name === "llm: 'gpt-4o-mini'");
+    expect(generation).toMatchObject({ outputs: { role: 'assistant', content: ANSWER } });
+    expect(generation.extra.metadata).not.toHaveProperty('ls_message_view_exclude');
+  });
+
+  it('sends text written before a tool call as one message with it, as the next call replays it', async () => {
+    const { agent, llmRuns } = setup({ textBeforeTools: 'Let me check.' });
+    const stream = await agent.stream(QUESTION);
+    await stream.consumeStream();
+
+    const [first, second] = await llmRuns();
+    const { role, content, tool_calls } = first.outputs;
+    expect({ role, content, tool_calls }).toEqual({ ...toolSteps[0], content: 'Let me check.' });
+    expect(second.inputs.messages).toContainEqual({ role, content, tool_calls });
   });
 
   it('leaves out the model call that names the thread', async () => {
