@@ -146,25 +146,45 @@ describe('RedisServerCache Integration', () => {
       expect(after).toBeNull();
     });
 
-    it('listPushIndexed assigns indices atomically and stamps TTL on both keys', async () => {
-      expect(await cache.listPushIndexed('events', 'events:counter', {})).toBe(0);
-      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a', data: { n: 1 } })).toBe(1);
+    it('listPushIndexed seeds a fresh log from the server clock, then numbers atomically and stamps TTL on both keys', async () => {
+      // Epoch-seeded on counter miss so a log recreated after expiry or
+      // eviction does not reissue an index a subscriber already consumed
+      // Seeded in epoch microseconds from the server clock;
+      // generous bound for client/server clock skew.
+      const before = (Date.now() - 60_000) * 1000;
+      const first = await cache.listPushIndexed('events', 'events:counter', {});
+      expect(first).toBeGreaterThanOrEqual(before);
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'a', data: { n: 1 } })).toBe(first + 1);
       expect(
         await cache.listPushIndexed('events', 'events:counter', { type: 'b', big: 9007199254740991, arr: [1, null] }),
-      ).toBe(2);
+      ).toBe(first + 2);
 
       expect(await cache.listFromTo('events', 0)).toEqual([
-        { index: 0 },
-        { index: 1, type: 'a', data: { n: 1 } },
-        { index: 2, type: 'b', big: 9007199254740991, arr: [1, null] },
+        { index: first },
+        { index: first + 1, type: 'a', data: { n: 1 } },
+        { index: first + 2, type: 'b', big: 9007199254740991, arr: [1, null] },
       ]);
-      expect(await cache.increment('events:counter')).toBe(4);
+      expect(await cache.increment('events:counter')).toBe(first + 4);
 
       for (const key of ['test:events', 'test:events:counter']) {
         const ttl = await redis.ttl(key);
         expect(ttl).toBeGreaterThan(0);
         expect(ttl).toBeLessThanOrEqual(60);
       }
+    });
+
+    it('listPushIndexed numbers above a consumed index after the log and counter were deleted', async () => {
+      const first = await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
+      const last = await cache.listPushIndexed('events', 'events:counter', { type: 'b' });
+      expect(last).toBe(first + 1);
+
+      // volatile-lru eviction or TTL expiry removes both keys.
+      await redis.del('test:events', 'test:events:counter');
+
+      // The recreated log reseeds above everything it issued before, so an
+      // observer holding a cursor into the old log does not drop the new
+      // frames as duplicates.
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'c' })).toBeGreaterThan(last);
     });
 
     it('listPushIndexed keeps both keys for a requested TTL longer than the default', async () => {
@@ -175,6 +195,19 @@ describe('RedisServerCache Integration', () => {
         const ttl = await redis.ttl(key);
         expect(ttl).toBeGreaterThan(day - 120);
         expect(ttl).toBeLessThanOrEqual(day);
+      }
+    });
+
+    it('listPushIndexed applies a requested TTL even when the default expiry is disabled', async () => {
+      const noExpiry = new RedisServerCache({ client: redis }, { keyPrefix: 'test:', ttlSeconds: 0 });
+      await noExpiry.listPushIndexed('events', 'events:counter', { type: 'a' }, 60_000);
+
+      // Thread-stream keys used to accumulate with no TTL at all because a
+      // no-expiry default silently discarded the caller's retention bound.
+      for (const key of ['test:events', 'test:events:counter']) {
+        const ttl = await redis.ttl(key);
+        expect(ttl).toBeGreaterThan(0);
+        expect(ttl).toBeLessThanOrEqual(60);
       }
     });
 
@@ -313,6 +346,9 @@ describe('CachingPubSub with Redis Integration', () => {
         data: { text: 'Before disconnect' },
       });
 
+      // The first live frame after attach reconciles against the log (the
+      // cursor sits below the epoch-seeded index), so delivery is async.
+      await new Promise(resolve => setTimeout(resolve, 50));
       expect(firstConnectionEvents).toHaveLength(1);
 
       // Disconnect

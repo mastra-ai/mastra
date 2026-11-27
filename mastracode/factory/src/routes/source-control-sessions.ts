@@ -14,7 +14,6 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
-  isWorkerSession,
   sessionMemoryResourceId,
   listFactorySessionThreads,
   sessionThreadsToMove,
@@ -124,13 +123,21 @@ function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
 }
 
-type SessionCapabilities = { recreateSandbox: boolean; takeOwnership: boolean; switchModel: boolean };
+/** Why a session the viewer could otherwise take keeps its owner, so the UI can say so. */
+type OwnershipLock = 'slack-thread' | 'side-session' | 'card';
+
+type SessionCapabilities = {
+  recreateSandbox: boolean;
+  takeOwnership: boolean;
+  switchModel: boolean;
+  ownershipLock?: OwnershipLock;
+};
 
 function withCapabilities<T extends object>(session: T, capabilities: SessionCapabilities) {
   return { ...session, capabilities };
 }
 
-type OwnershipRefusal = { status: 409 | 503; error: string };
+type OwnershipRefusal = { status: 409 | 503; error: string; lock?: OwnershipLock };
 
 async function ownershipRefusal(
   session: SourceControlSession,
@@ -146,12 +153,22 @@ async function ownershipRefusal(
       error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
     };
   }
-  // Slack finds a thread's session by its sender, a Factory run's session follows its work item,
-  // and a side session acts for the session that started it.
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) || (await isWorkerSession(session, options.workItems))) {
-    return { status: 409, error: 'Only user sessions can change owner' };
-  }
-  return null;
+  const lock = await ownershipLock(session, options.workItems);
+  return lock ? { status: 409, error: 'Only user sessions can change owner', lock } : null;
+}
+
+/**
+ * Slack finds a thread's session by its sender, a side session acts for the session that
+ * started it, and a Factory run's session follows its work item.
+ */
+async function ownershipLock(
+  session: SourceControlSession,
+  workItems: NonNullable<SourceControlSessionRoutesOptions['workItems']>,
+): Promise<OwnershipLock | undefined> {
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return 'slack-thread';
+  if (session.originSessionId) return 'side-session';
+  if (await isRunBound(session, workItems)) return 'card';
+  return undefined;
 }
 
 /** Marks the takeover in every thread of the session: the transcript draws it as a divider and the model reads it as context. */
@@ -615,14 +632,15 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
-        const takeOwnership =
-          session.userId !== resolved.tenant.userId && (await ownershipRefusal(session, options)) === null;
+        const refusal =
+          session.userId === resolved.tenant.userId ? undefined : await ownershipRefusal(session, options);
         return c.json({
           session: {
             ...withCapabilities(withOwnerProfile(session, owners), {
               recreateSandbox,
-              takeOwnership,
-              switchModel: canSwitchSessionModel(session, resolved.tenant),
+              takeOwnership: refusal === null,
+              switchModel: await canSwitchSessionModel(loose(c), options.auth, session, resolved.tenant),
+              ...(refusal?.lock ? { ownershipLock: refusal.lock } : {}),
             }),
             // The client opens the session by its id and creates it under this resource.
             resourceId,

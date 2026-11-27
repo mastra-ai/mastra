@@ -72,7 +72,7 @@ export const apiKeyReopenStoredScenario = {
     await runtime.waitForScreenText(/302ai\s+✓ \(stored\)/i, terminal, 8_000);
 
     // Bug 4: Delete should remove the stored key and give back the env key it overrode
-    terminal.write('\x7f');
+    terminal.write('\x1b[3~');
     await runtime.waitForScreenText(/302ai\s+✓ \(env\)/i, terminal, 8_000);
     runtime.printScreen('after deleting stored key', terminal);
 

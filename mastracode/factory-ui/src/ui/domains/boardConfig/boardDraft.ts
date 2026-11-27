@@ -1,12 +1,9 @@
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
+import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../api/types';
-import { rawRuleProblem, ruleProblem } from '../settings/services/rules';
-
-export const MAX_INSTRUCTIONS = 1000;
-export const MAX_OBJECTIVE = 2000;
-export const MAX_GOAL_RUNS = 50;
+import { ruleProblem } from '../settings/services/rules';
 
 export type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 export type PhaseKind = StoredPhaseInfo['kind'];
@@ -51,42 +48,27 @@ export function nextPhasesOf(phase: StoredPhaseInfo, phases: readonly StoredPhas
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
 }
 
-/** Rules typed as JSON, by `phaseKey.field`, for the phases whose rule editor shows JSON. */
-export type RawRules = Partial<Record<string, string>>;
-
-export const rawRuleKey = (phaseKey: string, field: RuleField) => `${phaseKey}.${field}`;
-
-/** Unset uses Factory's default; otherwise a whole number of runs the server accepts. */
-export function goalRunsValid(maxRuns: number | undefined): boolean {
-  return maxRuns === undefined || (Number.isInteger(maxRuns) && maxRuns >= 1 && maxRuns <= MAX_GOAL_RUNS);
-}
-
-/** A board the server would take: named, with named phases, nothing over its limit and no rule it would refuse. */
-export function draftHasProblem(draft: BoardDraft, rawRules: RawRules = {}): boolean {
-  return draft.name.trim() === '' || draft.phases.some(phase => phaseHasProblem(phase, rawRules));
+/** Why the server would refuse a phase's "only when" rule, if it would. */
+export function cardRuleProblem(rule: CardRule | null | undefined): string | undefined {
+  return ruleProblem(cardRuleGroupSchema, rule);
 }
 
 /**
- * Whether the server would refuse this phase as drafted: a rule it can't read, typed JSON that doesn't parse, text
- * over its limit, or a goal run count out of range.
+ * Whether the server would refuse this phase as drafted: a rule it can't read, text over its limit, a goal run count
+ * out of range, or an outcome without a usable key or label.
  */
-export function phaseHasProblem(phase: StoredPhaseInfo, rawRules: RawRules = {}): boolean {
+export function phaseHasProblem(phase: StoredPhaseInfo): boolean {
   const goal = phase.runner?.goal;
-  // A rule only counts while its switch is on; the JSON typed for it, when there is some, is what would be saved.
-  const ruleRefused = (field: RuleField, active: boolean, rule: CardRule | null | undefined) => {
-    if (!active) return false;
-    const text = rawRules[rawRuleKey(phase.key, field)];
-    const problem =
-      text === undefined ? ruleProblem(cardRuleGroupSchema, rule) : rawRuleProblem(cardRuleGroupSchema, text);
-    return problem !== undefined;
-  };
+  // A rule only counts while its switch is on.
+  const ruleRefused = (active: boolean, rule: CardRule | null | undefined) =>
+    active && cardRuleProblem(rule) !== undefined;
   return (
     phase.name.trim() === '' ||
-    (phase.runner?.instructions?.length ?? 0) > MAX_INSTRUCTIONS ||
-    (goal?.objective.length ?? 0) > MAX_OBJECTIVE ||
-    !goalRunsValid(goal?.maxRuns) ||
-    ruleRefused('autoStartWhen', phase.autoStart === true, phase.autoStartWhen) ||
-    ruleRefused('autoApproveWhen', phase.exitTool?.autoApprove === true, phase.exitTool?.autoApproveWhen)
+    !phaseRunFieldsValid(phase.runner?.instructions ?? '', goal) ||
+    (phase.outcomes?.length ?? 0) > MAX_OUTCOMES ||
+    outcomeProblems(phase.outcomes ?? []).some(problem => problem.key || problem.label) ||
+    ruleRefused(phase.autoStart === true, phase.autoStartWhen) ||
+    ruleRefused(phase.exitTool?.autoApprove === true, phase.exitTool?.autoApproveWhen)
   );
 }
 
@@ -111,15 +93,94 @@ export function canRemovePhase(phases: StoredPhaseInfo[], phaseKey: string, code
   return phases[0]?.key !== phaseKey || phases[1]?.kind === 'resting';
 }
 
+/** A phase with other moves. Its outcomes follow them: one going to a phase it no longer moves to is dropped. */
+export function withNextPhases(phase: StoredPhaseInfo, nextPhases: string[]): StoredPhaseInfo {
+  if (!phase.outcomes?.length) return { ...phase, nextPhases };
+  const outcomes = phase.outcomes.filter(outcome => nextPhases.includes(outcome.to));
+  return { ...phase, nextPhases, outcomes: outcomes.length > 0 ? outcomes : null };
+}
+
 /** Takes a phase out, and out of every move other phases list. Unset moves already mean "every other phase". */
 export function removePhase(phases: StoredPhaseInfo[], phaseKey: string): StoredPhaseInfo[] {
   return phases
     .filter(phase => phase.key !== phaseKey)
-    .map(phase =>
-      phase.nextPhases?.includes(phaseKey)
-        ? { ...phase, nextPhases: phase.nextPhases.filter(key => key !== phaseKey) }
-        : phase,
-    );
+    .map(phase => {
+      if (phase.nextPhases?.includes(phaseKey)) {
+        return withNextPhases(
+          phase,
+          phase.nextPhases.filter(key => key !== phaseKey),
+        );
+      }
+      // Unset moves stay unset, but an outcome can't keep going to the removed phase.
+      if (phase.outcomes?.some(outcome => outcome.to === phaseKey)) {
+        const outcomes = phase.outcomes.filter(outcome => outcome.to !== phaseKey);
+        return { ...phase, outcomes: outcomes.length > 0 ? outcomes : null };
+      }
+      return phase;
+    });
+}
+
+export type PhaseOutcome = NonNullable<StoredPhaseInfo['outcomes']>[number];
+
+/** Outcomes a working phase may list, as the server limits them. */
+export const MAX_OUTCOMES = 20;
+const MAX_OUTCOME_LABEL = 128;
+
+/** The outcomes a phase that lists none offers, as the server reads it: one per next phase, named after it. */
+export function defaultOutcomes(phase: StoredPhaseInfo, phases: readonly StoredPhaseInfo[]): PhaseOutcome[] {
+  return nextPhasesOf(phase, phases).flatMap(key => {
+    const target = phases.find(other => other.key === key);
+    return target ? [{ key, label: target.name, to: key }] : [];
+  });
+}
+
+/** Why the server would refuse one of a phase's outcomes, by its position in the list. */
+export function outcomeProblems(outcomes: readonly PhaseOutcome[]): Array<{ key?: string; label?: string }> {
+  return outcomes.map((outcome, index) => {
+    const taken = outcomes.filter((_, other) => other !== index).map(other => other.key);
+    const key = keyProblem(outcome.key, taken);
+    const label =
+      outcome.label.trim() === ''
+        ? 'Enter a label.'
+        : outcome.label.length > MAX_OUTCOME_LABEL
+          ? `Use at most ${MAX_OUTCOME_LABEL} characters.`
+          : undefined;
+    return { ...(key ? { key } : {}), ...(label ? { label } : {}) };
+  });
+}
+
+/** The next outcome a person adds: a move none of the outcomes takes yet, under a key not in use. */
+export function newOutcome(
+  phase: StoredPhaseInfo,
+  phases: readonly StoredPhaseInfo[],
+  outcomes: readonly PhaseOutcome[],
+): PhaseOutcome | undefined {
+  const next = nextPhasesOf(phase, phases);
+  const to = next.find(key => !outcomes.some(outcome => outcome.to === key)) ?? next[0];
+  const target = phases.find(other => other.key === to);
+  if (!to || !target) return undefined;
+  const taken = new Set(outcomes.map(outcome => outcome.key));
+  const base = keyFromName(target.name) || to;
+  let key = base;
+  for (let n = 2; taken.has(key); n++) {
+    const suffix = `-${n}`;
+    key = `${base.slice(0, MAX_BOARD_IDENTIFIER_LENGTH - suffix.length).replace(/-+$/, '')}${suffix}`;
+  }
+  return { key, label: target.name, to };
+}
+
+/**
+ * The outcome a phase's exit tool reports when it succeeds, as the server picks it: the `advance` outcome, else
+ * the only outcome into a working phase. Undefined when neither picks one; the agent then reports one itself.
+ */
+export function exitToolOutcome(
+  outcomes: readonly PhaseOutcome[],
+  phases: readonly StoredPhaseInfo[],
+): PhaseOutcome | undefined {
+  const advance = outcomes.find(outcome => outcome.key === 'advance');
+  if (advance) return advance;
+  const working = outcomes.filter(outcome => phases.find(other => other.key === outcome.to)?.kind === 'working');
+  return working.length === 1 ? working[0] : undefined;
 }
 
 /** A phase as another kind. Only a working phase has a runner, automation, an exit tool and tools; terminal moves nowhere. */

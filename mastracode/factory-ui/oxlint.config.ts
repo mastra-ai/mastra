@@ -7,13 +7,14 @@ export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],
   // This package did not previously run lint; adopt assertion checks without an unrelated lint migration.
   rules: {
-    // From playground-ui's preset, only icon-button-size, placeholder-text, and the copy rules below for now: the
+    // From playground-ui's preset, only icon-button-size, placeholder-text, date-locale, and the copy rules below for now: the
     // typography rules have existing hits here.
     'playground-ui/icon-button-size': 'error',
     'playground-ui/button-icon-prop': 'error',
     'playground-ui/placeholder-text': 'error',
     'playground-ui/icon-size-from-parent': 'error',
     'playground-ui/page-layout-props': 'error',
+    'playground-ui/date-locale': 'error',
     'playground-ui/no-page-spacing': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
@@ -46,6 +47,7 @@ export default defineConfig({
       rules: {
         'mastra/sentence-case-labels': 'off',
         'playground-ui/placeholder-text': 'off',
+        'playground-ui/date-locale': 'off',
         'playground-ui/icon-size-from-parent': 'off',
       },
     },

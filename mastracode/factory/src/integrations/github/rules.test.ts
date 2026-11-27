@@ -1397,7 +1397,7 @@ describe('GithubRules', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       workItems,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems, boards: createTriageWorkRegistry() }),
       sourceControl,
     );
     const primeCredentials = vi.fn(async () => {});
@@ -2876,7 +2876,7 @@ describe('GithubRules', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       workItems,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems, boards: createTriageWorkRegistry() }),
       sourceControl,
     );
     const prepared = await coordinator.prepare({

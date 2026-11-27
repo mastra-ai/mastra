@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 
 import type { WorkspaceChangeRequest } from '../context/WorkspacePanelContext';
 import type { RepositoryProvider } from './changes/tree/change-tree';
-import { WorkspaceChangesCard } from './WorkspaceChangesCard';
+import { WorkspaceChangesCard, WorkspaceChangesCardSkeleton } from './WorkspaceChangesCard';
 import type { WorkspaceChangesSummary } from './WorkspaceChangesCard';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
@@ -59,11 +59,14 @@ function BranchCopyButton({ branch }: { branch: string }) {
   );
 }
 
+const rowClass = 'flex min-w-0 items-center gap-1.5 pl-2';
+const sectionClass = 'flex min-w-0 shrink-0 flex-col gap-1.5 p-1.5';
+
 function RepositoryName({ slug, provider }: { slug: string; provider?: RepositoryProvider }) {
   const ProviderIcon = provider && REPOSITORY_PROVIDER_ICONS[provider];
   const owner = slug.includes('/') ? slug.slice(0, slug.lastIndexOf('/') + 1) : '';
   return (
-    <div className="flex h-6 min-w-0 items-center gap-1.5 pl-2" title={slug}>
+    <div className={cn(rowClass, 'h-6')} title={slug}>
       <span aria-hidden className="text-muted-foreground [&>svg]:size-icon-xs flex shrink-0">
         {ProviderIcon ? <ProviderIcon /> : <IconBranch />}
       </span>
@@ -101,7 +104,7 @@ function Elbow({ status }: { status: PullRequestStatus | 'none' }) {
 
 function BranchEdge({ baseBranch, changeRequest }: { baseBranch: string; changeRequest?: WorkspaceChangeRequest }) {
   return (
-    <div className="flex h-6 min-w-0 items-center gap-1.5 pl-2">
+    <div className={cn(rowClass, 'h-6')}>
       <Elbow status={changeRequest ? (changeRequest.status ?? 'draft') : 'none'} />
       {changeRequest?.badge}
       <IconArrowRight aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
@@ -113,22 +116,52 @@ function BranchEdge({ baseBranch, changeRequest }: { baseBranch: string; changeR
   );
 }
 
+function BranchRowsSkeleton() {
+  return (
+    <>
+      <div className={cn(rowClass, 'h-7')}>
+        <IconBranch aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
+        <Skeleton className="h-3.5 w-1/2 motion-reduce:before:animate-none" />
+      </div>
+      <div className={cn(rowClass, 'h-6')}>
+        <Elbow status="none" />
+        <IconArrowRight aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
+        <Skeleton className="h-3 w-1/5 motion-reduce:before:animate-none" />
+      </div>
+    </>
+  );
+}
+
 function BranchUnavailable({ loading }: { loading: boolean }) {
   if (loading) {
     return (
-      <div role="status" aria-label="Loading workspace details" className="flex flex-col gap-2 py-1.5 pl-2">
-        <Skeleton aria-hidden className="h-3 w-48 motion-reduce:before:animate-none" />
-        <Skeleton aria-hidden className="h-3 w-26 motion-reduce:before:animate-none" />
+      <div role="status" aria-label="Loading workspace details" className="flex flex-col">
+        <BranchRowsSkeleton />
       </div>
     );
   }
   return (
-    <div className="flex h-7 min-w-0 items-center gap-1.5 pl-2">
+    <div className={cn(rowClass, 'h-7')}>
       <IconBranch aria-hidden className="text-muted-foreground size-icon-sm shrink-0" />
       <Txt as="span" variant="caption" tone="muted" className="min-w-0 truncate">
         Branch details unavailable
       </Txt>
     </div>
+  );
+}
+
+export function WorkspaceSectionSkeleton() {
+  return (
+    <section aria-hidden className={sectionClass}>
+      <div className="flex min-w-0 flex-col">
+        <div className={cn(rowClass, 'h-6')}>
+          <Skeleton className="size-icon-xs shrink-0 rounded-full motion-reduce:before:animate-none" />
+          <Skeleton className="h-3 w-1/3 motion-reduce:before:animate-none" />
+        </div>
+        <BranchRowsSkeleton />
+      </div>
+      <WorkspaceChangesCardSkeleton />
+    </section>
   );
 }
 
@@ -150,13 +183,13 @@ export function WorkspaceSection({
   autoFocus?: boolean;
 }) {
   return (
-    <section aria-label="Workspace" className="flex min-w-0 shrink-0 flex-col gap-1.5 p-1.5">
+    <section aria-label="Workspace" className={sectionClass}>
       <div className="flex min-w-0 items-start gap-1.5">
         <div className="flex min-w-0 grow flex-col">
           {workspace?.repository ? <RepositoryName slug={workspace.repository} provider={workspace.provider} /> : null}
           {workspace && !loading ? (
             <>
-              <div className="flex h-7 min-w-0 items-center gap-1.5 pl-2">
+              <div className={cn(rowClass, 'h-7')}>
                 <IconBranch aria-hidden className="text-muted-foreground size-icon-xs shrink-0" />
                 <BranchCopyButton branch={workspace.branch} />
               </div>

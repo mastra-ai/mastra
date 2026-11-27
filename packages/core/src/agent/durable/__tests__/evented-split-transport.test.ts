@@ -129,7 +129,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     expect(replayed.some(chunk => chunk.type === 'text-delta' && chunk.payload?.text === 'Retained hello!')).toBe(true);
     expect(replayed.map(chunk => chunk.type)).toContain('finish');
 
-    const beyond = await agent.observe(runId, { offset: 1_000_000 });
+    const beyond = await agent.observe(runId, { offset: await pastEndOffset(agent, runId) });
     let timedOut = false;
     const completed = collectStreamChunks(beyond.fullStream);
     const timeout = setTimeout(() => {
@@ -147,9 +147,15 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     }
   }, 30_000);
 
+  /** An offset past every index the run's log has issued. Indices are opaque epoch-seeded cursors, not positions. */
+  async function pastEndOffset(agent: EventedAgent, runId: string) {
+    const history = await (agent.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+    return Math.max(0, ...history.map(event => event.index ?? 0)) + 1_000_000;
+  }
+
   /** Observes past the last frame and reports whether the stream closed on its own within 500ms. */
   async function observeBeyondLastFrame(agent: EventedAgent, runId: string) {
-    const beyond = await agent.observe(runId, { offset: 1_000_000 });
+    const beyond = await agent.observe(runId, { offset: await pastEndOffset(agent, runId) });
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true;
@@ -244,7 +250,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
       const onEvent = vi.fn();
       const unsubscribe = await observer.__subscribeToRunStream(
         running.runId,
-        { offset: 1_000_000, onComplete },
+        { offset: await pastEndOffset(observer, running.runId), onComplete },
         onEvent,
       );
       expect(onComplete).toHaveBeenCalledTimes(1);

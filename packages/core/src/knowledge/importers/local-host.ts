@@ -6,6 +6,7 @@ import type {
   KnowledgeImporterRunRecord,
   KnowledgeImporterRunStatus,
 } from '../../storage/domains/knowledge/importers';
+import { unwrapKnowledgeStorage } from '../changes';
 import type { KnowledgeHostWriter } from '../host-writes';
 import { KnowledgeImporterHostError } from './define';
 import {
@@ -482,7 +483,8 @@ export function createLocalKnowledgeImporterHost(
             // r352 S4: the claim, the scope and the run row commit together or not at all.
             if (start?.admit) {
               try {
-                await start.admit(tx);
+                // The adapter's own view: its transaction helpers find it by identity.
+                await start.admit(unwrapKnowledgeStorage(tx));
               } catch (error) {
                 throw new AdmitRefusal(error);
               }

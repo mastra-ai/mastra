@@ -447,4 +447,75 @@ describe('ConnectPromptTool', () => {
       expect(nangoMocks.auth).not.toHaveBeenCalled();
     });
   });
+
+  describe('when the user cancels the paused prompt', () => {
+    const cancelled = { provider: 'linear', status: 'failed', error: 'The user cancelled connecting.' };
+
+    it('resumes the paused tool with the cancellation, so the run is not left waiting', async () => {
+      const { approveToolcall } = renderConnectPrompt();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() => expect(approveToolcall).toHaveBeenCalledWith(toolCallId, cancelled));
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('abandons a connection still waiting for authorization and closes its window', async () => {
+      nangoMocks.auth.mockImplementation(() => new Promise(() => {}));
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+        http.get(launchPath, () =>
+          HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+        ),
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, status: 'pending' }),
+        ),
+      );
+
+      const { approveToolcall } = renderConnectPrompt();
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+      await screen.findByText('Waiting for authorization…');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      expect(nangoMocks.close).toHaveBeenCalled();
+      expect(screen.queryByText('Waiting for authorization…')).toBeNull();
+      await waitFor(() => expect(approveToolcall).toHaveBeenCalledWith(toolCallId, cancelled));
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for a running agent to stop before resuming', async () => {
+      const { approveToolcall, setRunning } = renderConnectPrompt({ isRunning: true });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+      expect(screen.getByRole('status').textContent).toMatch(/cancelled/i);
+      expect(approveToolcall).not.toHaveBeenCalled();
+
+      setRunning(false);
+
+      await waitFor(() => expect(approveToolcall).toHaveBeenCalledWith(toolCallId, cancelled));
+    });
+  });
+
+  describe('when there is no paused call to back out of', () => {
+    it('offers no Cancel on a finished call', async () => {
+      renderConnectPrompt({ output: connectPromptPayload });
+      await screen.findByRole('region', { name: 'Connect an account' });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('offers no Cancel on a call that was already resumed', async () => {
+      renderConnectPrompt({ toolCallApprovals: { [toolCallId]: { status: 'approved' } } });
+      await screen.findByRole('region', { name: 'Connect an account' });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+
+    it('offers no Cancel in read-only history', async () => {
+      renderConnectPrompt({ readOnly: true });
+      await screen.findByRole('region', { name: 'Connect an account' });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    });
+  });
 });

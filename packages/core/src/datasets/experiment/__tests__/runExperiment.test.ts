@@ -708,11 +708,11 @@ describe('runExperiment', () => {
           task,
           scorers: ['missing-run'],
         }),
-      ).rejects.toThrow('Scorer not found');
+      ).rejects.toMatchObject({ id: 'EXPERIMENT_SCORER_NOT_FOUND', message: expect.stringContaining('missing-run') });
       expect(task).not.toHaveBeenCalled();
     });
 
-    it('rejects experiment setup when a selected dataset scorer ID is missing', async () => {
+    it('fails the items that fall back to a missing dataset scorer, and keeps running the rest', async () => {
       const task = vi.fn().mockResolvedValue('output');
       const localMastra = {
         ...mastra,
@@ -725,9 +725,18 @@ describe('runExperiment', () => {
         scorerIds: ['missing-dataset'],
       });
       await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
+      await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'unscored' }, scorerIds: [] });
 
-      await expect(runExperiment(localMastra, { datasetId: dataset.id, task })).rejects.toThrow('Scorer not found');
-      expect(task).not.toHaveBeenCalled();
+      const result = await runExperiment(localMastra, { datasetId: dataset.id, task });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(1);
+      expect(result.failedCount).toBe(1);
+      expect(result.results.find(item => item.error)?.error).toEqual({
+        code: EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+        message: 'Dataset scorer configuration references unregistered scorer IDs: missing-dataset',
+      });
+      expect(task).toHaveBeenCalledTimes(1);
     });
   });
 

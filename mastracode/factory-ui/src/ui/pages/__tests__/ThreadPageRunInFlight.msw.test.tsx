@@ -188,7 +188,7 @@ function stubThreadRoute() {
       () => new Response(new ReadableStream<Uint8Array>(), { headers: { 'content-type': 'text/event-stream' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      HttpResponse.json({ modelId: null, thinkingLevel: null, modelPacks: [], defaultModelPackId: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),

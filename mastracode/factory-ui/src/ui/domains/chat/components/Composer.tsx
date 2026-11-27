@@ -5,20 +5,9 @@ import {
   useChatAnnotations,
 } from '@mastra/playground-ui/components/ai/annotations';
 import type { ChatAnnotation } from '@mastra/playground-ui/components/ai/annotations';
-import {
-  Composer as ComposerRoot,
-  ComposerActions,
-  ComposerActionsEnd,
-  ComposerActionsStart,
-  ComposerAttachMenu,
-  ComposerBox,
-  ComposerHeader,
-  ComposerInput,
-  ComposerRing,
-  ComposerSuggestions,
-  useComposerCommands,
-} from '@mastra/playground-ui/components/Composer';
+import { useComposerCommands } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
+import { SessionComposer } from '@mastra/playground-ui/domains/chat/transcript';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { useContext, useEffect, useEffectEvent, useState } from 'react';
@@ -47,9 +36,6 @@ import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { mergeDictation } from '../services/dictation';
-import { ComposerConnectionNotice } from './ComposerConnectionNotice';
-import { ComposerImageAttachments } from './ComposerImageAttachments';
-import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
 import { ModelPicker } from './StatusLine/ModelPicker';
@@ -328,58 +314,45 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   }
 
   return (
-    <>
-      <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-        <ComposerHeader placement="overlay" open={connectionNotice !== undefined}>
-          {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
-        </ComposerHeader>
-        <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
-          <ComposerBox>
-            <ComposerSuggestions {...commandMenu.suggestionsProps} />
-            <ComposerAnnotations />
-            <ComposerImageAttachments images={images} onRemove={removeImage} />
-            <ComposerInput
-              {...commandMenu.inputProps}
-              ref={inputRef}
-              onKeyDown={onComposerKeyDown}
-              onPaste={onPaste}
-              placeholder={placeholder}
-              disabled={textareaDisabled}
-              readOnly={preview !== undefined}
-              style={preview ? { height: preview.height } : undefined}
-              variant={variant}
-              aria-label="Message"
+    <SessionComposer
+      onSubmit={onSubmit}
+      onDrop={onDrop}
+      connectionNotice={connectionNotice}
+      busy={busy || chatPreparing || startingDraft}
+      suggestions={commandMenu.suggestionsProps}
+      annotations={<ComposerAnnotations />}
+      images={images}
+      onRemoveImage={removeImage}
+      onAddFiles={addFiles}
+      attachDisabled={attachDisabled}
+      input={{
+        ...commandMenu.inputProps,
+        ref: inputRef,
+        onKeyDown: onComposerKeyDown,
+        onPaste,
+        placeholder,
+        disabled: textareaDisabled,
+        readOnly: preview !== undefined,
+        style: preview ? { height: preview.height } : undefined,
+        variant,
+      }}
+      actions={
+        <>
+          <ModelPicker />
+          {factoryId && (
+            <ComposerVoiceButton
+              factoryId={factoryId}
+              disabled={textareaDisabled || preview !== undefined}
+              dictation={dictation}
             />
-            <ComposerActions>
-              <ComposerActionsStart>
-                <ComposerAttachMenu
-                  onFiles={addFiles}
-                  accept="image/*"
-                  disabled={attachDisabled}
-                  label="Attach images"
-                />
-              </ComposerActionsStart>
-              <ComposerActionsEnd role="group" aria-label="Composer actions">
-                <ModelPicker />
-                {factoryId && (
-                  <ComposerVoiceButton
-                    factoryId={factoryId}
-                    disabled={textareaDisabled || preview !== undefined}
-                    dictation={dictation}
-                  />
-                )}
-                <ComposerPrimaryAction
-                  showAbort={liveRun && !hasSubmittableDraft}
-                  sendDisabled={sendDisabled || !hasSubmittableDraft}
-                  sendTitle={sendTitle}
-                  onAbort={() => void abortMutation.mutateAsync()}
-                />
-              </ComposerActionsEnd>
-            </ComposerActions>
-          </ComposerBox>
-        </ComposerRing>
-      </ComposerRoot>
-      <StatusLine>{statusLead}</StatusLine>
-    </>
+          )}
+        </>
+      }
+      showAbort={liveRun && !hasSubmittableDraft}
+      sendDisabled={sendDisabled || !hasSubmittableDraft}
+      sendTitle={sendTitle}
+      onAbort={() => void abortMutation.mutateAsync()}
+      status={<StatusLine>{statusLead}</StatusLine>}
+    />
   );
 }

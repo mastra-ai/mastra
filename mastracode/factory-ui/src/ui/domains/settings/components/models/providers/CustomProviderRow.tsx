@@ -3,9 +3,12 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 import type { CustomProviderInfo } from '../../../../../../api/types';
-import { useRemoveCustomProvider } from '../../../../../../hooks/use-custom-providers';
+import { useCheckCustomProvider, useRemoveCustomProvider } from '../../../../../../hooks/use-custom-providers';
 import { ConnectedRow, CustomEndpointIcon } from './ProviderRows';
 
 const REMOVING_STATUS: StatusPresentation = {
@@ -14,7 +17,20 @@ const REMOVING_STATUS: StatusPresentation = {
   description: 'Deleting the custom endpoint',
 };
 
-function modelsStatus(provider: CustomProviderInfo): StatusPresentation {
+const TESTING_STATUS: StatusPresentation = {
+  label: 'Testing…',
+  tone: 'progress',
+  description: 'Calling the endpoint to list its models',
+};
+
+/** "N models", counting the models configured on the endpoint. */
+function modelCount(provider: CustomProviderInfo): string {
+  const count = provider.models.length;
+  return `${count} model${count === 1 ? '' : 's'}`;
+}
+
+/** The row's status: a refused URL first, then the last connection test, which saving new settings clears. */
+function endpointStatus(provider: CustomProviderInfo): StatusPresentation {
   if (provider.urlProblem) {
     return {
       label: 'URL not allowed',
@@ -22,12 +38,41 @@ function modelsStatus(provider: CustomProviderInfo): StatusPresentation {
       description: `${provider.urlProblem} Edit it to use its models.`,
     };
   }
-  const count = provider.models.length;
-  return {
-    label: `${count} model${count === 1 ? '' : 's'}`,
-    tone: count > 0 ? 'success' : 'neutral',
-    description: provider.hasApiKey ? 'Custom endpoint with a saved API key' : 'Custom endpoint without an API key',
-  };
+  if (!provider.lastCheck) {
+    return {
+      label: 'Not verified',
+      tone: 'neutral',
+      description: 'No connection test since these settings were saved',
+    };
+  }
+  if (!provider.lastCheck.ok) {
+    return {
+      label: 'Check failed',
+      tone: 'error',
+      description: provider.lastCheck.message ?? 'The last connection test failed',
+    };
+  }
+  return { label: modelCount(provider), tone: 'success', description: 'Passed the last connection test' };
+}
+
+/** The status shown while a row action runs, else the endpoint's own. */
+function rowStatus(provider: CustomProviderInfo, { removing, testing }: { removing: boolean; testing: boolean }) {
+  if (removing) return REMOVING_STATUS;
+  if (testing) return TESTING_STATUS;
+  return endpointStatus(provider);
+}
+
+/** The URL, and under it why the last connection test failed, so the reason is readable without opening anything. */
+function rowDetail(provider: CustomProviderInfo) {
+  const failure = !provider.urlProblem && provider.lastCheck?.ok === false ? provider.lastCheck.message : undefined;
+  if (!failure) return provider.url;
+  return (
+    <>
+      {provider.url}
+      {/* Clamped so a long upstream message can't stretch the row; the status description keeps the full text. */}
+      <span className="line-clamp-2">{failure}</span>
+    </>
+  );
 }
 
 /** A custom OpenAI-compatible endpoint in a provider list, next to the built-in providers. */
@@ -41,6 +86,8 @@ export function CustomProviderRow({
   onEdit: () => void;
 }) {
   const removeMutation = useRemoveCustomProvider();
+  const checkMutation = useCheckCustomProvider();
+  const pending = removeMutation.isPending || checkMutation.isPending;
 
   const remove = () => {
     removeMutation.mutate(
@@ -49,12 +96,30 @@ export function CustomProviderRow({
     );
   };
 
+  /** Tests the saved endpoint as stored. The server records the result, and a toast reports it. */
+  const test = () => {
+    checkMutation.mutate(
+      { previousId: provider.id, scope: provider.scope },
+      {
+        onSuccess: ({ check }) => {
+          if (check.models.ok) {
+            const count = check.models.models.length;
+            toast.success(`${provider.name} answered and lists ${count} model${count === 1 ? '' : 's'}.`);
+          } else {
+            toast.error(`${provider.name} failed the connection test. ${check.models.failure.message}`);
+          }
+        },
+        onError: error => toast.error(error.message || "Couldn't test the endpoint."),
+      },
+    );
+  };
+
   return (
     <ConnectedRow
       icon={<CustomEndpointIcon />}
       title={provider.name}
-      detail={provider.url}
-      status={removeMutation.isPending ? REMOVING_STATUS : modelsStatus(provider)}
+      detail={rowDetail(provider)}
+      status={rowStatus(provider, { removing: removeMutation.isPending, testing: checkMutation.isPending })}
     >
       <DropdownMenu>
         <DropdownMenu.Trigger
@@ -63,15 +128,23 @@ export function CustomProviderRow({
               variant="ghost"
               size="icon-sm"
               aria-label={`${provider.name} actions`}
-              disabled={disabled || removeMutation.isPending}
+              disabled={disabled || pending}
             >
               <IconDotGrid1x3Horizontal />
             </Button>
           }
         />
         <DropdownMenu.Content align="end">
-          <DropdownMenu.Item onClick={onEdit}>Edit</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={remove}>Remove</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={test} disabled={Boolean(provider.urlProblem)}>
+            <IconPlay /> Test connection
+          </DropdownMenu.Item>
+          <DropdownMenu.Item onClick={onEdit}>
+            <IconPencil /> Edit
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item variant="destructive" onClick={remove}>
+            <TrashIcon /> Remove
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
     </ConnectedRow>

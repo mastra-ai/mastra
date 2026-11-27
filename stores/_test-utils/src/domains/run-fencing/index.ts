@@ -4,6 +4,7 @@ import type {
   RunFence,
   RunFenceContext,
   RunFenceScope,
+  RunOwnershipRecord,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import { isRunFenceConflictError, setRunFenceContext } from '@mastra/core/storage';
@@ -258,6 +259,34 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const fenceB = await claimed(runId, 'owner-b');
         expect(fenceB.generation).toBe(fenceA.generation + 1);
         expect(await workflows.releaseRunOwnership(fenceA)).toBe(false);
+      });
+
+      // Core reads `leaseExpiresAt - updatedAt` as the length of a lapsed lease, to back off on the
+      // restart that takes it over. Stores that don't report `updatedAt` restart with the base length.
+      it('reports when the record last changed, so a lease reads back about its own length', async ctx => {
+        if (!(await workflows.supportsRunFencing())) return ctx.skip();
+        const runId = `run-${randomUUID()}`;
+        const claimedRecord = (await claim(runId, 'owner-a')).record!;
+        if (claimedRecord.updatedAt === undefined) return ctx.skip();
+        // Stores that read their clock once per value (pg's `clock_timestamp()`) can be a few ms off.
+        const expectLength = (record: RunOwnershipRecord | null, leaseMs: number) => {
+          const length = record!.leaseExpiresAt!.getTime() - record!.updatedAt!.getTime();
+          expect(Math.abs(length - leaseMs)).toBeLessThan(50);
+        };
+        expectLength(claimedRecord, LEASE_MS);
+        expectLength(await workflows.getRunOwnership({ runId }), LEASE_MS);
+
+        const fenceA: RunFence = { runId, ownerId: 'owner-a', generation: claimedRecord.generation };
+        await sleep(20);
+        const renewed = await workflows.renewRunOwnership({ ...fenceA, leaseMs: LEASE_MS * 2 });
+        expectLength(renewed.record, LEASE_MS * 2);
+        expect(renewed.record!.updatedAt!.getTime()).toBeGreaterThan(claimedRecord.updatedAt.getTime());
+
+        await sleep(20);
+        expect(await workflows.releaseRunOwnership(fenceA)).toBe(true);
+        const released = await workflows.getRunOwnership({ runId });
+        expect(released).toMatchObject({ leaseExpiresAt: null });
+        expect(released!.updatedAt!.getTime()).toBeGreaterThan(renewed.record!.updatedAt!.getTime());
       });
 
       it('reads many runs at once: live, released and expired records, and nothing for unclaimed runs', async ctx => {

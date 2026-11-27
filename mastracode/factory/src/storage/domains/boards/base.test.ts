@@ -30,6 +30,7 @@ function board(key: string, overrides: Partial<StoredBoardInput> = {}): StoredBo
         kind: 'working',
         runner: { skill: 'ship-it', context: 'work', instructions: 'Be careful.' },
         nextPhases: ['intake', 'done'],
+        outcomes: [{ key: 'ship', label: 'Shipped', to: 'done' }],
         autoStart: true,
         autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'go' }] },
         exitTool: {
@@ -98,6 +99,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       tools: null,
       runner: { skill: 'ship-it', context: 'work', instructions: 'Be careful.' },
       nextPhases: ['intake', 'done'],
+      outcomes: [{ key: 'ship', label: 'Shipped', to: 'done' }],
       autoStart: true,
       autoStartWhen: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'go' }] },
       exitTool: {

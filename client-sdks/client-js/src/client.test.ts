@@ -7,13 +7,9 @@ global.fetch = vi.fn();
 describe('MastraClient', () => {
   describe('Route Prefix Configuration', () => {
     const mockFetchResponse = () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: {
-          get: () => 'application/json',
-        },
-        json: async () => ({}),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
     };
 
     it('should use custom apiPrefix when provided', async () => {
@@ -163,13 +159,12 @@ describe('MastraClient', () => {
       (global.fetch as any)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: {
-            get: () => 'application/json',
-          },
-          json: async () => ({ success: true }),
-        });
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
 
       const result = await client.request('/test-endpoint');
       expect(result).toEqual({ success: true });
@@ -199,20 +194,18 @@ describe('MastraClient', () => {
       (global.fetch as any)
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: {
-            get: () => 'application/json',
-          },
-          json: async () => ({ success: true }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: {
-            get: () => 'application/json',
-          },
-          json: async () => ({ success: true }),
-        });
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
 
       const result = await customClient.request('/test');
       expect(result).toEqual({ success: true });
@@ -250,13 +243,10 @@ describe('MastraClient', () => {
       let customFetchCalled = false;
       const customFetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit): Promise<Response> => {
         customFetchCalled = true;
-        return {
-          ok: true,
-          headers: {
-            get: () => 'application/json',
-          },
-          json: async () => ({ customFetchUsed: true }),
-        } as Response;
+        return new Response(JSON.stringify({ customFetchUsed: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
       });
 
       const customClient = new MastraClient({
@@ -298,13 +288,9 @@ describe('MastraClient', () => {
 
   describe('Working Memory', () => {
     const mockFetchResponse = (data: any) => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: {
-          get: () => 'application/json',
-        },
-        json: async () => data,
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
     };
 
     describe('getWorkingMemory', () => {
@@ -466,12 +452,9 @@ describe('MastraClient', () => {
         const mockThreads = {
           threads: [{ id: 'thread-1', title: 'Test' }],
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThreads,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThreads), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listMemoryThreads({
           agentId: 'agent-1',
@@ -488,12 +471,9 @@ describe('MastraClient', () => {
         const mockThreads = {
           threads: [{ id: 'thread-1', title: 'Test' }],
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThreads,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThreads), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listMemoryThreads({
           resourceId: 'resource-1',
@@ -518,12 +498,9 @@ describe('MastraClient', () => {
           perPage: 100,
           hasMore: false,
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThreads,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThreads), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listMemoryThreads();
 
@@ -541,12 +518,9 @@ describe('MastraClient', () => {
           perPage: 100,
           hasMore: false,
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThreads,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThreads), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listMemoryThreads({
           metadata: { category: 'support', priority: 'high' },
@@ -567,12 +541,9 @@ describe('MastraClient', () => {
           perPage: 100,
           hasMore: false,
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThreads,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThreads), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listMemoryThreads({
           resourceId: 'user-123',
@@ -589,12 +560,9 @@ describe('MastraClient', () => {
     describe('getMemoryThread', () => {
       it('should get thread with agentId', async () => {
         const mockThread = { id: 'thread-1', title: 'Test' };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThread,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThread), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const thread = client.getMemoryThread({
           agentId: 'agent-1',
@@ -610,12 +578,9 @@ describe('MastraClient', () => {
 
       it('should get thread without agentId (storage fallback)', async () => {
         const mockThread = { id: 'thread-1', title: 'Test' };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockThread,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockThread), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const thread = client.getMemoryThread({
           threadId: 'thread-1',
@@ -634,12 +599,9 @@ describe('MastraClient', () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMessages), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listThreadMessages('thread-1', {
           agentId: 'agent-1',
@@ -656,12 +618,9 @@ describe('MastraClient', () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMessages), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listThreadMessages('thread-1', {
           agentId: 'agent-1',
@@ -679,12 +638,9 @@ describe('MastraClient', () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMessages), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listThreadMessages('thread-1');
 
@@ -703,12 +659,9 @@ describe('MastraClient', () => {
           perPage: 40,
           hasMore: true,
         };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockResponse,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listThreadMessages('thread-1', {
           agentId: 'agent-1',
@@ -728,12 +681,9 @@ describe('MastraClient', () => {
     describe('deleteThread', () => {
       it('should delete a thread with agentId', async () => {
         const mockResponse = { success: true, message: 'Thread deleted' };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockResponse,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
 
@@ -746,12 +696,9 @@ describe('MastraClient', () => {
 
       it('should delete a network thread with networkId', async () => {
         const mockResponse = { success: true, message: 'Thread deleted' };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockResponse,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
 
@@ -796,11 +743,9 @@ describe('MastraClient', () => {
     describe('listBackgroundTasks', () => {
       it('calls GET /background-tasks with no params', async () => {
         const mockResponse = { tasks: [], total: 0 };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => mockResponse,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockResponse), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.listBackgroundTasks();
 
@@ -809,11 +754,12 @@ describe('MastraClient', () => {
       });
 
       it('passes filter params as query string', async () => {
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ tasks: [], total: 0 }),
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify({ tasks: [], total: 0 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
 
         await client.listBackgroundTasks({
           agentId: 'a1',
@@ -834,11 +780,12 @@ describe('MastraClient', () => {
       });
 
       it('serializes date params as ISO strings', async () => {
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => ({ tasks: [], total: 0 }),
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify({ tasks: [], total: 0 }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
 
         const from = new Date('2024-01-01');
         const to = new Date('2024-02-01');
@@ -853,11 +800,9 @@ describe('MastraClient', () => {
 
     describe('resumeBackgroundTask', () => {
       const respondWith = (body: unknown) =>
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => body,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
       const sent = () => {
         const [url, init] = (global.fetch as any).mock.calls[0];
         return { url, method: init.method, body: JSON.parse(init.body) };
@@ -901,11 +846,9 @@ describe('MastraClient', () => {
     describe('getBackgroundTask', () => {
       it('calls GET /background-tasks/:backgroundTaskId', async () => {
         const mockTask = { id: 'background-task-1', status: 'completed', toolName: 'tool' };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          headers: { get: () => 'application/json' },
-          json: async () => mockTask,
-        });
+        (global.fetch as any).mockResolvedValueOnce(
+          new Response(JSON.stringify(mockTask), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        );
 
         const result = await client.getBackgroundTask('background-task-1');
 
@@ -953,11 +896,9 @@ describe('MastraClient', () => {
     });
 
     it('getAgentBuilderActions should hit /agent-builder (no trailing slash)', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({}),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
 
       await client.getAgentBuilderActions();
 
@@ -974,11 +915,9 @@ describe('MastraClient', () => {
     });
 
     it('createStoredSkill should POST the required description and other fields', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({}),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
 
       await client.createStoredSkill({
         name: 'my-skill',
@@ -1000,11 +939,12 @@ describe('MastraClient', () => {
 
   describe('Dataset Experiments', () => {
     const mockSuccess = () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ experiments: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ experiments: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
     };
 
     beforeEach(() => {
@@ -1144,11 +1084,12 @@ describe('MastraClient', () => {
     });
 
     it('issues a DELETE for a dataset-scoped experiment', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.deleteDatasetExperiment('dataset/1', 'experiment/1');
 
@@ -1159,11 +1100,12 @@ describe('MastraClient', () => {
     });
 
     it('scopes a dataset experiment DELETE with tenancy query parameters', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.deleteDatasetExperiment('dataset-1', 'experiment-1', {
         organizationId: 'org_a',
@@ -1177,11 +1119,12 @@ describe('MastraClient', () => {
     });
 
     it('issues a top-level DELETE for an experiment with tenancy query', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.deleteExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
 
@@ -1192,11 +1135,12 @@ describe('MastraClient', () => {
     });
 
     it('issues a top-level GET for an experiment by id', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'experiment-1', datasetId: 'dataset-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.getExperiment('experiment-1');
 
@@ -1208,11 +1152,12 @@ describe('MastraClient', () => {
     });
 
     it('scopes a top-level experiment GET with tenancy query parameters', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'experiment-1', datasetId: 'dataset-1' }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'experiment-1', datasetId: 'dataset-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.getExperiment('experiment-1', { organizationId: 'org_a', projectId: 'proj_1' });
 
@@ -1223,11 +1168,12 @@ describe('MastraClient', () => {
     });
 
     it('posts provenance and grouping when triggering an experiment', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ experimentId: 'experiment-1', status: 'pending' }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ experimentId: 'experiment-1', status: 'pending' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
       const provenance = {
         source: 'github',
         sourceId: 'mastra-ai/mastra',
@@ -1270,11 +1216,12 @@ describe('MastraClient', () => {
     });
 
     it('createDatasetExperiment posts to /experiments with start: false and the caller-supplied id', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ experimentId: 'wf-run-42', status: 'running', totalItems: 3, datasetVersion: 1 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
 
       const result = await client.createDatasetExperiment({
         datasetId: 'ds-1',
@@ -1301,14 +1248,15 @@ describe('MastraClient', () => {
     });
 
     it('runExperimentItem posts to the run route with the attempt', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({
-          result: { id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 0, output: { text: 'hi' } },
-          scores: [{ scorerId: 'accuracy', scorerName: 'accuracy', score: 0.9, reason: null, error: null }],
-        }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            result: { id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 0, output: { text: 'hi' } },
+            scores: [{ scorerId: 'accuracy', scorerName: 'accuracy', score: 0.9, reason: null, error: null }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
 
       const { result, scores } = await client.runExperimentItem({
         datasetId: 'ds-1',
@@ -1327,11 +1275,12 @@ describe('MastraClient', () => {
 
     it('submitExperimentResult posts itemId, attempt, output, and scores to the results route', async () => {
       const scores = [{ scorerId: 'accuracy', score: 0.92, reason: 'ok' }];
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 1 }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'res-1', experimentId: 'exp-1', itemId: 'item-1', attempt: 1 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.submitExperimentResult({
         datasetId: 'ds-1',
@@ -1350,11 +1299,12 @@ describe('MastraClient', () => {
     });
 
     it('finalizeExperiment posts to the finalize route and returns the updated experiment', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'exp-1', status: 'completed', succeededCount: 2, failedCount: 1, skippedCount: 0 }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ id: 'exp-1', status: 'completed', succeededCount: 2, failedCount: 1, skippedCount: 0 }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
 
       const result = await client.finalizeExperiment({ datasetId: 'ds-1', experimentId: 'exp-1' });
 
@@ -1376,11 +1326,12 @@ describe('MastraClient', () => {
 
     it('addDatasetItem posts toolMocks in the request body', async () => {
       const toolMocks = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'item-1', toolMocks }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'item-1', toolMocks }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, toolMocks });
 
@@ -1392,11 +1343,12 @@ describe('MastraClient', () => {
     });
 
     it('addDatasetItem posts externalId in the request body', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'item-1', externalId: 'source-item-1' }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'item-1', externalId: 'source-item-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.addDatasetItem({
         datasetId: 'ds-1',
@@ -1410,11 +1362,12 @@ describe('MastraClient', () => {
     });
 
     it('batchInsertDatasetItems posts externalId in each item', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.batchInsertDatasetItems({
         datasetId: 'ds-1',
@@ -1429,11 +1382,12 @@ describe('MastraClient', () => {
 
     it('updateDatasetItem posts toolMocks in the request body', async () => {
       const toolMocks = [{ toolName: 'write', args: { f: 'a' }, output: 'ok' }];
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'item-1', toolMocks }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'item-1', toolMocks }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', toolMocks });
 
@@ -1444,11 +1398,12 @@ describe('MastraClient', () => {
     });
 
     it('purgeDatasetItem deletes the tenant-scoped purge endpoint', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ success: true }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await expect(
         client.purgeDatasetItem('ds/1', 'item/1', { organizationId: 'org/1', projectId: 'project/1' }),
@@ -1463,11 +1418,12 @@ describe('MastraClient', () => {
 
     it('addDatasetItem posts scorerIds and returns them', async () => {
       const scorerIds = ['quality', 'safety'];
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'item-1', scorerIds }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'item-1', scorerIds }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, scorerIds });
 
@@ -1482,20 +1438,21 @@ describe('MastraClient', () => {
       const name = 'smoke-run';
       const description = 'baseline quality check';
       const metadata = { model: 'anthropic/claude-haiku-4-5' };
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({
-          experimentId: 'exp-1',
-          status: 'pending',
-          totalItems: 1,
-          succeededCount: 0,
-          failedCount: 0,
-          startedAt: new Date().toISOString(),
-          completedAt: null,
-          results: [],
-        }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            experimentId: 'exp-1',
+            status: 'pending',
+            totalItems: 1,
+            succeededCount: 0,
+            failedCount: 0,
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            results: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
 
       await client.triggerDatasetExperiment({
         datasetId: 'ds-1',
@@ -1520,20 +1477,21 @@ describe('MastraClient', () => {
 
     it('triggerDatasetExperiment posts agentModel in the request body', async () => {
       const agentModel = { provider: 'openai', modelId: 'gpt-5-mini' };
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({
-          experimentId: 'exp-1',
-          status: 'pending',
-          totalItems: 1,
-          succeededCount: 0,
-          failedCount: 0,
-          startedAt: new Date().toISOString(),
-          completedAt: null,
-          results: [],
-        }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            experimentId: 'exp-1',
+            status: 'pending',
+            totalItems: 1,
+            succeededCount: 0,
+            failedCount: 0,
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            results: [],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      );
 
       await client.triggerDatasetExperiment({
         datasetId: 'ds-1',
@@ -1549,11 +1507,9 @@ describe('MastraClient', () => {
 
     it('updateDatasetExperiment should PATCH the experiment route with name, description and metadata', async () => {
       const updated = { id: 'exp-1', datasetId: 'ds-1', name: 'renamed', description: 'new desc', metadata: { k: 1 } };
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => updated,
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify(updated), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      );
 
       const result = await client.updateDatasetExperiment({
         datasetId: 'ds-1',
@@ -1571,11 +1527,12 @@ describe('MastraClient', () => {
     });
 
     it('batchInsertDatasetItems preserves an explicit empty scorerIds override', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ items: [{ id: 'item-1', scorerIds: [] }], count: 1 }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [{ id: 'item-1', scorerIds: [] }], count: 1 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       const result = await client.batchInsertDatasetItems({
         datasetId: 'ds-1',
@@ -1588,11 +1545,12 @@ describe('MastraClient', () => {
     });
 
     it('updateDatasetItem posts null to clear a scorerIds override', async () => {
-      (global.fetch as any).mockResolvedValueOnce({
-        ok: true,
-        headers: { get: () => 'application/json' },
-        json: async () => ({ id: 'item-1' }),
-      });
+      (global.fetch as any).mockResolvedValueOnce(
+        new Response(JSON.stringify({ id: 'item-1' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
 
       await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', scorerIds: null });
 

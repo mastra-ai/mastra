@@ -9,7 +9,6 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
@@ -82,7 +81,13 @@ export interface SessionRowsRequest {
 }
 
 import type {
+  CustomProviderCheckFailedResponse,
+  CustomProviderCheckFailure,
+  CustomProviderCheckResponse,
+  CustomProviderHeaderInfo,
   CustomProviderInfo,
+  CustomProviderModelsResult,
+  CustomProviderModelTestResult,
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
@@ -110,6 +115,14 @@ import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway
 import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@mastra/factory/routes/voice';
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
+export type {
+  CustomProviderCheckFailedResponse,
+  CustomProviderCheckFailure,
+  CustomProviderCheckResponse,
+  CustomProviderHeaderInfo,
+  CustomProviderModelsResult,
+  CustomProviderModelTestResult,
+};
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -141,11 +154,6 @@ export interface ProvidersResponse {
 
 export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
-}
-
-export interface DefaultModelResponse {
-  modelId: string | null;
-  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {
@@ -204,16 +212,46 @@ export interface OAuthSessionBody {
   sessionId: string;
 }
 
-export interface SaveCustomProviderBody {
+/**
+ * A custom header as a save or check request sends it. Without `value` the server keeps the saved value of
+ * that name; an empty string is refused. Without `secret` a saved header keeps its flag and a new one is secret.
+ */
+export interface CustomProviderHeaderBody {
   name: string;
+  value?: string;
+  secret?: boolean;
+}
+
+/** The connection settings a save and a check both send. */
+interface CustomProviderConnectionBody {
   url: string;
   apiKey?: string;
+  authScheme?: CustomProviderInfo['authScheme'];
+  /** The full list. Omitted on an edit keeps the saved list. */
+  headers?: CustomProviderHeaderBody[];
+}
+
+export interface SaveCustomProviderBody extends CustomProviderConnectionBody {
+  name: string;
   models: string[];
   /** When editing, the id of the provider being replaced. */
   previousId?: string;
   /** Where to save it: the caller's own providers (the default) or their organization's. */
   scope?: CustomProviderInfo['scope'];
+  /** Run the connection test first and refuse to save when it fails (422 `custom_endpoint_check_failed`). */
+  check?: boolean;
 }
+
+/**
+ * `POST /web/config/custom-providers/check`. With `url` the draft is checked, reusing the saved secrets of
+ * `previousId` on the same origin. With only `previousId` the saved row is checked as stored and its
+ * `lastCheck` is recorded.
+ */
+export type CheckCustomProviderBody = {
+  scope?: CustomProviderInfo['scope'];
+  /** Also send the test message to this model. */
+  model?: string;
+} & ((CustomProviderConnectionBody & { previousId?: string }) | { previousId: string; url?: undefined });
 
 export interface UpdateOMModelBody {
   resourceId: string;

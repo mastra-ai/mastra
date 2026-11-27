@@ -3788,6 +3788,80 @@ describe('MDocument', () => {
       expect(allText).not.toContain('2 '); // No broken version number
       expect(allText).not.toContain('3 '); // No broken decimal
     });
+
+    it.each([
+      {
+        name: 'an ordinary ASCII pair',
+        text: 'The project is complete. It shipped on time.',
+        expected: ['The project is complete.', 'It shipped on time.'],
+      },
+      {
+        name: 'an integer year',
+        text: 'It was built in 2020. Then it grew.',
+        expected: ['It was built in 2020.', 'Then it grew.'],
+      },
+      {
+        name: 'a number followed by a question mark',
+        text: 'Do you need 5? Yes, I do.',
+        expected: ['Do you need 5?', 'Yes, I do.'],
+      },
+      {
+        name: 'an initial followed by a question mark',
+        text: 'What about vitamin C? It helps.',
+        expected: ['What about vitamin C?', 'It helps.'],
+      },
+      {
+        name: 'an accented uppercase next start',
+        text: 'Le projet est fini. Été arrive bientôt.',
+        expected: ['Le projet est fini.', 'Été arrive bientôt.'],
+      },
+      {
+        name: 'a Cyrillic uppercase next start',
+        text: 'Компания была основана давно. Она привлекла деньги позже.',
+        expected: ['Компания была основана давно.', 'Она привлекла деньги позже.'],
+      },
+      {
+        name: 'a custom Hindi ender',
+        text: 'कंपनी की स्थापना हुई थी। बाद में उसने पैसा जुटाया।',
+        sentenceEnders: ['।'],
+        expected: ['कंपनी की स्थापना हुई थी।', 'बाद में उसने पैसा जुटाया।'],
+      },
+      {
+        name: 'a no-space CJK ender',
+        text: '第一句话。第二句话。',
+        sentenceEnders: ['。'],
+        expected: ['第一句话。', '第二句话。'],
+      },
+    ])('should split $name through the public MDocument API', async ({ text, sentenceEnders, expected }) => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 200,
+        minSize: 1,
+        targetSize: 1,
+        overlap: 0,
+        ...(sentenceEnders ? { sentenceEnders } : {}),
+      });
+
+      expect(chunks.map(chunk => chunk.text)).toEqual(expected);
+    });
+
+    it('should keep sentence boundaries instead of falling back to word splits for numeric sentences', async () => {
+      const text = 'The company was founded in 2019. It raised money in 2021. It went public in 2024.';
+
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'sentence',
+        maxSize: 60,
+        minSize: 1,
+        overlap: 0,
+      });
+
+      expect(chunks.map(chunk => chunk.text)).toEqual([
+        'The company was founded in 2019. It raised money in 2021.',
+        'It went public in 2024.',
+      ]);
+    });
   });
 
   describe('chunkSemanticMarkdown', () => {

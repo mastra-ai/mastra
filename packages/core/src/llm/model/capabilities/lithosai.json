@@ -15,6 +15,12 @@
     "deepseek-ai/DeepSeek-V4.1-Flash-ultra"
   ],
   "reasoning": {
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4.1-Flash-fast": [
       {
         "type": "effort",
@@ -22,12 +28,6 @@
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash-ultra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

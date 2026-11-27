@@ -578,11 +578,19 @@ export class MastraAuthWorkos
       organizationId: authResponse.organizationId,
     };
 
-    // Create encrypted session cookie using AuthKit's encryption
+    // Create encrypted session cookie using AuthKit's encryption.
+    // The WorkOS SDK v12 returns `Date` instances for the user's timestamps, but
+    // iron-webcrypto (used by sessionEncryption) rejects non-JSON values, so
+    // normalize the three timestamp fields to ISO strings before sealing.
     const sessionData = {
       accessToken: authResponse.accessToken,
       refreshToken: authResponse.refreshToken,
-      user: authResponse.user,
+      user: {
+        ...authResponse.user,
+        createdAt: authResponse.user.createdAt.toISOString(),
+        updatedAt: authResponse.user.updatedAt.toISOString(),
+        lastSignInAt: authResponse.user.lastSignInAt?.toISOString() ?? null,
+      },
       organizationId: authResponse.organizationId,
       impersonator: authResponse.impersonator,
     };

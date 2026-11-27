@@ -1,9 +1,5 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-
 export interface PromptHandoff {
   handoffPrompt: string;
-  handoffModelId?: string;
-  handoffThinkingLevel?: ThinkingLevelSetting;
   handoffShownMessageId?: string;
 }
 

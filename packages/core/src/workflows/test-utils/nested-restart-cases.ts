@@ -181,13 +181,16 @@ export function describeNestedRestartCases({ createStorage }: { createStorage: (
      * Starts `parent` and lets the process die at the first nested write that `lands` rejects: that
      * write and every later write it makes never reach storage, except those `landsAfterCut` picks,
      * for a write already in flight at the cut that still commits. Work that runs inside the returned
-     * `revived` (the next process) writes normally. The dead process's lease is expired.
+     * `revived` (the next process) writes normally. The dead process's lease is expired once `committed`
+     * resolves: storage refuses the dead process's writes after that, so a write that still commits has
+     * to land first, as it would within the lease's TTL.
      */
     async function crashAtNestedWrite(
       { workflows }: Built,
       value: unknown,
       lands: (args: WriteArgs) => boolean = args => args.workflowName === 'parent',
       landsAfterCut: (args: WriteArgs) => boolean = () => false,
+      committed: (store: WorkflowsStorage, runId: string) => Promise<unknown> = async () => {},
     ) {
       const storage = await createStorage();
       const store = (await storage.getStore('workflows'))!;
@@ -210,6 +213,7 @@ export function describeNestedRestartCases({ createStorage }: { createStorage: (
       const run = await workflows.parent!.createRun();
       void run.start({ inputData: { value }, initialState: { log: ['parent'] } });
       await dead;
+      await committed(store, run.runId);
       await nextProcess.run(true, () => expireLease(store, run.runId));
       const revived: Revived = fn => nextProcess.run(true, fn);
       return { storage, store, runId: run.runId, revived };
@@ -401,9 +405,10 @@ export function describeNestedRestartCases({ createStorage }: { createStorage: (
           { n: 1 },
           args => args.workflowName === 'parent' || savesA(args),
           savesA,
-        );
-        await vi.waitFor(async () =>
-          expect((await loadStored(store, version, 'nested-a', runId))?.status).toBe('pending'),
+          (store, runId) =>
+            vi.waitFor(async () =>
+              expect((await loadStored(store, version, 'nested-a', runId))?.status).toBe('pending'),
+            ),
         );
         expect(await loadStored(store, version, 'nested-b', runId)).toBeNull();
 

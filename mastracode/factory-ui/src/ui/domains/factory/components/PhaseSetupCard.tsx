@@ -1,21 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Link } from 'react-router';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo, IntakeRouteInfo } from '../../../../api/types';
-import { boardConfigPath, boardRulesPath } from '../../boardConfig/boardConfigPaths';
+import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
 import { Muted } from '../../boardConfig/components/PhaseTimeline';
-import { outlineOfInstalled, PhaseWalkthrough } from '../../boardConfig/components/PhaseWalkthrough';
+import { outlineOfInstalled, sharedOutline } from '../../boardConfig/components/PhaseWalkthrough';
+import { PhaseSetupCard as SharedPhaseSetupCard } from '@mastra/playground-ui/domains/factory';
 import { RuleRow } from '../../boardConfig/components/RuleRow';
 import { AutoStartSwitch } from './AutoStartSwitch';
-import { BoardStageIcon, phaseIconKind } from './BoardIcons';
 
-/** Rules listed in the card before the rest are left to the Rules page. */
+/** Rules listed in the card before the rest are left to the board's settings. */
 const SHOWN_RULES = 3;
 
 /**
@@ -44,70 +43,55 @@ export function PhaseSetupCard({
   boards: readonly InstalledBoardInfo[] | undefined;
 }) {
   return (
-    <>
-      <div className="flex items-center gap-2">
-        <BoardStageIcon stage={phase.id} kind={phaseIconKind(boardId, phase.kind)} decorative />
-        <Txt as="span" variant="label" tone="ink" className="min-w-0 flex-1 truncate">
-          {label}
+    <SharedPhaseSetupCard
+      boardId={boardId}
+      label={label}
+      phase={sharedOutline(outlineOfInstalled(phase))}
+      phases={phases.map(phase => sharedOutline(outlineOfInstalled(phase)))}
+      actions={
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          tooltip="Phase settings"
+          render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} />}
+        >
+          <IconSettingsSliderHor />
+        </Button>
+      }
+      arrivals={
+        <>
+          {rulesLoading ? (
+            <SkeletonText line="text-caption" className="h-3 w-24 motion-reduce:before:animate-none" />
+          ) : arriving === undefined ? (
+            <Muted>Rules didn’t load</Muted>
+          ) : arriving.length === 0 ? (
+            <Muted>No rule moves cards here</Muted>
+          ) : (
+            <>
+              <ul aria-label={`Rules that move cards into ${label}`} className="mt-0.5 flex flex-col gap-1">
+                {arriving.slice(0, SHOWN_RULES).map(rule => (
+                  <RuleRow key={rule.id} rule={rule} boardId={boardId} boards={boards} />
+                ))}
+              </ul>
+              {arriving.length > SHOWN_RULES && (
+                <Link
+                  to={boardConfigPath(factoryId, boardId, phase.id)}
+                  className={cn(focusRing, 'text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs')}
+                >
+                  {arriving.length - SHOWN_RULES} more
+                </Link>
+              )}
+            </>
+          )}
+          {phase.id === start && <Muted>New cards start here</Muted>}
+        </>
+      }
+      starts={<AutoStartSwitch factoryId={factoryId} boardId={boardId} phase={phase} label={label} />}
+      agent={
+        <Txt as="span" variant="caption" tone="ink" className="truncate">
+          {phase.skill}
         </Txt>
-        <div className="-mr-1.5 flex items-center">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip={`Rules into ${label}`}
-            render={<Link to={boardRulesPath(factoryId, boardId, { into: phase.id })} />}
-          >
-            <IconBranch />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip="Phase settings"
-            render={<Link to={boardConfigPath(factoryId, boardId, phase.id)} />}
-          >
-            <IconSettingsSliderHor />
-          </Button>
-        </div>
-      </div>
-      <PhaseWalkthrough
-        boardId={boardId}
-        phase={outlineOfInstalled(phase)}
-        phases={phases.map(outlineOfInstalled)}
-        arrivals={
-          <>
-            {rulesLoading ? (
-              <Skeleton className="h-4 w-24" />
-            ) : arriving === undefined ? (
-              <Muted>Rules didn’t load</Muted>
-            ) : arriving.length === 0 ? (
-              <Muted>No rule moves cards here</Muted>
-            ) : (
-              <>
-                <ul aria-label={`Rules that move cards into ${label}`} className="mt-0.5 flex flex-col gap-1">
-                  {arriving.slice(0, SHOWN_RULES).map(rule => (
-                    <RuleRow key={rule.id} rule={rule} boardId={boardId} boards={boards} />
-                  ))}
-                </ul>
-                {arriving.length > SHOWN_RULES && (
-                  <Link
-                    to={boardRulesPath(factoryId, boardId, { into: phase.id })}
-                    className={cn(focusRing, 'text-muted-foreground hover:text-foreground w-fit rounded-sm text-xs')}
-                  >
-                    {arriving.length - SHOWN_RULES} more
-                  </Link>
-                )}
-              </>
-            )}
-            {phase.id === start && <Muted>New cards start here</Muted>}
-          </>
-        }
-        starts={<AutoStartSwitch factoryId={factoryId} boardId={boardId} phase={phase} label={label} />}
-        agent={
-          <Txt as="span" variant="caption" tone="ink" className="truncate">
-            {phase.skill}
-          </Txt>
-        }
-      />
-    </>
+      }
+    />
   );
 }

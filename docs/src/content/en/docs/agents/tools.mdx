@@ -653,6 +653,12 @@ The tool takes a single `url` input and returns `content`, `truncated`, `status`
 
 Failures don't throw. The tool returns `isError: true` with the reason in `content`, so the agent can retry or explain the problem.
 
+#### Cloudflare Workers
+
+The tool also runs on Cloudflare Workers with `nodejs_compat`, which the Cloudflare deployer enables. Workers can't pass the tool's DNS check to Node's request API. On Workers, the tool sends requests with `fetch` instead. It still checks every URL and redirect target before requesting it, still applies the same `localhost` and IP address checks as on Node to hosts written in the URL, and keeps the same redirect and size limits. The 15-second timeout works differently on Workers. On Node, a request times out after 15 seconds without network activity. On Workers, each request, including reading the response body, must finish within 15 seconds.
+
+On Workers the tool can't check which address a hostname resolves to. It doesn't block a public hostname whose DNS record points to a private address, including DNS rebinding. Cloudflare's network refuses most such requests from a deployed Worker, but Cloudflare doesn't document that behavior, and local `wrangler dev` reaches private addresses normally. Don't rely on the tool as the only guard for private services on Workers.
+
 ### Ask the user a question
 
 Import [`askUserTool`](/reference/tools/ask-user-tool) and add it to the agent's toolset.

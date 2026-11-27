@@ -28,6 +28,29 @@ import { compareModelReleaseDates } from '@/utils/model';
 
 // Catalogs run to thousands of models; rendering them all freezes the list.
 const MAX_SEARCH_RESULTS = 50;
+// A gateway catalog holds thousands of models; rendering them all as cmdk items takes seconds.
+// Past this many, the unfiltered list keeps only the newest models; a provider filter or a search reaches the rest.
+const MAX_LISTED_MODELS = 200;
+const MODELS_PER_PROVIDER_WHEN_CAPPED = 5;
+// Each pill carries a tooltip; hundreds of them stall opening. The rest wait behind "+N".
+const MAX_PROVIDER_PILLS = 12;
+
+const newestRelease = (provider: ModelPickerProvider) =>
+  provider.models.reduce<string | undefined>(
+    (latest, model) => (compareModelReleaseDates(model.releaseDate, latest) < 0 ? model.releaseDate : latest),
+    undefined,
+  );
+
+/** The providers with the newest models, keeping the picked, default and filtered ones in the row. */
+function busiestProviders(providers: ModelPickerProvider[], pinnedIds: ReadonlyArray<string | undefined>) {
+  const pinned = (provider: ModelPickerProvider) => pinnedIds.includes(provider.id);
+  const newest = new Map(providers.map(provider => [provider, newestRelease(provider)]));
+  const ranked = providers.toSorted(
+    (a, b) => Number(pinned(b)) - Number(pinned(a)) || compareModelReleaseDates(newest.get(a), newest.get(b)),
+  );
+  const kept = new Set(ranked.slice(0, MAX_PROVIDER_PILLS));
+  return providers.filter(provider => kept.has(provider));
+}
 
 const byReleaseDate = (a: ModelPickerModel, b: ModelPickerModel) =>
   compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.id.localeCompare(b.id);
@@ -38,24 +61,35 @@ const isSameModel = (a: ModelPickerValue | undefined, provider: string, model: s
 // "Opus 4.6" finds claude-opus-4-6: ids and queries compare as plain words.
 const searchWords = (text: string) => text.toLowerCase().replace(/[-_./:]/g, ' ');
 
+const searchPhrase = (text: string) => searchWords(text).split(' ').filter(Boolean).join(' ');
+
+type ModelMatch = { provider: ModelPickerProvider; model: ModelPickerModel };
+
 /**
  * Models whose provider name, provider id or model id hold every word of the query, in the order of
- * `providers`. Runs on each keystroke over catalogs of thousands, so it sorts only the matches and stops
- * once it has more than the list shows.
+ * `providers`, after the models whose id or `provider/id` is the query itself. Newer models can share
+ * every word of an older one's id, so the exact id is the only query that reaches it once the list is
+ * capped. Runs on each keystroke over catalogs of thousands, so it sorts only the matches and stops
+ * collecting them once it has more than the list shows.
  */
 function searchModels(providers: ModelPickerProvider[], query: string) {
-  const words = searchWords(query).split(' ').filter(Boolean);
-  const matches: { provider: ModelPickerProvider; model: ModelPickerModel }[] = [];
+  const phrase = searchPhrase(query);
+  const words = phrase.split(' ');
+  const exact: ModelMatch[] = [];
+  const matches: ModelMatch[] = [];
   for (const provider of providers) {
+    const providerId = searchPhrase(provider.id);
     const providerText = searchWords(`${provider.name} ${provider.id}`);
-    const found = provider.models.filter(model => {
-      const text = `${providerText} ${searchWords(model.id)}`;
-      return words.every(word => text.includes(word));
-    });
+    const found: ModelPickerModel[] = [];
+    for (const model of provider.models) {
+      const modelId = searchPhrase(model.id);
+      if (modelId === phrase || `${providerId} ${modelId}` === phrase) exact.push({ provider, model });
+      else if (matches.length <= MAX_SEARCH_RESULTS && words.every(word => `${providerText} ${modelId}`.includes(word)))
+        found.push(model);
+    }
     for (const model of found.toSorted(byReleaseDate)) matches.push({ provider, model });
-    if (matches.length > MAX_SEARCH_RESULTS) break;
   }
-  return matches;
+  return [...exact, ...matches];
 }
 
 export interface ModelPickerPanelProps {
@@ -63,6 +97,7 @@ export interface ModelPickerPanelProps {
   value?: ModelPickerValue;
   defaultModel?: ModelPickerValue;
   onSelect: (value: ModelPickerValue) => void;
+  customModel?: (query: string) => ModelPickerValue | undefined;
   /** Provider the list opens filtered to; "All" when unset. */
   initialProviderFilter?: string;
   renderProviderIcon: (providerId: string) => ReactNode;
@@ -90,6 +125,7 @@ export function ModelPickerPanel({
   value,
   defaultModel,
   onSelect,
+  customModel,
   initialProviderFilter,
   renderProviderIcon,
   header,
@@ -110,17 +146,27 @@ export function ModelPickerPanel({
   // Providers without credentials wait behind "+N" (or a search) unless picked or filtered to.
   const inRow = (provider: ModelPickerProvider) =>
     provider.connected !== false || provider.id === value?.provider || provider.id === providerFilter;
-  const usable = providers.filter(inRow);
-  const others = providers.filter(provider => !inRow(provider));
+  const inRowProviders = providers.filter(inRow);
+  const usable =
+    inRowProviders.length > MAX_PROVIDER_PILLS
+      ? busiestProviders(inRowProviders, [value?.provider, defaultModel?.provider, providerFilter])
+      : inRowProviders;
+  const others = providers.filter(provider => !usable.includes(provider));
   const filtering = usable.length > 1 || others.length > 0;
   const shownProviders = providerFilter ? usable.filter(provider => provider.id === providerFilter) : usable;
   const matches = deferredQuery ? searchModels([...usable, ...others], deferredQuery) : [];
+  const custom = deferredQuery === query && query ? customModel?.(query.trim()) : undefined;
   const filterTo = (providerId: string | undefined) => {
     setProviderFilter(providerId);
     setBrowsingMore(false);
   };
   // A lone group's provider is already on screen (the trigger, or the pressed filter), so it needs no heading.
   const mixedProviders = shownProviders.length > 1;
+  // A picked provider filter lists all its models: it is how a capped list reaches the rest.
+  const capped =
+    !providerFilter &&
+    shownProviders.reduce((total, provider) => total + provider.models.length, 0) > MAX_LISTED_MODELS;
+  const modelsPerProvider = mixedProviders ? MODELS_PER_PROVIDER_WHEN_CAPPED : MAX_LISTED_MODELS;
   const renderOption = (provider: ModelPickerProvider, model: ModelPickerModel) => (
     <ModelPickerOption
       key={`${provider.id}/${model.id}`}
@@ -132,6 +178,17 @@ export function ModelPickerPanel({
       renderProviderIcon={renderProviderIcon}
     />
   );
+  // Capped, a provider shows its newest models plus the picked and default ones, so neither drops off the list.
+  const listedModels = (provider: ModelPickerProvider) => {
+    const sorted = provider.models.toSorted(byReleaseDate);
+    if (!capped) return sorted;
+    return sorted.filter(
+      (model, index) =>
+        index < modelsPerProvider ||
+        isSameModel(value, provider.id, model.id) ||
+        isSameModel(defaultModel, provider.id, model.id),
+    );
+  };
 
   return (
     <>
@@ -213,7 +270,9 @@ export function ModelPickerPanel({
                 ) : null}
               </CommandGroup>
             ) : browsingMore ? (
-              <CommandGroup heading="Not connected">
+              <CommandGroup
+                heading={others.some(provider => provider.connected !== false) ? 'More providers' : 'Not connected'}
+              >
                 {others.map(provider => (
                   <ModelPickerProviderOption
                     key={provider.id}
@@ -224,12 +283,29 @@ export function ModelPickerPanel({
                 ))}
               </CommandGroup>
             ) : (
-              shownProviders.map(provider => (
-                <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
-                  {provider.models.toSorted(byReleaseDate).map(model => renderOption(provider, model))}
-                </CommandGroup>
-              ))
+              <>
+                {shownProviders.map(provider => (
+                  <CommandGroup key={provider.id} heading={mixedProviders ? provider.name : undefined}>
+                    {listedModels(provider).map(model => renderOption(provider, model))}
+                  </CommandGroup>
+                ))}
+                {capped ? (
+                  <Txt as="p" variant="caption" tone="muted" className="px-2 py-1.5">
+                    {filtering ? 'Search or pick a provider to see all models.' : 'Search to see the rest.'}
+                  </Txt>
+                ) : null}
+              </>
             )}
+            {custom ? (
+              <CommandGroup>
+                <CommandItem value={`custom:${custom.provider}/${custom.model}`} onSelect={() => onSelect(custom)}>
+                  <IconPlusMedium aria-hidden />
+                  <span className="truncate">
+                    Use {custom.provider}/{custom.model}
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
             {reset && !deferredQuery && !browsingMore ? (
               <>
                 <CommandSeparator />

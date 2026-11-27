@@ -23,10 +23,9 @@ export interface RedisServerCacheOptions {
    * Lifetime of cached values in seconds, refreshed on every write. Defaults to
    * 300. `0` means no expiry.
    *
-   * A cache list and its index counter always share this TTL: if the counter
-   * outlived the list, index allocation would restart at 0 while subscribers
-   * still expect the previous numbering, and every new frame would be dropped
-   * as a duplicate.
+   * A cache list and its index counter always share this TTL: a counter that
+   * expired before its list would be reseeded and reuse nothing, but a list
+   * without its counter loses the hole accounting replay reads rely on.
    */
   ttlSeconds?: number;
   /**
@@ -36,6 +35,13 @@ export interface RedisServerCacheOptions {
    */
   evalScript?: (client: RedisClient, script: string, keys: string[], args: string[]) => Promise<unknown>;
   setWithExpiry?: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
+  /**
+   * `SET key value NX` (plus `EX seconds` when positive): write the key only
+   * if it does not exist. Used by the non-scripting `listPushIndexed` fallback
+   * to seed an absent index counter exactly once under concurrency; see
+   * `composedPushIndexed`. Defaults to the ioredis argument style.
+   */
+  setIfAbsentWithExpiry?: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
   scanKeys?: (
     client: RedisClient,
     cursor: string | number,
@@ -49,6 +55,15 @@ export interface RedisServerCacheOptions {
 
 const defaultSetWithExpiry = (client: RedisClient, key: string, value: unknown, seconds: number): Promise<unknown> => {
   return client.set(key, value, 'EX', seconds);
+};
+
+const defaultSetIfAbsentWithExpiry = (
+  client: RedisClient,
+  key: string,
+  value: unknown,
+  seconds: number,
+): Promise<unknown> => {
+  return seconds > 0 ? client.set(key, value, 'NX', 'EX', seconds) : client.set(key, value, 'NX');
 };
 
 const defaultScanKeys = (
@@ -77,12 +92,28 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
 };
 
 /**
- * Atomic "allocate index + append + refresh TTL" used by `listPushIndexed`.
+ * Atomic "seed + allocate index + append + refresh TTL" used by
+ * `listPushIndexed`.
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
  * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
-
+ *
+ * An absent counter is seeded from the server clock (epoch MICROseconds)
+ * before the INCR, so a log recreated after expiry or eviction does not
+ * reissue an index a subscriber already consumed (see
+ * `MastraServerCache.listPushIndexed`). Microseconds, not milliseconds: a hot
+ * log appends faster than the millisecond clock advances, so a millisecond
+ * reseed could land at or below the dead log's last index. The server clock,
+ * not the client's, so two replicas recreating the same log cannot seed it
+ * backwards relative to each other. Only on a miss: an existing counter keeps
+ * counting, so rolling deploys never fork numbering. Epoch microseconds stay
+ * well inside Number.MAX_SAFE_INTEGER (2^53 ≈ year 2255).
+ *
+ * This bounds the risk rather than eliminating it — the seed is only as
+ * monotonic as the server clock, so a clock moved backwards can still repeat
+ * an index. Readers detect a restarted log and resynchronise instead of
+ * relying on that never happening.
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -90,13 +121,21 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
  * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
  */
 export const LIST_PUSH_INDEXED_SCRIPT = `
+if redis.call('EXISTS', KEYS[2]) == 0 then
+  local t = redis.call('TIME')
+  redis.call('SET', KEYS[2], string.format('%.0f', tonumber(t[1]) * 1000000 + tonumber(t[2])))
+end
 local i = redis.call('INCR', KEYS[2]) - 1
+-- Epoch-microsecond indices exceed Lua 5.1's default 14-significant-digit
+-- number formatting; %.0f keeps the full integer, where plain concatenation
+-- would round it and store a different index than the one allocated.
+local istr = string.format('%.0f', i)
 local body = ARGV[1]
 local doc
 if #body <= 2 then
-  doc = '{"index":' .. i .. '}'
+  doc = '{"index":' .. istr .. '}'
 else
-  doc = '{"index":' .. i .. ',' .. string.sub(body, 2)
+  doc = '{"index":' .. istr .. ',' .. string.sub(body, 2)
 end
 redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
@@ -104,7 +143,7 @@ if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
   redis.call('EXPIRE', KEYS[2], ttl)
 end
-return i
+return istr
 `.trim();
 
 export class RedisServerCache extends MastraServerCache {
@@ -112,6 +151,12 @@ export class RedisServerCache extends MastraServerCache {
   private keyPrefix: string;
   private ttlSeconds: number;
   private setWithExpiry: (client: RedisClient, key: string, value: unknown, seconds: number) => Promise<unknown>;
+  private setIfAbsentWithExpiry: (
+    client: RedisClient,
+    key: string,
+    value: unknown,
+    seconds: number,
+  ) => Promise<unknown>;
   private scanKeys: (
     client: RedisClient,
     cursor: string | number,
@@ -132,6 +177,7 @@ export class RedisServerCache extends MastraServerCache {
     this.keyPrefix = options.keyPrefix ?? 'mastra:cache:';
     this.ttlSeconds = options.ttlSeconds ?? 300;
     this.setWithExpiry = options.setWithExpiry ?? defaultSetWithExpiry;
+    this.setIfAbsentWithExpiry = options.setIfAbsentWithExpiry ?? defaultSetIfAbsentWithExpiry;
     this.scanKeys = options.scanKeys ?? defaultScanKeys;
     this.getListLength = options.getListLength ?? defaultGetListLength;
     this.pushToList = options.pushToList ?? defaultPushToList;
@@ -242,9 +288,11 @@ export class RedisServerCache extends MastraServerCache {
     value: Record<string, unknown>,
     ttlMs?: number,
   ): Promise<number> {
-    // A cache without expiry stays that way; otherwise `ttlMs` can only raise
-    // the default.
-    const ttlSeconds = this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0;
+    // The longer of the cache default and the requested minimum wins. An
+    // explicit request applies even when the default expiry is disabled: the
+    // caller is stating a retention bound for this log.
+    const requestedSeconds = ttlMs !== undefined ? Math.max(1, Math.ceil(ttlMs / 1000)) : 0;
+    const ttlSeconds = Math.max(this.ttlSeconds > 0 ? this.ttlSeconds : 0, requestedSeconds);
     if (this.scriptingDisabled) {
       return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
     }
@@ -273,9 +321,20 @@ export class RedisServerCache extends MastraServerCache {
   }
 
   /**
-   * `INCR` then `RPUSH`, each followed by the same `EXPIRE` the script applies.
-   * Not atomic: concurrent writers can interleave, so a list position may not
-   * match its index (Redis Cluster atomicity is tracked in COR-1491).
+   * Seed-if-absent, `INCR`, then `RPUSH`, each followed by the same `EXPIRE`
+   * the script applies. Not atomic as a whole: concurrent writers can
+   * interleave, so a list position may not match its index, and an append that
+   * fails after its allocation leaves a hole (Redis Cluster atomicity is
+   * tracked separately).
+   *
+   * The seed is written with `SET NX` *before* the increment rather than after
+   * it. Incrementing first and then overwriting an absent counter with the seed
+   * would discard an index a concurrent writer had already allocated and
+   * published, and a subscriber that had advanced past the seed would drop that
+   * writer's frame as stale. With `NX` exactly one writer establishes the seed
+   * and everyone else counts on from it, whoever wins. The TTL rides on the
+   * same `SET` so a crash between seeding and incrementing cannot leave an
+   * unexpiring counter.
    */
   private async composedPushIndexed(
     listKey: string,
@@ -284,6 +343,11 @@ export class RedisServerCache extends MastraServerCache {
     ttlSeconds: number,
   ): Promise<number> {
     const fullCounterKey = this.getKey(counterKey);
+    // Epoch microseconds, like the script, so a log recreated after its
+    // predecessor expired or was evicted does not reissue indices a subscriber
+    // already consumed. The client clock stands in for the server's `TIME`.
+    const seed = Date.now() * 1000;
+    await this.setIfAbsentWithExpiry(this.client, fullCounterKey, String(seed), ttlSeconds);
     const index = (await this.client.incr(fullCounterKey)) - 1;
     if (ttlSeconds > 0) await this.client.expire(fullCounterKey, ttlSeconds);
 
@@ -294,8 +358,13 @@ export class RedisServerCache extends MastraServerCache {
   }
 }
 
-export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'scanKeys' | 'evalScript'> = {
+export const upstashPreset: Pick<
+  RedisServerCacheOptions,
+  'setWithExpiry' | 'setIfAbsentWithExpiry' | 'scanKeys' | 'evalScript'
+> = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { ex: seconds } as any),
+  setIfAbsentWithExpiry: (client, key, value, seconds) =>
+    client.set(key, value, (seconds > 0 ? { nx: true, ex: seconds } : { nx: true }) as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { match: pattern, count } as any) as Promise<[string | number, string[]]>,
   evalScript: (client, script, keys, args) => client.eval!(script, keys, args),
@@ -310,9 +379,17 @@ export const upstashPreset: Pick<RedisServerCacheOptions, 'setWithExpiry' | 'sca
 // reshape arguments, not to alias method names.
 export const nodeRedisPreset: Pick<
   RedisServerCacheOptions,
-  'setWithExpiry' | 'scanKeys' | 'getListLength' | 'pushToList' | 'getListRange' | 'evalScript'
+  | 'setWithExpiry'
+  | 'setIfAbsentWithExpiry'
+  | 'scanKeys'
+  | 'getListLength'
+  | 'pushToList'
+  | 'getListRange'
+  | 'evalScript'
 > = {
   setWithExpiry: (client, key, value, seconds) => client.set(key, value, { EX: seconds } as any),
+  setIfAbsentWithExpiry: (client, key, value, seconds) =>
+    client.set(key, value, (seconds > 0 ? { NX: true, EX: seconds } : { NX: true }) as any),
   scanKeys: (client, cursor, pattern, count) =>
     client.scan(cursor, { MATCH: pattern, COUNT: count } as any) as Promise<[string | number, string[]]>,
   getListLength: (client, key) => (client as any).lLen(key),

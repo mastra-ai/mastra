@@ -4,11 +4,9 @@ import { MastraClient } from './client';
 global.fetch = vi.fn();
 
 function mockJsonResponse() {
-  (global.fetch as any).mockResolvedValueOnce({
-    ok: true,
-    headers: { get: () => 'application/json' },
-    json: async () => ({}),
-  });
+  (global.fetch as any).mockResolvedValueOnce(
+    new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+  );
 }
 
 function lastFetchUrl(): string {

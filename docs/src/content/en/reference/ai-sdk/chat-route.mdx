@@ -165,7 +165,7 @@ export const mastra = new Mastra({
 Set `resumable: true` on `chatRoute()` and `resume: true` on AI SDK UI's `useChat()` to reconnect after a refresh or network interruption. The route factory returns a two-item array containing:
 
 - `POST <path>`: Starts the agent run. The request's AI SDK chat ID becomes the Mastra memory thread ID.
-- `GET <path>/:chatId/stream`: Replays cached events and follows the active run. The route returns `204` when the run is finished, unavailable, expired, or outside the caller's scope.
+- `GET <path>/:chatId/stream`: Replays cached events and follows the active run. The route returns `204` when the run is finished, unavailable, or expired, and `404` when the caller isn't authorized to observe the active run. A caller with a different resource ID sees no active run and gets `204`.
 
 Pass the returned array as one entry in `server.apiRoutes`. Mastra flattens nested route arrays during server configuration.
 

@@ -694,6 +694,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
+    "model": "concentrate/glm-5.3-flashx-legal",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.37,
+    "outputCost": 1.25
+  },
+  {
     "model": "concentrate/gpt-4.1",
     "imageInput": true,
     "audioInput": false,
@@ -1028,18 +1040,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 125000,
     "inputCost": 2,
     "outputCost": 6
-  },
-  {
-    "model": "concentrate/grok-build-0.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 1,
-    "outputCost": 2
   },
   {
     "model": "concentrate/hy3",
@@ -1913,7 +1913,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 64000,
+    "maxOutput": 131072,
     "inputCost": 0.276,
     "outputCost": 1.101
   },

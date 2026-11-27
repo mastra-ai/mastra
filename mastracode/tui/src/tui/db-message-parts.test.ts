@@ -1,4 +1,5 @@
 import { accountSwitchNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { modelFallbackNoticeText } from '@mastra/code-sdk/model-fallback';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it } from 'vitest';
@@ -176,8 +177,6 @@ describe('getAssistantRenderParts', () => {
         data: {
           from: { entryId: 'custom:Daily', label: 'Daily' },
           to: { entryId: 'anthropic', label: 'Anthropic' },
-          // A valid *account-switch* reason that this part must not accept —
-          // `packFallbackNoticeText` would render it as "rate limit".
           reason: 'rate-limit',
           at: '2026-09-17T00:00:00.000Z',
         },
@@ -213,6 +212,33 @@ describe('getAssistantRenderParts', () => {
       ]);
     },
   );
+
+  it.each([
+    [{ kind: 'quota' }, 'anthropic/claude-opus-5.5 is out of credits or quota'],
+    [{ kind: 'rate_limited' }, 'anthropic/claude-opus-5.5 is rate-limited'],
+    [{ kind: 'model_rejected' }, 'anthropic/claude-opus-5.5 was not found by its provider'],
+    [{ kind: 'context_overflow' }, 'anthropic/claude-opus-5.5 failed'],
+    [{ kind: 'a-kind-from-a-newer-build' }, 'anthropic/claude-opus-5.5 failed'],
+  ])('renders a persisted hop that recorded failure %o as "%s"', (failure, cause) => {
+    const message = assistantMessage([
+      {
+        type: 'data-mastracode-model-fallback',
+        data: {
+          from: { entryId: 'anthropic/claude-opus-5.5', label: 'anthropic/claude-opus-5.5' },
+          to: { entryId: 'openai/gpt-5.6-sol', label: 'openai/gpt-5.6-sol' },
+          reason: 'pool-exhausted',
+          at: '2026-09-17T00:00:00.000Z',
+          failure,
+        },
+      },
+    ]);
+
+    const [part] = getAssistantRenderParts(message);
+
+    expect(part?.kind === 'pack-fallback' && modelFallbackNoticeText(part)).toBe(
+      `${cause}, switched to openai/gpt-5.6-sol`,
+    );
+  });
 
   it('maps a reasoning part to a thinking render item', () => {
     const message = assistantMessage([{ type: 'reasoning', reasoning: 'why', details: [] } as never]);
