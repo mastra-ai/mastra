@@ -664,6 +664,21 @@ describe.each([
         });
         expect(hidden).toMatchObject({ userId: 'someone-else', visibility: 'private' });
 
+        // The board's feed: the engine takes the move on, and tells there that it was refused.
+        const feed = await send('GET', `/web/factory/projects/${project.id}/feed-events`);
+        let heard = '';
+        const reader = feed.body!.getReader();
+        release.add(() => void reader.cancel().catch(() => undefined));
+        void (async () => {
+          const decoder = new TextDecoder();
+          for (;;) {
+            const { done, value } = await reader.read().catch(() => ({ done: true, value: undefined }));
+            if (done) return;
+            heard += decoder.decode(value, { stream: true });
+          }
+        })();
+        await vi.waitFor(() => expect(heard).toContain(': ping'));
+
         const drag = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
           board: 'delivery',
           stage: 'building',
@@ -673,8 +688,9 @@ describe.each([
         });
         const answer = await drag.json();
 
-        expect(drag.status, JSON.stringify(answer)).toBe(422);
-        expect(answer.result).toMatchObject({ status: 'rejected', code: 'card_busy' });
+        expect(drag.status, JSON.stringify(answer)).toBe(202);
+        await vi.waitFor(() => expect(heard).toContain(`"inputId":"${answer.inputId}"`));
+        expect(heard).toContain('"status":"rejected","code":"card_busy"');
         expect((await read(feature)).stages).toEqual(['planning']);
         expect(aborted).toBe(0);
         expect((await workItems.listRunBindings(ORG, project.id, feature.id))[0]?.stopRequestedAt ?? null).toBeNull();
