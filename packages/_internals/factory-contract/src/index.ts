@@ -2,7 +2,7 @@
  * The browser-safe slice of Factory: wire types and pure helpers shared by Factory's server,
  * its clients (@mastra/client-js, @mastra/react) and UIs. Private; consumers bundle it.
  *
- * Everything reachable from here must run in a browser. `index.test.ts` walks the import graph
+ * Everything reachable from here must run in a browser. `browser-safety.test.ts` walks the import graph
  * and fails if any module reaches a Node built-in, the code SDK, or a server dependency.
  * Type-only imports of `@mastra/core` are allowed; they are erased at build time.
  */
