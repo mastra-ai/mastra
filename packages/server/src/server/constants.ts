@@ -98,6 +98,8 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   // A resumed or recovered durable run names the spans its steps end here. A
   // body-supplied value would make a run end spans the client chose.
   'mastra__durableSegments',
+  // Only the server may bind a durable run to a controller session.
+  'mastra__controllerRunBinding',
   // Tenant scope must be established server-side, never self-asserted by a
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.
