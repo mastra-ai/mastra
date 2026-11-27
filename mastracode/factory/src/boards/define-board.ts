@@ -1,4 +1,6 @@
 import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
@@ -89,7 +91,11 @@ export const REVIEW_CONTEXT = 'review';
 
 /** Who runs a working phase, and with what. */
 export interface BoardPhaseRunner {
-  /** Must be `code-agent`, the agent Factory runs; omitted means that agent. */
+  /**
+   * The agent that runs the phase; omitted means `code-agent`, the agent Factory runs. A host
+   * that runs its own agents (such as Managed Agents) names one here; Factory's dispatcher only
+   * runs `code-agent` phases.
+   */
   readonly agentId?: string;
   /** Skill started when a card enters the phase. Without one, entering the phase starts no run. */
   readonly skill?: string;
@@ -106,6 +112,10 @@ export interface BoardPhaseRunner {
    * latest messages, so it must say when the work is done.
    */
   readonly goal?: BoardPhaseGoal;
+  /** Model the phase's runs use instead of the agent's own, as `provider/model`. */
+  readonly model?: string;
+  /** Thinking level the phase's runs use instead of the agent's own. */
+  readonly thinking?: ThinkingLevelSetting;
 }
 
 /** The objective a phase's runs pursue, judged in-loop until met. */
@@ -314,7 +324,15 @@ const MAX_DESCRIPTION_LENGTH = 2_000;
 const MAX_INSTRUCTIONS_LENGTH = 1_000;
 const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
 const MAX_GOAL_RUNS = 50;
-const RUNNER_KEYS: ReadonlySet<string> = new Set(['agentId', 'skill', 'context', 'instructions', 'goal']);
+const RUNNER_KEYS: ReadonlySet<string> = new Set([
+  'agentId',
+  'skill',
+  'context',
+  'instructions',
+  'goal',
+  'model',
+  'thinking',
+]);
 const GOAL_KEYS: ReadonlySet<string> = new Set(['objective', 'maxRuns']);
 const EXIT_TOOL_KEYS: ReadonlySet<string> = new Set(['id', 'autoApprove', 'autoApproveWhen']);
 const WORKING_ONLY_FIELDS = ['runner', 'autoStart', 'autoStartWhen', 'exitTool', 'tools'] as const;
@@ -344,6 +362,14 @@ function resolveName(name: unknown, title: unknown, label: string): string {
   return value;
 }
 
+/** `provider/model`, as model ids are written everywhere else. */
+const MODEL_ID_RE = /^[\w.-]+\/[\w.:@/-]{1,200}$/;
+
+/** Whether `value` is a `provider/model` id a phase or session may pick. */
+export function isModelId(value: unknown): value is string {
+  return typeof value === 'string' && MODEL_ID_RE.test(value);
+}
+
 function optionalText(value: unknown, label: string, max: number): string | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > max) {
@@ -361,6 +387,9 @@ function ruleGroup(value: unknown, label: string): RuleGroup | undefined {
   return parsed.data;
 }
 
+/** Agent ids: `code-agent`, or a host's own id such as a UUID. */
+const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
+
 function isContext(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= MAX_ROLE_LENGTH && IDENTIFIER_RE.test(value);
 }
@@ -369,7 +398,7 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
   const runner: unknown = phase.runner ?? {};
   if (!isPlainObject(runner) || Object.keys(runner).some(key => !RUNNER_KEYS.has(key))) {
     throw new BoardDefinitionError(
-      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions and goal.`,
+      `Phase "${phaseId}" runner may only set agentId, skill, context, instructions, goal, model and thinking.`,
     );
   }
   const role: unknown = phase.role;
@@ -379,10 +408,8 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
   const context = runner.context ?? role ?? DEFAULT_PHASE_CONTEXT;
   if (!isContext(context)) throw new BoardDefinitionError(`Working phase "${phaseId}" must declare a valid context.`);
   const agentId = runner.agentId ?? FACTORY_AGENT_ID;
-  if (agentId !== FACTORY_AGENT_ID) {
-    throw new BoardDefinitionError(
-      `Phase "${phaseId}" names unknown agent "${String(agentId)}"; Factory runs "${FACTORY_AGENT_ID}".`,
-    );
+  if (typeof agentId !== 'string' || !AGENT_ID_RE.test(agentId)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.agentId must be an agent id.`);
   }
   const skill = runner.skill;
   if (
@@ -397,10 +424,19 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
     MAX_INSTRUCTIONS_LENGTH,
   );
   const goal = resolveGoal(phaseId, runner.goal);
-  if (goal !== undefined && skill === undefined) {
+  // A host's own agent pursues the goal in its prompt run; code-agent pursues it through the skill.
+  if (goal !== undefined && skill === undefined && agentId === FACTORY_AGENT_ID) {
     throw new BoardDefinitionError(
       `Phase "${phaseId}" runner.goal needs runner.skill: the skill's run pursues the goal.`,
     );
+  }
+  const model = runner.model;
+  if (model !== undefined && !isModelId(model)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.model must be a provider/model id.`);
+  }
+  const thinking = runner.thinking;
+  if (thinking !== undefined && !isThinkingLevelSetting(thinking)) {
+    throw new BoardDefinitionError(`Phase "${phaseId}" runner.thinking must be a thinking level.`);
   }
   return Object.freeze({
     agentId,
@@ -408,6 +444,8 @@ function resolveRunner(phaseId: string, phase: BoardPhaseDefinition<string>): Re
     ...(skill !== undefined ? { skill } : {}),
     ...(instructions !== undefined ? { instructions } : {}),
     ...(goal !== undefined ? { goal } : {}),
+    ...(model !== undefined ? { model } : {}),
+    ...(thinking !== undefined ? { thinking } : {}),
   });
 }
 
@@ -843,7 +881,10 @@ function buildBoard<
     phaseForRole: (role: string) => phaseByRole.get(role),
     startsAutomatically: (phase: string, facts?: RuleFacts) => {
       const definition = phases[phase as PhaseId] as BoardPhase<PhaseId> | undefined;
-      if (definition?.kind !== 'working' || definition.autoStart !== true) return false;
+      if (definition?.kind !== 'working') return false;
+      // A host's own agent starts on every arrival; v1 Managed Factory moves cards by hand.
+      if ((definition.runner?.agentId ?? FACTORY_AGENT_ID) !== FACTORY_AGENT_ID) return true;
+      if (definition.autoStart !== true) return false;
       if (!definition.autoStartWhen) return true;
       return facts !== undefined && evaluateRuleGroup(definition.autoStartWhen, facts);
     },

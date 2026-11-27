@@ -238,6 +238,7 @@ describe('installed board catalog', () => {
           name: 'Preparing',
           title: 'Preparing',
           kind: 'working',
+          agentId: 'code-agent',
           nextPhases: ['shipped'],
           context: 'release-preparer',
           role: 'release-preparer',

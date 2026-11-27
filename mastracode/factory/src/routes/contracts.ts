@@ -1632,6 +1632,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
               context: z.string().optional(),
               /** @deprecated Use `context`. */
               role: z.string().optional(),
+              /** The agent that runs the phase (`runner.agentId`); `code-agent` unless a host names its own. */
+              agentId: z.string().optional(),
               /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
               skill: z.string().optional(),
               /** The objective the phase's runs pursue as a goal (`runner.goal`). */

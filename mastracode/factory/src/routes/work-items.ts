@@ -13,7 +13,6 @@ import type { Context } from 'hono';
 
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
-  boardFlow,
   boardPhaseOutcomes,
   DEFAULT_BOARD_ID,
   isPullRequestCard,
@@ -23,66 +22,48 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
-import { phaseOutcomes } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
-import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
-import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
-import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
-import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
-import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { RunRepositoryResolution } from '../session/work-item-repository.js';
-import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
-import type {
-  CreateWorkItemInput,
-  FactoryDeferredDecisionRecord,
-  UpdateWorkItemInput,
-  Card,
-  WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
-import {
-  FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
-  FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemRelationError,
-  WorkItemUpdateConflictError,
-} from '../storage/domains/work-items/base.js';
+import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { WorkItemRelationError, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
-import { workItemFilterOptions } from '../work-items/board-filter-options.js';
-import { boardPhases } from '../work-items/board-phases.js';
-import { createFactoryWorkItem } from '../work-items/create-work-item.js';
-import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { relatedCardsIn } from '../work-items/list-related-cards.js';
-import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import { buildAttentionRoutes } from './attention.js';
+import { BoardCatalogRoutes } from './board-catalog.js';
+import { BoardLiveStateRoutes } from './board-live-state.js';
 import {
   boardSnapshot,
   hashedBody,
   listCheck,
   matchesEtag,
   movedBody,
-  namedBody,
   scopedSnapshot,
-  etagDigest,
   sendJson,
   sendRevalidated,
 } from './board-snapshot.js';
+import { BoardWorkItemRoutes } from './board-work-items.js';
+export { parseCreateWorkItem } from './board-work-items.js';
+import { toVersionedWireWorkItem, toWireWorkItem } from './card-wire.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import { decisionSummary } from './decision-wire.js';
 import type { ProjectSessionsReader } from './project-sessions.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
-import { readRunQueue } from './run-queue.js';
 import { buildSessionRowRoutes } from './session-rows.js';
 import { workItemActivity } from './work-item-activity.js';
 import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
@@ -123,34 +104,6 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   projectSessions?: ProjectSessionsReader;
   activeRuns?: () => readonly { threadId: string; resourceId?: string }[];
-}
-
-/** The card as clients see it, without the dispatcher's internal bookkeeping. */
-function toWireWorkItem(item: Card): Card {
-  return {
-    ...item,
-    workItem: { ...item.workItem, metadata: publicWorkItemMetadata(item.workItem.metadata) },
-    // Keep the legacy wire metadata for one release; storage remains strictly split.
-    metadata: publicWorkItemMetadata({ ...item.workItem.metadata, ...item.metadata }) ?? {},
-  };
-}
-
-// One hash per card object: `listShared` keeps a card's object until the card changes.
-const wireVersions = new WeakMap<Card, string>();
-
-/**
- * Names the body a card is sent with. It is a hash of that body, not a stamp: two bodies of one
- * card can carry the same `changedAt`, and a card can read differently without a write.
- */
-function wireVersion(card: Card): string {
-  let version = wireVersions.get(card);
-  if (version === undefined) wireVersions.set(card, (version = etagDigest(JSON.stringify(toWireWorkItem(card)))));
-  return version;
-}
-
-/** The card for a reader that keeps it between reads, and tells by `version` whether it holds this body. */
-function toVersionedWireWorkItem(card: Card): Card & { version: string } {
-  return { ...toWireWorkItem(card), version: wireVersion(card) };
 }
 
 // One list per board version, so every tab's sidebar shares its serialization.
@@ -204,29 +157,6 @@ function listQueryError(field: PropertyKey | undefined): string {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<string, unknown> | null {
-  if (value === null) return null;
-  const {
-    [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
-    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
-    [EXTERNAL_SOURCE_MISSING_KEY]: _externalSourceMissingAt,
-    ...metadata
-  } = value;
-  return metadata;
-}
-
-/** Validate an untrusted create body. Unknown keys are dropped. */
-export function parseCreateWorkItem(body: unknown): CreateWorkItemInput | null {
-  const parsed = FACTORY_ROUTE_CONTRACTS.workItemCreate.bodySchema.safeParse(body);
-  return parsed.success ? parsed.data : null;
-}
-
-/** Validate an untrusted patch body. Unknown keys are dropped. */
-export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
-  const parsed = FACTORY_ROUTE_CONTRACTS.workItemUpdate.bodySchema.safeParse(body);
-  return parsed.success ? parsed.data : null;
-}
-
 async function readJson(c: Context): Promise<unknown | undefined> {
   try {
     return await c.req.json();
@@ -235,16 +165,15 @@ async function readJson(c: Context): Promise<unknown | undefined> {
   }
 }
 
+/** Validate an untrusted patch body. Unknown keys are dropped. */
+export function parseUpdateWorkItem(body: unknown): UpdateWorkItemInput | null {
+  const parsed = FACTORY_ROUTE_CONTRACTS.workItemUpdate.bodySchema.safeParse(body);
+  return parsed.success ? parsed.data : null;
+}
+
 /** Fields a PATCH touched, for the bounded `updated` event summary. */
 function patchedFields(patch: Record<string, unknown>): string[] {
   return Object.keys(patch).filter(key => patch[key] !== undefined);
-}
-
-function parseTransitionBody(
-  body: unknown,
-): Omit<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId' | 'actor'> | null {
-  const parsed = FACTORY_ROUTE_CONTRACTS.workItemTransition.bodySchema.safeParse(body);
-  return parsed.success ? parsed.data : null;
 }
 
 function parseStartBody(
@@ -257,62 +186,7 @@ function parseStartBody(
   return parsed.success ? { ...tenant, factoryProjectId, modelScope, ...parsed.data } : null;
 }
 
-function encodeDecisionCursor(decision: FactoryDeferredDecisionRecord): string {
-  return Buffer.from(JSON.stringify([decision.createdAt.toISOString(), decision.id]), 'utf8').toString('base64url');
-}
-
-/** A proposed transition names the seat its lane addresses, so the card can label what approving starts. */
-function summaryRole(boards: BoardRegistry, decision: Record<string, unknown>): string | null {
-  if (typeof decision.role === 'string') return decision.role.slice(0, 32);
-  if (decision.type !== 'transition') return null;
-  const { board, stage } = decision;
-  if (typeof board !== 'string' || typeof stage !== 'string') return null;
-  return boards.get(board)?.roleForPhase(stage) ?? null;
-}
-
-/** A linked-card decision names where the card is synced from, so the UI can say "GitHub" rather than "a linked card". */
-function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
-  if (decision.type !== 'upsertLinkedWorkItem') return null;
-  const source = decision.source;
-  return source === 'github-issue' ||
-    source === 'github-pr' ||
-    source === 'gitlab-issue' ||
-    source === 'gitlab-pr' ||
-    source === 'linear-issue' ||
-    source === 'manual'
-    ? source
-    : null;
-}
-
-function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord, overtaken = false) {
-  return {
-    id: decision.id,
-    evaluationId: decision.evaluationId,
-    workItemId: decision.workItemId,
-    type: factoryDecisionType(decision),
-    role: summaryRole(boards, decision.decision),
-    source: summarySource(decision.decision),
-    status: decision.status,
-    attempts: decision.attempts,
-    failureOccurrence: decision.failureOccurrence,
-    failureCode: decision.failureCode,
-    canRetry: decisionRetryable(decision, overtaken),
-    lastError: decision.lastError?.slice(0, 512) ?? null,
-    createdAt: decision.createdAt.toISOString(),
-    updatedAt: decision.updatedAt.toISOString(),
-    completedAt: decision.completedAt?.toISOString() ?? null,
-  };
-}
-
 /** Where a catalog board came from, whether it can be edited, and what is wrong with it. */
-function catalogDetails(details: StoredBoardDetails | undefined) {
-  if (!details) return {};
-  return {
-    source: details.source,
-    editable: details.editable,
-    ...(details.problems.length > 0 ? { problems: details.problems } : {}),
-  };
-}
 
 /** The pull request a person picked closed before the pick was written. */
 class PullRequestClosedError extends Error {}
@@ -399,100 +273,30 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     });
   }
 
-  /** Releasing a parked run and dropping it: same request, opposite outcomes, both audited as consent. */
-  #proposalRoute({ verb }: { verb: 'approve' | 'dismiss' }): ApiRoute {
-    const { audit, workItems } = this.deps;
-    const contract =
-      verb === 'approve' ? FACTORY_ROUTE_CONTRACTS.decisionApprove : FACTORY_ROUTE_CONTRACTS.decisionDismiss;
-    return registerApiRoute(contract.path, {
-      method: contract.method,
-      requiresAuth: false,
-      handler: async c => {
-        const context = loose(c);
-        const resolved = await this.#resolveProject(context);
-        if ('response' in resolved) return resolved.response;
-        const parsedPath = contract.pathSchema.safeParse({
-          id: resolved.factoryProjectId,
-          decisionId: context.req.param('decisionId'),
-        });
-        if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
-        const { decisionId } = parsedPath.data;
-        const settled = await resolveFactoryProposal({
-          workItems,
-          audit: input => audit.emit({ context, input }),
-          orgId: resolved.orgId,
-          factoryProjectId: resolved.factoryProjectId,
-          userId: resolved.userId,
-          decisionId,
-          action: verb,
-        });
-        if (!settled.ok) return c.json({ error: settled.code }, 409);
-        const { decision } = settled;
-        return c.json({ decision: decisionSummary(await this.#boards.load(resolved), decision) });
-      },
-    });
-  }
-
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
     const { audit, workItems, queueHealth, boardEngine, startCoordinator, liveSessions, projectSessions, activeRuns } =
       this.deps;
     return [
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardCatalog.path, {
-        method: FACTORY_ROUTE_CONTRACTS.boardCatalog.method,
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
-          if ('response' in resolved) return resolved.response;
-          const project = this.#boards.describe
-            ? await this.#boards.describe(resolved)
-            : { registry: await this.#boards.load(resolved), details: undefined, problems: [] };
-          return c.json({
-            boards: [...project.registry].map(([id, board]) => ({
-              id,
-              ...catalogDetails(project.details?.get(id)),
-              name: board.name,
-              title: board.name,
-              ...(board.description !== undefined ? { description: board.description } : {}),
-              initialPhase: board.initialPhase,
-              flow: catalogFlow(boardFlow(board)),
-              phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
-                id: phaseId,
-                name: phase.name,
-                title: phase.name,
-                ...(phase.description !== undefined ? { description: phase.description } : {}),
-                kind: phase.kind,
-                nextPhases: [...phase.nextPhases],
-                ...(phase.kind === 'working'
-                  ? {
-                      role: phase.runner.context,
-                      context: phase.runner.context,
-                      ...(phase.runner.skill ? { skill: phase.runner.skill } : {}),
-                      ...(phase.runner.goal ? { goal: { ...phase.runner.goal } } : {}),
-                      autoStart: phase.autoStart === true,
-                      ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
-                      ...(phase.exitTool
-                        ? {
-                            exitTool: {
-                              id: phase.exitTool.id,
-                              autoApprove: phase.exitTool.autoApprove,
-                              ...(phase.exitTool.autoApproveWhen
-                                ? { autoApproveWhen: phase.exitTool.autoApproveWhen }
-                                : {}),
-                            },
-                          }
-                        : {}),
-                      ...(phase.tools ? { tools: [...phase.tools] } : {}),
-                      outcomes: phaseOutcomes(board, phaseId).map(({ key, label, to }) => ({ key, label, to })),
-                    }
-                  : {}),
-                transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
-              })),
-            })),
-            ...(project.problems.length > 0 ? { problems: [...project.problems] } : {}),
-          });
-        },
-      }),
+      ...new BoardCatalogRoutes({ auth: this.deps.auth, projects: this.deps.projects, boards: this.#boards }).routes(),
+      ...new BoardWorkItemRoutes({
+        auth: this.deps.auth,
+        audit,
+        projects: this.deps.projects,
+        workItems,
+        boards: this.#boards,
+        boardEngine,
+        intakeRoutes: this.deps.intakeRoutes,
+        intakeEvaluator: this.deps.intakeEvaluator,
+      }).routes(),
+      ...new BoardLiveStateRoutes({
+        auth: this.deps.auth,
+        projects: this.deps.projects,
+        workItems,
+        audit,
+        boards: this.#boards,
+        runSlots: this.deps.runSlots,
+      }).routes(),
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemList.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
@@ -627,78 +431,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
-      // ── What each phase of a board view lists, a page of it at a time ───────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardPhases.path, {
-        method: FACTORY_ROUTE_CONTRACTS.boardPhases.method,
-        requiresAuth: false,
-        handler: async c => {
-          const context = loose(c);
-          const resolved = await this.#resolveProject(context);
-          if ('response' in resolved) return resolved.response;
-          const path = FACTORY_ROUTE_CONTRACTS.boardPhases.pathSchema.safeParse({
-            id: resolved.factoryProjectId,
-            boardKey: context.req.param('boardKey'),
-          });
-          if (!path.success) return c.json({ error: 'board_not_found' }, 404);
-          const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
-            sort: context.req.query('sort'),
-            q: context.req.query('q'),
-            source: context.req.queries('source'),
-            linearProject: context.req.queries('linearProject'),
-            label: context.req.queries('label'),
-            pullRequest: context.req.queries('pullRequest'),
-            trust: context.req.queries('trust'),
-            teammate: context.req.queries('teammate'),
-            author: context.req.queries('author'),
-            assignee: context.req.queries('assignee'),
-            reviewer: context.req.queries('reviewer'),
-            worked: context.req.queries('worked'),
-            limit: context.req.query('limit'),
-            window: context.req.queries('window'),
-            item: context.req.query('item'),
-            cards: context.req.query('cards'),
-          });
-          // A view that fails to parse must not answer as another view.
-          if (!query.success) return c.json({ error: 'invalid_phases_query' }, 400);
-          const { cards: withBodies, ...view } = query.data;
-          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
-          await workItems.ensureReady();
-          const [list, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
-          const board = boards.get(path.data.boardKey);
-          if (!board) return c.json({ error: 'board_not_found' }, 404);
-          const phases = Object.keys(board.phases);
-          const { body, named } = boardPhases(
-            list,
-            { id: path.data.boardKey, phases },
-            view,
-            resolved.userId,
-            wireVersion,
-          );
-          // The board asks again on each feed frame; most frames change nothing it shows.
-          return sendRevalidated(
-            context,
-            namedBody(body, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
-          );
-        },
-      }),
-
-      // ── The labels and people the board's filter menus offer ────────────────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.path, {
-        method: FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.method,
-        requiresAuth: false,
-        handler: async c => {
-          const context = loose(c);
-          const resolved = await this.#resolveProject(context);
-          if ('response' in resolved) return resolved.response;
-          await workItems.ensureReady();
-          const list = await workItems.listShared({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-          });
-          return sendRevalidated(context, hashedBody(workItemFilterOptions(list)));
-        },
-      }),
-
       // ── Per-project queue-health age-threshold config (seconds) ─────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.healthThresholdsGet.method,
@@ -713,67 +445,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           // hand-edited row (empty / non-ascending) would otherwise flow to the
           // chart and invert bucket colors. Fall back to the default on invalid.
           return c.json({ thresholds: thresholdsOrDefault(stored) });
-        },
-      }),
-
-      // ── Bounded durable rule-decision status ────────────────────────────────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionList.path, {
-        method: FACTORY_ROUTE_CONTRACTS.decisionList.method,
-        requiresAuth: false,
-        handler: async c => {
-          const context = loose(c);
-          const resolved = await this.#resolveProject(context);
-          if ('response' in resolved) return resolved.response;
-
-          const query = FACTORY_ROUTE_CONTRACTS.decisionList.querySchema.safeParse({
-            statuses: context.req.query('statuses'),
-            before: context.req.query('before'),
-            limit: context.req.query('limit'),
-          });
-          if (!query.success) {
-            const field = query.error.issues[0]?.path[0];
-            return c.json({ error: field === 'before' ? 'invalid_cursor' : 'invalid_decision_query' }, 400);
-          }
-          await workItems.ensureReady();
-          const page = await workItems.listDeferredDecisionPage({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            statuses: query.data.statuses,
-            before: query.data.before,
-            limit: query.data.limit,
-          });
-          const last = page.decisions.at(-1);
-          const boards = await this.#boards.load(resolved);
-          const overtaken = await overtakenDecisionIds(
-            workItems,
-            boards,
-            resolved,
-            page.decisions.filter(decision => decision.status === 'failed'),
-          );
-          return c.json({
-            decisions: page.decisions.map(decision => decisionSummary(boards, decision, overtaken.has(decision.id))),
-            ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
-          });
-        },
-      }),
-
-      // ── Automated runs waiting for a run slot ───────────────────────────────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.runQueue.path, {
-        method: FACTORY_ROUTE_CONTRACTS.runQueue.method,
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
-          if ('response' in resolved) return resolved.response;
-          await workItems.ensureReady();
-          return c.json(
-            await readRunQueue({
-              workItems,
-              orgId: resolved.orgId,
-              factoryProjectId: resolved.factoryProjectId,
-              slots: this.deps.runSlots?.(),
-              now: new Date(),
-            }),
-          );
         },
       }),
 
@@ -796,130 +467,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             authEnabled: () => this.deps.auth.enabled(),
           })
         : []),
-
-      this.#proposalRoute({ verb: 'approve' }),
-      this.#proposalRoute({ verb: 'dismiss' }),
-
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.decisionRetry.path, {
-        method: FACTORY_ROUTE_CONTRACTS.decisionRetry.method,
-        requiresAuth: false,
-        handler: async c => {
-          const context = loose(c);
-          const resolved = await this.#resolveProject(context);
-          if ('response' in resolved) return resolved.response;
-          const parsedPath = FACTORY_ROUTE_CONTRACTS.decisionRetry.pathSchema.safeParse({
-            id: resolved.factoryProjectId,
-            decisionId: context.req.param('decisionId'),
-          });
-          if (!parsedPath.success) return c.json({ error: 'invalid_decision_id' }, 422);
-          const { decisionId } = parsedPath.data;
-          const boards = await this.#boards.load(resolved);
-          const retried = await retryFactoryDecision({
-            workItems,
-            boards,
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            decisionId,
-          });
-          if (!retried.ok) return c.json({ error: retried.code }, 409);
-          const { decision } = retried;
-          return c.json({ decision: decisionSummary(boards, decision) });
-        },
-      }),
-
-      // ── Create (upsert on sourceKey) a work item ─────────────────────────────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemCreate.path, {
-        method: FACTORY_ROUTE_CONTRACTS.workItemCreate.method,
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
-          if ('response' in resolved) return resolved.response;
-
-          const body = await readJson(loose(c));
-          if (body === undefined) return c.json({ error: 'Invalid JSON body' }, 400);
-          const input = parseCreateWorkItem(body);
-          if (!input) return c.json({ error: 'invalid_work_item' }, 400);
-          try {
-            const created = await createFactoryWorkItem({
-              workItems,
-              boards: await this.#boards.load(resolved),
-              boardEngine,
-              intakeRoutes: this.deps.intakeRoutes,
-              intakeEvaluator: this.deps.intakeEvaluator,
-              audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
-              orgId: resolved.orgId,
-              userId: resolved.userId,
-              factoryProjectId: resolved.factoryProjectId,
-              input,
-              origin: auditRequestOrigin(loose(c)),
-            });
-            switch (created.status) {
-              case 'refused':
-                if (created.code === 'factory_transitions_unavailable') return c.json({ error: created.code }, 503);
-                return c.json(
-                  { error: created.code, message: created.message },
-                  created.code === 'invalid_board' || created.code === 'intake_board_required' ? 422 : 409,
-                );
-              case 'rejected':
-                return c.json({ status: 'rejected', code: created.code, reason: created.reason }, 422);
-              case 'reused': {
-                // Source-key reuse: the POST updated an existing card, not created one.
-                const { stages: _stages, sessions: _sessions, ...boundedPatch } = input;
-                await this.#auditWorkItemPatch({
-                  context: loose(c),
-                  item: created.item,
-                  patch: boundedPatch as unknown as Record<string, unknown>,
-                });
-                return c.json({ workItem: toWireWorkItem(created.item) });
-              }
-              case 'created':
-                return c.json({ workItem: toWireWorkItem(created.item) });
-            }
-          } catch (error) {
-            if (error instanceof WorkItemRelationError) {
-              return c.json({ error: error.code, message: error.message }, 400);
-            }
-            throw error;
-          }
-        },
-      }),
-
-      // ── Authoritative stage transition ──────────────────────────────────────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemTransition.path, {
-        method: FACTORY_ROUTE_CONTRACTS.workItemTransition.method,
-        requiresAuth: false,
-        handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
-          if ('response' in resolved) return resolved.response;
-          const context = loose(c);
-          const parsedPath = FACTORY_ROUTE_CONTRACTS.workItemTransition.pathSchema.safeParse({
-            id: resolved.factoryProjectId,
-            workItemId: context.req.param('workItemId'),
-          });
-          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
-          const { workItemId } = parsedPath.data;
-          const parsed = parseTransitionBody(await readJson(context));
-          if (!parsed) return c.json({ error: 'invalid_transition_request' }, 400);
-          if (!boardEngine) {
-            return c.json({ error: 'factory_transition_unavailable' }, 503);
-          }
-          await workItems.ensureReady();
-          const result = await boardEngine.requestMove({
-            ...parsed,
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-            workItemId,
-            actor: { type: 'human', id: resolved.userId },
-            ...auditRequestOrigin(loose(c)),
-            ingress: {
-              ...parsed.ingress,
-              identity: `human:${resolved.userId}:${parsed.ingress.identity}`,
-            },
-          });
-          if (result.status === 'accepted') return c.json({ result });
-          return c.json({ result }, result.code === 'stale' ? 409 : 422);
-        },
-      }),
 
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemSessionRepository.method,
@@ -1167,13 +714,3 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 }
 
 /** A board's loop parts, by phase key, as the catalog reports them. */
-function catalogFlow(flow: FactoryRuleBoardFlow) {
-  return {
-    ...(flow.triage ? { triage: flow.triage } : {}),
-    ...(flow.build ? { build: flow.build } : {}),
-    ...(flow.selfReview ? { selfReview: flow.selfReview } : {}),
-    ...(flow.pullRequestReview ? { pullRequestReview: flow.pullRequestReview } : {}),
-    ...(flow.completed ? { completed: flow.completed.phase } : {}),
-    ...(flow.canceled ? { canceled: flow.canceled.phase } : {}),
-  };
-}

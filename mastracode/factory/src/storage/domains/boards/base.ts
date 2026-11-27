@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
@@ -33,13 +34,17 @@ export interface StoredBoardScope {
 
 export type StoredPhaseKind = 'resting' | 'working' | 'terminal';
 
-/** Who runs a working phase. Factory runs every phase with its code agent. */
+/** Who runs a working phase. */
 export interface StoredPhaseRunner {
+  /** The agent that runs the phase; omitted means Factory's code agent. */
+  agentId?: string;
   skill?: string;
   context?: string;
   instructions?: string;
   /** The objective the phase's runs pursue as a goal. */
   goal?: { objective: string; maxRuns?: number };
+  model?: string;
+  thinking?: ThinkingLevelSetting;
 }
 
 export interface StoredPhaseExitTool {

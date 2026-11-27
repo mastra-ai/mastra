@@ -175,9 +175,9 @@ describe('defineBoard phase fields', () => {
     expect(() =>
       release({
         backlog: { name: 'Backlog', kind: 'resting' },
-        build: { name: 'Build', kind: 'working', runner: { agentId: 'other-agent' } },
+        build: { name: 'Build', kind: 'working', runner: { agentId: 'bad agent!' } },
       }),
-    ).toThrow(/names unknown agent "other-agent"; Factory runs "code-agent"/);
+    ).toThrow(/runner.agentId must be an agent id/);
   });
 
   it('keeps working-phase fields off resting and terminal phases', () => {
@@ -394,6 +394,30 @@ describe('defineBoard phase fields', () => {
         build: { name: 'Build', kind: 'working', runner: { goal: { objective: 'Ship.' } } },
       }),
     ).toThrow('Phase "build" runner.goal needs runner.skill');
+    // A host's own agent pursues the goal in its prompt run, so it needs no skill.
+    const hosted = release({
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: {
+        name: 'Build',
+        kind: 'working',
+        runner: { agentId: 'managed-1', instructions: 'Fix it.', goal: { objective: 'Ship.' } },
+      },
+    });
+    expect(hosted.phases.build.runner?.goal).toEqual({ objective: 'Ship.' });
+    expect(hosted.phases.build.runner?.instructions).toBe('Fix it.');
+  });
+
+  it('lets a phase pick the model and thinking its runs use, and refuses ones that are not', () => {
+    const withRunner = (runner: Record<string, unknown>) => () =>
+      release({
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: { name: 'Build', kind: 'working', runner: { agentId: 'managed-1', ...runner } as never },
+      });
+    const board = withRunner({ model: 'openai/gpt-5.1', thinking: 'high' })();
+    expect(board.phases.build.runner).toMatchObject({ model: 'openai/gpt-5.1', thinking: 'high' });
+    expect(withRunner({ model: 'gpt-5' })).toThrow('runner.model must be a provider/model id.');
+    expect(withRunner({ model: 5 })).toThrow('runner.model must be a provider/model id.');
+    expect(withRunner({ thinking: 'huge' })).toThrow('runner.thinking must be a thinking level.');
   });
 
   it('starts the runner skill with its instructions for every source, ignoring a declared onEnter', () => {

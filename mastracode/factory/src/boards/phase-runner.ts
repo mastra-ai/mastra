@@ -1,5 +1,6 @@
 import { externallyAuthored } from '../rules/types.js';
 import type { FactoryInvokeSkillDecision, FactoryStageRuleContext } from '../rules/types.js';
+import { FACTORY_AGENT_ID } from './define-board.js';
 import type { BoardDefinition } from './define-board.js';
 
 /** How the card came into the phase. */
@@ -41,10 +42,22 @@ export function phaseRunDecision(
   const sameStage = rule.fromStage === phaseKey && entry.boardEntry !== true;
   if (sameStage && !entry.initialEntry && !entry.reenter) return undefined;
   const phase = Object.hasOwn(board.phases, phaseKey) ? board.phases[phaseKey] : undefined;
-  if (phase?.kind !== 'working' || !phase.runner.skill) return undefined;
-  const { skill, context, instructions, goal } = phase.runner;
+  if (phase?.kind !== 'working') return undefined;
+  const { skill, context, instructions, goal, agentId } = phase.runner;
   const reference = workItemReference(rule.item);
   const reentry = sameStage && entry.reenter === true && !entry.initialEntry;
+  if (!skill) {
+    // A host's own agent (a Managed Agent) works the card from the phase's instructions alone.
+    if (agentId === FACTORY_AGENT_ID) return undefined;
+    return {
+      type: 'invokeSkill',
+      idempotencyKey: `${rule.ingress.id}:${phaseKey}:${agentId}`,
+      role: context,
+      prompt: instructions ? `${reference}\n\n${instructions}` : reference,
+      ...(sameStage ? {} : { startsAfterOwnMove: true }),
+      ...(reentry ? { cancelInFlight: true } : {}),
+    };
+  }
   return {
     type: 'invokeSkill',
     idempotencyKey: `${rule.ingress.id}:${phaseKey}:${skill}`,
