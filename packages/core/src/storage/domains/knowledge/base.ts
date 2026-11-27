@@ -1,8 +1,8 @@
 import type { KnowledgeScopeDeclarations } from '../../../knowledge/declarations';
 import { StorageDomain } from '../base';
 import type { KnowledgeImportersStorage } from './importers';
-import { KnowledgeMoveTooLargeError, MAX_KNOWLEDGE_MOVE_PAGES } from './pages';
-import type { KnowledgePageStore } from './pages';
+import { KnowledgeMoveTooLargeError, MAX_KNOWLEDGE_MOVE_PAGES, MAX_KNOWLEDGE_PAGE_DEPTH } from './pages';
+import type { KnowledgePage, KnowledgePageStore, KnowledgeReadScope } from './pages';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 4 as const;
@@ -347,6 +347,28 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   }
   getPages(_input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPages'));
+  }
+  /**
+   * The page `parentId` and its ancestors, nearest first: for each row what {@link getPage} would
+   * return with the same `read`, deleted rows included. Stops after the first scope page, before
+   * the first row `getPage` would return null for, or after {@link MAX_KNOWLEDGE_PAGE_DEPTH} + 1
+   * rows. Lets a caller holding a page walk its parents in one call instead of one per level.
+   *
+   * The base class reads one {@link getPage} per level; adapters that can read the chain in one
+   * query override it.
+   *
+   * @experimental
+   */
+  async getPageParents(input: { parentId: string; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const parents: KnowledgePage[] = [];
+    let id: string | null = input.parentId;
+    while (id && parents.length <= MAX_KNOWLEDGE_PAGE_DEPTH) {
+      const page = await this.getPage({ id, read: input.read });
+      if (!page) break;
+      parents.push(page);
+      id = page.isScope ? null : page.parentId;
+    }
+    return parents;
   }
 
   getPageByPath(
