@@ -55,7 +55,8 @@ type PendingInput =
     }
   | {
       runPaused: FactoryRunEndedBinding;
-      /** The phase the card was in when the session stopped for its answer. */
+      /** The board and phase the card was in when the session stopped for its answer. */
+      board: string;
       phase: string;
       answer?: { paused: true } | { error: unknown };
     };
@@ -116,7 +117,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
         if ('runPaused' in pending) {
           if (pending.runPaused.workItemId !== workItemId) return undefined;
           try {
-            const next = await this.#stateAfterRunPause(pending.runPaused, pending.phase, state);
+            const next = await this.#stateAfterRunPause(pending.runPaused, pending, state);
             pending.answer = { paused: true };
             return next;
           } catch (error) {
@@ -179,12 +180,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * approval until the next input says otherwise: the move an approval makes, or a run end.
    */
   async runPaused(binding: FactoryRunEndedBinding): Promise<void> {
-    // The phase the session waits in, read now: by the time the card's run hears of the wait, the
-    // card may have moved on to a phase the same role works.
+    // Where the session waits, read now: by the time the card's run hears of the wait, the card
+    // may have moved on to a phase the same role works, on this board or another.
     const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
     const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!phase) return;
-    const pending = { runPaused: binding, phase } satisfies PendingInput as Extract<
+    if (!item || !phase) return;
+    const pending = { runPaused: binding, board: boardForWorkItem(item), phase } satisfies PendingInput as Extract<
       PendingInput,
       { runPaused: unknown }
     >;
@@ -309,12 +310,12 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    */
   async #stateAfterRunPause(
     binding: FactoryRunEndedBinding,
-    pausedIn: string,
+    pausedIn: { board: string; phase: string },
     previous: FactoryCardRunRecord,
   ): Promise<FactoryCardRunRecord | undefined> {
     const item = await this.#context.workItems.get({ orgId: binding.orgId, id: binding.workItemId });
     const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
-    if (!item || !phase || phase !== pausedIn) return undefined;
+    if (!item || !phase || phase !== pausedIn.phase || boardForWorkItem(item) !== pausedIn.board) return undefined;
     const board = (await toBoardSource(this.#context.boards).load(binding)).get(boardForWorkItem(item));
     if (!board || board.phaseKind(phase) !== 'working' || board.roleForPhase(phase) !== binding.role) return undefined;
     return {

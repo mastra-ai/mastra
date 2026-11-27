@@ -818,9 +818,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
           { board: 'work', stage: 'done', expectedRevision: card.revision, requestId: randomUUID(), cause: 'test' },
         );
-        expect(moved.status, JSON.stringify(moved.json)).toBe(200);
-        const run = await replica.mastra.getWorkflow('factory-board').getWorkflowRunById(`factory-board:${card.id}`);
-        expect(run?.steps?.phase?.payload).toMatchObject({ state: 'terminal', phase: 'done' });
+        // Answered with the move made, or taken on to be made: either way the card's run hears of it.
+        expect([200, 202], JSON.stringify(moved.json)).toContain(moved.status);
+        // The card's run holds its state by the time the move has landed.
+        await vi.waitFor(async () => {
+          const run = await replica.mastra.getWorkflow('factory-board').getWorkflowRunById(`factory-board:${card.id}`);
+          expect(run?.steps?.phase?.payload).toMatchObject({ state: 'terminal', phase: 'done' });
+        });
 
         // The host's server, as anyone who reaches it does.
         const host = new Hono();

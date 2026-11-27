@@ -520,6 +520,85 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it("records no approval wait on another board's phase of the same name when the card moved there first", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+    // A second board whose Planning the same role works, as Work's does.
+    const second = defineBoard({
+      id: 'second',
+      name: 'Second',
+      initialPhase: 'intake',
+      phases: {
+        intake: { name: 'Intake', kind: 'resting', nextPhases: ['planning'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          runner: { skill: 'factory-plan', context: 'work' },
+          nextPhases: ['done'],
+        },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    const boards = createBoardRegistry({ boards: [second] });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    let hold: (() => void) | undefined;
+    const held = new Promise<void>(resolve => {
+      hold = resolve;
+    });
+    const engine = new WorkflowBoardEngine({
+      transitionService: {
+        transition: async request => {
+          await held;
+          return transitionService.transition(request);
+        },
+      },
+      workItems: storage,
+      boards,
+    });
+    const mastra = new Mastra({
+      storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: `file:${join(dir, 'runs.db')}` }),
+      workflows: engine.workflows,
+      logger: false,
+    });
+    onTestFinished(() => mastra.shutdown().catch(() => undefined));
+    const { item, binding } = await storage.prepareRunStart({
+      orgId: ORG,
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Factory item',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/item', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-1',
+      kickoffMessage: null,
+    });
+    await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
+
+    // A person is moving the card to the second board when the wait Work's Planning session
+    // asked for reaches the card's run.
+    const move = await personMove(storage, item.id, 'planning', 'drag-1')();
+    const moved = engine.requestMove({ ...move, board: 'second' });
+    await new Promise(resolve => setImmediate(resolve));
+    const paused = engine.runPaused(binding);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    hold?.();
+    await expect(moved).resolves.toMatchObject({ status: 'accepted' });
+    await paused;
+
+    const described = await engine.describe({ workItemId: item.id });
+    expect(described).toMatchObject({ phase: 'planning', probes: 0 });
+    expect(described?.state).not.toBe('awaiting_approval');
+  });
+
   it("starts the count over in the card's next phase, and counts nothing for a session that doesn't work it", async () => {
     const { storage, engine, item, binding } = await setup();
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
