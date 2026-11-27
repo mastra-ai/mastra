@@ -2,9 +2,22 @@
 '@mastra/memory': minor
 ---
 
-Changed thread clones to copy only the messages in the context window when observational memory is configured and the thread has observations: the ones created after the memory's `lastObservedAt`. The observations already carry the earlier messages, so the clone starts with the same context as the source without duplicating the whole conversation. This applies to `memory.cloneThread()`, `memory.copyThread()` (used by subagent forks), and the agent controller's thread clones. When both a thread and a resource record exist, the clone now carries the one the configured scope reads.
+Changed thread clones of observed threads to copy only the messages still in the context window. When observational memory is configured and the source thread has observations, a clone now copies only the messages created after the memory's `lastObservedAt`, plus the observations themselves. The earlier messages are not copied, because the observations already stand in for them.
 
-Without observational memory configured, or when it hasn't observed anything yet, clones still copy every message, and a `messageFilter` or `messageLimit` you pass still decides. To copy every message, pass an empty filter:
+**What stays the same**
+
+- The model sees the same context in the clone as in the source: the same observations and the same unobserved messages.
+- The source thread keeps every message.
+- Threads without observational memory configured, or whose memory hasn't observed anything yet, still copy every message.
+- A `messageFilter` or `messageLimit` you pass still decides which messages are copied.
+
+**Where it applies**
+
+`memory.cloneThread()`, `memory.copyThread()` (which subagent forks use), the agent controller's thread clones (including Mastra Code's thread clone), and the server's clone-thread endpoint.
+
+**Getting a full copy**
+
+Pass an empty message filter to copy every message, as before:
 
 ```ts
 const { thread } = await memory.cloneThread({
