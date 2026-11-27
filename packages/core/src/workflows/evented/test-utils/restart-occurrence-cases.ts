@@ -152,6 +152,41 @@ export function describeRestartOccurrenceCases({
       };
     }
 
+    /**
+     * Keeps the `workflows` events `pick` selects from the workers until `release(index)` hands one
+     * on, returning it as delivered. `count(n)` waits until `n` were held.
+     */
+    function holdPublishes(driver: RedeliveryDriver, pick: (event: any) => boolean) {
+      const publish = driver.pubsub.publish.bind(driver.pubsub);
+      const held: { event: any; send: () => Promise<void> }[] = [];
+      let notify = () => {};
+      const spy = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === 'workflows' && pick(event)) {
+          held.push({ event, send: () => publish(topic, event, options) });
+          notify();
+          return;
+        }
+        return publish(topic, event, options);
+      });
+      return {
+        held,
+        count: async (n: number) => {
+          while (held.length < n) await new Promise<void>(resolve => (notify = resolve));
+        },
+        release: async (index: number): Promise<Event> => {
+          const from = driver.events.length;
+          await held[index]!.send();
+          return driver.events[from]!;
+        },
+        restore: () => spy.mockRestore(),
+      };
+    }
+
+    const isStepRun = (event: any, workflowId: string, path: number[]) =>
+      event.type === 'workflow.step.run' &&
+      event.data?.workflowId === workflowId &&
+      JSON.stringify(event.data.executionPath) === JSON.stringify(path);
+
     const stepRuns = (driver: RedeliveryDriver, runId: string, workflowId: string, path: number[]) =>
       driver.stepRuns({ spec: `${workflowId}@${path.join(',')}`, runId });
 
@@ -414,6 +449,61 @@ export function describeRestartOccurrenceCases({
           await drainHandlers();
           expect(await started).toMatchObject({ status: 'success', result: { n: 2 } });
           expect(steps.calls).toEqual({ inner: 2, after: 1 });
+        });
+      }, 20_000);
+
+      // The restart takes the parent's nested step over, but the old run still drives the same child
+      // run. A sleeping child has no step the child's restart can claim, so the old timer's chain can
+      // win it. On storage v1 its hand-back carried the occurrence the restart took the parent's step
+      // from, the parent's guard refused it, and the parent and the restart's caller waited forever.
+      it('restarted while its nested workflow sleeps, and the old run wins the nested workflow', async () => {
+        const steps = holdableSteps();
+        const child = createWorkflow({
+          id: `restart-sleeping-child-${randomUUID()}`,
+          inputSchema: Num,
+          outputSchema: Num,
+        })
+          .then(steps.step('a'))
+          .sleep(10)
+          .then(steps.step('b'))
+          .commit();
+        const workflow = createWorkflow({
+          id: `restart-sleeping-parent-${randomUUID()}`,
+          inputSchema: Num,
+          outputSchema: Num,
+        })
+          .then(child)
+          .then(steps.step('after'))
+          .commit();
+        await withHost({ [child.id]: child, [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
+          // The child's step after its sleep, once per timer.
+          const wake = holdPublishes(driver, event => isStepRun(event, child.id, [2]));
+          try {
+            const run = await workflow.createRun();
+            const started = run.start({ inputData: { n: 0 } });
+            await wake.count(1);
+            const restarted = restartRun(workflow, run.runId);
+            await wake.count(2);
+            expect(wake.held[0]!.event.data.restart).toBeUndefined();
+            expect(wake.held[1]!.event.data.restart).toBeDefined();
+
+            // The old timer's b runs first; the restart's copy finds it running and is refused.
+            const oldB = steps.holdAt('b');
+            await wake.release(0);
+            await oldB.entered;
+            await settleDeliveries([await wake.release(1)]);
+            oldB.release();
+
+            await expect
+              .poll(async () => (await storedRun(workflow.id, run.runId))?.status, { timeout: 5_000 })
+              .toBe('success');
+            expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+            await drainHandlers();
+            expect(await started).toMatchObject({ status: 'success', result: { n: 3 } });
+            expect(steps.calls).toEqual({ a: 1, b: 1, after: 1 });
+          } finally {
+            wake.restore();
+          }
         });
       }, 20_000);
 

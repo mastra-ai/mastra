@@ -1885,6 +1885,29 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /** Hands a nested run's successful result to the parent step that runs it. */
+  /**
+   * The occurrence a nested run's hand-back completes the parent's step under. On storage v1 the
+   * hand-back carries the parent's step results as the occurrence that started the child saw them.
+   * A restart can take the step over and drive the same child run, whose own guards then pick one
+   * owner per child step, so the hand-back may come from either chain. When it comes from the child
+   * run stored as the step's `nestedRunId`, it completes the step under the occurrence stored for
+   * it, as storage v2 does by reading the stored results. A step a restart claimed but has not
+   * started yet keeps the carried occurrence: the restart's own delivery hands the child's outcome
+   * up. A hand-back from another child run keeps it too, so the step's guard refuses it.
+   */
+  async #nestedStepOccurrence(
+    parentStorage: RunStorage,
+    stepId: string,
+    nestedRunId: string,
+    carried: string | undefined,
+  ): Promise<string | undefined> {
+    if (!this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows'))) return carried;
+    const stored = (await parentStorage.loadStep(stepId))?.context?.[stepId];
+    const metadata = stored?.metadata;
+    if (metadata?.nestedRunId !== nestedRunId || !metadata?.startedBy || metadata.__restartPending) return carried;
+    return metadata.startedBy;
+  }
+
   async #handNestedSuccessToParent({
     parentWorkflow,
     nestedRunId,
@@ -1967,7 +1990,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         prevResult,
         // The child completes the loop leaf under the occurrence stored for it, which a restart or a
         // resume re-drives as well; otherwise the leaf stays 'running' and the next iteration is stale.
-        loopStepResults[getEntryId(step.step)]?.metadata?.startedBy,
+        await this.#nestedStepOccurrence(
+          parentStorage,
+          getEntryId(step.step),
+          nestedRunId,
+          loopStepResults[getEntryId(step.step)]?.metadata?.startedBy,
+        ),
       );
       return;
     }
@@ -5145,6 +5173,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // handle nested workflow
       if (parentContext) {
+        const handBackStartedBy = nestedRunId
+          ? await this.#nestedStepOccurrence(runStorage, stepId, nestedRunId, stepResults[stepId]?.metadata?.startedBy)
+          : undefined;
         prevResult = stepResults[stepId] = {
           ...prevResult,
           // On storage v2 the descriptor doesn't carry the input: the nested run's start stored it.
@@ -5153,7 +5184,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...(nestedRunId && {
             metadata: {
               ...(prevResult as any).metadata,
-              startedBy: stepResults[stepId]?.metadata?.startedBy,
+              startedBy: handBackStartedBy,
               nestedRunId,
             },
           }),
