@@ -2559,7 +2559,8 @@ export class MemoryPG extends MemoryStorage {
         // were never saved: consumed ones are deleted, the others go back to pending.
         await t.none(
           `WITH locked AS (
-             SELECT id, (thread_id = $4 OR "signalState" = ${TAKEN_STATE}) AND id = ANY($3::text[]) AS consumed,
+             SELECT id,
+               (thread_id = $4 OR "signalState" IS NOT DISTINCT FROM ${TAKEN_STATE}) AND id = ANY($3::text[]) AS consumed,
                "signalState" IS NOT DISTINCT FROM ${TAKEN_STATE} AS taken
              FROM ${messagesTable}
              WHERE thread_id = ANY($1::text[]) AND "signalClaimedBy" = $2
