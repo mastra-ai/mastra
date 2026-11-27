@@ -1,0 +1,20 @@
+# Flags images without alt text, or with alt text that is only a placeholder
+# word or a filename. Covers Markdown images and <img> tags, including tags
+# that span several lines, so it matches against the raw source.
+extends: existence
+message: "Describe the image in its alt text: '%s'."
+level: error
+scope: raw
+nonword: true
+ignorecase: true
+tokens:
+  # No alt text
+  - '!\[\]\('
+  - 'alt=""'
+  - '<img\b(?:(?!alt=)[^>])*/?>'
+  # Placeholder word
+  - '!\[(?:image|img|screenshot|diagram|picture|photo|logo)\]\('
+  - 'alt="(?:image|img|screenshot|diagram|picture|photo|logo)"'
+  # Filename
+  - '!\[[^\]]*\.(?:png|jpe?g|gif|svg|webp)\]\('
+  - 'alt="[^"]*\.(?:png|jpe?g|gif|svg|webp)"'
