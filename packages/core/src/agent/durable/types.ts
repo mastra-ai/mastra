@@ -834,6 +834,11 @@ export interface RunRegistryEntry {
    */
   toolsSegment?: string;
   /**
+   * The request context a segment's tools were rebuilt with. Their closures write to it, for
+   * example the delegation bail flag, so later steps in the segment read it from here.
+   */
+  toolsRequestContext?: RequestContext;
+  /**
    * The method that started the run (`stream` or `generate`). A warm resume
    * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
    * streaming whatever the resume's `closeOnSuspend` is (#29436).
