@@ -224,7 +224,7 @@ await sandbox._stop()
 await sandbox._start()
 ```
 
-`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone, capped at Modal's 24-hour maximum. If the template sets `timeoutMs`, that stays the clone's hard lifetime, raised to the idle window when shorter. If it doesn't, the clone gets Modal's 24-hour maximum lifetime, so the idle timeout normally ends the clone. The hard lifetime still ends a command that runs past it. `idleTimeoutMinutes: 0` turns the idle timeout off. A clone that reconnects to a running sandbox with the same `id` keeps the timeouts that sandbox was created with.
+`clone({ idleTimeoutMinutes })` sets `idleTimeoutMs` on the clone, capped at Modal's 24-hour maximum. A template `timeoutMs` stays the clone's hard lifetime and is raised to the idle window when shorter; without one, the clone gets Modal's 24-hour maximum lifetime and the idle timeout normally ends it. The hard lifetime still ends a command that runs past it. `idleTimeoutMinutes: 0` turns the idle timeout off. A clone that reconnects to a running sandbox with the same `id` keeps the timeouts that sandbox was created with.
 
 ## Volumes and persistent files
 
