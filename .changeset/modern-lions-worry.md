@@ -2,4 +2,10 @@
 '@mastra/core': patch
 ---
 
-Removed the 30 second lock the evented engine took on each step event. A step event that the broker delivers again while the step is still running is no longer dropped, so the step's code can run a second time. With `@mastra/pg` or `@mastra/libsql`, the step guards keep one result for each step. Individual `foreach` items and storage adapters without step guards have no protection against a step event delivered again. You no longer need to keep `reclaimIdleMs` at 30 seconds or more for evented workflows.
+Evented workflows and agents no longer drop a step event that the broker delivers again within 30 seconds. The step's code can run again when that happens.
+
+With Postgres or libSQL storage, only one result is saved for each step. A `foreach` item can still run and save again, and so can an evented agent's tool call, which runs as a `foreach` item. With `storageVersion: 2`, a copy that arrives after the step finished can also run again. Other storage adapters save the result of every copy.
+
+On a pubsub that delivers each event to every subscriber, such as a unix socket pubsub shared by several processes, every process now runs a delivered step. Running evented workflows and agents on several processes with such a pubsub was already unsupported.
+
+Make steps and tools safe to run more than once. See [restarting active workflow runs](https://mastra.ai/docs/workflows/overview#restarting-active-workflow-runs) and [make tools safe to repeat](https://mastra.ai/docs/harness/durable-agents#make-tools-safe-to-repeat).
