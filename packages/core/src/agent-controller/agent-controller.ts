@@ -127,7 +127,7 @@ const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
  * capped and ends with `reason:"complete"` after a few steps — the agent stops
  * mid-task even though it promised to continue. See {@link buildSharedRunOptions}.
  */
-const CONTROLLER_MAX_STEPS = 1000;
+const DEFAULT_CONTROLLER_MAX_STEPS = 1000;
 
 /**
  * Returns Anthropic `providerOptions` that enable a server-side fallback to
@@ -2375,7 +2375,7 @@ export class AgentController<TState = {}> {
     const channelAutoApprove =
       this.#channels?.__isAutoApproveResource(context?.resourceId ?? session.identity.getResourceId()) === true;
     const shared: SharedRunOptions = {
-      maxSteps: CONTROLLER_MAX_STEPS,
+      maxSteps: this.config.maxSteps ?? DEFAULT_CONTROLLER_MAX_STEPS,
       savePerStep: false,
       // Evaluated per call, so a tool the session already allows runs without
       // pausing for an approval the session would answer itself. `deny` still

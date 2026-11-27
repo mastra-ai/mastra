@@ -44,6 +44,7 @@ describe('AgentController notification signals', () => {
       workspace: createMockWorkspace(),
       id: 'controller-1',
       resourceId: 'resource-1',
+      maxSteps: 100,
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await controller.init();
@@ -80,7 +81,7 @@ describe('AgentController notification signals', () => {
         ifIdle: expect.objectContaining({
           streamOptions: expect.objectContaining({
             memory: expect.objectContaining({ resource: 'resource-1', thread: threadId }),
-            maxSteps: 1000,
+            maxSteps: 100,
             savePerStep: false,
           }),
         }),

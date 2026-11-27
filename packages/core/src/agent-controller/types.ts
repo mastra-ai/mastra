@@ -290,6 +290,13 @@ export interface AgentControllerConfig<TState = {}> {
   /** Default mode to enter when a thread has no persisted mode. */
   defaultModeId?: string;
 
+  /**
+   * Maximum number of steps for controller-managed agent runs.
+   * Applied to initial execution and every resumed continuation.
+   * @default 1000
+   */
+  maxSteps?: number;
+
   instructions?: string;
 
   /**
