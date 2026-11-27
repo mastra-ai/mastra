@@ -349,6 +349,7 @@ export class InMemoryMemory extends MemoryStorage {
     const hasResourceScope = resourceId !== undefined;
 
     for (const includeItem of include) {
+      // Found by message id, so without a resource scope a queued row named here is returned as stored.
       const targetMessage = this.db.messages.get(includeItem.id);
       if (!targetMessage) continue;
       if (hasResourceScope && targetMessage.resourceId !== resourceId) continue;
@@ -491,6 +492,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
+    // Queued rows come back too, with their reserved `threadId`; no read by id filters them.
     const rawMessages = messageIds
       .map(id => this.db.messages.get(id))
       .filter((message): message is MessageRow => !!message);
@@ -892,7 +894,8 @@ export class InMemoryMemory extends MemoryStorage {
     if (!this.db.threads.has(threadId) || this.db.signalRunIds.get(threadId) !== runId) return [];
 
     // Taken rows belong to the thread, not to a run. A second live run taking on this thread is a
-    // bug outside storage; this does not guard against it.
+    // bug outside storage; this does not guard against it. Rows of a run that ended without its
+    // close come back here, consumed ones included, instead of staying out of reach.
     const pendingThreadId = pendingQueueThreadId(threadId);
     const takenThreadId = takenQueueThreadId(threadId);
     const consumed = new Set(consumedIds);
@@ -916,7 +919,8 @@ export class InMemoryMemory extends MemoryStorage {
     assertNotQueueThreadId(threadId, 'closeSignalRun');
     // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
     // close of an earlier run deletes what that run consumed. A second live run taking on this
-    // thread is a bug outside storage; this does not guard against it.
+    // thread is a bug outside storage; this does not guard against it. The delete goes by id;
+    // ids are assumed unique.
     const current = this.db.signalRunIds.get(threadId) === runId;
     const pendingThreadId = pendingQueueThreadId(threadId);
     const takenThreadId = takenQueueThreadId(threadId);

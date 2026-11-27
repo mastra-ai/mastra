@@ -156,6 +156,7 @@ export function createPendingSignalsTest({ storage, peerStorage }: PendingSignal
         const second = await send(thread);
         expect(ids(await claim(thread, earlier))).toEqual([first.id, second.id]);
 
+        // The earlier run never closes, so its taken rows wait under the taken id for the later run.
         const later = await startRun(thread);
         expect(await claim(thread, earlier)).toEqual([]);
         const fresh = await send(thread);

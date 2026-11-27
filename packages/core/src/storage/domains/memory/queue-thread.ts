@@ -4,6 +4,12 @@ import { MastraError } from '../../../error';
  * Prefix of the reserved thread ids under which a store keeps a thread's queued messages. A row
  * under one of them has no `resourceId` and is not part of any thread. The ids are persisted, so
  * the prefix cannot change without a migration.
+ *
+ * The prefix is reserved without a migration and nothing checks for a collision at `init()`. A
+ * thread stored earlier under an id with the prefix is rejected by the entry points, and messages
+ * stored under `pendingQueueThreadId(T)` or `takenQueueThreadId(T)` count as T's queue, so
+ * `deleteThread(T)` deletes them. The prefix is namespaced so that no existing id is expected to
+ * collide.
  * @experimental
  */
 export const QUEUE_THREAD_PREFIX = 'mastra-queue:';

@@ -1317,6 +1317,7 @@ export class MemoryPG extends MemoryStorage {
 
     const idPlaceholders = targetIds.map((_, i) => '$' + (i + 1)).join(', ');
     const targetResourceCondition = resourceId ? ` AND "resourceId" = $${targetIds.length + 1}` : '';
+    // Found by message id, so without a resource a queued row named here is returned as stored.
     const targetRows = await this.#db.readClient.manyOrNone<{
       id: string;
       thread_id: string;
@@ -1431,6 +1432,7 @@ export class MemoryPG extends MemoryStorage {
 
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
+    // Queued rows come back too, with their reserved `threadId`; no read by id filters them.
     const selectStatement = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId"`;
 
     try {
@@ -2152,7 +2154,8 @@ export class MemoryPG extends MemoryStorage {
 
     const selectQuery = `SELECT id, content, role, type, "createdAt", "createdAtZ", thread_id AS "threadId", "resourceId" FROM ${getTableName({ indexName: TABLE_MESSAGES, schemaName: getSchemaName(this.#schema) })} WHERE id IN (${inPlaceholders(messageIds.length)})`;
 
-    // A queued signal is not a message yet, so it counts as missing.
+    // A queued signal is not a message yet, so it counts as missing. The update below goes by id
+    // after this unlocked read, which is exact while ids are unique.
     const existingMessagesDb = (await this.#db.client.manyOrNone(selectQuery, messageIds)).filter(
       row => !isQueueThreadId(row.threadId),
     );
@@ -2283,6 +2286,8 @@ export class MemoryPG extends MemoryStorage {
         if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'deleteMessages');
         const placeholders = messageIds.map((_, idx) => `$${idx + 1}`).join(',');
         // A queued signal is not a message; `cancelPendingSignals` removes a pending one.
+        // This unlocked read decides which ids are queued and the delete goes by id, which is exact
+        // while ids are unique; no SQL here tests the prefix.
         const kept = (
           await t.manyOrNone<{ id: string; thread_id: string | null }>(
             `SELECT id, thread_id FROM ${messageTableName} WHERE id IN (${placeholders})`,
@@ -2467,7 +2472,8 @@ export class MemoryPG extends MemoryStorage {
         );
         if (thread?.signalRunId !== runId) return { resourceId: undefined, rows: [] };
         // Taken rows belong to the thread, not to a run. A second live run taking on this thread is
-        // a bug outside storage; this does not guard against it.
+        // a bug outside storage; this does not guard against it. Rows of a run that ended without
+        // its close come back here, consumed ones included, instead of staying out of reach.
         await t.none(
           `WITH locked AS (
              SELECT id FROM ${messagesTable} WHERE thread_id = $1 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
@@ -2512,7 +2518,8 @@ export class MemoryPG extends MemoryStorage {
         );
         // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
         // close of an earlier run deletes what that run consumed. A second live run taking on this
-        // thread is a bug outside storage; this does not guard against it.
+        // thread is a bug outside storage; this does not guard against it. The delete goes by id;
+        // ids are assumed unique.
         const current = thread?.signalRunId === runId;
         // One statement locks the thread's taken rows in lock order.
         await t.none(

@@ -470,6 +470,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
     const resourceCondition = resourceId ? ` AND "resourceId" = ?` : '';
     const idPlaceholders = targetIds.map(() => '?').join(', ');
+    // Found by message id, so without a resource a queued row named here is returned as stored.
     const targetResult = await this.#client.execute({
       sql: `SELECT id, thread_id, "createdAt" FROM "${TABLE_MESSAGES}" WHERE id IN (${idPlaceholders})${resourceCondition}`,
       args: resourceId ? [...targetIds, resourceId] : targetIds,
@@ -544,6 +545,7 @@ export class MemoryLibSQL extends MemoryStorage {
   public async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
     if (messageIds.length === 0) return { messages: [] };
 
+    // Queued rows come back too, with their reserved `threadId`; no read by id filters them.
     try {
       const sql = `
         SELECT 
@@ -1168,6 +1170,8 @@ export class MemoryLibSQL extends MemoryStorage {
               const placeholders = batch.map(() => '?').join(',');
 
               // A queued signal is not a message; `cancelPendingSignals` removes a pending one.
+              // This read decides which ids are queued, and the delete in the same write transaction
+              // goes by id, so it removes exactly the rows the read kept; no SQL here tests the prefix.
               const result = await tx.execute({
                 sql: `SELECT id, thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
                 args: batch,
@@ -1992,7 +1996,8 @@ export class MemoryLibSQL extends MemoryStorage {
     const takenThreadId = takenQueueThreadId(threadId);
     try {
       // Taken rows belong to the thread, not to a run. A second live run taking on this thread is a
-      // bug outside storage; this does not guard against it.
+      // bug outside storage; this does not guard against it. Rows of a run that ended without its
+      // close come back here, consumed ones included, instead of staying out of reach.
       const [, claimed] = await this.#write('claimPendingSignals', () =>
         this.#client.batch(
           [
@@ -2032,7 +2037,8 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
       // close of an earlier run deletes what that run consumed. A second live run taking on this
-      // thread is a bug outside storage; this does not guard against it.
+      // thread is a bug outside storage; this does not guard against it. The delete goes by id;
+      // ids are assumed unique.
       // The move reads the signal run before the last statement clears it.
       await this.#write('closeSignalRun', () =>
         this.#client.batch(

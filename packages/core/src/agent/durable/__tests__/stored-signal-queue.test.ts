@@ -1295,6 +1295,8 @@ describe('a storage-backed run with observational memory', () => {
     expect(refused).toEqual({ visible: true });
     expect(prompts).toHaveLength(3);
     expect(occurrences(prompts[1], 'SAVED_BEFORE_THE_STATE')).toBe(1);
+    // The save made the signal a message of the thread, and the retried step's claim returns only rows
+    // under the taken id, so the retry gets no copy of it.
     expect(occurrences(prompts[2], 'SAVED_BEFORE_THE_STATE')).toBe(0);
     expect((await savedMessages()).filter(message => message.id === sent!.signal.id)).toHaveLength(1);
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);

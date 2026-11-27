@@ -329,7 +329,9 @@ export abstract class MemoryStorage extends StorageDomain {
   //   message. A row moved from one of T's reserved ids into T takes the saved
   //   message's `createdAt`.
   // - Reads by thread or by resource never match a queued row. Reads by
-  //   message id return whatever row has the id.
+  //   message id, `listMessages` include targets among them, return whatever
+  //   row has the id; an include without a resource also returns the other
+  //   rows under the same reserved id as its neighbors.
   // - `updateMessages` treats a queued row as a missing id.
   // - `deleteMessages` deletes nothing for a queued row's id;
   //   `cancelPendingSignals` removes a pending signal.
@@ -358,6 +360,27 @@ export abstract class MemoryStorage extends StorageDomain {
   // Rows are returned ordered by `createdAt`, then by `id` in code unit order,
   // in the shape message reads return. Their `threadId` is T and their
   // `resourceId` is the thread's current one.
+  //
+  // Deliberate limits of this layout:
+  // - Delivery after an unsettled end is at least once. A run whose close
+  //   failed or never ran leaves its taken rows, and the next claim by T's
+  //   signal run returns them, including a transient signal or a failed
+  //   turn's signal that the ended run already gave to its model. A row marked
+  //   with its run would stay out of reach until T is deleted when that run
+  //   never closes.
+  // - A signal saved inside a step whose state write then fails is a message
+  //   of T, so the retried step's claim does not return it and history holds
+  //   it once. Telling it apart needs a per-run mark on a saved message row.
+  // - Message and signal ids are assumed unique. A close deletes taken rows by
+  //   the ids in `consumedIds`, and `deleteMessages` and `updateMessages`
+  //   decide from a read and then write by id. When an id is deleted and sent
+  //   again as a signal, a late repeated close of the earlier run, or a delete
+  //   or update between its read and its write, can act on the new row.
+  //   Closing that window needs a per-run mark on the row or a prefix test in
+  //   SQL, and the layout has neither.
+  // - No store filters queued rows out of reads by message id. A caller that
+  //   must not treat one as a message checks
+  //   `isQueueThreadId(message.threadId)`, as `dbMessagesToStateSignals` does.
   // ============================================
 
   /**
@@ -406,8 +429,8 @@ export abstract class MemoryStorage extends StorageDomain {
    * When the thread's signal run is `runId`: move the thread's pending rows
    * to taken, then return every taken row of the thread except the ids in
    * `consumedIds`. Taken rows belong to the thread, so this includes rows an
-   * earlier run took and never closed. Saved rows are messages and are not
-   * returned.
+   * earlier run took and never closed, those it consumed among them. Saved
+   * rows are messages and are not returned.
    * Otherwise, including for a missing thread, return nothing and change
    * nothing. Does not change any `createdAt`.
    * @experimental
@@ -425,8 +448,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * thread's signal run is still `runId`, move its other taken rows back to
    * pending and clear the signal run. A close that comes after another run
    * became the signal run deletes only what it consumed and leaves the other
-   * taken rows to that run. Pending rows and messages are untouched. Repeating
-   * a close changes nothing.
+   * taken rows to that run. Pending rows and messages are untouched. The
+   * delete goes by id, so repeating a close changes nothing while no consumed
+   * id is sent again.
    * @experimental
    */
   async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
