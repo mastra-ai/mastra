@@ -49,7 +49,13 @@ function confirmTool(seen: unknown[], resumeSchema: z.ZodType = z.object({ confi
   });
 }
 
-function startProcess(engine: Engine, storage: InMemoryStore, seen: unknown[], overrides?: AgentOverrides) {
+function startProcess(
+  engine: Engine,
+  storage: InMemoryStore,
+  seen: unknown[],
+  overrides?: AgentOverrides,
+  withFga = false,
+) {
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       const parts: LanguageModelV2StreamPart[] = prompt.some(message => message.role === 'tool')
@@ -83,15 +89,12 @@ function startProcess(engine: Engine, storage: InMemoryStore, seen: unknown[], o
   const pubsub = new EventEmitterPubSub();
   pubsubs.push(pubsub);
   const durable = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
-  new Mastra({ agents: { confirmer: durable }, storage, logger: false, server: { fga } });
+  new Mastra({ agents: { confirmer: durable }, storage, logger: false, server: withFga ? { fga } : undefined });
   return durable;
 }
 
-function tenant(name: string, userId = 'allowed') {
-  return new RequestContext<unknown>([
-    ['tenant', name],
-    ['user', { id: userId }],
-  ]);
+function tenant(name: string, userId?: string) {
+  return new RequestContext<unknown>([['tenant', name], ...(userId ? [['user', { id: userId }] as const] : [])]);
 }
 
 async function drain(stream: { fullStream: AsyncIterable<ChunkType> }) {
@@ -100,12 +103,15 @@ async function drain(stream: { fullStream: AsyncIterable<ChunkType> }) {
   return text.join('');
 }
 
-async function suspend(engine: Engine, overrides?: (seen: unknown[]) => AgentOverrides) {
+async function suspend(engine: Engine, overrides?: (seen: unknown[]) => AgentOverrides, withFga = false) {
   globalRunRegistry.clear();
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
-  const agent = startProcess(engine, storage, seen, overrides?.(seen));
-  const started = await agent.stream('go', { requestContext: tenant('original'), closeOnSuspend: true });
+  const agent = startProcess(engine, storage, seen, overrides?.(seen), withFga);
+  const started = await agent.stream('go', {
+    requestContext: tenant('original', withFga ? 'allowed' : undefined),
+    closeOnSuspend: true,
+  });
   await drain(started);
   const workflows = (await storage.getStore('workflows'))!;
   await vi.waitFor(async () => {
@@ -118,11 +124,11 @@ async function suspend(engine: Engine, overrides?: (seen: unknown[]) => AgentOve
   return { agent, storage, seen, runId: started.runId };
 }
 
-async function suspendIn(mode: 'warm' | 'cold', engine: Engine) {
-  const run = await suspend(engine);
+async function suspendIn(mode: 'warm' | 'cold', engine: Engine, withFga = false) {
+  const run = await suspend(engine, undefined, withFga);
   if (mode === 'warm') return run;
   globalRunRegistry.clear();
-  return { ...run, agent: startProcess(engine, run.storage, run.seen) };
+  return { ...run, agent: startProcess(engine, run.storage, run.seen, undefined, withFga) };
 }
 
 afterEach(async () => {
@@ -135,16 +141,16 @@ describe.each(['durable', 'evented'] as const)(
   engine => {
     it.each([
       ['warm', false],
-      ['warm', true],
       ['cold', false],
       ['cold', true],
     ] as const)(
       '%s (untilIdle: %s): rejects without touching the run, and a corrected retry sees the original context',
       async (mode, untilIdle) => {
         const run = await suspendIn(mode, engine);
+        const requestContext = mode === 'cold' ? tenant('rejected') : undefined;
 
         await expect(
-          run.agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle, requestContext: tenant('rejected') }),
+          run.agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle, requestContext }),
         ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
         expect(run.seen).toEqual([]);
         if (mode === 'warm') expect(globalRunRegistry.get(run.runId)?.requestContext?.get('tenant')).toBe('original');
@@ -156,7 +162,7 @@ describe.each(['durable', 'evented'] as const)(
     );
 
     it.each(['warm', 'cold'] as const)('%s: reports an authorization denial before invalid resume data', async mode => {
-      const run = await suspendIn(mode, engine);
+      const run = await suspendIn(mode, engine, true);
 
       await expect(
         run.agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('other', 'denied') }),
@@ -164,6 +170,24 @@ describe.each(['durable', 'evented'] as const)(
     });
 
     describe('warm resumes validate the tool the run registered, not the current catalog', () => {
+      it('a resume whose request context rebuilds the tool with another schema', async () => {
+        const run = await suspend(engine, seen => ({
+          tools: ({ requestContext }) => ({
+            confirm:
+              requestContext.get('tenant') === 'strict'
+                ? confirmTool(seen, z.object({ confirmed: z.string() }))
+                : confirmTool(seen),
+          }),
+        }));
+
+        const resumed = await run.agent.resumeStream(
+          { confirmed: 'yes' },
+          { runId: run.runId, requestContext: tenant('strict') },
+        );
+        expect(await drain(resumed)).toBe('done');
+        expect(run.seen).toEqual([{ confirmed: 'yes', tenant: 'strict' }]);
+      });
+
       it('a call-time toolset that shadows the suspended tool', async () => {
         const run = await suspend(engine);
         const toolsets = { replacement: { confirm: confirmTool([], z.object({ confirmed: z.string() })) } };

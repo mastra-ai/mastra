@@ -15582,6 +15582,9 @@ export class Agent<
     // The resumed segment always carries its own claim: without a context the
     // engine would restore the previous segment's claim from the snapshot.
     resumeRequestContext ??= new RequestContext();
+    // A warm resume with its own context, delegation or hooks rebuilds its request-built tools below.
+    const rebuildsRequestTools =
+      !coldSnapshot && !!(options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser);
     const resolvedOptions = (await this.#resolveDurableRunOptions(
       {
         ...(options as DurableAgentStreamOptions<TOutput>),
@@ -15691,9 +15694,10 @@ export class Agent<
           details: { agentName: this.name, runId },
         });
       }
-      if (current) {
+      // Checked against the tools the run registered, which the tool-call step executes. A run this
+      // process already executed may rebuild them for this call below, so its check is left to the step.
+      if (current && !(priorExecution && rebuildsRequestTools)) {
         try {
-          // Checked against the tools the run registered, which the tool-call step executes.
           await this.#validateToolResumeData({
             snapshot: current,
             toolCallId: options?.toolCallId,
@@ -15749,7 +15753,7 @@ export class Agent<
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
+    if (rebuildsRequestTools) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
