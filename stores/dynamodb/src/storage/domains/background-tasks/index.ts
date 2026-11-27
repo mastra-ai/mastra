@@ -16,9 +16,24 @@ import { deleteTableData } from '../utils';
 
 const ENTITY = 'background_task';
 
+/**
+ * Serializes a JSON value for the DynamoDB entity's string attributes.
+ *
+ * The attributes hold a JSON document for every value, not just objects: a bare
+ * string or number was stored as-is, and `fromElectroRecord` then read it back
+ * as a different type (`'42'` became the number `42`, and a JSON-looking string
+ * became an object). Encoding every defined value keeps the round-trip
+ * lossless. `undefined`/`null` stay unset so a cleared attribute stays cleared
+ * instead of becoming the JSON string `'undefined'`.
+ *
+ * The entity's `jsonSetGet` helper stores strings verbatim and only decodes a
+ * value that starts with `{` or `[`, so this is the only place a string scalar
+ * is encoded and `fromElectroRecord` is the only place it is decoded.
+ * See mastra-ai/mastra#31613.
+ */
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? undefined;
+  if (v === undefined || v === null) return undefined;
+  return JSON.stringify(v);
 }
 
 function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
@@ -51,11 +66,19 @@ function toElectroRecord(task: BackgroundTask): Record<string, unknown> {
 }
 
 function fromElectroRecord(data: Record<string, any>): BackgroundTask {
+  /**
+   * Decodes a JSON attribute written by `serializeJson`.
+   *
+   * Every defined value is stored as a JSON document, string scalars included,
+   * so any string has to be parsed — not just the ones that start with `{` or
+   * `[`. The try/catch fallback returns the raw string for legacy rows that
+   * were stored as plain text.
+   */
   const parseJson = (v: unknown): any => {
     if (v == null || v === '') return undefined;
     if (typeof v === 'string') {
       try {
-        if (v.startsWith('{') || v.startsWith('[')) return JSON.parse(v);
+        return JSON.parse(v);
       } catch {
         return v;
       }

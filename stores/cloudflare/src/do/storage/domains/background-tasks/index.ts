@@ -21,9 +21,20 @@ import { createSqlBuilder } from '../../sql-builder';
 import type { SqlParam } from '../../sql-builder';
 import { deserializeValue } from '../utils';
 
+/**
+ * Serializes a JSON column value for the Durable Object SQL storage.
+ *
+ * The column stores a JSON document for every value, not just objects: a bare
+ * string or number written as-is was read back as a different type (`'42'`
+ * became the number `42`). `rowToTask` parses any string it reads, so encoding
+ * every defined value keeps that round-trip lossless.
+ *
+ * `undefined`/`null` stay unset so a cleared column stays cleared instead of
+ * becoming the JSON string `'undefined'`. See mastra-ai/mastra#31613.
+ */
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? undefined;
+  if (v === undefined || v === null) return undefined;
+  return JSON.stringify(v);
 }
 
 function rowToTask(row: Record<string, unknown>): BackgroundTask {
