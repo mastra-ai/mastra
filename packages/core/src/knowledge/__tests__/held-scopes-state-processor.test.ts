@@ -39,23 +39,31 @@ function harness() {
 }
 
 describe('HeldScopesStateProcessor', () => {
-  it('snapshots every held scope on the first turn, scopes with no pages included', async () => {
+  it('snapshots every scope it holds a role on, scopes with no pages included', async () => {
     const { requestContext, processor, args } = harness();
+    // agent:support grants this run no role, so it gives no access and is left out.
     setRunAgentScopes(requestContext, ['org:acme', 'agent:support', 'docs:acme']);
 
     const snapshot = (await processor.computeStateSignal(args())) as any;
-    expect(snapshot).toMatchObject({ mode: 'snapshot', tagName: 'knowledge-scopes', attributes: { count: 5 } });
+    expect(snapshot).toMatchObject({ mode: 'snapshot', tagName: 'knowledge-scopes' });
+    expect(snapshot.attributes).toBeUndefined();
     expect(snapshot.value.scopes).toEqual([
-      { address: 'org:acme', role: 'editor', can: 'write' },
-      { address: 'agent:support', can: 'none' },
-      { address: 'docs:acme', role: 'viewer', can: 'read' },
-      { address: 'resource:user-1', role: 'owner', can: 'write' },
-      { address: 'thread:t-1', role: 'owner', can: 'write' },
+      { address: 'org:acme', role: 'editor' },
+      { address: 'docs:acme', role: 'viewer' },
+      { address: 'resource:user-1', role: 'owner' },
+      { address: 'thread:t-1', role: 'owner' },
     ]);
-    expect(snapshot.contents).toContain('org:acme: write (editor)');
-    expect(snapshot.contents).toContain('docs:acme: read (viewer)');
-    expect(snapshot.contents).toContain('agent:support: none');
-    expect(snapshot.contents).toContain('thread:t-1: write (owner)');
+    expect(snapshot.contents).toBe(
+      [
+        '',
+        '  Your session has access to:',
+        '  - org:acme (editor)',
+        '  - docs:acme (viewer)',
+        '  - resource:user-1 (owner)',
+        '  - thread:t-1 (owner)',
+        '',
+      ].join('\n'),
+    );
   });
 
   it('emits nothing while the held scopes are unchanged and the snapshot is visible', async () => {
@@ -79,7 +87,7 @@ describe('HeldScopesStateProcessor', () => {
     expect(next).toBeUndefined();
   });
 
-  it('sends a delta when a scope is added, removed, or its permission changes', async () => {
+  it('sends a delta when a scope is added, removed, or its role changes', async () => {
     const { requestContext, processor, args, asBase } = harness();
     setRunAgentScopes(requestContext, ['org:acme']);
     const snapshot = (await processor.computeStateSignal(args())) as any;
@@ -87,22 +95,50 @@ describe('HeldScopesStateProcessor', () => {
 
     setRunAgentScopes(requestContext, ['org:acme', 'docs:acme']);
     const added = (await processor.computeStateSignal(args(base))) as any;
-    expect(added).toMatchObject({ mode: 'delta', tagName: 'knowledge-scopes-update', attributes: { changes: 1 } });
-    expect(added.delta.ops).toEqual([{ op: 'add', scope: { address: 'docs:acme', role: 'viewer', can: 'read' } }]);
-    expect(added.contents).toContain('+ docs:acme: read (viewer)');
+    expect(added).toMatchObject({ mode: 'delta', tagName: 'knowledge-scopes-update' });
+    expect(added.attributes).toBeUndefined();
+    expect(added.delta.ops).toEqual([{ op: 'add', scope: { address: 'docs:acme', role: 'viewer' } }]);
+    expect(added.contents).toBe('\n  + docs:acme (viewer)\n');
 
-    // Dropping org:acme removes it, and takes away the viewer role docs:acme granted through it.
+    // Dropping org:acme removes it, and takes away the viewer role docs:acme granted through it:
+    // losing a role reads as losing access.
     setRunAgentScopes(requestContext, ['docs:acme']);
-    const changed = (await processor.computeStateSignal(
-      args({ ...base, deltasSinceSnapshot: [{ metadata: added.metadata }] }),
-    )) as any;
-    expect(changed.mode).toBe('delta');
-    expect(changed.delta.ops).toEqual([
+    const folded = { ...base, deltasSinceSnapshot: [{ metadata: added.metadata }] };
+    const removed = (await processor.computeStateSignal(args(folded))) as any;
+    expect(removed.mode).toBe('delta');
+    expect(removed.delta.ops).toEqual([
       { op: 'remove', address: 'org:acme' },
-      { op: 'change', scope: { address: 'docs:acme', can: 'none' } },
+      { op: 'remove', address: 'docs:acme' },
     ]);
-    expect(changed.contents).toContain('- removed org:acme');
-    expect(changed.contents).toContain('~ changed docs:acme: none');
+    expect(removed.contents).toBe('\n  - org:acme scope access was removed\n  - docs:acme scope access was removed\n');
+  });
+
+  it('sends a role change as a change, not a removal', async () => {
+    const { requestContext, processor, args } = harness();
+    setRunAgentScopes(requestContext, ['org:acme']);
+    // A snapshot from a turn where the run was a viewer on org:acme; it is an editor now.
+    const base = {
+      lastSnapshot: { metadata: { value: { scopes: [{ address: 'org:acme', role: 'viewer' }] } } },
+      contextWindow: { hasSnapshot: true },
+    };
+    const changed = (await processor.computeStateSignal(args(base))) as any;
+    expect(changed.delta.ops).toContainEqual({ op: 'change', scope: { address: 'org:acme', role: 'editor' } });
+    expect(changed.contents).toContain('  ~ org:acme role changed to editor');
+  });
+
+  it('clears the list with a snapshot that says so when no scope is held any more', async () => {
+    const { args } = harness();
+    const processorWithNone = new HeldScopesStateProcessor({
+      principalsKey: () => 'k',
+      readHeldScopes: async () => [],
+    });
+    const base = {
+      lastSnapshot: { metadata: { value: { scopes: [{ address: 'org:acme', role: 'viewer' }] } } },
+      contextWindow: { hasSnapshot: true },
+    };
+    const cleared = (await processorWithNone.computeStateSignal(args(base))) as any;
+    expect(cleared).toMatchObject({ mode: 'snapshot', contents: '\n  Your session has no Knowledge scopes.\n' });
+    expect(await processorWithNone.computeStateSignal(args())).toBeUndefined();
   });
 
   it('sends a full snapshot again once the earlier one has left the context window', async () => {
@@ -132,5 +168,6 @@ describe('HeldScopesStateProcessor', () => {
     expect(preamble).toContain('<knowledge-scopes');
     expect(preamble).toContain('<knowledge-scopes-update');
     expect(preamble).toContain('no pages yet');
+    expect(preamble).toContain('Viewers can only read; every other role can also write.');
   });
 });

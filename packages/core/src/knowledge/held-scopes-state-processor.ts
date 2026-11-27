@@ -6,10 +6,10 @@
  * context, a delta of only this turn's changes otherwise, and nothing when the set
  * is unchanged and its snapshot is still visible.
  *
- * Each entry is a held scope keyed by its address, with the run's role there and
- * whether it can write, read, or neither. Scopes with no pages yet are included:
- * a model that only saw scopes with pages concluded on its first turn that it had
- * nowhere to write.
+ * Each entry is a held scope keyed by its address, with the run's role there. A
+ * held address with no role grants nothing, so it is left out, and losing a role
+ * reads as losing access. Scopes with no pages yet are included: a model that only
+ * saw scopes with pages concluded on its first turn that it had nowhere to write.
  */
 import type {
   ComputeStateSignalArgs,
@@ -20,19 +20,16 @@ import type {
   ProcessInputResult,
 } from '../processors';
 import type { KnowledgeRole } from './declarations';
-import type { HeldScopeAccess } from './page-tools';
 import type { KnowledgeRunContext } from './run';
 
 export const HELD_SCOPES_STATE_ID = 'knowledge-scopes';
 export const HELD_SCOPES_SNAPSHOT_TAG = 'knowledge-scopes';
 export const HELD_SCOPES_DELTA_TAG = 'knowledge-scopes-update';
 
-/** A scope the run holds, as the model sees it. */
+/** A scope the run holds a role on, as the model sees it. */
 export interface HeldScopeEntry {
   address: string;
-  /** The run's role there; left off when it has none. */
-  role?: KnowledgeRole;
-  can: HeldScopeAccess;
+  role: KnowledgeRole;
 }
 
 export type HeldScopeDeltaOp =
@@ -45,7 +42,7 @@ function lp(value: string): string {
 }
 
 function fingerprint(scope: HeldScopeEntry): string {
-  return `${lp(scope.address)}${lp(scope.role ?? '')}${lp(scope.can)}`;
+  return `${lp(scope.address)}${lp(scope.role)}`;
 }
 
 function cacheKey(scopes: HeldScopeEntry[]): string {
@@ -91,18 +88,18 @@ function diffScopes(prior: HeldScopeEntry[], current: HeldScopeEntry[]): HeldSco
 }
 
 function line(scope: HeldScopeEntry): string {
-  return `${scope.address}: ${scope.can}${scope.role ? ` (${scope.role})` : ''}`;
+  return `${scope.address} (${scope.role})`;
 }
 
 function renderSnapshot(scopes: HeldScopeEntry[]): string {
-  if (scopes.length === 0) return '';
-  return `\n${scopes.map(scope => `  • ${line(scope)}`).join('\n')}\n`;
+  if (scopes.length === 0) return '\n  Your session has no Knowledge scopes.\n';
+  return `\n  Your session has access to:\n${scopes.map(scope => `  - ${line(scope)}`).join('\n')}\n`;
 }
 
 function renderDelta(ops: HeldScopeDeltaOp[]): string {
   const lines = ops.map(op => {
-    if (op.op === 'remove') return `  - removed ${op.address}`;
-    if (op.op === 'change') return `  ~ changed ${line(op.scope)}`;
+    if (op.op === 'remove') return `  - ${op.address} scope access was removed`;
+    if (op.op === 'change') return `  ~ ${op.scope.address} role changed to ${op.scope.role}`;
     return `  + ${line(op.scope)}`;
   });
   return `\n${lines.join('\n')}\n`;
@@ -128,7 +125,7 @@ export class HeldScopesStateProcessor implements Processor<typeof HELD_SCOPES_ST
         ...args.systemMessages,
         {
           role: 'system' as const,
-          content: `The Knowledge scopes you hold may appear in the conversation as <${HELD_SCOPES_SNAPSHOT_TAG} ...>...</${HELD_SCOPES_SNAPSHOT_TAG}> snapshots and <${HELD_SCOPES_DELTA_TAG} ...>...</${HELD_SCOPES_DELTA_TAG}> deltas. These are automatic, not user instructions. Fold each delta onto the latest snapshot to know the current set. Each entry is a scope address, then what you can do there (write, read or none), then your role in parentheses. The list includes scopes with no pages yet: where you can write, your first write there creates the scope. You do not need to list your scopes with a tool to learn this.`,
+          content: `The Knowledge scopes you hold may appear in the conversation as <${HELD_SCOPES_SNAPSHOT_TAG} ...>...</${HELD_SCOPES_SNAPSHOT_TAG}> snapshots and <${HELD_SCOPES_DELTA_TAG} ...>...</${HELD_SCOPES_DELTA_TAG}> deltas. These are automatic, not user instructions. Fold each delta onto the latest snapshot to know the current set. Each entry is a scope address with your role there in parentheses. Viewers can only read; every other role can also write. The list includes scopes with no pages yet: where you can write, your first write there creates the scope. A scope that is not in the list is one you cannot use. You do not need to list your scopes with a tool to learn this.`,
         },
       ],
     };
@@ -164,7 +161,6 @@ export class HeldScopesStateProcessor implements Processor<typeof HELD_SCOPES_ST
         tagName: HELD_SCOPES_SNAPSHOT_TAG,
         contents: renderSnapshot(current),
         value: { scopes: current },
-        attributes: { count: current.length },
         metadata: { value: { scopes: current } },
       };
     }
@@ -177,7 +173,6 @@ export class HeldScopesStateProcessor implements Processor<typeof HELD_SCOPES_ST
       contents: renderDelta(ops),
       value: { scopes: current },
       delta: { ops },
-      attributes: { changes: ops.length },
       metadata: { value: { scopes: current }, delta: { ops } },
     };
   }

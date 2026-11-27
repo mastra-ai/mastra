@@ -315,9 +315,10 @@ describe('Knowledge attached to an Agent without Memory', () => {
     });
     await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
     const prompt = JSON.stringify(prompts[0]);
-    expect(prompt).toContain('<knowledge-scopes count=');
-    expect(prompt).toContain('thread:thread-9: write (owner)');
-    expect(prompt).toContain('resource:user-1: write (owner)');
+    expect(prompt).toContain('<knowledge-scopes>');
+    expect(prompt).toContain('Your session has access to:');
+    expect(prompt).toContain('- thread:thread-9 (owner)');
+    expect(prompt).toContain('- resource:user-1 (owner)');
   });
 
   it('warns and delivers no pins to an agent without Memory', async () => {

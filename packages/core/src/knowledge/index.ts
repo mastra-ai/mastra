@@ -474,10 +474,10 @@ export class Knowledge extends MastraBase {
     return knowledgeDeliveredPins(run, budget, this.#groups().read);
   }
 
-  /** The scopes a run holds this turn, with its role and what it can do in each. @internal */
+  /** The scopes a run holds a role on this turn, with that role. @internal */
   async __heldScopes(context: KnowledgeRunContext): Promise<HeldScopeEntry[]> {
     const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
-    return (await heldScopes(run)).map(({ address, role, can }) => ({ address, ...(role ? { role } : {}), can }));
+    return (await heldScopes(run)).flatMap(({ address, role }) => (role ? [{ address, role }] : []));
   }
 
   /** @internal */

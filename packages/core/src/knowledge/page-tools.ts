@@ -218,10 +218,10 @@ async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[], cache: M
 }
 
 /** What a run can do in a scope it holds: contributors and up can write, viewers only read. */
-export type HeldScopeAccess = 'write' | 'read' | 'none';
+type HeldScopeAccess = 'write' | 'read' | 'none';
 
 /** A scope the run holds, whether or not it has a scope page yet. */
-export type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | null; can: HeldScopeAccess };
+type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | null; can: HeldScopeAccess };
 
 /**
  * Every scope the run holds, in principal order, with its role and what it can do there. A held scope
