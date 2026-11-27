@@ -683,7 +683,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           ? { actorId: by.userId, actorType: 'human' as const }
           : { actorId: 'factory', actorType: 'system' as const }),
         action: 'factory.work_item.needs_attention',
-        // The input that flagged the card: told twice, or by two processes, it is recorded once.
+        // The input that flagged the card. One entry per time the card comes to need attention is
+        // kept by the run itself: an input that finds it already flagged flags nothing.
         idempotencyKey: `factory-needs-attention:${card.workItemId}:${inputId}`,
         targets: [{ type: 'work_item', id: card.workItemId, ...(item ? { name: item.title } : {}) }],
         metadata: {

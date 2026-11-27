@@ -609,7 +609,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
-      // ── When cards were created and completed, for the draft page's band ────
+      // ── What a card's board run records it doing ─────────────────────────────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemRunState.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemRunState.method,
         requiresAuth: false,
@@ -632,6 +632,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
+      // ── When cards were created and completed, for the draft page's band ────
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
         method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
         requiresAuth: false,
