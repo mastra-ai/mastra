@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import {
   clearRemovable,
   collectIds,
+  countScopedGroups,
   createGroup,
   denormalize,
   findGroup,
@@ -16,6 +17,7 @@ import {
   pruneEmptyGroups,
   removeNode,
   setGroupLogic,
+  setGroupScope,
   setNegated as setTreeNegated,
   updateItem as updateTreeItem,
 } from './filter-bar-tree';
@@ -29,11 +31,13 @@ import type {
   FilterBarExpression,
   FilterBarField,
   FilterBarGroup,
+  FilterBarGroupScope,
   FilterBarItem,
   FilterBarPlace,
   FilterBarLogic,
   FilterBarNode,
   FilterBarOperator,
+  FilterBarScope,
   FilterBarSegment,
   FilterBarValue,
 } from './types';
@@ -94,8 +98,22 @@ export type FilterBarContextValue = {
   hasRemovableItems: boolean;
   /** Called by chips so `clear` and the Clear button know which items are pinned. */
   registerNonRemovable: (itemId: string, nonRemovable: boolean) => void;
-  /** Appends an empty group to the root (`undefined`) or inside `parentId`, and points the input at it. */
-  addGroup: (parentId: string | undefined, logic: FilterBarLogic) => string;
+  /**
+   * Appends an empty group to the root (`undefined`) or inside `parentId`, and points the input
+   * at it. With `scope`, the group is a related clause reading that scope's fields.
+   */
+  addGroup: (parentId: string | undefined, logic: FilterBarLogic, scope?: FilterBarGroupScope) => string;
+  /** Scopes a related clause can read (the bar's `scopes`; none for flat values). */
+  scopes: readonly FilterBarScope[];
+  getScope: (scopeId: string) => FilterBarScope | undefined;
+  /** Whether a related clause may sit in `parentId` (`undefined` = root): never inside another one. */
+  canNestScope: (parentId: string | undefined) => boolean;
+  /** Whether the tree already holds `maxScopedGroups` related clauses. */
+  scopedGroupsFull: boolean;
+  /** Switches the quantifier of a related clause. */
+  setQuantifier: (groupId: string, quantifierId: string) => void;
+  /** "Has spans" for a related clause; `undefined` when its scope is unknown. */
+  describeScope: (scope: FilterBarGroupScope) => string | undefined;
   /** Removes a group and everything below it. */
   removeGroup: (groupId: string) => void;
   setLogic: (groupId: string, logic: FilterBarLogic) => void;
@@ -115,7 +133,7 @@ export type FilterBarContextValue = {
   inputTarget: string | undefined;
   /** Point the input at a group (or back at the root with `undefined`) and focus it. */
   openGroupInput: (groupId: string | undefined) => void;
-  /** Fields offered in a group (`undefined` = root). */
+  /** Fields offered in a group (`undefined` = root): its scope's fields inside a related clause. */
   fieldsAt: (groupId: string | undefined) => FilterBarField[];
   /**
    * The custom field named by typed text in a group, when the bar takes one and the name is
@@ -208,6 +226,10 @@ export type FilterBarProviderProps = {
    * memoized): option lists are cached per field and place until it changes.
    */
   operatorsFor?: (field: FilterBarField, place: FilterBarPlace) => readonly string[] | undefined;
+  /** Related clauses ("Has spans where …") a group can read; each brings its own fields. */
+  scopes?: readonly FilterBarScope[];
+  /** Most related clauses the tree may hold. Unlimited by default. */
+  maxScopedGroups?: number;
   children: ReactNode;
 };
 
@@ -246,6 +268,8 @@ const mergeNodes = (prev: FilterBarNode[], next: FilterBarNode[], leaving: Reado
   return out;
 };
 
+const NO_SCOPES: readonly FilterBarScope[] = [];
+
 export function FilterBarProvider({
   fields,
   operators,
@@ -260,6 +284,8 @@ export function FilterBarProvider({
   customField,
   validateItem,
   operatorsFor,
+  scopes: scopesProp = NO_SCOPES,
+  maxScopedGroups = Number.POSITIVE_INFINITY,
   children,
 }: FilterBarProviderProps) {
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
@@ -280,36 +306,6 @@ export function FilterBarProvider({
     [onValueChange, flat],
   );
 
-  const fieldsAt = useCallback((_groupId: string | undefined) => fields, [fields]);
-  // Built once per name (and per `customField` object) so a custom field keeps its identity
-  // and its cached operators.
-  const buildCustomField = useMemo(() => {
-    const built = new Map<string, FilterBarField>();
-    return (id: string): FilterBarField | undefined => {
-      if (!customField || id.length <= customField.prefix.length || !id.startsWith(customField.prefix)) return;
-      let field = built.get(id);
-      if (!field) {
-        field = { ...customField.field, id, label: id };
-        built.set(id, field);
-      }
-      return field;
-    };
-  }, [customField]);
-  const customFieldAt = useCallback(
-    (groupId: string | undefined, text: string) => {
-      if (!customField) return;
-      const trimmed = text.trim();
-      const name = trimmed.startsWith(customField.prefix) ? trimmed.slice(customField.prefix.length) : trimmed;
-      const id = `${customField.prefix}${name}`;
-      if (fieldsAt(groupId).some(f => f.id === id)) return;
-      return buildCustomField(id);
-    },
-    [customField, fieldsAt, buildCustomField],
-  );
-  const getField = useCallback(
-    (fieldId: string, groupId?: string) => fieldsAt(groupId).find(f => f.id === fieldId) ?? buildCustomField(fieldId),
-    [fieldsAt, buildCustomField],
-  );
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
   // Cached per field (and place) so a chip's operator and its option lists stay the same
   // objects across renders.
@@ -413,6 +409,81 @@ export function FilterBarProvider({
     (groupId: string | undefined, itemId?: string) => placeInTree(rendered, groupId, itemId),
     [rendered],
   );
+
+  const scopes = flat ? NO_SCOPES : scopesProp;
+  const getScope = useCallback((scopeId: string) => scopes.find(s => s.id === scopeId), [scopes]);
+  const describeScope = useCallback(
+    (scope: FilterBarGroupScope) => {
+      const found = getScope(scope.id);
+      if (!found) return undefined;
+      const quantifier = found.quantifiers.find(q => q.id === scope.quantifierId) ?? found.quantifiers[0];
+      return quantifier ? `${quantifier.label} ${found.label}` : found.label;
+    },
+    [getScope],
+  );
+  const scopeAt = useCallback(
+    (groupId: string | undefined) => {
+      const scope = groupId === undefined ? undefined : placeOf(groupId).scope;
+      return scope ? (getScope(scope.id) ?? null) : undefined;
+    },
+    [placeOf, getScope],
+  );
+  const fieldsAt = useCallback(
+    (groupId: string | undefined) => {
+      const scope = scopeAt(groupId);
+      return scope === undefined ? fields : (scope?.fields ?? []);
+    },
+    [scopeAt, fields],
+  );
+  const customFieldOf = useCallback(
+    (groupId: string | undefined) => {
+      const scope = scopeAt(groupId);
+      return scope === undefined ? customField : scope?.customField;
+    },
+    [scopeAt, customField],
+  );
+  // Built once per name and per custom-field template, so a custom field keeps its identity
+  // and its cached operators.
+  const [builtCustomFields] = useState(() => new WeakMap<FilterBarCustomField, Map<string, FilterBarField>>());
+  const buildCustomField = useCallback(
+    (template: FilterBarCustomField | undefined, id: string): FilterBarField | undefined => {
+      if (!template || id.length <= template.prefix.length || !id.startsWith(template.prefix)) return;
+      let built = builtCustomFields.get(template);
+      if (!built) {
+        built = new Map();
+        builtCustomFields.set(template, built);
+      }
+      let field = built.get(id);
+      if (!field) {
+        field = { ...template.field, id, label: id };
+        built.set(id, field);
+      }
+      return field;
+    },
+    [builtCustomFields],
+  );
+  const customFieldAt = useCallback(
+    (groupId: string | undefined, text: string) => {
+      const template = customFieldOf(groupId);
+      if (!template) return;
+      const trimmed = text.trim();
+      const name = trimmed.startsWith(template.prefix) ? trimmed.slice(template.prefix.length) : trimmed;
+      const id = `${template.prefix}${name}`;
+      if (fieldsAt(groupId).some(f => f.id === id)) return;
+      return buildCustomField(template, id);
+    },
+    [customFieldOf, fieldsAt, buildCustomField],
+  );
+  const getField = useCallback(
+    (fieldId: string, groupId?: string) =>
+      fieldsAt(groupId).find(f => f.id === fieldId) ?? buildCustomField(customFieldOf(groupId), fieldId),
+    [fieldsAt, customFieldOf, buildCustomField],
+  );
+  const canNestScope = useCallback(
+    (parentId: string | undefined) => scopes.length > 0 && scopeAt(parentId) === undefined,
+    [scopes, scopeAt],
+  );
+  const scopedGroupsFull = countScopedGroups(expression) >= maxScopedGroups;
 
   // Consumers who derive root ids from the field hold one root filter per field: this is the
   // one `fieldId` already has, which a new filter on that field updates instead of duplicating.
@@ -520,16 +591,25 @@ export function FilterBarProvider({
   );
 
   const addGroup = useCallback(
-    (parentId: string | undefined, logic: FilterBarLogic) => {
-      const group: FilterBarGroup = { id: createFilterId(), kind: 'group', logic, nodes: [] };
+    (parentId: string | undefined, logic: FilterBarLogic, scope?: FilterBarGroupScope) => {
+      const group: FilterBarGroup = { id: createFilterId(), kind: 'group', logic, nodes: [], ...(scope && { scope }) };
       emit(createGroup(exprRef.current, parentId, group));
       setLastCommit(null);
       setDraftState(null);
       setInputTarget(group.id);
-      announce(parentId ? 'Nested group added' : 'Advanced filter added');
+      announce(scope ? 'Related condition added' : parentId ? 'Nested group added' : 'Advanced filter added');
       return group.id;
     },
     [emit, announce],
+  );
+
+  const setQuantifier = useCallback(
+    (groupId: string, quantifierId: string) => {
+      const scope = findGroup(exprRef.current, groupId)?.scope;
+      if (!scope || scope.quantifierId === quantifierId) return;
+      emit(setGroupScope(exprRef.current, groupId, { ...scope, quantifierId }));
+    },
+    [emit],
   );
 
   const setLogic = useCallback(
@@ -694,6 +774,12 @@ export function FilterBarProvider({
       hasRemovableItems,
       registerNonRemovable,
       addGroup,
+      scopes,
+      getScope,
+      canNestScope,
+      scopedGroupsFull,
+      setQuantifier,
+      describeScope,
       removeGroup,
       setLogic,
       negatable,
@@ -743,6 +829,12 @@ export function FilterBarProvider({
       hasRemovableItems,
       registerNonRemovable,
       addGroup,
+      scopes,
+      getScope,
+      canNestScope,
+      scopedGroupsFull,
+      setQuantifier,
+      describeScope,
       removeGroup,
       setLogic,
       negatable,

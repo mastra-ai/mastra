@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarProps } from './filter-bar';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
+import type { FilterBarExpression, FilterBarField, FilterBarGroup, FilterBarItem, FilterBarScope } from './types';
 
 afterEach(cleanup);
 
@@ -512,6 +512,156 @@ describe('FilterBar rules', () => {
     it('shows no toggle on a flat list, which has nowhere to keep the logic', () => {
       render(<ListHarness rootLogicToggle initial={[status('a'), status('b', { value: 'running' })]} />);
       expect(toggles()).toHaveLength(0);
+    });
+  });
+
+  describe('scoped groups', () => {
+    const QUANTIFIERS = [
+      { id: 'some', label: 'Has' },
+      { id: 'none', label: 'Has no' },
+    ];
+    const SCOPES: FilterBarScope[] = [
+      {
+        id: 'spans',
+        label: 'spans',
+        fields: [
+          { id: 'name', label: 'Span name', operators: ['is', 'contains'] },
+          // Same id as a bar field: inside the scope, the scope's own field wins.
+          { id: 'status', label: 'Span status', operators: ['is'] },
+        ],
+        quantifiers: QUANTIFIERS,
+      },
+      {
+        id: 'scores',
+        label: 'scores',
+        fields: [{ id: 'value', label: 'Score', type: 'number', operators: ['gt', 'lt'] }],
+        quantifiers: QUANTIFIERS,
+      },
+    ];
+    const spanName = (id = 's1'): FilterBarItem => ({ id, fieldId: 'name', operatorId: 'is', value: 'llm' });
+    const spansGroup = (nodes: FilterBarExpression['nodes'], quantifierId = 'some'): FilterBarGroup => ({
+      id: 'g',
+      kind: 'group',
+      logic: 'and',
+      nodes,
+      scope: { id: 'spans', quantifierId },
+    });
+    const orGroup = (nodes: FilterBarExpression['nodes'] = [status('a')]): FilterBarGroup => ({
+      id: 'or',
+      kind: 'group',
+      logic: 'or',
+      nodes,
+    });
+    const openScoped = async (name: RegExp) => {
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name.source}`) }));
+      return (await screen.findAllByRole('group', { name: /^Conditions joined with/ }))[0];
+    };
+    const openFieldList = () => getInput().focus();
+
+    it('offers no related conditions without scopes', async () => {
+      render(<ExpressionHarness initial={expressionOf(orGroup())} />);
+      openFieldList();
+      await screen.findByRole('option', { name: 'Status' });
+      expect(screen.queryByRole('option', { name: /^Has / })).toBeNull();
+      key('Escape');
+
+      const editor = await openAdvanced();
+      expect(within(editor).queryByRole('button', { name: /Related/ })).toBeNull();
+    });
+
+    it('starts a related clause from the bar and edits it with the scope fields', async () => {
+      const onChange = vi.fn();
+      render(<ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf()} />);
+
+      openFieldList();
+      fireEvent.click(await screen.findByRole('option', { name: 'Has spans…' }));
+
+      expect(lastCall(onChange)?.nodes[0]).toMatchObject({
+        kind: 'group',
+        scope: { id: 'spans', quantifierId: 'some' },
+      });
+      await screen.findByRole('group', { name: /^Conditions joined with/ });
+      expect(getInput().dataset.target).toBe(lastCall(onChange)?.nodes[0].id);
+      openFieldList();
+      await screen.findByRole('option', { name: 'Span name' });
+      expect(screen.queryByRole('option', { name: 'Trace ID' })).toBeNull();
+    });
+
+    it('reads a root related clause as one chip and its conditions with the scope labels', async () => {
+      render(
+        <ExpressionHarness scopes={SCOPES} initial={expressionOf(spansGroup([spanName(), { ...status('s2') }]))} />,
+      );
+      expect(screen.getByRole('group', { name: 'Has spans, 2 conditions' })).toBeTruthy();
+
+      const editor = await openScoped(/Has spans/);
+      expect(within(editor).getByRole('group', { name: /^Span name is llm/ })).toBeTruthy();
+      expect(within(editor).getByRole('group', { name: /^Span status/ })).toBeTruthy();
+    });
+
+    it('switches the quantifier of a related clause', async () => {
+      const onChange = vi.fn();
+      render(
+        <ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf(spansGroup([spanName()]))} />,
+      );
+      await openScoped(/Has spans/);
+
+      fireEvent.click(screen.getByRole('radio', { name: 'Has no' }));
+
+      expect(lastCall(onChange)?.nodes[0]).toMatchObject({ scope: { id: 'spans', quantifierId: 'none' } });
+      expect(screen.getByRole('group', { name: 'Has no spans, 1 condition' })).toBeTruthy();
+    });
+
+    it('adds a related clause inside an advanced filter', async () => {
+      const onChange = vi.fn();
+      render(<ExpressionHarness scopes={SCOPES} onChange={onChange} initial={expressionOf(orGroup())} />);
+      const editor = await openAdvanced();
+
+      fireEvent.click(within(editor).getByRole('button', { name: /Related/ }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'scores' }));
+
+      const group = lastCall(onChange)?.nodes[0] as FilterBarGroup;
+      expect(group.nodes[1]).toMatchObject({ kind: 'group', scope: { id: 'scores', quantifierId: 'some' } });
+      expect(await screen.findByText('scores')).toBeTruthy();
+    });
+
+    it('does not nest a related clause inside another', async () => {
+      render(<ExpressionHarness scopes={SCOPES} initial={expressionOf(spansGroup([spanName()]))} />);
+      const editor = await openScoped(/Has spans/);
+      expect(within(editor).queryByRole('button', { name: /Related/ })).toBeNull();
+    });
+
+    it('stops offering related clauses once the cap is reached', async () => {
+      render(
+        <ExpressionHarness
+          scopes={SCOPES}
+          maxScopedGroups={1}
+          initial={expressionOf(spansGroup([spanName()]), orGroup())}
+        />,
+      );
+      openFieldList();
+      await screen.findByRole('option', { name: 'Status' });
+      expect(screen.queryByRole('option', { name: /^Has / })).toBeNull();
+      key('Escape');
+
+      fireEvent.click(screen.getByRole('button', { name: /Advanced filter/ }));
+      const related = await screen.findByRole('button', { name: /Related/ });
+      expect(related.hasAttribute('disabled') || related.getAttribute('aria-disabled') === 'true').toBe(true);
+    });
+
+    it('tells operatorsFor which scope a condition reads', async () => {
+      const operatorsFor = vi.fn(() => undefined);
+      render(
+        <ExpressionHarness
+          scopes={SCOPES}
+          operatorsFor={operatorsFor}
+          initial={expressionOf(spansGroup([spanName()], 'none'))}
+        />,
+      );
+      await openScoped(/Has no spans/);
+      expect(operatorsFor).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'name' }),
+        expect.objectContaining({ groupId: 'g', scope: { id: 'spans', quantifierId: 'none' } }),
+      );
     });
   });
 });

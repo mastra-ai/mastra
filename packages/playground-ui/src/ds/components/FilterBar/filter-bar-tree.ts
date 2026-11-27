@@ -234,3 +234,10 @@ export const placeOf = (expr: FilterBarExpression, groupId: string | undefined, 
     ...(scope && { scope }),
   };
 };
+
+/** Scoped groups anywhere in the tree. */
+export const countScopedGroups = (expr: FilterBarExpression): number => {
+  const count = (nodes: FilterBarNode[]): number =>
+    nodes.reduce((n, node) => (isFilterBarGroup(node) ? n + (node.scope ? 1 : 0) + count(node.nodes) : n), 0);
+  return count(expr.nodes);
+};

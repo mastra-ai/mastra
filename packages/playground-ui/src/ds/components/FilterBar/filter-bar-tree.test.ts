@@ -4,6 +4,7 @@ import {
   clearRemovable,
   collectIds,
   countLeaves,
+  countScopedGroups,
   createGroup,
   denormalize,
   findGroup,
@@ -211,6 +212,17 @@ describe('filter-bar-tree', () => {
 
     it('reads an unknown group as the root', () => {
       expect(placeOf(placed, 'gone')).toEqual({ negated: false });
+    });
+  });
+
+  describe('countScopedGroups', () => {
+    it('counts scoped groups at any depth', () => {
+      const scoped = (id: string, ...nodes: FilterBarNode[]): FilterBarGroup => ({
+        ...group(id, ...nodes),
+        scope: { id: 'spans', quantifierId: 'some' },
+      });
+      expect(countScopedGroups(expr)).toBe(0);
+      expect(countScopedGroups({ logic: 'and', nodes: [scoped('s1'), group('g', scoped('s2'), item('x'))] })).toBe(2);
     });
   });
 });

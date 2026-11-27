@@ -7,7 +7,14 @@ import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import type {
+  FilterBarDraft,
+  FilterBarField,
+  FilterBarOperator,
+  FilterBarOption,
+  FilterBarScope,
+  FilterBarValue,
+} from './types';
 import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
@@ -15,6 +22,7 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -39,6 +47,24 @@ const ADVANCED_FIELD: FilterBarField = {
   label: 'Advanced filter…',
   icon: IconCodeBrackets,
   operators: [],
+};
+
+/** Field-list entries that each start a related clause on one scope ("Has spans…"). */
+const SCOPE_FIELD_PREFIX = '__filter-bar-scope__:';
+const scopeFields = new WeakMap<FilterBarScope, FilterBarField>();
+const scopeFieldOf = (scope: FilterBarScope): FilterBarField => {
+  let field = scopeFields.get(scope);
+  if (!field) {
+    const quantifier = scope.quantifiers[0];
+    field = {
+      id: `${SCOPE_FIELD_PREFIX}${scope.id}`,
+      label: `${quantifier ? `${quantifier.label} ` : ''}${scope.label}…`,
+      icon: IconChainLink3,
+      operators: [],
+    };
+    scopeFields.set(scope, field);
+  }
+  return field;
 };
 
 export type FilterBarInputProps = {
@@ -93,14 +119,19 @@ function FilterBarInputImpl({
     : undefined;
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
+  // Related clauses start from the bar too; inside a popover they come from the editor's `Related`.
+  const scopeOptions = useMemo(
+    () => (offerAdvanced && !ctx.scopedGroupsFull ? ctx.scopes.map(scopeFieldOf) : []),
+    [offerAdvanced, ctx.scopedGroupsFull, ctx.scopes],
+  );
   // Typed text naming no listed field can still be one under the bar's custom-field prefix.
   const customOption = step === 'field' ? ctx.customFieldAt(groupId, query) : undefined;
   const visibleFields = useMemo(() => {
     const offered = (f: FilterBarField) => ctx.getFieldOperators(f, place).length > 0;
     const fields = ctx.fieldsAt(groupId).filter(f => !f.hidden && (!f.rootOnly || groupId === undefined) && offered(f));
     const custom = customOption && offered(customOption) ? [customOption] : [];
-    return [...fields, ...custom, ...(offerAdvanced ? [ADVANCED_FIELD] : [])];
-  }, [ctx, offerAdvanced, groupId, customOption, place]);
+    return [...fields, ...custom, ...scopeOptions, ...(offerAdvanced ? [ADVANCED_FIELD] : [])];
+  }, [ctx, offerAdvanced, groupId, customOption, place, scopeOptions]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
@@ -158,6 +189,17 @@ function FilterBarInputImpl({
       if (next.id === ADVANCED_FIELD_ID) {
         // `or` is the useful default: an `and` group is indistinguishable from the root.
         const id = ctx.addGroup(undefined, 'or');
+        ctx.setOpenGroup(id);
+        ctx.openGroupInput(id);
+        setQuery('');
+        setOpen(false);
+        return;
+      }
+      if (next.id.startsWith(SCOPE_FIELD_PREFIX)) {
+        const scope = ctx.getScope(next.id.slice(SCOPE_FIELD_PREFIX.length));
+        const quantifier = scope?.quantifiers[0];
+        if (!scope || !quantifier) return;
+        const id = ctx.addGroup(undefined, 'and', { id: scope.id, quantifierId: quantifier.id });
         ctx.setOpenGroup(id);
         ctx.openGroupInput(id);
         setQuery('');

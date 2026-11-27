@@ -16,6 +16,7 @@ import type {
   FilterBarItem,
   FilterBarOperator,
   FilterBarPlace,
+  FilterBarScope,
 } from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -76,6 +77,13 @@ export type FilterBarProps = FilterBarValueProps & {
    * and a chip whose operator is ruled out reads invalid. Keep the function stable.
    */
   operatorsFor?: (field: FilterBarField, place: FilterBarPlace) => readonly string[] | undefined;
+  /**
+   * Related clauses a group can read ("Has spans where …"): each scope brings its own fields
+   * and quantifiers. Offered from the bar and from the advanced editor; ignored for flat values.
+   */
+  scopes?: readonly FilterBarScope[];
+  /** Most related clauses the value may hold. Unlimited by default. */
+  maxScopedGroups?: number;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
   className?: string;
@@ -145,6 +153,8 @@ export function FilterBar({
   customField,
   validateItem,
   operatorsFor,
+  scopes,
+  maxScopedGroups,
   clearLabel = 'Clear filters',
   className,
   children,
@@ -164,6 +174,8 @@ export function FilterBar({
       customField={customField}
       validateItem={validateItem}
       operatorsFor={operatorsFor}
+      scopes={scopes}
+      maxScopedGroups={maxScopedGroups}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
         {children}
