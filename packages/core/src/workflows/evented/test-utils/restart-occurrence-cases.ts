@@ -617,6 +617,53 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // The same restart with nothing to claim, but its worker stops after recording the restart and
+    // before its step event goes out. Delivered again, the restart finds the sleep as its caller read
+    // it and publishes again; the run finishes once. It used to treat itself as applied and publish
+    // nothing, so nothing drove the run.
+    it('recovers a restart with nothing to claim whose worker stopped before its publish', async () => {
+      const steps = holdableSteps();
+      const workflow = createWorkflow({ id: `restart-sleep-lost-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(steps.step('a'))
+        .sleep(10)
+        .then(steps.step('after'))
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async ({ driver }) => {
+        let restartDispatches = 0;
+        const held = holdPublishes(
+          driver,
+          event =>
+            // The old worker stops while it sleeps, and the restart's first dispatch is lost.
+            (isStepRun(event, workflow.id, [2]) && !event.data.restart) ||
+            (isStepRun(event, workflow.id, [1]) && !!event.data.restart && !restartDispatches++),
+        );
+        try {
+          const run = await workflow.createRun();
+          void run.start({ inputData: { n: 0 } });
+          await held.count(1);
+
+          const from = driver.events.length;
+          const restarted = restartRun(workflow, run.runId);
+          await held.count(2);
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.start' && event.runId === run.runId && event.data.restart)!;
+          await settleDeliveries([trigger]);
+          expect((await storedRun(workflow.id, run.runId))?.appliedTriggerEventId).toBe(trigger.id);
+
+          await driver.redeliverEvent(trigger);
+          expect(await within(restarted, 'the restarted run to finish')).toMatchObject({
+            status: 'success',
+            result: { n: 2 },
+          });
+          await drainHandlers();
+          expect(steps.calls).toEqual({ a: 1, after: 1 });
+        } finally {
+          held.restore();
+        }
+      });
+    }, 20_000);
+
     // R3 for a restart before the first step started. Such a restart has no step to claim and
     // writes the run whole; delivered again, it wrote it again from what its caller read, which
     // dropped the results saved since, and the first step ran again.

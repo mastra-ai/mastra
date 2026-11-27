@@ -1345,15 +1345,31 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResults = claim.stepResults;
       // The header records the restart event, so a delivery of it again does not move the run back
       // to where this one found it. Its claims still settle a race with a first delivery that has not
-      // finished; with nothing to claim, nothing is left to settle.
+      // finished. With nothing to claim, it publishes again only while the entry it dispatches is
+      // still as its caller read it: the worker may have stopped before publishing. Handling the
+      // dispatch writes the entry's records again with a new start (a sleep's) or a new occurrence.
       const applied = header.appliedTriggerEventId === eventId;
       if (applied && claim.outcome === 'nothing to claim') {
-        this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: it was already applied', {
-          workflowId,
-          runId,
-          eventId,
-        });
-        return;
+        const entry = workflow.stepGraph[(executionPath ?? restart.activePaths)[0] ?? 0];
+        const ids = entry ? getStepIds(entry) : [];
+        const stored = await runStorage.loadSteps(ids);
+        const read = stepResults ?? {};
+        if (
+          header.status !== 'running' ||
+          ids.some(
+            id =>
+              stored[id]?.status !== read[id]?.status ||
+              stored[id]?.startedAt !== read[id]?.startedAt ||
+              stored[id]?.metadata?.startedBy !== read[id]?.metadata?.startedBy,
+          )
+        ) {
+          this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: the run already went past it', {
+            workflowId,
+            runId,
+            eventId,
+          });
+          return;
+        }
       }
       // When every claimed step had saved its result, the header is left as it is: the finished-step
       // check reads from it whether the run already went past those steps.
