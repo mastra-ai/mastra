@@ -791,11 +791,12 @@ export class MemoryPG extends MemoryStorage {
           [resourceId, threadId],
         );
         // In lock order: a save can be moving these rows to another thread without holding this one.
+        // The outer thread_id test lets the join use the thread index instead of scanning the table.
         await t.none(
           `WITH locked AS (
              SELECT id FROM ${messagesTable} WHERE thread_id = $2 ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
-           UPDATE ${messagesTable} m SET "resourceId" = $1 FROM locked WHERE m.id = locked.id`,
+           UPDATE ${messagesTable} m SET "resourceId" = $1 FROM locked WHERE m.id = locked.id AND m.thread_id = $2`,
           [resourceId, threadId],
         );
 
@@ -1209,13 +1210,14 @@ export class MemoryPG extends MemoryStorage {
       const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.tx(async t => {
         // The thread row first, then its messages and pending signals in lock order, as every other
-        // writer takes them.
+        // writer takes them. The outer thread_id test lets the join use the thread index instead of
+        // scanning the table.
         await t.none(`SELECT 1 FROM ${threadTableName} WHERE id = $1 FOR UPDATE`, [threadId]);
         await t.none(
           `WITH locked AS (
              SELECT id FROM ${tableName} WHERE thread_id = ANY($1::text[]) ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
-           DELETE FROM ${tableName} m USING locked WHERE m.id = locked.id`,
+           DELETE FROM ${tableName} m USING locked WHERE m.id = locked.id AND m.thread_id = ANY($1::text[])`,
           [[threadId, pendingQueueThreadId(threadId), takenQueueThreadId(threadId)]],
         );
 
