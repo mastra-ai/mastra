@@ -21,7 +21,9 @@ export function BuildTriggersRows({
   onSave,
 }: {
   triggers: EnvironmentBuildTriggers;
+  /** Keep true while a save is in flight: each edit is built from the current `triggers`. */
   disabled: boolean;
+  /** Report a failed save and resolve; the switch and schedule picker do not catch a rejection. */
   onSave: (patch: { buildTriggers: EnvironmentBuildTriggersPatch }) => Promise<unknown>;
 }) {
   const { schedule, push } = triggers;
