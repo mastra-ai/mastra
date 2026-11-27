@@ -252,6 +252,39 @@ describe('token-based memory history', () => {
     expect(listMessages.mock.calls.every(([input]) => input.perPage === 3 && input.includeTotal === false)).toBe(true);
   });
 
+  it('pages overflow history past maxTokens so the limiter can trim it, without paging past a count cap', async () => {
+    const store = (await new InMemoryStore().getStore('memory'))!;
+    await store.saveMessages({
+      messages: Array.from({ length: 100 }, (_, index) => message(`message-${index}`, index)),
+    });
+    const load = (maxMessages?: number) =>
+      loadMessageHistory({
+        storage: store,
+        threadId: 'thread',
+        resourceId: 'resource',
+        maxMessages,
+        maxTokens: 500,
+        atMaxRemoveTokens: 300,
+        tokenCounter: { countMessage: () => 10 },
+        includeOverflow: true,
+      });
+
+    const tokenLimited = await load();
+    expect(tokenLimited.messages).toHaveLength(20);
+    expect(tokenLimited.messages.length + tokenLimited.overflow.length).toBeGreaterThan(50);
+
+    // Tokens trip before a looser count cap: the retained set still honours both limits.
+    const tokensFirst = await load(30);
+    expect(tokensFirst.messages).toHaveLength(20);
+    expect(tokensFirst.messages.length + tokensFirst.overflow.length).toBeGreaterThan(50);
+
+    const listMessages = vi.spyOn(store, 'listMessages');
+    const countLimited = await load(5);
+    expect(countLimited.messages).toHaveLength(5);
+    expect(countLimited.overflow).toEqual([]);
+    expect(listMessages).toHaveBeenCalledTimes(1);
+  });
+
   it('loads every retained message across boundary-timestamp pages', async () => {
     const store = (await new InMemoryStore().getStore('memory'))!;
     const removed = message('removed');
@@ -339,6 +372,43 @@ describe('token-based memory history', () => {
     expect(next.get.all.db().map(m => m.id)).toEqual(list.get.all.db().map(m => m.id));
     // Trimming changes context, not stored chat history.
     expect((await store.listMessages({ threadId: 'thread', perPage: false })).messages).toHaveLength(3);
+  });
+
+  it('keeps the history start stable across runs when the newest page is between the trim target and maxTokens', async () => {
+    // https://github.com/mastra-ai/mastra/issues/31469
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('memory'))!;
+    let thread = await store.saveThread({
+      thread: { id: 'thread', resourceId: 'resource', createdAt: new Date(), updatedAt: new Date() },
+    });
+    const turn = (i: number): MastraDBMessage => ({
+      ...message(`m${String(i).padStart(3, '0')}`, i),
+      role: i % 2 ? 'assistant' : 'user',
+      content: { format: 2, parts: [{ type: 'text', text: `message ${i} `.repeat(20) }] },
+    });
+    await store.saveMessages({ messages: Array.from({ length: 100 }, (_, i) => turn(i)) });
+    const weight = await new TokenLimiterProcessor(1).countMessage(turn(0));
+    // One 40-message storage page weighs more than the trim target but less than maxTokens.
+    const memory = new MockMemory({
+      storage,
+      options: { messageHistory: { maxTokens: weight * 50, atMaxRemoveTokens: weight * 30 } },
+    });
+
+    const oldest: string[] = [];
+    for (let run = 0; run < 3; run++) {
+      const context = new RequestContext();
+      context.set('MastraMemory', { thread, resourceId: 'resource' });
+      const processors = await memory.getInputProcessors([], context);
+      const list = new MessageList();
+      await processors.find(p => p.id === 'message-history')!.processInput!(args(list, context));
+      await processors.find(p => p.id === 'memory-token-limiter')!.processInput!(args(list, context));
+      oldest.push(list.get.all.db()[0]!.id);
+      thread = (await store.getThreadById({ threadId: 'thread' }))!;
+      await store.saveMessages({ messages: [turn(100 + run * 2), turn(101 + run * 2)] });
+    }
+
+    expect(oldest).toEqual([oldest[0], oldest[0], oldest[0]]);
+    expect(getMemoryTokenBoundary(thread)).toBeDefined();
   });
 
   it('checks readOnly when the trim callback executes', async () => {

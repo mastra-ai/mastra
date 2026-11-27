@@ -79,7 +79,7 @@ import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
-import { touchFeed } from './feed-events.js';
+import { announceMove, touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
@@ -139,6 +139,7 @@ import {
 } from './metrics/index.js';
 import type { FactoryMetricsOptions } from './metrics/index.js';
 import { instrumentSessionFirstOutput } from './metrics/session.js';
+import { createBoardRunGuard } from './routes/board-run-guard.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -150,7 +151,7 @@ import { ProjectRoutes } from './routes/projects.js';
 import { tenantOrgId } from './routes/provider-credentials.js';
 import { createRunStopMarker } from './routes/run-stop-marker.js';
 import { SandboxEnvRoutes } from './routes/sandbox-envs.js';
-import { createSessionAccessGuard } from './routes/session-access.js';
+import { canViewSourceControlSession, createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import { TelemetryRoutes } from './routes/telemetry.js';
@@ -262,7 +263,7 @@ import {
   createWorkItemRunEndReporter,
 } from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
-import { observeSessionRunReports } from './tools/run-watch.js';
+import { observeSessionRunReports, reportsTellingOfWaits } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { backfillUntilDone } from './work-items/split-backfill.js';
@@ -1632,6 +1633,16 @@ export class MastraFactory {
           transitionService,
           workItems: workItemsStorage,
           boards,
+          // `this.#dispatcher` is created with the runtime below; before it, no run can be in flight.
+          runs: {
+            inFlight: async card => (await this.#dispatcher?.hasRunInFlightOnCard(card)) ?? false,
+            // A person stops only the runs of sessions they may drive, as the session's Stop does.
+            stop: async (card, by) =>
+              (await this.#dispatcher?.stopRunsOnCard(card, async sessionId => {
+                const session = await sourceControlSessions.getBySessionId(sessionId);
+                return !session || canViewSourceControlSession(session, { orgId: card.orgId, userId: by.userId });
+              })) ?? false,
+          },
         })
       : undefined;
     this.#boardEngineWorkflows = boardEngine?.workflows;
@@ -2374,6 +2385,7 @@ export class MastraFactory {
             controllerId: CONTROLLER_ID,
             controller,
             liveSessions: (liveSessions = liveSessionsTouchingTheFeed(controller, eventBus, sourceControlSessions)),
+            announceMove: (scope, move) => announceMove(eventBus, scope, move),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -2587,12 +2599,17 @@ export class MastraFactory {
             auth: routeAuth,
             workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
           });
+          const boardRunGuard = createBoardRunGuard(() => Object.keys(this.#boardEngineWorkflows ?? {}));
+          // The host's built-in MCP endpoint reads workflow runs without passing the guard, so
+          // the board engine's workflows are left out of it as well.
+          const boardRunsOffMcp = { mcp: { exclude: { workflows: Object.keys(this.#boardEngineWorkflows ?? {}) } } };
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
                 ...timing,
+                boardRunGuard,
                 sessionActivity,
                 runStopMarker,
                 createFactoryInteractiveMarker(),
@@ -2601,6 +2618,7 @@ export class MastraFactory {
               ],
               ...cors,
               ...onError,
+              ...boardRunsOffMcp,
             };
           }
 
@@ -2621,6 +2639,7 @@ export class MastraFactory {
             middleware: [
               ...timing,
               createFactoryAuthGate(auth, authOptions),
+              boardRunGuard,
               createSessionAccessGuard({
                 auth: routeAuth,
                 sessions: sourceControlSessions,
@@ -2645,6 +2664,7 @@ export class MastraFactory {
             ],
             ...cors,
             ...onError,
+            ...boardRunsOffMcp,
           };
         },
       }),
@@ -2664,40 +2684,53 @@ export class MastraFactory {
       observeSessionRunEnd(session, { audit: auditDomain, openRuns: openRunsStorage });
       // A run the dispatcher no longer watches (a plan approved after its run parked) still ends
       // its phase: the board engine hears of every run end of a bound session.
+      const runBinding = async () => {
+        const row = await sourceControlSessions.getBySessionId(session.identity.getId());
+        if (!row?.factoryProjectId) return null;
+        return workItemsStorage.findActiveRunBindingForSession({
+          orgId: row.orgId,
+          factoryProjectId: row.factoryProjectId,
+          sessionId: row.sessionId,
+        });
+      };
       observeSessionPhaseOutcome(session, {
         boardEngine: () => boardEngine,
-        binding: async () => {
-          const row = await sourceControlSessions.getBySessionId(session.identity.getId());
-          if (!row?.factoryProjectId) return null;
-          return workItemsStorage.findActiveRunBindingForSession({
-            orgId: row.orgId,
-            factoryProjectId: row.factoryProjectId,
-            sessionId: row.sessionId,
-          });
+        binding: runBinding,
+        openRun: async () => {
+          const threadId = session.thread.getId();
+          return threadId ? (await openRunsStorage.listRunning(threadId)).at(-1)?.kickoffId : undefined;
         },
       });
-      // Every run end of a work or side session, and every tool call it holds for
-      // approval, reaches whoever follows it, however the run started;
-      // re-attached when a session is created again.
-      observeSessionRunReports(
-        session,
-        (outcome, since) =>
+      // A run that waits for a person's yes or no leaves its card waiting on that answer.
+      const answersItself = (toolCallId: string) => this.#dispatcher?.autoApproves(toolCallId) ?? false;
+      const waits = reportsTellingOfWaits({
+        reportRunEnd: (outcome, since) =>
           reportSessionRunEnd({
             sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
           }),
-        {
-          onApprovalRequested: request =>
-            notifyApprovalRequested({
-              sessionId: session.identity.getId(),
-              threadId: session.thread.getId(),
-              ...request,
-            }),
-          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
+        notifyApproval: request =>
+          notifyApprovalRequested({
+            sessionId: session.identity.getId(),
+            threadId: session.thread.getId(),
+            ...request,
+          }),
+        runPaused: async () => {
+          if (!boardEngine?.runPaused) return;
+          const binding = await runBinding();
+          if (binding) await boardEngine.runPaused(binding, 'approval');
         },
-      );
+        answersItself,
+      });
+      // Every run end of a work or side session, and every tool call it holds for
+      // approval, reaches whoever follows it, however the run started;
+      // re-attached when a session is created again.
+      observeSessionRunReports(session, waits.report, {
+        onApprovalRequested: waits.onApprovalRequested,
+        answersItself,
+      });
       observeSessionMemoryFailurePosts(session, () => prepared.base.controller.getChannels());
       observeSessionThreadStamp(session);
       instrumentSessionFirstOutput(session);

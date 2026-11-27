@@ -133,7 +133,7 @@ export const Page: Story = {
           </SettingsGroup>
 
           <SettingsGroup>
-            <SettingsTitle>Join links</SettingsTitle>
+            <SettingsTitle info="Anyone with a link can join, within its limits.">Join links</SettingsTitle>
             <SettingsContainer>
               <SettingsEmptyRow action={<Button size="sm">Create join link</Button>}>No join links</SettingsEmptyRow>
             </SettingsContainer>

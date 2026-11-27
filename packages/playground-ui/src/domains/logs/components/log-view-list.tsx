@@ -6,6 +6,8 @@ import type { FractionDigits } from '@/utils/date-format';
 
 export type LogViewOrder = 'newest-first' | 'oldest-first';
 
+export type LogViewNextPage = 'older' | 'newer';
+
 export interface LogViewListHandle {
   scrollToLog: (logId: string) => void;
 }
@@ -15,6 +17,7 @@ export interface LogViewListProps<T extends LogViewLine = LogRecord> {
   isLoading?: boolean;
   isFetchingNextPage?: boolean;
   hasNextPage?: boolean;
+  nextPage?: LogViewNextPage;
   logIdMap: Map<T, string>;
   featuredLogId?: string;
   onLogClick?: (log: T) => void;

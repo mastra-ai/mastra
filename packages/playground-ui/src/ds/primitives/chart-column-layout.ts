@@ -5,10 +5,20 @@
  * extra height is taken from the segments that can spare it, so the column keeps its true
  * height. A column too short to hold every segment at the minimum grows just enough to (one
  * request next to a 3,000-request peak still shows as a few pixels, not half of one).
+ *
+ * A column that is zero as a whole gets a stub instead of bars (see `zeroStubSeries`).
  */
 
 /** Smallest height a non-zero bar or stacked segment is drawn at. */
 export const CHART_MIN_SEGMENT = 3;
+
+/**
+ * Height of the stub that marks a column whose value is zero: a pixel under the smallest value, so
+ * the two never look alike. Columns too narrow for gaps between their stubs get a hairline instead.
+ */
+const ZERO_STUB = 2;
+const ZERO_STUB_THIN = 1;
+const ZERO_STUB_THIN_BELOW = 4;
 
 export type SegmentBox = { y: number; height: number };
 
@@ -66,4 +76,22 @@ export function singleBarBox(
   if (!(amount(value) > 0) || !Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return undefined;
   if (geo.height >= minSize) return geo;
   return { y: geo.y + geo.height - minSize, height: minSize };
+}
+
+/**
+ * Which series of a column draws its zero stub, or -1 for no stub: the first one at zero, when no
+ * series has a value. Missing values (`undefined`, `null`, not a number) aren't zeros, so a column
+ * without data draws nothing.
+ */
+export function zeroStubSeries(raw: unknown[]): number {
+  const values = raw.map(v => (v === null || v === undefined || v === '' ? Number.NaN : Number(v)));
+  if (values.some(v => Number.isFinite(v) && v !== 0)) return -1;
+  return values.indexOf(0);
+}
+
+/** The stub's box, standing on the base of the empty box Recharts computed for a zero. */
+export function zeroStubBox(geo: SegmentBox, width: number): SegmentBox | undefined {
+  if (!Number.isFinite(geo.y) || !Number.isFinite(geo.height)) return undefined;
+  const height = width < ZERO_STUB_THIN_BELOW ? ZERO_STUB_THIN : ZERO_STUB;
+  return { y: geo.y + geo.height - height, height };
 }

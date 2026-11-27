@@ -6,37 +6,9 @@ import type {
 } from '@mastra/client-js';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
-import { useState } from 'react';
-
-import { loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
-import type { DoneSound } from '../services/doneSound';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import { SettingsSubsection } from './SettingsSubsection';
-import { SoundPicker } from './SettingsFields';
-
-export function PreferencesSettings() {
-  const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
-  const changeDoneSound = (next: DoneSound) => {
-    setDoneSound(next);
-    saveDoneSound(next);
-
-    playDoneSound(next);
-  };
-  return (
-    <SettingsSubsection scope="personal" title="Preferences" description="Stored in this browser.">
-      <SettingsContainer>
-        <SettingsRow label="Theme" description="Color scheme for the interface.">
-          <ThemeToggle />
-        </SettingsRow>
-        <SettingsRow label="Completion sound" description="Played when an agent run finishes.">
-          <SoundPicker value={doneSound} onChange={changeDoneSound} />
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsSubsection>
-  );
-}
 
 interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;

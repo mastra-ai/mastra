@@ -25,6 +25,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "NVIDIA/NVIDIA-Nemotron-3-Super-120B-A12B": [
       {
         "type": "effort",
@@ -34,24 +40,12 @@
         "type": "budget_tokens"
       }
     ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "Qwen/Qwen3.5-35B-A3B-FP8": [
       {
         "type": "toggle"
       },
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "budget_tokens"
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -66,12 +60,14 @@
         "type": "budget_tokens"
       }
     ],
-    "Qwen/Qwen3.5-35B-A3B-FP8": [
+    "apertus-ai/Apertus-v1.5-8B": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "google/gemma-4-31B-it": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
       }
     ],
     "openai/gpt-oss-120b": [
@@ -80,9 +76,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "apertus-ai/Apertus-v1.5-8B": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

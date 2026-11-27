@@ -73,6 +73,12 @@
         "type": "toggle"
       }
     ],
+    "meta/muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "sakana/fugu-ultra": [
       {
         "type": "effort",
@@ -84,43 +90,27 @@
         "type": "toggle"
       }
     ],
-    "thinkingmachines/inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
     "thinkingmachines/inkling-small": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "thinkingmachines/inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -136,7 +126,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3.7-plus": [
+    "qwen/qwen3-vl-plus": [
       {
         "type": "toggle"
       },
@@ -144,7 +134,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-vl-plus": [
+    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -168,16 +158,20 @@
         "type": "budget_tokens"
       }
     ],
-    "meta/muse-spark-1.2-contributor": [
+    "qwen/qwen3-max": [
       {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
-    "upstage/solar-pro4": [
+    "qwen/qwen-flash": [
       {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ],
     "upstage/solar-pro2": [
@@ -190,6 +184,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "upstage/solar-pro4": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

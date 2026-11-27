@@ -8,14 +8,14 @@ vi.mock('@ai-sdk/openai-compatible-v6', async () => {
   };
 });
 
-vi.mock('@ai-sdk/openai-v6', async () => {
+vi.mock('@ai-sdk/openai-v7', async () => {
   return {
     createOpenAI: vi.fn(),
   };
 });
 
 const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
-const { createOpenAI } = await import('@ai-sdk/openai-v6');
+const { createOpenAI } = await import('@ai-sdk/openai-v7');
 
 const chatModel = vi.fn((_modelId: string) => createMockModel({ mockText: 'chat' }));
 const responses = vi.fn((_modelId: string) => createMockModel({ mockText: 'responses' }));

@@ -51,18 +51,12 @@ describe('authorship', () => {
   });
 
   describe('hasAdminBypass', () => {
-    it('grants bypass for `*`', () => {
-      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['*'] });
-      expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
-    });
-
-    it('grants bypass for `<resource>:*`', () => {
-      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:*'] });
-      expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
-    });
-
-    it('grants bypass for `<resource>:admin`', () => {
-      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:admin'] });
+    it.each([
+      ['grants bypass for `*`', '*'],
+      ['grants bypass for `<resource>:*`', 'stored-agents:*'],
+      ['grants bypass for `<resource>:admin`', 'stored-agents:admin'],
+    ] as const)('%s', (_title, value) => {
+      const ctx = ctxWith({ [MASTRA_USER_PERMISSIONS_KEY]: [value] });
       expect(hasAdminBypass(ctx, 'stored-agents')).toBe(true);
     });
 
@@ -304,25 +298,13 @@ describe('authorship', () => {
       ).not.toThrow();
     });
 
-    it('passes when caller holds scoped `agents:execute:<id>`', () => {
+    it.each([
+      ['passes when caller holds scoped `agents:execute:<id>`', 'agents:execute:a1'],
+      ['passes when caller holds scoped `agents:read:<id>` (read implies execute)', 'agents:read:a1'],
+    ] as const)('%s', (_title, value) => {
       const ctx = ctxWith({
         [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:execute:a1'],
-      });
-      expect(() =>
-        assertExecuteAccess({
-          requestContext: ctx,
-          resource: 'agents',
-          resourceId: 'a1',
-          record: { authorId: 'owner', visibility: 'private' },
-        }),
-      ).not.toThrow();
-    });
-
-    it('passes when caller holds scoped `agents:read:<id>` (read implies execute)', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:read:a1'],
+        [MASTRA_USER_PERMISSIONS_KEY]: [value],
       });
       expect(() =>
         assertExecuteAccess({
@@ -405,33 +387,20 @@ describe('authorship', () => {
       ).toThrow(HTTPException);
     });
 
-    it('allows edit when caller holds scoped `agents:edit:<id>`', () => {
+    it.each([
+      ['allows edit when caller holds scoped `agents:edit:<id>`', 'agents:edit:a1', 'edit'],
+      ['allows delete when caller holds scoped `agents:delete:<id>`', 'agents:delete:a1', 'delete'],
+    ] as const)('%s', (_title, value, action) => {
       const ctx = ctxWith({
         [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:edit:a1'],
+        [MASTRA_USER_PERMISSIONS_KEY]: [value],
       });
       expect(() =>
         assertWriteAccess({
           requestContext: ctx,
           resource: 'agents',
           resourceId: 'a1',
-          action: 'edit',
-          record: { authorId: 'owner', visibility: 'private' },
-        }),
-      ).not.toThrow();
-    });
-
-    it('allows delete when caller holds scoped `agents:delete:<id>`', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['agents:delete:a1'],
-      });
-      expect(() =>
-        assertWriteAccess({
-          requestContext: ctx,
-          resource: 'agents',
-          resourceId: 'a1',
-          action: 'delete',
+          action,
           record: { authorId: 'owner', visibility: 'private' },
         }),
       ).not.toThrow();
@@ -524,58 +493,21 @@ describe('authorship', () => {
       ).not.toThrow();
     });
 
-    it('passes with admin bypass (`*`)', () => {
+    it.each([
+      ['passes with admin bypass (`*`)', 'admin', '*', 'someone'],
+      ['passes with admin bypass (`<resource>:*`)', 'admin', 'stored-agents:*', 'someone'],
+      ['passes when caller holds `<resource>:share`', 'someone-else', 'stored-agents:share', 'owner'],
+      ['passes when caller holds `*:share`', 'someone-else', '*:share', 'owner'],
+    ] as const)('%s', (_title, id, value, authorId) => {
       const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'admin' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['*'],
+        [MASTRA_USER_KEY]: { id },
+        [MASTRA_USER_PERMISSIONS_KEY]: [value],
       });
       expect(() =>
         assertShareAccess({
           requestContext: ctx,
           resource: 'stored-agents',
-          record: { authorId: 'someone', visibility: 'private' },
-        }),
-      ).not.toThrow();
-    });
-
-    it('passes with admin bypass (`<resource>:*`)', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'admin' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:*'],
-      });
-      expect(() =>
-        assertShareAccess({
-          requestContext: ctx,
-          resource: 'stored-agents',
-          record: { authorId: 'someone', visibility: 'private' },
-        }),
-      ).not.toThrow();
-    });
-
-    it('passes when caller holds `<resource>:share`', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:share'],
-      });
-      expect(() =>
-        assertShareAccess({
-          requestContext: ctx,
-          resource: 'stored-agents',
-          record: { authorId: 'owner', visibility: 'private' },
-        }),
-      ).not.toThrow();
-    });
-
-    it('passes when caller holds `*:share`', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['*:share'],
-      });
-      expect(() =>
-        assertShareAccess({
-          requestContext: ctx,
-          resource: 'stored-agents',
-          record: { authorId: 'owner', visibility: 'private' },
+          record: { authorId, visibility: 'private' },
         }),
       ).not.toThrow();
     });
@@ -595,24 +527,14 @@ describe('authorship', () => {
       ).not.toThrow();
     });
 
-    it('rejects write-only caller (write does NOT imply share)', () => {
+    it.each([
+      ['rejects write-only caller (write does NOT imply share)', 'editor', 'stored-agents:write'],
+      ['rejects `*:write` caller (action wildcard for write does NOT imply share)', 'editor', '*:write'],
+      ['rejects share grant for a different resource family', 'someone-else', 'stored-skills:share'],
+    ] as const)('%s', (_title, id, value) => {
       const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'editor' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-agents:write'],
-      });
-      expect(() =>
-        assertShareAccess({
-          requestContext: ctx,
-          resource: 'stored-agents',
-          record: { authorId: 'owner', visibility: 'private' },
-        }),
-      ).toThrow(HTTPException);
-    });
-
-    it('rejects `*:write` caller (action wildcard for write does NOT imply share)', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'editor' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['*:write'],
+        [MASTRA_USER_KEY]: { id },
+        [MASTRA_USER_PERMISSIONS_KEY]: [value],
       });
       expect(() =>
         assertShareAccess({
@@ -646,20 +568,6 @@ describe('authorship', () => {
           requestContext: ctx,
           resource: 'stored-agents',
           resourceId: 'a1',
-          record: { authorId: 'owner', visibility: 'private' },
-        }),
-      ).toThrow(HTTPException);
-    });
-
-    it('rejects share grant for a different resource family', () => {
-      const ctx = ctxWith({
-        [MASTRA_USER_KEY]: { id: 'someone-else' },
-        [MASTRA_USER_PERMISSIONS_KEY]: ['stored-skills:share'],
-      });
-      expect(() =>
-        assertShareAccess({
-          requestContext: ctx,
-          resource: 'stored-agents',
           record: { authorId: 'owner', visibility: 'private' },
         }),
       ).toThrow(HTTPException);

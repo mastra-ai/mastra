@@ -15,48 +15,25 @@ describe('MetaSchemaCompatLayer', () => {
   createSuite(layer);
 
   describe('shouldApply', () => {
-    it('should apply for meta models', () => {
+    it.each([
+      ['should apply for meta models', 'meta', 'meta-llama-3.1-70b-instruct', true],
+      [
+        'should apply for llama models with meta in modelId',
+        'together',
+        'meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo',
+        true,
+      ],
+      ['should not apply for non-Meta models', 'openai', 'gpt-4o', false],
+      ['should not apply for llama models without meta in modelId', 'groq', 'llama-3.1-70b-versatile', false],
+    ] as const)('%s', (_title, provider, modelId, expected) => {
       const modelInfo: ModelInformation = {
-        provider: 'meta',
-        modelId: 'meta-llama-3.1-70b-instruct',
+        provider,
+        modelId,
         supportsStructuredOutputs: false,
       };
 
       const layer = new MetaSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for llama models with meta in modelId', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'together',
-        modelId: 'meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new MetaSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should not apply for non-Meta models', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'openai',
-        modelId: 'gpt-4o',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new MetaSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
-    });
-
-    it('should not apply for llama models without meta in modelId', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'groq',
-        modelId: 'llama-3.1-70b-versatile',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new MetaSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
+      expect(layer.shouldApply()).toBe(expected);
     });
   });
 
@@ -672,7 +649,10 @@ describe('MetaSchemaCompatLayer', () => {
       expect(typeof result.validate).toBe('function');
     });
 
-    it('should validate correct data', () => {
+    it.each([
+      ['should validate correct data', 30, true],
+      ['should reject invalid data', 'not a number', false],
+    ] as const)('%s', (_title, age, expected) => {
       const schema = z.object({
         name: z.string(),
         age: z.number(),
@@ -681,23 +661,9 @@ describe('MetaSchemaCompatLayer', () => {
       const layer = new MetaSchemaCompatLayer(modelInfo);
       const result = layer.processToAISDKSchema(schema);
 
-      const validationResult = result.validate!({ name: 'John', age: 30 });
+      const validationResult = result.validate!({ name: 'John', age });
       expect(validationResult).toHaveProperty('success');
-      expect(validationResult.success).toBe(true);
-    });
-
-    it('should reject invalid data', () => {
-      const schema = z.object({
-        name: z.string(),
-        age: z.number(),
-      });
-
-      const layer = new MetaSchemaCompatLayer(modelInfo);
-      const result = layer.processToAISDKSchema(schema);
-
-      const validationResult = result.validate!({ name: 'John', age: 'not a number' });
-      expect(validationResult).toHaveProperty('success');
-      expect(validationResult.success).toBe(false);
+      expect(validationResult.success).toBe(expected);
     });
   });
 

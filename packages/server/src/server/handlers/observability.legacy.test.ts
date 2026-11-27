@@ -120,7 +120,20 @@ describe('Legacy Observability API - Backward Compatibility', () => {
   });
 
   describe('Legacy name parameter', () => {
-    it('should transform name="agent run: \'x\'" to entityId and entityType', async () => {
+    it.each([
+      [
+        'should transform name="agent run: \'x\'" to entityId and entityType',
+        "agent run: 'my-agent-id'",
+        'my-agent-id',
+        'agent',
+      ],
+      [
+        'should transform name="workflow run: \'x\'" to entityId and entityType=workflow_run',
+        "workflow run: 'my-workflow-id'",
+        'my-workflow-id',
+        'workflow_run',
+      ],
+    ] as const)('%s', async (_title, name, entityId, entityType) => {
       const mockResult = {
         pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
         spans: [],
@@ -130,36 +143,13 @@ describe('Legacy Observability API - Backward Compatibility', () => {
 
       await LIST_TRACES_ROUTE.handler({
         ...createTestServerContext({ mastra: mockMastra }),
-        name: "agent run: 'my-agent-id'",
+        name,
       });
 
       expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
         filters: {
-          entityId: 'my-agent-id',
-          entityType: 'agent',
-        },
-        pagination: {},
-        orderBy: {},
-      });
-    });
-
-    it('should transform name="workflow run: \'x\'" to entityId and entityType=workflow_run', async () => {
-      const mockResult = {
-        pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
-        spans: [],
-      };
-
-      (mockObservabilityStore.listTraces as ReturnType<typeof vi.fn>).mockResolvedValue(mockResult);
-
-      await LIST_TRACES_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        name: "workflow run: 'my-workflow-id'",
-      });
-
-      expect(mockObservabilityStore.listTraces).toHaveBeenCalledWith({
-        filters: {
-          entityId: 'my-workflow-id',
-          entityType: 'workflow_run',
+          entityId,
+          entityType,
         },
         pagination: {},
         orderBy: {},

@@ -110,13 +110,25 @@ describeForAllEngines('AIMock scenario: cut-off tool-call arguments in a termina
     },
   );
 
-  it('still runs a valid empty-object call at a "length" finish and ends the run (#29518)', async () => {
-    const { output, requests, executions } = await sendCutOffToolCall({ finishReason: 'length', args: '{}' });
+  it.each([
+    { finishReason: 'length', expected: 'length' },
+    { finishReason: 'content_filter', expected: 'content-filter' },
+  ])(
+    'still runs a valid empty-object call at a "$expected" finish and ends the run (#29518)',
+    async ({ finishReason, expected }) => {
+      const { output, requests, chunks, executions } = await sendCutOffToolCall({ finishReason, args: '{}' });
 
-    expect(executions).toEqual([{}]);
-    expect(requests).toHaveLength(1);
-    expect(await output.finishReason).toBe('length');
-  });
+      expect(executions).toEqual([{}]);
+      expect(requests).toHaveLength(1);
+      expect(await output.finishReason).toBe(expected);
+      // The stream reports the model's own reason for the step, and that the run does not continue.
+      expect(chunks?.findLast(chunk => chunk.type === 'step-finish')?.payload.stepResult.reason).toBe(expected);
+      expect(chunks?.findLast(chunk => chunk.type === 'finish')?.payload.stepResult).toMatchObject({
+        reason: expected,
+        isContinued: false,
+      });
+    },
+  );
 
   // The same rule holds for any failed call in a terminal response, not only unparseable arguments.
   it('ends the run at a "length" finish when a valid call throws (#29518)', async () => {

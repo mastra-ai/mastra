@@ -15,8 +15,8 @@ const BOARDS_URL = `${PROJECT_URL}/boards`;
 const SKILL_URL = `${PROJECT_URL}/skills/:name`;
 const CREATE_URL = `${PROJECT_URL}/skills`;
 
-const SKILLS_PAGE = `/factories/${FACTORY_ID}/work/skills`;
-const NEW_SKILL_PAGE = `/factories/${FACTORY_ID}/work/new-skill`;
+const SKILLS_PAGE = `/factories/${FACTORY_ID}/settings/skills`;
+const NEW_SKILL_PAGE = `/factories/${FACTORY_ID}/settings/new-skill`;
 
 const bundled = { origin: 'bundled', builtIn: true } as const;
 
@@ -123,59 +123,79 @@ function openAt(
   return { writes, ...renderAt(path) };
 }
 
-function card(name: string) {
-  return screen.getByRole('link', { name: new RegExp(`^${name}`) });
+/** A skill's row in the list; its name links to its page. */
+function row(name: string): HTMLElement {
+  const item = screen.getByRole('link', { name }).closest<HTMLElement>('[data-slot="settings-item"]');
+  if (!item) throw new Error(`No row for ${name}`);
+  return item;
 }
 
+async function findRow(name: string): Promise<HTMLElement> {
+  await screen.findByRole('link', { name });
+  return row(name);
+}
+
+/** A custom board whose phases run `changelog-lint`. */
+const notesBoard: BoardCatalogResponse['boards'][number] = {
+  id: 'notes',
+  name: 'Notes',
+  title: 'Notes',
+  initialPhase: 'queued',
+  phases: [
+    { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'drafting' }] },
+    {
+      id: 'drafting',
+      name: 'Drafting',
+      title: 'Drafting',
+      kind: 'working',
+      context: 'build',
+      skill: 'changelog-lint',
+      transitions: [{ outcome: null, to: 'checking' }],
+    },
+    { id: 'checking', title: 'Checking', kind: 'working', context: 'build', skill: 'changelog-lint', transitions: [] },
+  ],
+};
+
 describe('the skills page', () => {
-  it('lists only the skills no board phase runs', async () => {
+  it('lists every skill, with the board phases that run it linking to each phase on its board', async () => {
+    openAt(SKILLS_PAGE, { boards: { boards: [notesBoard] } });
+
+    const lint = await findRow('changelog-lint');
+    expect(within(lint).getByRole('link', { name: 'Notes › Drafting' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/boards/notes/config/drafting`,
+    );
+    expect(within(lint).getByRole('link', { name: 'Notes › Checking' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/boards/notes/config/checking`,
+    );
+    expect(within(row('configure-factory-rules')).getByText('No phase runs it')).toBeInTheDocument();
+    expect(screen.getByText('5 skills')).toBeInTheDocument();
+  });
+
+  it('lists the skills the built-in boards run too', async () => {
     openAt(SKILLS_PAGE);
 
-    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
-    expect(card('changelog-lint')).toBeInTheDocument();
-    for (const name of ['factory-triage', 'factory-plan', 'factory-review']) {
-      expect(screen.queryByText(name)).not.toBeInTheDocument();
+    await findRow('configure-factory-rules');
+    for (const name of ['factory-triage', 'factory-plan', 'factory-review', 'changelog-lint']) {
+      expect(row(name)).toBeInTheDocument();
     }
   });
 
-  it('leaves out a skill a custom board phase runs', async () => {
-    const notes: BoardCatalogResponse['boards'][number] = {
-      id: 'notes',
-      name: 'Notes',
-      title: 'Notes',
-      initialPhase: 'queued',
-      phases: [
-        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'drafting' }] },
-        {
-          id: 'drafting',
-          name: 'Drafting',
-          title: 'Drafting',
-          kind: 'working',
-          context: 'build',
-          skill: 'changelog-lint',
-          transitions: [],
-        },
-      ],
-    };
-    openAt(SKILLS_PAGE, { boards: { boards: [notes, ...builtinBoardCatalog.boards] } });
+  it('says so when the factory has no skills, still offering a new one', async () => {
+    openAt(SKILLS_PAGE, { catalog: [] });
 
-    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
-    expect(screen.queryByText('changelog-lint')).not.toBeInTheDocument();
+    expect(await screen.findByText('No skills')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New skill' })).toHaveAttribute('href', NEW_SKILL_PAGE);
   });
 
-  it('says so when every skill runs in a board phase', async () => {
-    openAt(SKILLS_PAGE, { catalog: skills.filter(skill => skill.name.startsWith('factory-')) });
-
-    expect(await screen.findByText('Every skill runs in a board phase.')).toBeInTheDocument();
-  });
-
-  it("lists every skill, saying why, when the installed boards can't be loaded", async () => {
+  it("lists every skill, saying why no phases show, when the installed boards can't be loaded", async () => {
     openAt(SKILLS_PAGE);
     server.use(http.get(BOARDS_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
 
-    expect(await screen.findByText(/Installed boards could not be loaded/)).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
-    expect(card('factory-plan')).toBeInTheDocument();
+    expect(await screen.findByText(/The boards could not be loaded/)).toBeInTheDocument();
+    expect(row('factory-plan')).not.toHaveTextContent('No phase runs it');
+    expect(row('configure-factory-rules')).toBeInTheDocument();
   });
 
   it('marks a skill the runtime cannot load as failed and keeps its body readable on its page', async () => {
@@ -187,12 +207,12 @@ describe('the skills page', () => {
     });
     const user = userEvent.setup();
 
-    const failed = await screen.findByRole('link', { name: /^configure-factory-rules/ });
+    const failed = await findRow('configure-factory-rules');
     expect(within(failed).getByText('Failed to load')).toBeInTheDocument();
     expect(within(failed).getByText(`Agents cannot load this skill: ${error}`)).toBeInTheDocument();
-    expect(within(card('changelog-lint')).queryByText('Failed to load')).not.toBeInTheDocument();
+    expect(within(row('changelog-lint')).queryByText('Failed to load')).not.toBeInTheDocument();
 
-    await user.click(failed);
+    await user.click(within(failed).getByRole('link', { name: 'configure-factory-rules' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`${SKILLS_PAGE}/configure-factory-rules`));
     expect(await screen.findByRole('alert')).toHaveTextContent(`Agents cannot load this skill: ${error}`);
     expect(screen.getByRole('textbox', { name: 'Instructions' })).toHaveTextContent(/Write the rules a board follows/);
@@ -205,10 +225,8 @@ describe('the skills page', () => {
       ),
     });
 
-    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toHaveTextContent(
-      'Overridden by app',
-    );
-    expect(card('changelog-lint')).not.toHaveTextContent('Overridden by app');
+    expect(await findRow('configure-factory-rules')).toHaveTextContent('Overridden by app');
+    expect(row('changelog-lint')).not.toHaveTextContent('Overridden by app');
   });
 
   it('surfaces a load failure from the server', async () => {
@@ -217,6 +235,18 @@ describe('the skills page', () => {
 
     expect(await screen.findByText(/boom|Failed to load skills/)).toBeInTheDocument();
   });
+
+  it.each([
+    ['work/skills', SKILLS_PAGE],
+    ['boards/notes/skills', SKILLS_PAGE],
+    ['work/skills/changelog-lint', `${SKILLS_PAGE}/changelog-lint`],
+    ['boards/notes/new-skill', NEW_SKILL_PAGE],
+  ])('opens old links beside a board, at %s, in Settings', async (from, to) => {
+    const { router } = openAt(`/factories/${FACTORY_ID}/${from}`);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(to));
+    expect(await screen.findByRole('link', { name: 'Skills', current: 'page' })).toBeInTheDocument();
+  });
 });
 
 describe("a skill's page", () => {
@@ -224,7 +254,7 @@ describe("a skill's page", () => {
     const { writes, router, client } = openAt(SKILLS_PAGE);
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('link', { name: /^changelog-lint/ }));
+    await user.click(await screen.findByRole('link', { name: 'changelog-lint' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(`${SKILLS_PAGE}/changelog-lint`));
     expect(await screen.findByRole('heading', { name: 'changelog-lint' })).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Name' })).not.toBeInTheDocument();
@@ -247,13 +277,9 @@ describe("a skill's page", () => {
     expect(screen.getByText('Edited')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Description' })).toHaveValue('Our lint: check # first');
 
-    await user.click(
-      within(screen.getByRole('navigation', { name: 'Board configuration' })).getByRole('link', { name: 'Skills' }),
-    );
-    expect(
-      await within(await screen.findByRole('link', { name: /^changelog-lint/ })).findByText('Edited'),
-    ).toBeInTheDocument();
-    expect(within(card('changelog-lint')).getByText('Our lint: check # first')).toBeInTheDocument();
+    await user.click(screen.getByRole('link', { name: 'Back to Skills' }));
+    expect(await within(await findRow('changelog-lint')).findByText('Edited')).toBeInTheDocument();
+    expect(within(row('changelog-lint')).getByText('Our lint: check # first')).toBeInTheDocument();
     await waitForMutationsIdle(client);
   });
 
@@ -406,9 +432,9 @@ describe("a skill's page", () => {
     });
     const user = userEvent.setup();
 
-    const editedCard = await screen.findByRole('link', { name: /^configure-factory-rules/ });
-    expect(within(editedCard).getByText('Edited')).toBeInTheDocument();
-    await user.click(editedCard);
+    const editedRow = await findRow('configure-factory-rules');
+    expect(within(editedRow).getByText('Edited')).toBeInTheDocument();
+    await user.click(within(editedRow).getByRole('link', { name: 'configure-factory-rules' }));
     expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue('Our own rules');
     await user.click(screen.getByRole('button', { name: 'Revert to original' }));
 
@@ -443,7 +469,7 @@ describe("a skill's page", () => {
     const { writes } = openAt(SKILLS_PAGE, { canEdit: false });
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('link', { name: /^configure-factory-rules/ }));
+    await user.click(await screen.findByRole('link', { name: 'configure-factory-rules' }));
     expect(await screen.findByText('Only organization admins can edit skills.')).toBeInTheDocument();
     expect(screen.getByText('Configure board rules')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Configure rules' })).toBeInTheDocument();
@@ -467,8 +493,7 @@ describe("a skill's page", () => {
   it('asks before leaving with unsaved edits, and drops them only when told to', async () => {
     const { router } = openAt(`${SKILLS_PAGE}/changelog-lint`);
     const user = userEvent.setup();
-    const skillsLink = () =>
-      within(screen.getByRole('navigation', { name: 'Board configuration' })).getByRole('link', { name: 'Skills' });
+    const skillsLink = () => screen.getByRole('link', { name: 'Back to Skills' });
 
     await user.type(await screen.findByRole('textbox', { name: 'Description' }), ' locally');
     await user.click(skillsLink());
@@ -485,7 +510,7 @@ describe("a skill's page", () => {
       ),
     );
     await waitFor(() => expect(router.state.location.pathname).toBe(SKILLS_PAGE));
-    await user.click(await screen.findByRole('link', { name: /^changelog-lint/ }));
+    await user.click(await screen.findByRole('link', { name: 'changelog-lint' }));
     expect(await screen.findByRole('textbox', { name: 'Description' })).toHaveValue('Lint changelogs');
   });
 
@@ -507,11 +532,18 @@ describe("a skill's page", () => {
     await waitFor(() => expect(router.state.location.pathname).toBe(SKILLS_PAGE));
   });
 
+  it('opens a skill named new, not the new skill form', async () => {
+    openAt(`${SKILLS_PAGE}/new`, { catalog: [...skills, { ...releaseNotes, name: 'new' }] });
+
+    expect(await screen.findByRole('heading', { name: 'new' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create' })).not.toBeInTheDocument();
+  });
+
   it('deletes a skill this Factory created once confirmed, and offers no revert for it', async () => {
     const { writes, router, client } = openAt(SKILLS_PAGE, { catalog: [...skills, releaseNotes] });
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('link', { name: /^release-notes/ }));
+    await user.click(await screen.findByRole('link', { name: 'release-notes' }));
     await user.click(await screen.findByRole('button', { name: 'Delete' }));
     expect(screen.queryByRole('button', { name: 'Revert to original' })).not.toBeInTheDocument();
     expect(screen.getByText('Delete release-notes?')).toBeInTheDocument();
@@ -525,7 +557,7 @@ describe("a skill's page", () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe(SKILLS_PAGE));
     expect(writes).toEqual([{ method: 'DELETE', name: 'release-notes' }]);
-    await waitFor(() => expect(screen.queryByRole('link', { name: /^release-notes/ })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('link', { name: 'release-notes' })).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
   });
 });
@@ -537,6 +569,7 @@ describe('the new skill page', () => {
 
     await user.click(await screen.findByRole('link', { name: 'New skill' }));
     await waitFor(() => expect(router.state.location.pathname).toBe(NEW_SKILL_PAGE));
+    expect(screen.getByRole('link', { name: 'Skills', current: 'page' })).toBeInTheDocument();
     const name = await screen.findByRole('textbox', { name: 'Name' });
     expect(name).toHaveFocus();
     await user.type(name, 'release-notes');
@@ -633,7 +666,7 @@ describe('the new skill page', () => {
   it('is not offered to members who are not admins', async () => {
     openAt(SKILLS_PAGE, { canEdit: false });
 
-    expect(await screen.findByRole('link', { name: /^configure-factory-rules/ })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'configure-factory-rules' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'New skill' })).not.toBeInTheDocument();
   });
 

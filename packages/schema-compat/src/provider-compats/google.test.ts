@@ -17,81 +17,33 @@ describe('GoogleSchemaCompatLayer', () => {
   createSuite(layer);
 
   describe('shouldApply', () => {
-    it('should apply when provider includes google', () => {
+    it.each([
+      ['should apply when provider includes google', 'google', 'gemini-pro', true],
+      ['should apply when modelId includes google', 'vertex-ai', 'google/gemini-1.5-pro', true],
+      ['should apply for gemini models via google provider', 'google', 'gemini-1.5-flash', true],
+      ['should apply for gemini models via random provider', 'random', 'gemini-1.5-flash', true],
+      [
+        'should apply for Gemini models served through Google Vertex',
+        'googleVertex.generative-ai',
+        'gemini-2.5-pro',
+        true,
+      ],
+      [
+        'should not apply for Claude models served through Google Vertex',
+        'googleVertex.anthropic.messages',
+        'claude-sonnet-4-5',
+        false,
+      ],
+      ['should not apply for non-Google models', 'openai', 'gpt-4o', false],
+    ] as const)('%s', (_title, provider, modelId, expected) => {
       const modelInfo: ModelInformation = {
-        provider: 'google',
-        modelId: 'gemini-pro',
+        provider,
+        modelId,
         supportsStructuredOutputs: false,
       };
 
       const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply when modelId includes google', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'vertex-ai',
-        modelId: 'google/gemini-1.5-pro',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for gemini models via google provider', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'google',
-        modelId: 'gemini-1.5-flash',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for gemini models via random provider', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'random',
-        modelId: 'gemini-1.5-flash',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for Gemini models served through Google Vertex', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'googleVertex.generative-ai',
-        modelId: 'gemini-2.5-pro',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should not apply for Claude models served through Google Vertex', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'googleVertex.anthropic.messages',
-        modelId: 'claude-sonnet-4-5',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
-    });
-
-    it('should not apply for non-Google models', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'openai',
-        modelId: 'gpt-4o',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new GoogleSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
+      expect(layer.shouldApply()).toBe(expected);
     });
   });
 

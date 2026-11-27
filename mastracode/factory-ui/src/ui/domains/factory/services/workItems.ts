@@ -209,6 +209,22 @@ export type FactoryTransitionResult =
     }
   | { status: 'rejected'; transitionId: string; itemId: string; code: string; reason: string };
 
+/** The server took the move on and answers it later, on the feed stream, under this input id. */
+export interface SubmittedTransition {
+  status: 'submitted';
+  inputId: string;
+}
+
+/**
+ * How a move ended for the board: answered at once, or submitted and then told to have landed,
+ * been refused, or never answered (the board's next read shows where the card is).
+ */
+export type TransitionOutcome =
+  | FactoryTransitionResult
+  | { status: 'landed'; inputId: string }
+  | { status: 'rejected'; inputId: string; code: string; reason: string }
+  | { status: 'unanswered'; inputId: string };
+
 export interface UpdateWorkItemInput {
   parentWorkItemId?: string | null;
   title?: string;
@@ -369,7 +385,7 @@ export async function transitionWorkItem(
     /** Re-enter the lane the card is already in, so its rule runs again. */
     reenter?: boolean;
   },
-): Promise<FactoryTransitionResult> {
+): Promise<FactoryTransitionResult | SubmittedTransition> {
   const res = await fetch(
     `${baseUrl}/web/factory/projects/${encodeURIComponent(githubProjectId)}/work-items/${encodeURIComponent(id)}/transition`,
     {
@@ -379,8 +395,9 @@ export async function transitionWorkItem(
       body: JSON.stringify(input),
     },
   );
-  const body = (await res.json()) as { result?: FactoryTransitionResult; error?: string };
+  const body = (await res.json()) as { result?: FactoryTransitionResult; inputId?: string; error?: string };
   if (body.result) return body.result;
+  if (res.status === 202 && typeof body.inputId === 'string') return { status: 'submitted', inputId: body.inputId };
   throw new Error(body.error ?? `Request failed (${res.status})`);
 }
 

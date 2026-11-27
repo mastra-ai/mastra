@@ -4492,14 +4492,21 @@ Remember: A good system prompt should be specific enough to guide behavior but f
 
 // Helper to find the first model with a connected provider
 async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agent['getModel']>> | null> {
+  // Only gateway/router models depend on a provider API key env var. An explicit AI SDK
+  // model instance (e.g. `openai('gpt-4o')`) or any other non-router model carries its
+  // credentials on the instance itself, so it is usable without that env var and must not
+  // be gated behind isProviderConnected. (#31608)
+  const isUsable = (model: unknown): boolean =>
+    !(model instanceof ModelRouterLanguageModel) || isProviderConnected((model as { provider: string }).provider);
+
   const modelList = await agent.getModelList();
 
   if (modelList && modelList.length > 0) {
-    // Find the first enabled model with a connected provider
+    // Find the first enabled model that can be used
     for (const modelConfig of modelList) {
       if (modelConfig.enabled !== false) {
         const model = modelConfig.model;
-        if (isProviderConnected(model.provider)) {
+        if (isUsable(model)) {
           return model;
         }
       }
@@ -4509,7 +4516,7 @@ async function findConnectedModel(agent: Agent): Promise<Awaited<ReturnType<Agen
 
   // No model list, check the default model
   const defaultModel = await agent.getModel();
-  if (isProviderConnected(defaultModel.provider)) {
+  if (isUsable(defaultModel)) {
     return defaultModel;
   }
   return null;

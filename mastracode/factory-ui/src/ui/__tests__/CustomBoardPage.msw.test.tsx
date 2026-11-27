@@ -152,7 +152,7 @@ describe('custom-only board routing', () => {
     expect(within(queued).queryByRole('link', { name: 'Connect issue source' })).not.toBeInTheDocument();
     expect(within(queued).getByRole('link', { name: 'Add intake rule' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/boards/release/rules',
+      '/factories/fp-1/boards/release/config?rule=new',
     );
   });
 

@@ -16,16 +16,7 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -40,7 +31,7 @@
         "max": 262144
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -55,7 +46,10 @@
         "values": ["none", "high"]
       }
     ],
-    "glm-5.3": [
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -73,6 +67,12 @@
         "type": "budget_tokens",
         "min": 0,
         "max": 262144
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

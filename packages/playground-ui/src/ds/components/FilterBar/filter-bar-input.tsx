@@ -7,7 +7,14 @@ import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
 import { matchesQueryFilter } from './match-query';
-import type { FilterBarDraft, FilterBarField, FilterBarOperator, FilterBarOption, FilterBarValue } from './types';
+import type {
+  FilterBarDraft,
+  FilterBarField,
+  FilterBarOperator,
+  FilterBarOption,
+  FilterBarScope,
+  FilterBarValue,
+} from './types';
 import { parseFieldValue } from './types';
 import { useValueStep } from './use-value-step';
 import { Button } from '@/ds/components/Button/Button';
@@ -15,6 +22,7 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
 import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -39,6 +47,24 @@ const ADVANCED_FIELD: FilterBarField = {
   label: 'Advanced filter…',
   icon: IconCodeBrackets,
   operators: [],
+};
+
+/** Field-list entries that each start a related clause on one scope ("Has spans…"). */
+const SCOPE_FIELD_PREFIX = '__filter-bar-scope__:';
+const scopeFields = new WeakMap<FilterBarScope, FilterBarField>();
+const scopeFieldOf = (scope: FilterBarScope): FilterBarField => {
+  let field = scopeFields.get(scope);
+  if (!field) {
+    const quantifier = scope.quantifiers[0];
+    field = {
+      id: `${SCOPE_FIELD_PREFIX}${scope.id}`,
+      label: `${quantifier ? `${quantifier.label} ` : ''}${scope.label}…`,
+      icon: IconChainLink3,
+      operators: [],
+    };
+    scopeFields.set(scope, field);
+  }
+  return field;
 };
 
 export type FilterBarInputProps = {
@@ -84,17 +110,28 @@ function FilterBarInputImpl({
   // The draft lives in the provider so the chip list can render it; the step follows from it.
   const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
-  const field = draft ? ctx.getField(draft.fieldId) : undefined;
-  const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field) : []), [ctx, field]);
+  const field = draft ? ctx.getField(draft.fieldId, groupId) : undefined;
+  // A new condition sits in the target group; the operators it may take depend on that place.
+  const place = useMemo(() => ctx.placeOf(groupId), [ctx, groupId]);
+  const fieldOperators = useMemo(() => (field ? ctx.getFieldOperators(field, place) : []), [ctx, field, place]);
   const operator = draft?.operatorId
     ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
     : undefined;
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
+  // Related clauses start from the bar too; inside a popover they come from the editor's `Related`.
+  const scopeOptions = useMemo(
+    () => (offerAdvanced && !ctx.scopedGroupsFull ? ctx.scopes.map(scopeFieldOf) : []),
+    [offerAdvanced, ctx.scopedGroupsFull, ctx.scopes],
+  );
+  // Typed text naming no listed field can still be one under the bar's custom-field prefix.
+  const customOption = step === 'field' ? ctx.customFieldAt(groupId, query) : undefined;
   const visibleFields = useMemo(() => {
-    const fields = ctx.fields.filter(f => !f.hidden && (!f.rootOnly || groupId === undefined));
-    return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
-  }, [ctx.fields, offerAdvanced, groupId]);
+    const offered = (f: FilterBarField) =>
+      !f.hidden && (!f.rootOnly || groupId === undefined) && ctx.getFieldOperators(f, place).length > 0;
+    const fields = [...ctx.fieldsAt(groupId), ...(customOption ? [customOption] : [])].filter(offered);
+    return [...fields, ...scopeOptions, ...(offerAdvanced ? [ADVANCED_FIELD] : [])];
+  }, [ctx, offerAdvanced, groupId, customOption, place, scopeOptions]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
@@ -158,7 +195,18 @@ function FilterBarInputImpl({
         setOpen(false);
         return;
       }
-      const [only, ...rest] = ctx.getFieldOperators(next);
+      if (next.id.startsWith(SCOPE_FIELD_PREFIX)) {
+        const scope = ctx.getScope(next.id.slice(SCOPE_FIELD_PREFIX.length));
+        const quantifier = scope?.quantifiers[0];
+        if (!scope || !quantifier) return;
+        const id = ctx.addGroup(undefined, 'and', { id: scope.id, quantifierId: quantifier.id });
+        ctx.setOpenGroup(id);
+        ctx.openGroupInput(id);
+        setQuery('');
+        setOpen(false);
+        return;
+      }
+      const [only, ...rest] = ctx.getFieldOperators(next, place);
       // Free-text entry with text already typed: that text is the value, so neither the
       // operator nor the value step has anything left to ask.
       if (next.search && only && query.trim() !== '') {
@@ -173,7 +221,7 @@ function FilterBarInputImpl({
       setDraft({ fieldId: next.id });
       setQuery('');
     },
-    [ctx, commit, query, selectOperator, setDraft],
+    [ctx, commit, query, selectOperator, setDraft, place],
   );
 
   const valueStep = useValueStep({
@@ -278,8 +326,10 @@ function FilterBarInputImpl({
   // step's own filtering whatever was typed; every other item matches on its label.
   const filterItem = useCallback(
     (item: Item, text: string, itemToString?: (item: Item) => string) =>
-      ('search' in item && item.search === true) || matchesQueryFilter(item, text, itemToString),
-    [],
+      item === customOption ||
+      ('search' in item && item.search === true) ||
+      matchesQueryFilter(item, text, itemToString),
+    [customOption],
   );
 
   const inputPlaceholder =
@@ -391,9 +441,12 @@ function FilterBarInputImpl({
                   renderOption={f => (
                     <>
                       <FilterBarFieldLabel field={f} />
+                      {f === customOption && (
+                        <span className="min-w-0 truncate text-muted-foreground">Custom field</span>
+                      )}
                       {f.search && query !== '' && (
                         <span className="min-w-0 truncate text-muted-foreground">
-                          {ctx.getFieldOperators(f)[0]?.label} "{query}"
+                          {ctx.getFieldOperators(f, place)[0]?.label} "{query}"
                         </span>
                       )}
                     </>

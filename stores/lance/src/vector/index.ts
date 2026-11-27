@@ -514,7 +514,10 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Check for schema mismatches:
         // - extraColumns: columns in data not in schema (will be dropped)
         // - missingSchemaColumns: columns in schema not in data (will be set to null)
-        const dataColumns = new Set(Object.keys(data[0] || {}));
+        // Union over every row, not just the first: metadata columns are skipped for
+        // null values, so a column can appear only in a later row of the batch. Reading
+        // only data[0] would miss it and let mergeInsert fail with "field not in schema".
+        const dataColumns = new Set(data.flatMap(row => Object.keys(row)));
         const extraColumns = [...dataColumns].filter(col => !existingColumns.has(col));
         const missingSchemaColumns = [...existingColumns].filter(col => !dataColumns.has(col));
         const hasSchemaMismatch = extraColumns.length > 0 || missingSchemaColumns.length > 0;

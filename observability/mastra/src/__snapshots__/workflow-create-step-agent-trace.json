@@ -389,7 +389,8 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "timeToFirstTokenMs": "<ms>"
+                              "timeToFirstTokenMs": "<ms>",
+                              "responseId": "1"
                             },
                             "metadata": {
                               "runId": "<runId-2>",

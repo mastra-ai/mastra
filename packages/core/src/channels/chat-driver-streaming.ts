@@ -8,6 +8,7 @@ import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   ToolTracker,
+  cleanBufferedText,
   editOrPostMessage,
   postFileAttachment,
   postStreamError,
@@ -212,7 +213,7 @@ export async function runStreamingDriver({
           if (closed) break;
           await waitForNext();
         }
-        const cleaned = fallback.replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+        const cleaned = cleanBufferedText(fallback);
         if (cleaned) {
           try {
             await chatThread.post(textFormat === 'plain' ? cleaned : { markdown: cleaned });

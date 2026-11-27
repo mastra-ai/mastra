@@ -50,6 +50,16 @@ describe('AIV5Adapter malformed parts', () => {
     ]);
   });
 
+  it('preserves data parts without a data property as undefined', () => {
+    const message = AIV5Adapter.fromUIMessage({
+      id: 'assistant-data',
+      role: 'assistant',
+      parts: [{ type: 'data-progress' }],
+    } as never);
+
+    expect(message.content.parts).toEqual([{ type: 'data-progress', data: undefined }]);
+  });
+
   it('treats undefined model content as an empty parts array', () => {
     const message = AIV5Adapter.fromModelMessage({ role: 'assistant', content: undefined } as never);
 

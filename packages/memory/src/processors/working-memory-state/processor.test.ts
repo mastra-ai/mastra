@@ -175,17 +175,12 @@ describe('WorkingMemoryStateProcessor', () => {
     expect(result?.contents).toContain('# new');
   });
 
-  it('emits no signal when no working memory data is stored yet', async () => {
+  it.each([
+    ['emits no signal when no working memory data is stored yet', null],
+    ['emits no signal when working memory data is whitespace-only', '   \n  '],
+  ] as const)('%s', async (_title, data) => {
     const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
-    const memory = buildMemoryMock({ template, data: null });
-    const processor = new WorkingMemoryStateProcessor(memory);
-    const result = await processor.computeStateSignal(buildArgs());
-    expect(result).toBeUndefined();
-  });
-
-  it('emits no signal when working memory data is whitespace-only', async () => {
-    const template: WorkingMemoryTemplate = { format: 'markdown', content: '# tpl' };
-    const memory = buildMemoryMock({ template, data: '   \n  ' });
+    const memory = buildMemoryMock({ template, data });
     const processor = new WorkingMemoryStateProcessor(memory);
     const result = await processor.computeStateSignal(buildArgs());
     expect(result).toBeUndefined();

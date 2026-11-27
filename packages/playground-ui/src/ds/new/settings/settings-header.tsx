@@ -2,6 +2,9 @@ import { createContext, useContext, useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // On a settings page (`PageLayout variant="settings"`), section titles and descriptions sit 10px inside the card's edge, in line with
@@ -53,7 +56,7 @@ export function SettingsTitle({
   ...props
 }: Omit<ComponentProps<'h2'>, 'id'> & {
   accessory?: ReactNode;
-  /** What the section is for, shown in a tooltip on the title. For sections whose name isn't self-explanatory. */
+  /** What the section is for: a muted info icon after the title, and a tooltip on hovering or focusing either. For sections whose name isn't self-explanatory. */
   info?: ReactNode;
 }) {
   const titleId = useContext(SettingsTitleIdContext);
@@ -68,22 +71,40 @@ export function SettingsTitle({
   );
 }
 
-/** The title's text as a tooltip trigger, described by `info`. */
+/**
+ * The title and a muted info icon after it, as one tooltip trigger described by `info`. Hovering or focusing
+ * anywhere on it lifts the icon and opens the tooltip quickly: the reader is reaching for the explanation.
+ */
 function SettingsTitleInfo({ info, children }: { info: ReactNode; children: ReactNode }) {
   const infoId = useId();
 
   return (
     <Tooltip>
       <TooltipTrigger
+        delay={50}
         render={
           <span
             tabIndex={0}
             aria-describedby={infoId}
-            className="cursor-help underline decoration-transparent decoration-dotted underline-offset-4 hover:decoration-current focus-visible:decoration-current focus-visible:outline-none"
+            className={cn(
+              'group/title-info -mx-1 inline-flex cursor-default items-center gap-1 rounded-sm px-1',
+              focusRing,
+            )}
           />
         }
       >
         {children}
+        <Icon
+          size="xs"
+          aria-hidden
+          // Half a pixel down centers the circle optically against the title's text.
+          className={cn(
+            'translate-y-[0.5px] text-subtle-foreground group-hover/title-info:text-muted-foreground group-focus-visible/title-info:text-muted-foreground',
+            controlStateColorTransition,
+          )}
+        >
+          <IconCircleInfo />
+        </Icon>
       </TooltipTrigger>
       <TooltipContent id={infoId} keepMounted className="max-w-64">
         {info}

@@ -1,10 +1,6 @@
 import type { ModelPack, ModelSelectionRequest } from '@mastra/factory/model-packs';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
-import {
-  ModelPicker as SharedModelPicker,
-  catalogModelPickerValue,
-  findCatalogModel,
-} from '@mastra/playground-ui/domains/llm';
+import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
@@ -12,7 +8,7 @@ import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
-import { factoryModelPickerProviders } from '../../../../lib/modelPickerCatalog';
+import { catalogModelPickerValue, findPickerModel, modelPickerProviders } from '../../../../lib/modelPickerCatalog';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
@@ -128,10 +124,10 @@ function ModelMenu({
 
   return (
     <SharedModelPicker
-      providers={factoryModelPickerProviders(catalog)}
+      providers={modelPickerProviders(catalog)}
       value={value}
       onValueChange={({ provider, model }) => {
-        const modelId = findCatalogModel(catalog, { provider, model })?.id;
+        const modelId = findPickerModel(catalog, { provider, model })?.id;
         if (modelId) modelSwitch.pickModel(modelId);
       }}
       renderProviderIcon={renderProviderIcon}

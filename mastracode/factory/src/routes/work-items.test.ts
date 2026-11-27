@@ -10,6 +10,7 @@ import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { createTestBoard, createTriageWorkRegistry, triageWorkBoard } from '../boards/test-utils.js';
+import type { FeedMove } from '../feed-events.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
@@ -28,6 +29,16 @@ let acceptedHook: Array<{ workItemId: string }> = [];
 let committedHook: Array<{ workItemId: string; fromStage?: string; toStage: string }> = [];
 /** Every input the routes hand the board engine, in order. */
 let engineInputs: FactoryTransitionRequest[] = [];
+const deletedCards: string[] = [];
+/** Whether the routes' board engine takes moves on to settle later, as an engine with `submitMove` does. */
+let submitsMoves = false;
+let announcesMoves = true;
+let settlingFails = false;
+/** When set, a submitted move settles only once this does: a test holds it to look at the gap after the 202. */
+let settlingHeld: Promise<void> | undefined;
+const SUBMITTED_INPUT_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+/** What the routes told the project's open boards about moves answered `202`. */
+const announcedMoves: Array<{ scope: { orgId: string; factoryProjectId: string }; move: FeedMove }> = [];
 
 const auditRecorder: AuditRecorder = {
   async record(input) {
@@ -105,8 +116,30 @@ function buildApp(
       // No intake rules to read: the route list, as before intake order.
       intakeEvaluator: 'route-list',
       queueHealth: seed.queueHealth,
+      // Absent when a test turns it off: a host that wired no way to tell the board.
+      get announceMove() {
+        if (!announcesMoves) return undefined;
+        return (scope: { orgId: string; factoryProjectId: string }, move: FeedMove) =>
+          void announcedMoves.push({ scope, move });
+      },
       boardEngine: {
-        requestMove: input => {
+        cardDeleted: async card => void deletedCards.push(card.workItemId),
+        // Absent unless a test turns it on: the default engine has no `submitMove`.
+        get submitMove() {
+          if (!submitsMoves) return undefined;
+          return async (input: FactoryTransitionRequest) => {
+            const card = await seed.workItems.get({ orgId: input.orgId, id: input.workItemId });
+            // The check an engine can make right away; the rest of the move settles later.
+            if (card?.revision !== input.expectedRevision) return { answered: await this.requestMove(input) };
+            if (settlingFails) {
+              return { inputId: SUBMITTED_INPUT_ID, settled: Promise.reject(new Error('The board run is gone.')) };
+            }
+            const held = settlingHeld;
+            if (held) return { inputId: SUBMITTED_INPUT_ID, settled: held.then(() => this.requestMove(input)) };
+            return { inputId: SUBMITTED_INPUT_ID, settled: this.requestMove(input) };
+          };
+        },
+        requestMove(input: FactoryTransitionRequest) {
           engineInputs.push(input);
           return new DispatcherBoardEngine({
             workItems: seed.workItems,
@@ -893,6 +926,104 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     );
   });
 
+  describe('with a board engine that settles moves later', () => {
+    beforeEach(() => {
+      submitsMoves = true;
+      announcedMoves.length = 0;
+    });
+    afterEach(() => {
+      submitsMoves = false;
+      announcesMoves = true;
+      settlingFails = false;
+      settlingHeld = undefined;
+    });
+
+    it('answers 202 with an input id, and tells the board when the move landed', async () => {
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ inputId: SUBMITTED_INPUT_ID });
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]).toEqual({
+        scope: { orgId: 'org1', factoryProjectId: PROJECT_ID },
+        move: { inputId: SUBMITTED_INPUT_ID, status: 'accepted' },
+      });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+
+    it('answers 202 while the move is still settling, and tells the board only once it has', async () => {
+      let settle = () => {};
+      settlingHeld = new Promise<void>(resolve => {
+        settle = resolve;
+      });
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+      expect(await res.json()).toEqual({ inputId: SUBMITTED_INPUT_ID });
+      // The route answered with the move not made yet, and nothing told.
+      expect(announcedMoves).toEqual([]);
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+
+      settle();
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({ inputId: SUBMITTED_INPUT_ID, status: 'accepted' });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+
+    it('answers a move its first checks refuse on the spot, as before', async () => {
+      const item = await createItem();
+      const res = await transition({ id: item.id, revision: item.revision + 5 });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
+      expect(announcedMoves).toEqual([]);
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+    });
+
+    it('tells the board of a refusal that came after the 202, under its input id', async () => {
+      const item = await createItem();
+      const res = await transition(item, { stage: 'missing' });
+      expect(res.status).toBe(202);
+      const { inputId } = await res.json();
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({
+        inputId,
+        status: 'rejected',
+        code: 'invalid_transition',
+        reason: expect.stringContaining('does not allow moving from intake to missing'),
+      });
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+    });
+
+    it('tells the board the move failed when it broke after the 202', async () => {
+      settlingFails = true;
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(202);
+
+      await vi.waitFor(() => expect(announcedMoves).toHaveLength(1));
+      expect(announcedMoves[0]?.move).toEqual({
+        inputId: SUBMITTED_INPUT_ID,
+        status: 'rejected',
+        code: 'failed',
+        reason: 'Factory could not move the card. Try again.',
+      });
+      expect((await listItems())[0]?.stages).toEqual(['intake']);
+      warn.mockRestore();
+    });
+
+    it('answers the whole move, as before, when nothing can tell the board how it ended', async () => {
+      announcesMoves = false;
+      const item = await createItem();
+      const res = await transition(item);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ result: { status: 'accepted', stage: 'planning' } });
+      expect((await listItems())[0]?.stages).toEqual(['planning']);
+    });
+  });
+
   it("hands the card's placement and the person's move to the board engine", async () => {
     engineInputs = [];
     const item = await createItem();
@@ -1513,13 +1644,18 @@ describe('DELETE /web/factory/work-items/:id', () => {
   it('removes the item for the org', async () => {
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     const { workItem } = await created.json();
+    deletedCards.length = 0;
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
     expect(await listItems()).toHaveLength(0);
+    // The board engine hears of the delete, to let go of what it kept for the card.
+    expect(deletedCards).toEqual([workItem.id]);
   });
 
   it('404s for unknown or cross-org items', async () => {
+    deletedCards.length = 0;
     expect((await json('DELETE', `/web/factory/work-items/00000000-0000-4000-8000-000000000099`)).status).toBe(404);
+    expect(deletedCards).toEqual([]);
   });
 });
 

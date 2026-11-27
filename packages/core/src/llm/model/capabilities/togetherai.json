@@ -82,73 +82,6 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "meta-models/Muse-Glimmer-30B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "tencent/Hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Prism-ML/Ternary-Bonsai-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "thinkingmachines/Inkling-2-Small": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -170,24 +103,18 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "reflection/Beam-1.0-501B-A23B": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
+    "Qwen/Qwen3.6-Plus": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.6-Plus": [
+    "Qwen/Qwen3.7-Plus": [
       {
         "type": "toggle"
       }
@@ -201,15 +128,27 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.7-Plus": [
+    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
+    "tencent/Hy4": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "high"]
+      }
+    ],
+    "meta-models/Muse-Spark-Open-816B-A42B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "openai/gpt-oss-120b": [
@@ -218,10 +157,71 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "thinkingmachines/Inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "elorian-labs/glimpse-1.0": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "Prism-ML/Ternary-Bonsai-27B": [
+      {
+        "type": "toggle"
       }
     ]
   }

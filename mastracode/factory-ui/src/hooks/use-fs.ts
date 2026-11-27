@@ -1,4 +1,4 @@
-import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQueries, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import type { ApiClient } from '../api/client';
@@ -150,6 +150,17 @@ export function useWorkspaceTree(
     queryKey: queryKeys.workspaceTree(workspacePath, path),
     enabled,
     queryFn: url ? () => client.get<WorkspaceTreeListing>(url) : skipToken,
+  });
+}
+
+export function useWorkspaceTrees(workspacePath: string, paths: readonly string[]) {
+  const { client } = useApiConfig();
+  return useQueries({
+    queries: paths.map(path => ({
+      queryKey: queryKeys.workspaceTree(workspacePath, path),
+      queryFn: () =>
+        client.get<WorkspaceTreeListing>(`/web/workspace/tree?${new URLSearchParams({ workspacePath, path })}`),
+    })),
   });
 }
 

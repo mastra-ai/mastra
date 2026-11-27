@@ -674,24 +674,17 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
     });
 
-    it('should throw error when workflow is not found', async () => {
+    it.each([
+      ['should throw error when workflow is not found', 'non-existent', 'test-run', 'Workflow not found'],
+      ['should throw error when workflow run is not found', 'test-workflow', 'non-existent', 'Workflow run not found'],
+    ] as const)('%s', async (_title, workflowId, runId, message) => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'non-existent',
-          runId: 'test-run',
+          workflowId,
+          runId,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should throw error when workflow run is not found', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'test-workflow',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message }));
     });
 
     it('should get workflow run successfully', async () => {

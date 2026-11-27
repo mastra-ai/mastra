@@ -1,5 +1,5 @@
 {
-  "attachment": ["google/gemma-4-26b-a4b-it", "qwen/qwen3.8-27b"],
+  "attachment": ["google/gemma-4-26b-a4b-it", "qwen/qwen3.6-35b-a3b", "qwen/qwen3.8-27b"],
   "temperature": [
     "ambient/large",
     "ambient/small",
@@ -27,21 +27,7 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "deepseek/deepseek-v4.1-flash-1017": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ambient/large": [
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -52,13 +38,18 @@
         "type": "toggle"
       }
     ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "z-ai/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -76,6 +67,15 @@
     "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
