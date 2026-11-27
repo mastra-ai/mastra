@@ -5,6 +5,7 @@ import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace'
 import type { PlatformFilesystemOptions, PlatformSandboxOptions } from '@mastra/platform-workspace';
 import { PlatformAgent, toAgentBody } from './agents/platform-agent';
 import type { CreatePlatformAgentInput, PlatformAgentRecord } from './agents/platform-agent';
+import { PlatformGateway } from './gateway/index';
 import { PlatformKnowledge } from './knowledge/index';
 import type { PlatformKnowledgeOptions } from './knowledge/index';
 import { PlatformMemory } from './memory/platform-memory';
@@ -78,6 +79,7 @@ interface ProjectServices {
   client: MastraClient;
   connect: ConnectClient;
   environments: PlatformEnvironments;
+  gateway: PlatformGateway;
   memoryInstances: PlatformMemoryInstances;
   knowledgeInstances: PlatformKnowledgeInstances;
   databases: PlatformDatabases;
@@ -156,6 +158,7 @@ export class MastraProject {
         fetch: this.#options.fetch,
       }),
       environments: new PlatformEnvironments(this.#api, projectId),
+      gateway: new PlatformGateway(this.#api, projectId),
       memoryInstances: new PlatformMemoryInstances(this.#api, projectId),
       knowledgeInstances: new PlatformKnowledgeInstances(this.#api, projectId),
       databases: new PlatformDatabases(this.#api, projectId),
@@ -176,6 +179,11 @@ export class MastraProject {
   /** The project's environments. */
   get environments(): PlatformEnvironments {
     return this.#services.environments;
+  }
+
+  /** The project's Mastra Gateway: API keys, their spend, the models they can call, and usage. */
+  get gateway(): PlatformGateway {
+    return this.#services.gateway;
   }
 
   /** Provision and manage the project's hosted Memory instances. Use `getMemory()` to read and write one. */

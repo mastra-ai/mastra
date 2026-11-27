@@ -28,6 +28,21 @@ export type {
   CreatePlatformFilesystemInput,
   PlatformSandboxRecord,
 } from './provisioning/index';
+export { PlatformGateway } from './gateway/index';
+export type {
+  GatewayRegion,
+  GatewaySpendLimit,
+  GatewayKey,
+  CreateGatewayKeyInput,
+  CreatedGatewayKey,
+  UpdateGatewayKeyInput,
+  GatewayKeyBudget,
+  GatewayModel,
+  GatewayUsageDimension,
+  GatewayUsageOptions,
+  GatewayRequestUsage,
+  GatewayAttemptUsage,
+} from './gateway/index';
 export { PlatformAgent } from './agents/platform-agent';
 export type {
   CreatePlatformAgentInput,
