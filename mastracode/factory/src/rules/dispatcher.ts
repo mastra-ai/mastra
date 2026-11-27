@@ -2027,9 +2027,10 @@ export class FactoryDecisionDispatcher {
                       return review?.kind === 'working' && review.runner.context === 'review';
                     });
                     if (ownCardHandOff) return;
-                    // Only here is the phase run again (or given up on, after its last attempt):
-                    // the engine hears of this end once more, as one a second run answers.
-                    if (await this.#boardEngine.runEnded({ ...ended, runsAgain: true }, this.#boardEngine)) return;
+                    // Only here is the phase run again, or given up on after its last attempt: the
+                    // engine hears of this end once more, with which of the two it is.
+                    const runsAgain = !isTerminalFailure(record.attempts, 'run_incomplete');
+                    if (await this.#boardEngine.runEnded({ ...ended, runsAgain }, this.#boardEngine)) return;
                     throw new FactoryDispatchError(
                       'run_incomplete',
                       'Factory skill run ended before completing the working phase.',

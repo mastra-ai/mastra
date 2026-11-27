@@ -29,9 +29,10 @@ export type FactoryRunEndedBinding = Pick<
    */
   runEnd?: string;
   /**
-   * Set by a teller that runs the phase again when the run ended without an outcome, as the
-   * dispatcher does. Only such an end is a probe; any other (a person's chat turn with the card's
-   * session, a resumed run nobody watches) is followed by no second run.
+   * Set by a teller that decides whether the phase is run again when the run ended without an
+   * outcome, as the dispatcher does: true when a second run follows, which makes the end a probe,
+   * false when the teller gives the phase up. An end that says neither (a person's chat turn with
+   * the card's session, a resumed run nobody watches) is followed by no second run.
    */
   runsAgain?: boolean;
 };

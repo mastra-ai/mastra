@@ -10,4 +10,4 @@ const doing = await engine.describe({ workItemId });
 // { state: 'probing', phase: 'execute', probes: 1 }
 ```
 
-A run that ends without an outcome is run once more, and after a second such end the card needs attention, with a reason. A session waiting on a person (a submitted plan, a held tool call) leaves its card awaiting approval; custom engines can hear of it through the new optional `runPaused(binding, 'approval')`. The default engine behaves as before.
+A run that ends without an outcome is run once more, and after a second such end the card needs attention, with a reason. A Factory host answers 404 for Mastra's workflow routes on the board engine's workflows, so one organization can't read another's cards there. A session waiting on a person (a submitted plan, a held tool call) leaves its card awaiting approval; custom engines can hear of it through the new optional `runPaused(binding, 'approval')`. The default engine behaves as before.

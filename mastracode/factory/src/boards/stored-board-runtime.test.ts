@@ -275,6 +275,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         storage,
         github,
         send,
+        mastra,
+        middleware: [args.server?.middleware ?? []].flat(),
         sandboxHome,
         boards: storage.getDomain<StoredBoardsStorage>('boards'),
         workItems: storage.getDomain<WorkItemsStorage>('work-items'),
@@ -800,6 +802,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       it("runs Shipyard's configuration on the workflow board engine", async () => {
         await runShipyard(createWorkflowBoardEngine);
       }, 120_000);
+
+      it("keeps cards' board runs off the host's workflow routes, where no org owns them", async () => {
+        stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId, { boardEngine: createWorkflowBoardEngine });
+        const projectId = await runnableProject(replica, orgId);
+        const created = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+          title: 'Private to its org',
+        });
+        expect(created.status, JSON.stringify(created.json)).toBe(200);
+        const card = created.json.workItem as { id: string; revision: number };
+        const moved = await replica.send(
+          'POST',
+          `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
+          { board: 'work', stage: 'done', expectedRevision: card.revision, requestId: randomUUID(), cause: 'test' },
+        );
+        expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+        const run = await replica.mastra.getWorkflow('factory-board').getWorkflowRunById(`factory-board:${card.id}`);
+        expect(run?.steps?.phase?.payload).toMatchObject({ state: 'terminal', phase: 'done' });
+
+        // The host's server, as anyone who reaches it does.
+        const host = new Hono();
+        for (const entry of replica.middleware) {
+          if (typeof entry === 'function') host.use('*', entry);
+          else host.use(entry.path, entry.handler);
+        }
+        host.all('/api/*', c => c.json({ served: true }));
+        const list = await host.request('/api/workflows/factory-board/runs');
+        const one = await host.request(
+          `/api/workflows/factory-board/runs/${encodeURIComponent(`factory-board:${card.id}`)}`,
+        );
+        const resume = await host.request(`/api/workflows/factory-board/resume?runId=factory-board:${card.id}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ step: 'phase', resumeData: { inputId: randomUUID() } }),
+        });
+
+        expect([list.status, one.status, resume.status]).toEqual([404, 404, 404]);
+        expect(await list.json()).toEqual({ error: 'Not found' });
+      }, 60_000);
 
       it('leaves a card awaiting approval on the workflow board engine until a person approves its plan', async () => {
         // Planning submits its plan, and Building reports `done`, whatever the card's labels.

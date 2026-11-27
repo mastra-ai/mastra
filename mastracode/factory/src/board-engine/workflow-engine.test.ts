@@ -328,6 +328,20 @@ describe('the workflow board engine', () => {
     expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
   });
 
+  it('flags the card at once when the run that ended without an outcome will not be run again', async () => {
+    const { engine, item, binding } = await setup();
+
+    // The dispatcher's attempts were spent on an earlier failure: this end is the phase's last.
+    await expect(engine.runEnded({ ...binding, runEnd: 'run-1', runsAgain: false }, engine)).resolves.toBe(false);
+
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 1,
+      reason: "The agent's run ended without reporting how the phase ended, and it will not be run again.",
+    });
+  });
+
   it('counts a run end once, however many times it is told', async () => {
     const { engine, item, binding } = await setup();
 

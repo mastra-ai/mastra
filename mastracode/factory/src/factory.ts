@@ -139,6 +139,7 @@ import {
 } from './metrics/index.js';
 import type { FactoryMetricsOptions } from './metrics/index.js';
 import { instrumentSessionFirstOutput } from './metrics/session.js';
+import { createBoardRunGuard } from './routes/board-run-guard.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
 import {
   createCustomProvidersPrimer,
@@ -262,7 +263,7 @@ import {
   createWorkItemRunEndReporter,
 } from './tools/reports.js';
 import type { FactoryReporting } from './tools/reports.js';
-import { observeSessionRunReports } from './tools/run-watch.js';
+import { observeSessionRunReports, reportsTellingOfWaits } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
 import { backfillUntilDone } from './work-items/split-backfill.js';
@@ -2587,12 +2588,14 @@ export class MastraFactory {
             auth: routeAuth,
             workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
           });
+          const boardRunGuard = createBoardRunGuard(() => Object.keys(this.#boardEngineWorkflows ?? {}));
           if (!auth) {
             // Auth disabled: no gate. Still prime the sentinel-local custom
             // provider snapshot so model calls see DB rows, then SPA + CORS.
             return {
               middleware: [
                 ...timing,
+                boardRunGuard,
                 sessionActivity,
                 runStopMarker,
                 createFactoryInteractiveMarker(),
@@ -2621,6 +2624,7 @@ export class MastraFactory {
             middleware: [
               ...timing,
               createFactoryAuthGate(auth, authOptions),
+              boardRunGuard,
               createSessionAccessGuard({
                 auth: routeAuth,
                 sessions: sourceControlSessions,
@@ -2681,47 +2685,36 @@ export class MastraFactory {
           return threadId ? (await openRunsStorage.listRunning(threadId)).at(-1)?.kickoffId : undefined;
         },
       });
-      // A run that waits for a person's yes or no leaves its card waiting on that answer. The
-      // engine may take the card's other inputs first, so nothing waits on it: the person is told
-      // of the wait, and the run's end is reported, without it.
-      const runPaused = () => {
-        if (!boardEngine?.runPaused) return;
-        void (async () => {
-          const binding = await runBinding();
-          if (binding) await boardEngine.runPaused?.(binding, 'approval');
-        })().catch(error => {
-          console.warn('[Factory] Unable to tell the board engine a session waits for approval.', error);
-        });
-      };
-      // Every run end of a work or side session, and every tool call it holds for
-      // approval, reaches whoever follows it, however the run started;
-      // re-attached when a session is created again.
-      observeSessionRunReports(
-        session,
-        async (outcome, since) => {
-          const reported = reportSessionRunEnd({
+      // A run that waits for a person's yes or no leaves its card waiting on that answer.
+      const answersItself = (toolCallId: string) => this.#dispatcher?.autoApproves(toolCallId) ?? false;
+      const waits = reportsTellingOfWaits({
+        reportRunEnd: (outcome, since) =>
+          reportSessionRunEnd({
             sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
-          });
-          if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) runPaused();
-          await reported;
+          }),
+        notifyApproval: request =>
+          notifyApprovalRequested({
+            sessionId: session.identity.getId(),
+            threadId: session.thread.getId(),
+            ...request,
+          }),
+        runPaused: async () => {
+          if (!boardEngine?.runPaused) return;
+          const binding = await runBinding();
+          if (binding) await boardEngine.runPaused(binding, 'approval');
         },
-        {
-          onApprovalRequested: async request => {
-            // A call Factory answers itself waits on nobody.
-            const notified = notifyApprovalRequested({
-              sessionId: session.identity.getId(),
-              threadId: session.thread.getId(),
-              ...request,
-            });
-            if (!this.#dispatcher?.autoApproves(request.toolCallId)) runPaused();
-            await notified;
-          },
-          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
-        },
-      );
+        answersItself,
+      });
+      // Every run end of a work or side session, and every tool call it holds for
+      // approval, reaches whoever follows it, however the run started;
+      // re-attached when a session is created again.
+      observeSessionRunReports(session, waits.report, {
+        onApprovalRequested: waits.onApprovalRequested,
+        answersItself,
+      });
       observeSessionMemoryFailurePosts(session, () => prepared.base.controller.getChannels());
       observeSessionThreadStamp(session);
       instrumentSessionFirstOutput(session);

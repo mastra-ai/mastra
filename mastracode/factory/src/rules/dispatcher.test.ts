@@ -5201,13 +5201,20 @@ describe('FactoryDecisionDispatcher', () => {
         });
         await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
         const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-        return { decision, told: runEnded.mock.calls.map(([binding]) => binding.runsAgain ?? false) };
+        const told = () => runEnded.mock.calls.map(([binding]) => binding.runsAgain ?? 'unmarked');
+        const first = { decision, told: told() };
+        await dispatcher.runOnce(new Date('2030-01-01T00:10:00Z'));
+        const [last] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        return { ...first, last: { decision: last, told: told().slice(first.told.length) } };
       };
 
       // Building names how it ends: an unchanged card is a run to do again, and only then is it marked.
       const building = await tellings(autoStartingBoards(), 'run-end-marked');
       expect(building.decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
-      expect(building.told).toEqual([false, true]);
+      expect(building.told).toEqual(['unmarked', true]);
+      // Its second run is its last: the engine hears that no third follows.
+      expect(building.last.decision).toMatchObject({ status: 'failed', failureCode: 'run_incomplete' });
+      expect(building.last.told).toEqual(['unmarked', false]);
 
       // A phase that doesn't name how it ends is never run again.
       const open = await tellings(
@@ -5217,7 +5224,8 @@ describe('FactoryDecisionDispatcher', () => {
         'run-end-unmarked',
       );
       expect(open.decision).toMatchObject({ status: 'succeeded' });
-      expect(open.told).toEqual([false]);
+      expect(open.told).toEqual(['unmarked']);
+      expect(open.last.told).toEqual([]);
     });
   });
 

@@ -39,6 +39,8 @@ const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RES
 
 /** What a card that needs attention tells the person looking at it. */
 const NO_OUTCOME_REASON = "The agent's run ended twice without reporting how the phase ended.";
+const NOT_RUN_AGAIN_REASON =
+  "The agent's run ended without reporting how the phase ended, and it will not be run again.";
 
 /** An input waiting for the card's run to apply it, and what applying it gave. */
 type PendingInput =
@@ -284,18 +286,20 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     if (definition?.kind !== 'working' || !(definition.runner.goal || definition.exitTool)) {
       return { state: 'awaiting_start', ...at, probes, ...kept, ...counted };
     }
-    // Only a teller that runs the phase again asks for a second run; an end nobody follows up (a
-    // person's chat turn with the session, or an end the dispatcher lets stand) says nothing about
-    // how the phase is going, and stays uncounted so the teller that does follow up is still heard.
-    if (binding.runsAgain !== true) return undefined;
+    // Only a teller that decides whether the phase is run again says how it is going; an end
+    // nobody follows up (a person's chat turn with the session, or an end the dispatcher lets
+    // stand) stays uncounted, so the teller that does follow up is still heard.
+    if (binding.runsAgain === undefined) return undefined;
+    // A second run is the probe. Without one, whatever the count, nothing is working the phase.
+    const probed = binding.runsAgain && probes === 0;
     return {
       ...at,
       probes: probes + 1,
       ...kept,
       ...counted,
-      ...(probes === 0
+      ...(probed
         ? { state: 'probing' as const }
-        : { state: 'needs_attention' as const, reason: NO_OUTCOME_REASON }),
+        : { state: 'needs_attention' as const, reason: probes === 0 ? NOT_RUN_AGAIN_REASON : NO_OUTCOME_REASON }),
     };
   }
 
