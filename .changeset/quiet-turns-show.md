@@ -2,7 +2,7 @@
 '@mastra/langsmith': minor
 ---
 
-Fixed LangSmith trajectories missing tool calls, tool results and the final answer, and showing thread title generation as part of the conversation. Multi-turn online evaluators that use `trajectory` now receive the full turn.
+Fixed LangSmith trajectories missing tool calls, tool results and the final answer, and showing thread title generation as part of the conversation. Multi-turn online evaluators that use `trajectory` now receive the tool calls, tool results and answers.
 
 Each call to the model provider is now its own `llm` run (`inference: 0`, `inference: 1`, ...), with the conversation up to that call in `inputs.messages` and its own token usage. The run that wraps them (`llm: 'gpt-4o'`) is now a `chain` run. Each token is still counted once.
 
