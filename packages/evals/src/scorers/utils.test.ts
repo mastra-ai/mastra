@@ -1568,6 +1568,23 @@ describe('Scorer Utils', () => {
         expect(compareTrajectories(a, b).score).toBe(1);
       });
 
+      it('should match an Error in toolResult whose props are in a different order, and keep boxed numbers apart', () => {
+        const step = (toolResult: Record<string, unknown>) => ({
+          stepType: 'tool_call' as const,
+          name: 'fetch',
+          toolResult,
+        });
+        const error = Object.assign(new Error('boom'), { status: 500, code: 'E1' });
+
+        expect(
+          compareTrajectories({ steps: [step({ error })] }, { steps: [step({ error: { code: 'E1', status: 500 } })] })
+            .score,
+        ).toBe(1);
+        expect(
+          compareTrajectories({ steps: [step({ n: new Number(1) })] }, { steps: [step({ n: new Number(2) })] }).score,
+        ).toBe(0);
+      });
+
       it('should not match steps with different toolArgs', () => {
         const a = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'hello' } }] };
         const b = { steps: [{ stepType: 'tool_call' as const, name: 'search', toolArgs: { q: 'world' } }] };

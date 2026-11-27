@@ -1326,9 +1326,19 @@ const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   processor_run: ['processorId'],
 };
 
+const BOXED_PRIMITIVE_TAGS = new Set(['[object Number]', '[object String]', '[object Boolean]', '[object BigInt]']);
+
+/**
+ * `JSON.stringify` with object keys sorted at every depth. Arrays keep their order.
+ * Boxed primitives such as `new Number(1)` stay as they are, because `JSON.stringify`
+ * unboxes them only after the replacer runs.
+ */
 function stableStringify(value: unknown): string | undefined {
   return JSON.stringify(value, (_key, val) =>
-    Object.prototype.toString.call(val) === '[object Object]'
+    val &&
+    typeof val === 'object' &&
+    !Array.isArray(val) &&
+    !BOXED_PRIMITIVE_TAGS.has(Object.prototype.toString.call(val))
       ? Object.fromEntries(
           Object.keys(val)
             .sort()
