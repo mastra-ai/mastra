@@ -865,6 +865,36 @@ describe('the workflow board engine', () => {
     expect(waiting!.deadlineAt).toBeLessThan(probing!.deadlineAt!);
   });
 
+  it("leaves a run going past its deadline to the dispatcher while it still holds the run's decision", async () => {
+    const { runs, stopped } = sweptRuns({ inFlight: true, stops: true });
+    const { storage, engine, item, binding } = await setup({ runs });
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    const first = (await engine.describe({ workItemId: item.id }))!.deadlineAt!;
+    // The retry started late, and the dispatcher's own watch of it has time to run.
+    const card = (await storage.get({ orgId: ORG, id: item.id }))!;
+    await storage.commitRuleEvaluation({
+      orgId: ORG,
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      ingress: { identity: 'rule-1' },
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'rule-1' }],
+      causalChain: [],
+      now: new Date(),
+    });
+
+    await engine.sweep(Date.now() + 7 * HOUR, engine);
+    expect(stopped).toEqual([]);
+    const later = await engine.describe({ workItemId: item.id });
+    expect(later).toMatchObject({ state: 'running', probes: 0, attempts: 1 });
+    expect(later!.deadlineAt).toBeLessThan(first);
+  });
+
   it('acts on nothing for a deadline the card has since moved past', async () => {
     const { runs } = sweptRuns({ inFlight: false });
     const { engine, item, binding } = await setup({ runs });

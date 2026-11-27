@@ -654,14 +654,10 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 
   /**
-   * Answers an input for a card that no longer exists, so no run is started to wait on it forever:
-   * the card's session can end a run after the card was deleted.
-   */
-  /**
    * Looks at every card whose run is past its deadline, as told by `now`: a card still `running`
    * or `probing` whose run's end nobody heard (its process died with the run's watch) is told of
-   * that end, so it moves by the outcome its agent reported or is probed and flagged; a run still
-   * going past it is stopped, which flags the card. Each card's run checks the deadline it was
+   * that end, so it moves by the outcome its agent reported or, with none, is flagged; a run still
+   * going past it with no decision left for the dispatcher is stopped, which flags the card. Each card's run checks the deadline it was
    * asked about is still its own, so a sweep in every process acts on one expiry once.
    *
    * Moves go through `engine`, the engine Factory holds, as a run end's move does.
@@ -717,9 +713,10 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
 
   /**
    * What a card past its deadline is doing: nothing changes unless the deadline is still the one
-   * the card's record holds. A run still going is stopped and the card flagged as overdue, or, when
-   * the run is another process's to stop, looked at again later; a run that ended unseen is told
-   * as a run end, which is a probe of a `running` card and the last straw for a `probing` one.
+   * the card's record holds. A run the dispatcher still has a decision for is left to it and looked
+   * at again later. Otherwise a run still going is stopped and the card flagged as overdue, or, when
+   * the run is another process's to stop, looked at again later; a run that ended unseen is told as
+   * a run end that won't run again, so the card moves by its reported outcome or is flagged.
    */
   async #stateAfterDeadline(
     pending: Extract<PendingInput, { deadline: unknown }>,
@@ -736,9 +733,18 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const role = board?.roleForPhase(previous.phase);
     const binding = pending.bindings.find(seat => seat.role === role);
     if (!binding) return later;
-    if (await runs.inFlight(card)) {
-      // A probe is the phase run once more, and gets as long as any run of the phase.
-      if (previous.state === 'probing') return { ...previous, deadlineAt: Date.now() + this.#deadlines.running };
+    const inFlight = await runs.inFlight(card);
+    // A probe is the phase run once more, and gets as long as any run of the phase.
+    if (inFlight && previous.state === 'probing')
+      return { ...previous, deadlineAt: Date.now() + this.#deadlines.running };
+    // A run the dispatcher still holds a decision for is its to start, watch, retry or give up: one
+    // that started late is still within its own watch, and one whose watch died is taken over.
+    const decisions = await this.#context.workItems.listDeferredDecisions?.(card.orgId, card.factoryProjectId, {
+      workItemId: card.workItemId,
+      statuses: UNSETTLED_DECISIONS,
+    });
+    if (decisions?.some(record => record.decision.type === 'invokeSkill')) return later;
+    if (inFlight) {
       const { deadlineAt: _expired, ...kept } = previous;
       if (await runs.stop(card)) {
         return { ...kept, state: 'needs_attention', failure: 'run_overdue', reason: failureLabel('run_overdue') };
@@ -746,13 +752,6 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       // Its process's own watch gives the run up; look again once that had time to land.
       return later;
     }
-    // A run waiting for its turn, or one whose watch died with its lease, is still the dispatcher's
-    // to start or take over; it hears that run's end.
-    const decisions = await this.#context.workItems.listDeferredDecisions?.(card.orgId, card.factoryProjectId, {
-      workItemId: card.workItemId,
-      statuses: UNSETTLED_DECISIONS,
-    });
-    if (decisions?.some(record => record.decision.type === 'invokeSkill')) return later;
     const ended: FactoryRunEndedBinding = {
       id: binding.id,
       role: binding.role,
@@ -769,6 +768,10 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     return next ?? later;
   }
 
+  /**
+   * Answers an input for a card that no longer exists, so no run is started to wait on it forever:
+   * the card's session can end a run after the card was deleted.
+   */
   async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
     const asked =
       'runEnded' in pending
