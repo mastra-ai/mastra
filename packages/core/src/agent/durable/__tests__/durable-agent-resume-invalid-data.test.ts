@@ -1,6 +1,7 @@
 /**
- * Regression test for #28229: a durable resume with data that fails the suspended tool's
+ * Regression test for #28229: a cold durable resume with data that fails the suspended tool's
  * resumeSchema must reject before it touches the run, so a corrected retry still resumes it.
+ * Warm resumes keep the tools the run was registered with and are left to the tool-call step.
  */
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -15,10 +16,14 @@ import { InMemoryStore } from '../../../storage';
 import type { ChunkType } from '../../../stream/types';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import type { AgentConfig } from '../../types';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
+
+type Engine = 'durable' | 'evented';
+type AgentOverrides = Pick<AgentConfig, 'tools' | 'inputProcessors'>;
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const pubsubs: EventEmitterPubSub[] = [];
@@ -30,7 +35,21 @@ const fga: IFGAProvider = {
   filterAccessible: async () => [],
 };
 
-function startProcess(engine: 'durable' | 'evented', storage: InMemoryStore, seen: unknown[]) {
+function confirmTool(seen: unknown[], resumeSchema: z.ZodType = z.object({ confirmed: z.boolean() })) {
+  return createTool({
+    id: 'confirm',
+    description: 'Asks the user to confirm',
+    inputSchema: z.object({}),
+    resumeSchema,
+    execute: async (_input, context) => {
+      if (!context?.agent?.resumeData) return context?.agent?.suspend?.({ question: 'Confirm?' });
+      seen.push({ ...context.agent.resumeData, tenant: context.requestContext?.get('tenant') });
+      return { ok: true };
+    },
+  });
+}
+
+function startProcess(engine: Engine, storage: InMemoryStore, seen: unknown[], overrides?: AgentOverrides) {
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       const parts: LanguageModelV2StreamPart[] = prompt.some(message => message.role === 'tool')
@@ -53,18 +72,14 @@ function startProcess(engine: 'durable' | 'evented', storage: InMemoryStore, see
       };
     },
   });
-  const confirm = createTool({
-    id: 'confirm',
-    description: 'Asks the user to confirm',
-    inputSchema: z.object({}),
-    resumeSchema: z.object({ confirmed: z.boolean() }),
-    execute: async (_input, context) => {
-      if (!context?.agent?.resumeData) return context?.agent?.suspend?.({ question: 'Confirm?' });
-      seen.push({ ...context.agent.resumeData, tenant: context.requestContext?.get('tenant') });
-      return { ok: true };
-    },
+  const agent = new Agent({
+    id: 'confirmer',
+    name: 'confirmer',
+    instructions: 'Confirm.',
+    model,
+    tools: { confirm: confirmTool(seen) },
+    ...overrides,
   });
-  const agent = new Agent({ id: 'confirmer', name: 'confirmer', instructions: 'Confirm.', model, tools: { confirm } });
   const pubsub = new EventEmitterPubSub();
   pubsubs.push(pubsub);
   const durable = engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
@@ -85,11 +100,11 @@ async function drain(stream: { fullStream: AsyncIterable<ChunkType> }) {
   return text.join('');
 }
 
-async function suspend(engine: 'durable' | 'evented') {
+async function suspend(engine: Engine, overrides?: (seen: unknown[]) => AgentOverrides) {
   globalRunRegistry.clear();
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
-  const agent = startProcess(engine, storage, seen);
+  const agent = startProcess(engine, storage, seen, overrides?.(seen));
   const started = await agent.stream('go', { requestContext: tenant('original'), closeOnSuspend: true });
   await drain(started);
   const workflows = (await storage.getStore('workflows'))!;
@@ -103,6 +118,12 @@ async function suspend(engine: 'durable' | 'evented') {
   return { agent, storage, seen, runId: started.runId };
 }
 
+async function suspendCold(engine: Engine) {
+  const run = await suspend(engine);
+  globalRunRegistry.clear();
+  return { ...run, agent: startProcess(engine, run.storage, run.seen) };
+}
+
 afterEach(async () => {
   globalRunRegistry.clear();
   await Promise.allSettled(pubsubs.splice(0).map(pubsub => pubsub.close()));
@@ -111,69 +132,72 @@ afterEach(async () => {
 describe.each(['durable', 'evented'] as const)(
   '%s agent resume with data that fails the resumeSchema (#28229)',
   engine => {
-    it.each(['warm', 'cold'] as const)(
-      '%s: rejects without touching the run, and a corrected retry sees the original context',
-      async mode => {
-        const run = await suspend(engine);
-        let agent = run.agent;
-        if (mode === 'cold') {
-          globalRunRegistry.clear();
-          agent = startProcess(engine, run.storage, run.seen);
-        }
+    it.each([false, true])(
+      'cold (untilIdle: %s): rejects without touching the run, and a corrected retry sees the original context',
+      async untilIdle => {
+        const run = await suspendCold(engine);
 
         await expect(
-          agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('rejected') }),
+          run.agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle, requestContext: tenant('rejected') }),
         ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
         expect(run.seen).toEqual([]);
-        if (mode === 'warm') expect(globalRunRegistry.get(run.runId)?.requestContext?.get('tenant')).toBe('original');
-        else expect(globalRunRegistry.get(run.runId)).toBeUndefined();
+        expect(globalRunRegistry.get(run.runId)).toBeUndefined();
 
-        expect(await drain(await agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
+        expect(await drain(await run.agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
         expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
       },
     );
 
-    it('reports an authorization denial before invalid resume data', async () => {
-      const run = await suspend(engine);
+    it('cold: reports an authorization denial before invalid resume data', async () => {
+      const run = await suspendCold(engine);
 
       await expect(
         run.agent.resumeStream({ confirmed: 'yes' }, { runId: run.runId, requestContext: tenant('other', 'denied') }),
       ).rejects.toThrow(FGADeniedError);
     });
 
-    it.each(['warm', 'cold'] as const)('%s: rejects the outer call when untilIdle is set', async mode => {
-      const run = await suspend(engine);
-      let agent = run.agent;
-      if (mode === 'cold') {
-        globalRunRegistry.clear();
-        agent = startProcess(engine, run.storage, run.seen);
-      }
+    describe('warm resumes run the tool the run was registered with', () => {
+      it('a call-time toolset that shadows the suspended tool', async () => {
+        const run = await suspend(engine);
+        const toolsets = { replacement: { confirm: confirmTool([], z.object({ confirmed: z.string() })) } };
 
-      await expect(
-        agent.resume(run.runId, { confirmed: 'yes' }, { untilIdle: true, requestContext: tenant('rejected') }),
-      ).rejects.toMatchObject({ id: 'AGENT_RESUME_INVALID_DATA' });
-      expect(run.seen).toEqual([]);
-
-      expect(await drain(await agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
-      expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
-    });
-
-    it('does not validate a warm resume against a call-time tool that shadows the suspended one', async () => {
-      const run = await suspend(engine);
-      const replacement = createTool({
-        id: 'confirm',
-        description: 'Not the tool the run suspended in',
-        inputSchema: z.object({}),
-        resumeSchema: z.object({ confirmed: z.string() }),
-        execute: async () => ({ ok: true }),
+        expect(await drain(await run.agent.resumeStream({ confirmed: true }, { runId: run.runId, toolsets }))).toBe(
+          'done',
+        );
+        expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
       });
 
-      const resumed = await run.agent.resumeStream(
-        { confirmed: true },
-        { runId: run.runId, toolsets: { replacement: { confirm: replacement } } },
-      );
-      expect(await drain(resumed)).toBe('done');
-      expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
+      it.each(['changes schema', 'throws'] as const)('a dynamic tools resolver that now %s', async change => {
+        let resolved = 0;
+        const run = await suspend(engine, seen => ({
+          tools: () => {
+            resolved++;
+            if (resolved === 1) return { confirm: confirmTool(seen) };
+            if (change === 'throws') throw new Error('resolver unavailable');
+            return { confirm: confirmTool(seen, z.object({ confirmed: z.string() })) };
+          },
+        }));
+
+        expect(await drain(await run.agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
+        expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
+      });
+
+      it('a processor that replaces an assigned tool under the same name', async () => {
+        const run = await suspend(engine, seen => ({
+          tools: { confirm: confirmTool(seen, z.object({ confirmed: z.string() })) },
+          inputProcessors: [
+            {
+              id: 'replace-confirm',
+              processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => ({
+                tools: { ...tools, confirm: confirmTool(seen) },
+              }),
+            },
+          ],
+        }));
+
+        expect(await drain(await run.agent.resumeStream({ confirmed: true }, { runId: run.runId }))).toBe('done');
+        expect(run.seen).toEqual([{ confirmed: true, tenant: 'original' }]);
+      });
     });
   },
 );
