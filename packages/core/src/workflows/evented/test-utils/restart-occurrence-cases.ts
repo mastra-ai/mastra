@@ -242,9 +242,14 @@ export function describeRestartOccurrenceCases({
       driver.stepRuns({ spec: `${workflowId}@${path.join(',')}`, runId });
 
     /** a -> b -> c, each holdable. */
-    function chain() {
+    function chain(options?: WorkflowOptions<any>) {
       const steps = holdableSteps();
-      const workflow = createWorkflow({ id: `restart-chain-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+      const workflow = createWorkflow({
+        id: `restart-chain-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        ...(options ? { options } : {}),
+      })
         .then(steps.step('a'))
         .then(steps.step('b'))
         .then(steps.step('c'))
@@ -1286,7 +1291,8 @@ export function describeRestartOccurrenceCases({
     // R7. A run that ended after the restart's caller read it was set back to running from what the
     // caller read, and its step ran again.
     it('does not reopen a run that ended between the restart read and the restart', async () => {
-      const wf = chain();
+      let finishes = 0;
+      const wf = chain({ onFinish: () => void finishes++ });
       await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
         const run = await wf.workflow.createRun();
         const oldB = wf.holdAt('b');
@@ -1316,6 +1322,55 @@ export function describeRestartOccurrenceCases({
           context: { b: ended?.context.b, c: ended?.context.c },
         });
         expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+        // The run's onFinish ran when it ended; the declined restart does not run it again.
+        expect(finishes).toBe(1);
+      });
+    }, 20_000);
+
+    // R7 for a run that failed in that window: the caller gets the failure as an Error, as the run's
+    // own caller did, and the run's onFinish and onError are not called again.
+    it('returns the failure of a run that failed between the restart read and the restart', async () => {
+      const callbacks = { finish: 0, error: 0 };
+      let fail = false;
+      const steps = holdableSteps();
+      const breaks = createStep({
+        id: 'breaks',
+        inputSchema: Num,
+        outputSchema: Num,
+        execute: async ({ inputData }) => {
+          if (fail) throw new Error('breaks broke');
+          return inputData;
+        },
+      });
+      const workflow = createWorkflow({
+        id: `restart-failed-${randomUUID()}`,
+        inputSchema: Num,
+        outputSchema: Num,
+        options: { onFinish: () => void callbacks.finish++, onError: () => void callbacks.error++ },
+      })
+        .then(steps.step('a'))
+        .then(breaks)
+        .commit();
+      await withHost({ [workflow.id]: workflow }, steps.releaseAll, async () => {
+        const run = await workflow.createRun();
+        const oldA = steps.holdAt('a');
+        const started = run.start({ inputData: { n: 0 } });
+        await oldA.entered;
+        const { restarted, proceed } = await restartHeldAfterRead(workflow, run.runId);
+        fail = true;
+        oldA.release();
+        const failed = (await started) as { status: string; error?: Error };
+        expect(failed).toMatchObject({ status: 'failed' });
+        await drainHandlers();
+        expect(callbacks).toEqual({ finish: 1, error: 1 });
+
+        proceed();
+        const result = (await within(restarted, 'the restart caller to settle')) as { status: string; error?: Error };
+        expect(result.status).toBe('failed');
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error?.message).toBe(failed.error?.message);
+        await drainHandlers();
+        expect(callbacks).toEqual({ finish: 1, error: 1 });
       });
     }, 20_000);
 

@@ -535,7 +535,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    if (callbackArg.status !== 'paused') {
+    // A run's stored outcome sent to a restart that no longer applied (see the processor's
+    // `#declineRestart`): the run already called its lifecycle callbacks when it finished.
+    if (callbackArg.status !== 'paused' && !resultData.storedOutcome) {
       // Invoke lifecycle callbacks before returning
       await this.invokeLifecycleCallbacks({
         status: callbackArg.status,

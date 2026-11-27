@@ -2833,8 +2833,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       data: {
         workflowId,
         runId,
+        // An Error, as `restart()` returns for a run it finds failed itself.
         prevResult: ended
-          ? { status: 'failed', error: snapshot.error }
+          ? { status: 'failed', error: getErrorFromUnknown(snapshot.error, { serializeStack: false }) }
           : snapshot.status === 'success' || snapshot.status === 'paused'
             ? (snapshot.result ?? { status: 'success' })
             : { status: snapshot.status },
@@ -2842,6 +2843,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: snapshot.context,
         state: snapshot.context?.__state ?? snapshot.value,
         requestContext,
+        // The run called its lifecycle callbacks when it finished; its caller must not call them again.
+        storedOutcome: true,
       },
     });
   }
