@@ -44,6 +44,7 @@ import {
   isNotFound,
   notFound,
   readAllPages,
+  refusal,
   rejectUnsupported,
   revive,
   unsupportedMethod,
@@ -455,12 +456,10 @@ export class PlatformDataset extends Dataset {
   ): Promise<ExperimentSummary> {
     const { mastra: configMastra, onEvent, ...experiment } = config;
     if (experiment.targetType !== undefined && !configMastra) {
-      throw new MastraError({
-        id: 'PLATFORM_DATASETS_MASTRA_REQUIRED',
-        text: `startExperiment: pass \`mastra\` to run ${experiment.targetType} "${experiment.targetId}"; it is looked up in that Mastra`,
-        domain: 'STORAGE',
-        category: 'USER',
-      });
+      throw refusal(
+        `startExperiment: pass \`mastra\` to run ${experiment.targetType} "${experiment.targetId}"; it is looked up in that Mastra`,
+        { code: 'PLATFORM_DATASETS_MASTRA_REQUIRED', method: 'startExperiment', options: ['targetType', 'targetId'] },
+      );
     }
     const mastra = configMastra ?? this.#mastra;
 

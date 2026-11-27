@@ -145,11 +145,13 @@ await dataset.submitExperimentResult({
 await dataset.finalizeExperiment({ experimentId });
 ```
 
-The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`. Some core options aren't available and throw a `MastraError` instead of being ignored:
+The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`. Some core options aren't available and throw a `MastraPlatformError` (status 400, with `body.code` naming the refusal) instead of being ignored:
 
 - The Platform assigns dataset IDs, so `create` takes no `id`.
 - Experiments created from code have no target. `startExperiment` records the target you ran in the experiment's `metadata.target`.
 - `startExperimentAsync`, `runExperimentItem`, and `compareExperiments` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
+
+Errors the Platform answers with also throw `MastraPlatformError`, carrying its status and body. As with `mastra.datasets`, `get` throws core's `DATASET_NOT_FOUND` for a missing dataset, and `getItem` and `getExperiment` return `null`.
 
 ### Hosted browser
 

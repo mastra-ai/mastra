@@ -22,4 +22,4 @@ const summary = await dataset.startExperiment({
 });
 ```
 
-To run items yourself, use `createExperiment`, `submitExperimentResult`, and `finalizeExperiment`. Options the Platform can't honor, such as a caller-chosen dataset `id`, throw instead of being ignored.
+To run items yourself, use `createExperiment`, `submitExperimentResult`, and `finalizeExperiment`. Options the Platform can't honor, such as a caller-chosen dataset `id`, throw a `MastraPlatformError` instead of being ignored.

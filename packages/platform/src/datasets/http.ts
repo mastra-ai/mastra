@@ -2,13 +2,15 @@ import { MastraClientError } from '@mastra/client-js';
 import type { MastraClient } from '@mastra/client-js';
 import { MastraError } from '@mastra/core/error';
 import type { PaginationInfo } from '@mastra/core/storage';
+import { MastraPlatformError, errorMessage } from '../provisioning/index';
 
 type QueryValue = string | number | string[] | { field?: string; direction?: string } | undefined;
 
 /**
  * The Platform's dataset routes, which run core's own dataset handlers. Calls go through
  * `MastraClient.request` with core's argument shapes, which the generated client-js methods type
- * more narrowly; the server validates every body and query.
+ * more narrowly; the server validates every body and query. Error responses throw
+ * `MastraPlatformError`, as the rest of this package does.
  */
 export class DatasetsHttp {
   readonly #client: MastraClient;
@@ -18,11 +20,21 @@ export class DatasetsHttp {
   }
 
   get<T>(path: string, query?: Record<string, QueryValue>): Promise<T> {
-    return this.#client.request<T>(`${path}${toQueryString(query)}`);
+    return platformErrors('GET', path, this.#client.request<T>(`${path}${toQueryString(query)}`));
   }
 
   send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: object): Promise<T> {
-    return this.#client.request<T>(path, { method, ...(body ? { body } : {}) });
+    return platformErrors(method, path, this.#client.request<T>(path, { method, ...(body ? { body } : {}) }));
+  }
+}
+
+async function platformErrors<T>(method: string, path: string, request: Promise<T>): Promise<T> {
+  try {
+    return await request;
+  } catch (error) {
+    if (!(error instanceof MastraClientError)) throw error;
+    const reason = errorMessage(error.body) ?? error.statusText;
+    throw new MastraPlatformError(`${method} ${path} failed (${error.status}): ${reason}`, error.status, error.body);
   }
 }
 
@@ -67,33 +79,36 @@ export function revive<T>(value: object, dateKeys: readonly string[]): T {
 }
 
 export function isNotFound(error: unknown): boolean {
-  return error instanceof MastraClientError && error.status === 404;
+  return error instanceof MastraPlatformError && error.status === 404;
 }
 
 export function notFound(id: 'DATASET_NOT_FOUND' | 'EXPERIMENT_NOT_FOUND', text: string, cause: unknown): MastraError {
   return new MastraError({ id, text, domain: 'STORAGE', category: 'USER' }, cause);
 }
 
-/** Throws for core options the Platform's HTTP API can't honor, instead of silently dropping them. */
+/**
+ * Throws for core options the Platform's API can't honor, instead of silently dropping them. The
+ * error is the `400` the Platform would answer with; `body.code` names the refusal.
+ */
 export function rejectUnsupported(method: string, args: object | undefined, keys: readonly string[]): void {
   if (!args) return;
   const given = keys.filter(key => (args as Record<string, unknown>)[key] !== undefined);
   if (given.length === 0) return;
-  throw new MastraError({
-    id: 'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
-    text: `${method}: ${given.join(', ')} ${given.length === 1 ? 'is' : 'are'} not supported by Mastra Platform datasets`,
-    domain: 'STORAGE',
-    category: 'USER',
+  throw refusal(
+    `${method}: ${given.join(', ')} ${given.length === 1 ? 'is' : 'are'} not supported by Mastra Platform datasets`,
+    { code: 'PLATFORM_DATASETS_UNSUPPORTED_OPTION', method, options: given },
+  );
+}
+
+export function unsupportedMethod(method: string, hint: string): MastraPlatformError {
+  return refusal(`${method} is not supported by Mastra Platform datasets. ${hint}`, {
+    code: 'PLATFORM_DATASETS_UNSUPPORTED_METHOD',
+    method,
   });
 }
 
-export function unsupportedMethod(method: string, hint: string): MastraError {
-  return new MastraError({
-    id: 'PLATFORM_DATASETS_UNSUPPORTED_METHOD',
-    text: `${method} is not supported by Mastra Platform datasets. ${hint}`,
-    domain: 'STORAGE',
-    category: 'USER',
-  });
+export function refusal(message: string, body: { code: string; method: string; options?: string[] }) {
+  return new MastraPlatformError(message, 400, body);
 }
 
 const PAGE_SIZE = 100;

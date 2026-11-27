@@ -13,7 +13,7 @@ import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
-import { MastraProject, PlatformDataset, PlatformDatasets } from '../index';
+import { MastraPlatformError, MastraProject, PlatformDataset, PlatformDatasets } from '../index';
 
 const PROJECT_ID = 'proj_datasets';
 const ACCESS_TOKEN = 'project-token';
@@ -102,6 +102,15 @@ async function expectMastraError(promise: Promise<unknown>, id: string) {
   );
   expect(error).toBeInstanceOf(MastraError);
   expect((error as MastraError).id).toBe(id);
+}
+
+async function expectRefusal(promise: Promise<unknown>, code: string) {
+  const error = await promise.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  expect(error).toBeInstanceOf(MastraPlatformError);
+  expect(error).toMatchObject({ status: 400, body: { code } });
 }
 
 function publicMethods(prototype: object): string[] {
@@ -225,25 +234,25 @@ describe('PlatformDatasets', () => {
   });
 
   it('refuses options and methods the Platform cannot honor instead of dropping them', async () => {
-    await expectMastraError(
+    await expectRefusal(
       project.datasets.create({ id: 'gold-dev', name: 'gold' }),
       'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
     );
-    await expectMastraError(
+    await expectRefusal(
       project.datasets.list({ filters: { organizationId: 'org_1' } }),
       'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
     );
-    await expectMastraError(project.datasets.compareExperiments(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
+    await expectRefusal(project.datasets.compareExperiments(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
 
     const dataset = await project.datasets.create({ name: 'refusals' });
-    await expectMastraError(
+    await expectRefusal(
       dataset.createExperiment({ targetType: 'agent', targetId: 'support' }),
       'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
     );
-    await expectMastraError(dataset.listExperiments({ status: 'completed' }), 'PLATFORM_DATASETS_UNSUPPORTED_OPTION');
-    await expectMastraError(dataset.startExperimentAsync(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
-    await expectMastraError(dataset.runExperimentItem(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
-    await expectMastraError(
+    await expectRefusal(dataset.listExperiments({ status: 'completed' }), 'PLATFORM_DATASETS_UNSUPPORTED_OPTION');
+    await expectRefusal(dataset.startExperimentAsync(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
+    await expectRefusal(dataset.runExperimentItem(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
+    await expectRefusal(
       dataset.startExperiment({ targetType: 'agent', targetId: 'support' }),
       'PLATFORM_DATASETS_MASTRA_REQUIRED',
     );
@@ -294,6 +303,17 @@ describe('experiments uploaded from code', () => {
       completedAt: new Date(),
     });
     expect(result.startedAt).toBeInstanceOf(Date);
+    // The Platform's refusal reaches the caller with its status and body.
+    const tooMany = await ds
+      .submitExperimentResult({
+        experimentId,
+        itemId: items[1]!.id,
+        scores: Array.from({ length: 51 }, (_, i) => ({ scorerId: `s-${i}`, score: 1 })),
+        completedAt: new Date(),
+      })
+      .catch((e: unknown) => e);
+    expect(tooMany).toBeInstanceOf(MastraPlatformError);
+    expect(tooMany).toMatchObject({ status: 400, body: { error: 'invalid_dataset_request' } });
     await ds.submitExperimentResult({
       experimentId,
       itemId: items[1]!.id,
