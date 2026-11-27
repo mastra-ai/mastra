@@ -242,7 +242,7 @@ describe('MastraPlatform project provisioning', () => {
     const created = await platform.projects.create({ name: 'Support Bot' });
     expect(await platform.projects.list()).toContainEqual(created);
 
-    const project = platform.project(created.id);
+    const project = platform.getProject(created.id);
     const [production] = await project.environments.list();
     expect(production).toMatchObject({ type: 'production' });
 
@@ -274,7 +274,7 @@ describe('MastraPlatform project provisioning', () => {
   });
 
   it('turns a provisioned database into Mastra storage that memory saves to', async () => {
-    const project = signedIn().project((await signedIn().projects.create({ name: 'Storage' })).id);
+    const project = signedIn().getProject((await signedIn().projects.create({ name: 'Storage' })).id);
     const database = await project.databases.create({ kind: 'turso', name: 'support-threads' });
     await project.databases.waitUntilReady(database.id, wait);
 
@@ -292,7 +292,7 @@ describe('MastraPlatform project provisioning', () => {
   });
 
   it('picks the store for each kind of database', async () => {
-    const project = signedIn().project((await signedIn().projects.create({ name: 'Stores' })).id);
+    const project = signedIn().getProject((await signedIn().projects.create({ name: 'Stores' })).id);
     const { environments } = project;
     const [production] = await environments.list();
     const stores = [];
@@ -311,14 +311,14 @@ describe('MastraPlatform project provisioning', () => {
   });
 
   it('refuses a database that is not ready yet', async () => {
-    const project = signedIn().project((await signedIn().projects.create({ name: 'Early' })).id);
+    const project = signedIn().getProject((await signedIn().projects.create({ name: 'Early' })).id);
     const database = await project.databases.create({ kind: 'turso', name: 'too-soon' });
     await expect(project.getStorage(database.id)).rejects.toThrow(`Database ${database.id} is provisioning`);
   });
 
   it('removes what it provisioned, and the project itself', async () => {
     const platform = signedIn();
-    const project = platform.project((await platform.projects.create({ name: 'Scratch' })).id);
+    const project = platform.getProject((await platform.projects.create({ name: 'Scratch' })).id);
     const [production] = await project.environments.list();
     const memory = await project.memoryInstances.create({ name: 'scratch' });
     const filesystem = await project.filesystems.create({ environmentId: production!.id, name: 'tmp' });
@@ -334,21 +334,21 @@ describe('MastraPlatform project provisioning', () => {
 
   it('creates another environment for preview resources', async () => {
     const platform = signedIn();
-    const project = platform.project((await platform.projects.create({ name: 'Envs' })).id);
+    const project = platform.getProject((await platform.projects.create({ name: 'Envs' })).id);
     const preview = await project.environments.create({ name: 'Preview', type: 'preview' });
     expect((await project.environments.list()).map(env => env.id)).toContain(preview.id);
   });
 
   it('sets a project up for managed agents and waits until it is ready', async () => {
     const platform = signedIn();
-    const project = platform.project((await platform.projects.create({ name: 'Agents' })).id);
+    const project = platform.getProject((await platform.projects.create({ name: 'Agents' })).id);
     expect(await project.agentsSetupStatus()).toBe('none');
     await project.setupAgents(wait);
     expect(await project.agentsSetupStatus()).toBe('ready');
   });
 
   it('reports why provisioning failed instead of waiting forever', async () => {
-    const project = signedIn().project((await signedIn().projects.create({ name: 'Broken' })).id);
+    const project = signedIn().getProject((await signedIn().projects.create({ name: 'Broken' })).id);
     const database = await project.databases.create({ kind: 'turso', name: 'broken' });
     await expect(project.databases.waitUntilReady(database.id, wait)).rejects.toThrow(
       `Database ${database.id} is failed: upstream provider rejected the database`,
@@ -357,7 +357,7 @@ describe('MastraPlatform project provisioning', () => {
 
   it("surfaces the Platform's reason when a member who is not an admin provisions memory", async () => {
     const projectId = (await signedIn().projects.create({ name: 'Members' })).id;
-    const member = signedIn('member-session').project(projectId);
+    const member = signedIn('member-session').getProject(projectId);
     const error = await member.memoryInstances.create({ name: 'mem' }).catch(e => e);
     expect(error).toBeInstanceOf(MastraPlatformError);
     expect(error).toMatchObject({ status: 403 });
@@ -375,8 +375,8 @@ describe('MastraPlatform project provisioning', () => {
 
   it("cannot reach another project's resources through a project it was pointed at", async () => {
     const platform = signedIn();
-    const a = platform.project((await platform.projects.create({ name: 'A' })).id);
-    const b = platform.project((await platform.projects.create({ name: 'B' })).id);
+    const a = platform.getProject((await platform.projects.create({ name: 'A' })).id);
+    const b = platform.getProject((await platform.projects.create({ name: 'B' })).id);
     const memory = await a.memoryInstances.create({ name: 'private' });
     await expect(b.memoryInstances.get(memory.id)).rejects.toMatchObject({ status: 404 });
   });

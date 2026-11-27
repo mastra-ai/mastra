@@ -551,6 +551,23 @@ describe('MastraPlatform credentials', () => {
     await expect(client.listAgents()).resolves.toBeTypeOf('object');
   });
 
+  it('works in another project through getProject', async () => {
+    const client = new MastraPlatform({
+      accessToken: ACCESS_TOKEN,
+      projectId: 'proj_other',
+      apiUrl: platformApi.apiUrl,
+    });
+    await expect(client.listAgents()).rejects.toMatchObject({ status: 404 });
+
+    const project = client.getProject(PROJECT_ID);
+    expect(project.projectId).toBe(PROJECT_ID);
+    const agent = await project.createAgent({ name: 'Elsewhere', instructions: 'Help with billing.' });
+    expect(Object.keys(await project.listAgents())).toContain(agent.id);
+    // The client it came from still works in its own project.
+    expect(client.projectId).toBe('proj_other');
+    await agent.delete();
+  });
+
   it('rejects a request made with a token the Platform does not accept', async () => {
     const client = new MastraPlatform({ accessToken: 'sk_wrong', projectId: PROJECT_ID, apiUrl: platformApi.apiUrl });
 
@@ -562,7 +579,7 @@ describe('MastraPlatform credentials', () => {
     const client = new MastraPlatform({ accessToken: 'sk_org_key' });
     expect(client.projects).toBeDefined();
     await expect(client.getAgent('agent-1')).rejects.toThrow('MastraPlatform: projectId is required');
-    expect(client.project(PROJECT_ID).projectId).toBe(PROJECT_ID);
+    expect(client.getProject(PROJECT_ID).projectId).toBe(PROJECT_ID);
   });
 
   it('requires an access token', () => {

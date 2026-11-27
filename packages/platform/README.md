@@ -93,7 +93,7 @@ Signed in as an organization member (for example with a token from `mastra auth 
 const platform = new MastraPlatform({ accessToken: process.env.MASTRA_API_TOKEN, organizationId: 'org_123' });
 
 const created = await platform.projects.create({ name: 'Support Desk' });
-const project = platform.project(created.id);
+const project = platform.getProject(created.id);
 await project.setupAgents();
 
 const [production] = await project.environments.list();

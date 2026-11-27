@@ -46,7 +46,7 @@ The same client provisions projects for an organization member: create projects 
 ```ts
 const platform = new MastraPlatform({ accessToken: process.env.MASTRA_API_TOKEN, organizationId: 'org_123' });
 const { id } = await platform.projects.create({ name: 'Support Desk' });
-const project = platform.project(id);
+const project = platform.getProject(id);
 await project.setupAgents();
 
 const memory = await project.memoryInstances.create({ name: 'support-memory' });

@@ -125,14 +125,18 @@ export class MastraPlatform {
   get projectId(): string {
     if (!this.#projectId) {
       throw new Error(
-        'MastraPlatform: projectId is required. Pass it, set MASTRA_PROJECT_ID, or use platform.project(id)',
+        'MastraPlatform: projectId is required. Pass it, set MASTRA_PROJECT_ID, or use platform.getProject(id)',
       );
     }
     return this.#projectId;
   }
 
-  /** A client for another project, with the same credentials. */
-  project(projectId: string): MastraPlatform {
+  /**
+   * A client for another project in the organization, with the same credentials. It has everything
+   * this client has (`listAgents()`, `createAgent()`, `getMemory()`, ...), scoped to that project.
+   * Makes no request: a project that doesn't exist fails on first use.
+   */
+  getProject(projectId: string): MastraPlatform {
     return new MastraPlatform({ ...this.#options, accessToken: this.#accessToken, projectId });
   }
 
