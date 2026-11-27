@@ -86,7 +86,9 @@ const general = page('general', 'workspace', {
   position: 'a2',
   description: 'Messages from the #general Slack channel.',
 });
-const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway, general];
+const runbook = page('runbook', 'documents', { name: 'Refund runbook', key: 'refund-runbook' });
+const approve = page('approve', 'runbook', { name: 'Approve the refund', key: 'approve' });
+const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway, general, runbook, approve];
 
 const SLACK = 'importer:slack';
 function item(
@@ -157,6 +159,50 @@ const SEQUENCE: KnowledgeExplorerSequenceInfo = {
   },
 };
 
+const RUNBOOK: KnowledgeExplorerSequenceInfo = {
+  orderBy: 'position',
+  propertiesSchema: null,
+  itemTypes: {
+    step: { label: 'Step', propertiesSchema: { type: 'object', properties: { owner: { type: 'string' } } } },
+  },
+};
+
+const STEPS: KnowledgeExplorerSequenceItem[] = [
+  item('check', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a0',
+    type: 'step',
+    title: 'Check the order and the payment',
+    body: 'Find the order in the admin and confirm the payment cleared.',
+    properties: { owner: 'Support', slaMinutes: 30 },
+  }),
+  item('page:approve', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a1',
+    title: 'Approve the refund',
+    body: null,
+    pageId: 'approve',
+  }),
+  item('notify', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a2',
+    type: 'step',
+    title: 'Tell the customer',
+    body: null,
+    links: [{ url: 'https://example.com/templates/refund', title: 'Refund email template' }],
+    properties: { owner: 'Support' },
+  }),
+];
+
+function runbookFor(request: KnowledgeExplorerSequenceRequest) {
+  let items = STEPS.filter(
+    item =>
+      (!request.types || (item.type !== null && request.types.includes(item.type))) && (!request.untyped || !item.type),
+  );
+  if (request.order === 'desc') items = [...items].reverse();
+  return { items, nextCursor: null };
+}
+
 function sequenceFor(request: KnowledgeExplorerSequenceRequest) {
   let items = ITEMS.filter(
     item =>
@@ -210,7 +256,7 @@ function detail(target: KnowledgePagePayload): KnowledgeExplorerPageDetail {
     notes: target.id === 'launch' ? notes : [],
     ancestors,
     related: pages,
-    sequence: target.id === 'general' ? SEQUENCE : undefined,
+    sequence: target.id === 'general' ? SEQUENCE : target.id === 'runbook' ? RUNBOOK : undefined,
   };
 }
 
@@ -261,7 +307,8 @@ function source(state: 'ready' | 'loading' | 'error'): KnowledgeExplorerSource {
           },
         ],
       }),
-    useSequence: (_pageId, requests) => requests.map(request => ok(sequenceFor(request))),
+    useSequence: (pageId, requests) =>
+      requests.map(request => ok(pageId === 'runbook' ? runbookFor(request) : sequenceFor(request))),
   };
 }
 
@@ -323,3 +370,5 @@ export const Loading: Story = { args: { view: 'page', pageId: 'launch', state: '
 export const PageError: Story = { args: { view: 'page', pageId: 'launch', state: 'error' } };
 
 export const Sequence: Story = { args: { view: 'page', pageId: 'general' } };
+
+export const PositionSequence: Story = { args: { view: 'page', pageId: 'runbook' } };
