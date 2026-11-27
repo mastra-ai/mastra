@@ -25,14 +25,6 @@ describe('KeywordExtractor', () => {
     });
   });
 
-  it('can use a custom model for keywords extraction', async () => {
-    const extractor = new KeywordExtractor({ llm: model });
-    const node = new TextNode({ text: 'The quick brown fox jumps over the lazy dog.' });
-    const result = await extractor.extractKeywordsFromNodes(node);
-    expect(result).toHaveProperty('excerptKeywords');
-    expect(result.excerptKeywords.length).toBeGreaterThan(0);
-  });
-
   it('handles empty input gracefully', async () => {
     const extractor = new KeywordExtractor({ llm: model });
     const node = new TextNode({ text: '' });

@@ -105,12 +105,15 @@ describe('serverRestartAction', () => {
     expect(mockOutro).toHaveBeenCalledWith('Restart complete! https://app.example');
   });
 
-  it('exits 1 when deploy failed', async () => {
+  it.each([
+    ['exits 1 when deploy failed', 'failed', 'build broke', 'Restart failed: build broke'],
+    ['exits 1 on non-running terminal status', 'cancelled', null, 'Restart ended with status: cancelled'],
+  ] as const)('%s', async (_title, status, error, input) => {
     mockRestartServerProject.mockResolvedValue('dep-1');
     mockPollServerDeploy.mockResolvedValue({
-      status: 'failed',
+      status,
       instanceUrl: null,
-      error: 'build broke',
+      error,
     });
     const mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: number) => {
       throw new Error(`exit:${code}`);
@@ -118,25 +121,7 @@ describe('serverRestartAction', () => {
 
     const { serverRestartAction } = await import('./lifecycle.js');
     await expect(serverRestartAction({})).rejects.toThrow('exit:1');
-    expect(mockLogError).toHaveBeenCalledWith('Restart failed: build broke');
-
-    mockExit.mockRestore();
-  });
-
-  it('exits 1 on non-running terminal status', async () => {
-    mockRestartServerProject.mockResolvedValue('dep-1');
-    mockPollServerDeploy.mockResolvedValue({
-      status: 'cancelled',
-      instanceUrl: null,
-      error: null,
-    });
-    const mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: number) => {
-      throw new Error(`exit:${code}`);
-    });
-
-    const { serverRestartAction } = await import('./lifecycle.js');
-    await expect(serverRestartAction({})).rejects.toThrow('exit:1');
-    expect(mockLogError).toHaveBeenCalledWith('Restart ended with status: cancelled');
+    expect(mockLogError).toHaveBeenCalledWith(input);
 
     mockExit.mockRestore();
   });

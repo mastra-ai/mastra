@@ -123,7 +123,13 @@ export class InMemoryServerCache extends MastraServerCache {
     if (existingCounter !== undefined && typeof existingCounter !== 'number') {
       throw new Error(`${counterKey} exists but is not a number`);
     }
-    const index = typeof existingCounter === 'number' ? existingCounter : 0;
+    // An absent counter is seeded from the clock (epoch microseconds, see the
+    // base class contract) so a log recreated after expiry does not reissue an
+    // index a subscriber already consumed. `Date.now()` advances once per
+    // millisecond, so this is a practical guard, not an absolute one: deleting
+    // and recreating a log inside the same millisecond can repeat an index,
+    // and readers fall back to detecting a restarted log.
+    const index = typeof existingCounter === 'number' ? existingCounter : Date.now() * 1000;
 
     const existingList = this.cache.get(listKey);
     if (existingList !== undefined && !Array.isArray(existingList)) {
@@ -131,9 +137,10 @@ export class InMemoryServerCache extends MastraServerCache {
     }
     const list = Array.isArray(existingList) ? existingList : [];
 
-    // A cache configured without expiry stays that way; otherwise the longer of
-    // the cache default and the requested minimum wins.
-    const ttl = this.ttlMs > 0 ? Math.max(this.ttlMs, ttlMs ?? 0) : Infinity;
+    // The longer of the cache default and the requested minimum wins. An
+    // explicit request applies even when the default expiry is disabled: the
+    // caller is stating a retention bound for this log.
+    const ttl = ttlMs !== undefined && ttlMs > 0 ? Math.max(this.ttlMs, ttlMs) : this.ttlMs > 0 ? this.ttlMs : Infinity;
     this.cache.set(counterKey, index + 1, { ttl });
     list.push({ ...value, index });
     this.cache.set(listKey, list, { ttl });

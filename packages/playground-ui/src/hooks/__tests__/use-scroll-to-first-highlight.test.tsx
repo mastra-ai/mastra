@@ -50,19 +50,12 @@ describe('useScrollToFirstHighlight', () => {
     expect((scrollIntoView.mock.instances[0] as HTMLElement).textContent).toContain('nee.le');
   });
 
-  it('does nothing for queries shorter than 2 characters', () => {
+  it.each([
+    ['does nothing for queries shorter than 2 characters', 'n'],
+    ['does nothing when nothing matches and nothing ever arrives', 'unicorn'],
+  ] as const)('%s', (_title, value) => {
     render(
-      <Harness search="n">
-        <p>a needle in a haystack</p>
-      </Harness>,
-    );
-
-    expect(scrollIntoView).not.toHaveBeenCalled();
-  });
-
-  it('does nothing when nothing matches and nothing ever arrives', () => {
-    render(
-      <Harness search="unicorn">
+      <Harness search={value}>
         <p>a needle in a haystack</p>
       </Harness>,
     );

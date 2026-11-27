@@ -780,16 +780,12 @@ Each voice provider can be configured with different models and options. Below a
     // OpenAI Voice Configuration
     const voice = new OpenAIVoice({
       speechModel: {
-        name: 'gpt-3.5-turbo', // Example model name
+        name: 'tts-1-hd', // 'tts-1' or 'tts-1-hd'
         apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        voiceType: 'neural', // Type of voice model
       },
       listeningModel: {
-        name: 'whisper-1', // Example model name
+        name: 'whisper-1',
         apiKey: process.env.OPENAI_API_KEY,
-        language: 'en-US', // Language code
-        format: 'wav', // Audio format
       },
       speaker: 'alloy', // Example speaker name
     })
@@ -803,19 +799,14 @@ Each voice provider can be configured with different models and options. Below a
     // Azure Voice Configuration
     const voice = new AzureVoice({
       speechModel: {
-        name: 'en-US-JennyNeural', // Example model name
         apiKey: process.env.AZURE_SPEECH_KEY,
         region: process.env.AZURE_SPEECH_REGION,
-        language: 'en-US', // Language code
-        style: 'cheerful', // Voice style
-        pitch: '+0Hz', // Pitch adjustment
-        rate: '1.0', // Speech rate
+        voiceName: 'en-US-JennyNeural',
       },
       listeningModel: {
-        name: 'en-US', // Example model name
         apiKey: process.env.AZURE_SPEECH_KEY,
         region: process.env.AZURE_SPEECH_REGION,
-        format: 'simple', // Output format
+        language: 'en-US',
       },
     })
     ```
@@ -846,16 +837,12 @@ Each voice provider can be configured with different models and options. Below a
     // Google Voice Configuration
     const voice = new GoogleVoice({
       speechModel: {
-        name: 'en-US-Studio-O', // Example model name
         apiKey: process.env.GOOGLE_API_KEY,
-        languageCode: 'en-US', // Language code
-        gender: 'FEMALE', // Voice gender
-        speakingRate: 1.0, // Speaking rate
       },
       listeningModel: {
-        name: 'en-US', // Example model name
-        sampleRateHertz: 16000, // Sample rate
+        apiKey: process.env.GOOGLE_API_KEY,
       },
+      speaker: 'en-US-Studio-O',
     })
     ```
 
@@ -866,14 +853,12 @@ Each voice provider can be configured with different models and options. Below a
     ```typescript
     // Cloudflare Voice Configuration
     const voice = new CloudflareVoice({
-      speechModel: {
-        name: 'cloudflare-voice', // Example model name
-        accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
-        apiToken: process.env.CLOUDFLARE_API_TOKEN,
-        language: 'en-US', // Language code
-        format: 'mp3', // Audio format
+      listeningModel: {
+        model: '@cf/openai/whisper-large-v3-turbo',
+        apiKey: process.env.CLOUDFLARE_AI_API_KEY,
+        account_id: process.env.CLOUDFLARE_ACCOUNT_ID,
       },
-      // Cloudflare may not have a separate listening model
+      // Cloudflare supports speech-to-text only. In a Worker, pass `binding: env.AI` instead of an API key.
     })
     ```
 

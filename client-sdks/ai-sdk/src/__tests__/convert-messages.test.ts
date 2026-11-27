@@ -135,6 +135,182 @@ describe('toAISdkFormat', () => {
     });
   });
 
+  describe('legacy system reminders without metadata', () => {
+    const quoted = 'What does <system-reminder mean in the logs?';
+    const userMessage = (parts: Array<{ type: 'text'; text: string }>) => ({
+      id: 'msg-user',
+      role: 'user' as const,
+      content: { format: 2 as const, parts },
+      createdAt: new Date(),
+    });
+
+    it('keeps user text that quotes a system-reminder tag in every version', () => {
+      expect(toAISdkV4Messages(quoted)).toHaveLength(1);
+      expect(toAISdkV5Messages(quoted)).toHaveLength(1);
+      expect(toAISdkMessages(quoted, { version: 'v6' })).toHaveLength(1);
+      expect(toAISdkMessages(quoted, { version: 'v7' })).toHaveLength(1);
+    });
+
+    it('keeps user text that starts with a quoted tag but is not a reminder element', () => {
+      expect(toAISdkV5Messages('<system-reminder> shows up in my logs, what is it?')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder means what?</system-reminder>')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder/help</system-reminder>')).toHaveLength(1);
+    });
+
+    it('keeps a full reminder block pasted inside a longer user message', () => {
+      const pasted = 'Why did the agent see this?\n<system-reminder>continue</system-reminder>';
+      expect(toAISdkV5Messages([userMessage([{ type: 'text', text: pasted }])])).toHaveLength(1);
+    });
+
+    it('keeps user text placed between two reminder blocks', () => {
+      for (const sandwiched of [
+        '<system-reminder>A</system-reminder>\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</SYSTEM-REMINDER >\nWhy were these added?\n<system-reminder>B</system-reminder>',
+      ]) {
+        const messages = [userMessage([{ type: 'text', text: sandwiched }])];
+        expect(toAISdkV4Messages(messages)).toHaveLength(1);
+        expect(toAISdkV5Messages(messages)).toHaveLength(1);
+        expect(toAISdkMessages(messages, { version: 'v6' })).toHaveLength(1);
+        expect(toAISdkMessages(messages, { version: 'v7' })).toHaveLength(1);
+      }
+    });
+
+    it('still hides a legacy reminder whose contents mention other or escaped tags', () => {
+      for (const text of [
+        '<system-reminder>see &lt;/system-reminder&gt; in docs</system-reminder>',
+        '<system-reminder>close the </system-reminders> list</system-reminder>',
+      ]) {
+        expect(toAISdkV5Messages([userMessage([{ type: 'text', text }])])).toEqual([]);
+      }
+    });
+
+    it('keeps user text whose wrapper is not the canonical lowercase reminder', () => {
+      expect(toAISdkV5Messages('<SYSTEM-REMINDER>Is this valid?</SYSTEM-REMINDER>')).toHaveLength(1);
+      expect(toAISdkV5Messages('<system-reminder>Is this valid?</SYSTEM-REMINDER >')).toHaveLength(1);
+    });
+
+    it('keeps a multi-part user message when only one part quotes the tag', () => {
+      const result = toAISdkV5Messages([
+        userMessage([
+          { type: 'text', text: 'hello' },
+          { type: 'text', text: quoted },
+        ]),
+      ]);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]!.parts.filter(part => part.type === 'text').map(part => part.text)).toEqual(['hello', quoted]);
+    });
+
+    it('still hides standalone legacy reminders that have no metadata', () => {
+      const legacy = userMessage([
+        { type: 'text', text: '<system-reminder type="dynamic-agents-md">ctx</system-reminder>\n' },
+      ]);
+
+      expect(toAISdkV4Messages([legacy])).toEqual([]);
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
+      expect(toAISdkMessages([legacy], { version: 'v6' })).toEqual([]);
+      expect(toAISdkMessages([legacy], { version: 'v7' })).toEqual([]);
+    });
+
+    it('still hides legacy reminders whose first text part is the wrapped reminder', () => {
+      const legacy = userMessage([
+        { type: 'text', text: '<system-reminder kind="walkthrough">Step one of the screen.</system-reminder>' },
+        { type: 'text', text: 'Step two has this attachment.' },
+      ]);
+
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
+    });
+
+    describe('first text part classification', () => {
+      const hidden = [
+        '<system-reminder />',
+        '<system-reminder kind="reference-image" />',
+        '<system-reminder a="1" b="x &amp; y" />',
+        '<system-reminder>continue</system-reminder>',
+        '<system-reminder type="dynamic-agents-md">ctx</system-reminder>',
+        '<system-reminder a="1" b="&quot;q&quot;">ctx</system-reminder>',
+        '<system-reminder>see &lt;/system-reminder&gt; in docs</system-reminder>',
+        '<system-reminder>close the </system-reminders> list</system-reminder>',
+        '<system-reminder>A<system-reminder>B</system-reminder>',
+        '<system-reminder>ends with </system-reminder</system-reminder>',
+        '<system-reminder a="x/&gt;y">ctx</system-reminder>',
+        '<system-reminder a="x &quot;b=&quot;y">ctx</system-reminder>',
+        '<system-reminder> </system-reminder>',
+        '<system-reminder a="x a=">ctx</system-reminder>',
+        '<system-reminder a="1" b="2" />',
+        '  \n<system-reminder>continue</system-reminder>\n  ',
+        '\t<system-reminder kind="x" />\n',
+      ];
+      const shown = [
+        '<system-reminder /><system-reminder>B</system-reminder>',
+        '<system-reminder />What is this?</system-reminder>',
+        '<system-reminder /> and then my question',
+        '<system-reminder/>',
+        '<system-reminder></system-reminder>',
+        '<system-reminder a="x&y" />',
+        '<system-reminder a="1" a="2" />',
+        '<system-reminder a="&copy;">x</system-reminder>',
+        '<system-reminder>x</system-reminder',
+        '<system-reminder kind="x" /><system-reminder />',
+        '<system-reminder/>What?</system-reminder>',
+        '<system-reminder>A</system-reminder> trailing question',
+        '<system-reminder>A</system-reminder><system-reminder>B</system-reminder>',
+        '<system-reminder>A</system-reminder>\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</SYSTEM-REMINDER >\nWhy were these added?\n<system-reminder>B</system-reminder>',
+        '<system-reminder>A</system-reminder ><system-reminder>B</system-reminder>',
+        '<SYSTEM-REMINDER>Is this valid?</SYSTEM-REMINDER>',
+        '<System-Reminder />',
+        '<system-reminder>Is this valid?</SYSTEM-REMINDER >',
+        '<system-reminder> shows up in my logs, what is it?',
+        '<system-reminder means what?</system-reminder>',
+        '<system-reminder/help</system-reminder>',
+        '<system-reminder / >',
+        '<system-reminders>x</system-reminders>',
+        '<system-reminder a=">">x</system-reminder>',
+        '<system-reminder a="/>" />',
+        "<system-reminder a='1'>x</system-reminder>",
+        '<system-reminder a=1>x</system-reminder>',
+        '<system-reminder  a="1">x</system-reminder>',
+        '<system-reminder a="1"b="2">x</system-reminder>',
+        '<system-reminder >x</system-reminder>',
+        'What does <system-reminder mean in the logs?',
+        'Why did the agent see this?\n<system-reminder>continue</system-reminder>',
+      ];
+      const convertAll = (text: string) =>
+        [[userMessage([{ type: 'text', text }])], text].flatMap(messages => [
+          toAISdkV4Messages(messages).length,
+          toAISdkV5Messages(messages).length,
+          toAISdkMessages(messages, { version: 'v6' }).length,
+          toAISdkMessages(messages, { version: 'v7' }).length,
+        ]);
+
+      it.each(hidden)('hides %j in every version', text => {
+        expect(convertAll(text)).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+      });
+
+      it.each(shown)('keeps %j in every version', text => {
+        expect(convertAll(text)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+      });
+    });
+
+    it('still hides file-only legacy reminders marked with a self-closing tag', () => {
+      const legacy = {
+        id: 'msg-reminder',
+        role: 'user' as const,
+        content: {
+          format: 2 as const,
+          parts: [
+            { type: 'text' as const, text: '<system-reminder kind="reference-image" />' },
+            { type: 'file' as const, data: 'data:image/png;base64,aGVsbG8=', mimeType: 'image/png' },
+          ],
+        },
+        createdAt: new Date(),
+      };
+
+      expect(toAISdkV5Messages([legacy])).toEqual([]);
+    });
+  });
+
   describe('toAISdkV5Stream error handling', () => {
     it('should preserve error message details when converting agent stream', async () => {
       const errorMessage =

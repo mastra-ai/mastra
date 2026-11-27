@@ -526,7 +526,7 @@ describe('dispatchGithubWebhook', () => {
       listSubscriptions: async () => [subscription('a')],
     });
 
-    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false });
+    expect(switchThread).toHaveBeenCalledWith({ threadId: 'thread-a', emitEvent: false, requestContext: expect.any(RequestContext) });
     expect(send).toHaveBeenCalledOnce();
   });
 

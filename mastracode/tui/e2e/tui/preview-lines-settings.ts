@@ -35,7 +35,7 @@ async function choosePreviewLines(
   option: RegExp,
 ): Promise<void> {
   terminal.submit('/settings');
-  await runtime.waitForScreenText(/Enter\/Space to change/i, terminal);
+  await runtime.waitForScreenText(/Preview lines\s+\S/i, terminal);
   await selectMenuRow(terminal, /Preview lines/i);
   // Wait for the submenu so option navigation doesn't read the main list's highlight.
   await runtime.waitForScreenText(/Show up to 1 preview line\b/i, terminal);
@@ -62,6 +62,8 @@ export const previewLinesSettingsScenario: McE2eScenario = {
     };
     restartApp = async () => {
       await currentStop?.();
+      // Take the old app's frame off screen, so waiting for the banner waits for the new app.
+      console.info('\x1b[2J\x1b[H');
       await start();
     };
     await start();

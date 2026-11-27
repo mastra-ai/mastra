@@ -3624,8 +3624,10 @@ describe('Agent Routes Authorization', () => {
           type: 'error',
           data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
         });
+        // Log indices are opaque clock-seeded cursors, not positions.
+        const [chunkEntry] = await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
         const reader = (await observe(runId)).getReader();
-        expect((await reader.read()).value).toEqual({ ...chunk, index: 0 });
+        expect((await reader.read()).value).toEqual({ ...chunk, index: chunkEntry!.index });
         await expect(reader.read()).rejects.toThrow('Run superseded');
         reader.releaseLock();
       });
@@ -3633,12 +3635,16 @@ describe('Agent Routes Authorization', () => {
 
     it('closes after replay even when the offset is past the terminal event', async () => {
       const runId = 'observe-past-finish';
-      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, {
         runId,
         type: 'finish',
         data: {},
       } as any);
-      expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
+      // Past the end means past the terminal entry's own index, which is an
+      // opaque clock-seeded cursor rather than a frame count.
+      const [finishEntry] = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      expect(await collectWithDeadline(await observe(runId, { offset: finishEntry!.index! + 1 }))).toEqual([]);
     });
 
     it.each(['finish', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
@@ -3726,23 +3732,29 @@ describe('Agent Routes Authorization', () => {
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
+    // `past` is how far beyond the terminal entry's index the client resumes.
+    // Just past it, the log still answers in one read; far past it, the first
+    // read finds nothing and the reader falls back to the whole log.
     it.each([
-      { offset: 3, reads: [2] },
-      { offset: 100, reads: [99, 0] },
-    ])(
-      'closes a finished legacy run resumed at offset $offset, reading history from $reads',
-      async ({ offset, reads }) => {
-        (mockDurableAgent as any).__subscribeToRunStream = undefined;
-        const runId = `observe-legacy-past-end-${offset}`;
-        const topic = AGENT_STREAM_TOPIC(runId);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
-        await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
-        const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
-        expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
-        expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(reads);
-      },
-    );
+      { past: 1, label: 'just past the end', fallsBackToWholeLog: false },
+      { past: 98, label: 'far past the end', fallsBackToWholeLog: true },
+    ])('closes a finished legacy run resumed $label', async ({ past, fallsBackToWholeLog }) => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = `observe-legacy-past-end-${past}`;
+      const topic = AGENT_STREAM_TOPIC(runId);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
+      await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
+      // Indices are opaque clock-seeded cursors, so derive the offset from the
+      // terminal entry's real index instead of a frame count.
+      const history = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      const offset = history.at(-1)!.index! + past;
+      const getHistory = vi.spyOn(mockDurableAgent.pubsub, 'getHistory');
+      expect(await collectWithDeadline(await observe(runId, { offset }))).toEqual([]);
+      expect(getHistory.mock.calls.filter(([t]) => t === topic).map(([, from]) => from)).toEqual(
+        fallsBackToWholeLog ? [offset - 1, 0] : [offset - 1],
+      );
+    });
 
     it('closes a legacy run whose log ends in an error event, resumed past the end', async () => {
       (mockDurableAgent as any).__subscribeToRunStream = undefined;
@@ -3750,8 +3762,9 @@ describe('Agent Routes Authorization', () => {
       const topic = AGENT_STREAM_TOPIC(runId);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'text-delta' } } as any);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'error', data: {} } as any);
+      const history = await mockDurableAgent.pubsub.getHistory(topic, 0);
       const unsubscribe = vi.spyOn(mockDurableAgent.pubsub, 'unsubscribe');
-      expect(await collectWithDeadline(await observe(runId, { offset: 2 }))).toEqual([]);
+      expect(await collectWithDeadline(await observe(runId, { offset: history.at(-1)!.index! + 1 }))).toEqual([]);
       expect(unsubscribe.mock.calls.filter(([t]) => t === topic)).toHaveLength(1);
     });
 
@@ -3775,11 +3788,14 @@ describe('Agent Routes Authorization', () => {
       const runId = 'observe-legacy-error-chunk';
       const topic = AGENT_STREAM_TOPIC(runId);
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'chunk', data: { type: 'error' } } as any);
-      const reader = (await observe(runId, { offset: 1 })).getReader();
+      // Resume just past the error chunk's own index; the finish published
+      // afterwards takes the next consecutive index in the same log.
+      const [errorChunk] = await mockDurableAgent.pubsub.getHistory(topic, 0);
+      const reader = (await observe(runId, { offset: errorChunk!.index! + 1 })).getReader();
       const next = reader.read();
       await new Promise(resolve => setTimeout(resolve, 50));
       await mockDurableAgent.pubsub.publish(topic, { runId, type: 'finish', data: {} } as any);
-      expect((await next).value).toMatchObject({ type: 'finish', index: 1 });
+      expect((await next).value).toMatchObject({ type: 'finish', index: errorChunk!.index! + 1 });
       expect(await reader.read()).toEqual({ done: true, value: undefined });
     });
 
@@ -3926,11 +3942,16 @@ describe('Agent Routes Authorization', () => {
       await text('recovered', current);
       await publish({ type: 'finish', data: {}, generation: current });
 
+      // Resume at the stale publisher's finish — the fourth entry — using its
+      // real index, since indices are opaque clock-seeded cursors.
+      const history = await mockDurableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const staleFinishIndex = history[3]!.index!;
+
       const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
         agentId: 'test-durable-agent',
         runId,
-        offset: 3,
+        offset: staleFinishIndex,
         abortSignal: new AbortController().signal,
       } as any)) as ReadableStream<any>;
 
@@ -4625,11 +4646,22 @@ describe('Agent Routes Authorization', () => {
       expect(forwarded.streamOptions.context[0].metadata?.mastra?.userTurn).toBeUndefined();
     });
 
-    it('should reject subscription tool approval for a thread owned by another resource', async () => {
+    it.each([
+      [
+        'should reject subscription tool approval for a thread owned by another resource',
+        'approval-thread-owned-by-b',
+        'Approval Thread B',
+      ],
+      [
+        'should reject subscription tool decline for a thread owned by another resource',
+        'decline-thread-owned-by-b',
+        'Decline Thread B',
+      ],
+    ] as const)('%s', async (_title, threadId, title) => {
       await mockMemory.createThread({
-        threadId: 'approval-thread-owned-by-b',
+        threadId,
         resourceId: 'user-b',
-        title: 'Approval Thread B',
+        title,
       });
       (mockAgent as any).sendToolApproval = vi.fn();
 
@@ -4640,30 +4672,7 @@ describe('Agent Routes Authorization', () => {
           requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
           abortSignal: new AbortController().signal,
           resourceId: 'user-a',
-          threadId: 'approval-thread-owned-by-b',
-          toolCallId: 'tool-call-123',
-          approved: true,
-        } as any),
-      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
-      expect((mockAgent as any).sendToolApproval).not.toHaveBeenCalled();
-    });
-
-    it('should reject subscription tool decline for a thread owned by another resource', async () => {
-      await mockMemory.createThread({
-        threadId: 'decline-thread-owned-by-b',
-        resourceId: 'user-b',
-        title: 'Decline Thread B',
-      });
-      (mockAgent as any).sendToolApproval = vi.fn();
-
-      await expect(
-        SEND_TOOL_APPROVAL_ROUTE.handler({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          resourceId: 'user-a',
-          threadId: 'decline-thread-owned-by-b',
+          threadId,
           toolCallId: 'tool-call-123',
           approved: true,
         } as any),
@@ -6153,12 +6162,17 @@ describe('plain Agent resumable streams', () => {
         type: AgentStreamEventTypes.FINISH,
         data: { output: {}, stepResult: { reason: 'stop' } },
       });
+      // Far past the terminal entry's own index, which is an opaque
+      // clock-seeded cursor rather than a frame count: the first read finds
+      // nothing and the reader falls back to the whole log.
+      const [finishEntry] = await bus.getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const offset = finishEntry!.index! + 98;
       const getHistory = vi.spyOn(bus, 'getHistory');
       const stream = await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
         agentId: 'plain-agent',
         runId,
-        offset: 100,
+        offset,
         requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
       } as any);
       const events: any[] = [];
@@ -6166,7 +6180,7 @@ describe('plain Agent resumable streams', () => {
       for await (const event of stream as any) events.push(event);
       expect(events).toEqual([]);
       expect(Date.now() - started).toBeLessThan(1_000);
-      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([99, 0]);
+      expect(getHistory.mock.calls.map(([, from]) => from)).toEqual([offset - 1, 0]);
     });
   });
 

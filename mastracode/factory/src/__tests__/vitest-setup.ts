@@ -9,3 +9,9 @@ import { afterAll } from 'vitest';
 const testAppDataDir = mkdtempSync(join(tmpdir(), 'mastracode-test-app-data-'));
 process.env.MASTRA_APP_DATA_DIR = testAppDataDir;
 afterAll(() => rmSync(testAppDataDir, { recursive: true, force: true }));
+
+// A Mastra gateway key in the developer's shell adds the whole `mastra/` catalog to every
+// model list and reroutes gateway aliases. Tests that need the gateway stub these themselves.
+delete process.env.MASTRA_GATEWAY_API_KEY;
+delete process.env.MASTRA_GATEWAY_VERSION;
+delete process.env.MASTRA_GATEWAY_URL;

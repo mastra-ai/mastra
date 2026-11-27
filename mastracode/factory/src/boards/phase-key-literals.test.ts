@@ -24,7 +24,7 @@ const NOT_PHASES: readonly [file: string, line: string, why: string][] = [
   ['storage/domains/work-items/metrics.ts', "includes('canceled')", 'a metrics outcome'],
   ['tools/reports.ts', "['done', 'failed']", 'run report statuses'],
   ['boards/define-board.ts', "keys.includes('canceled')", "the keys of a board's sourceClosed"],
-  ['integrations/linear/integration.ts', '"triage", "backlog"', 'Linear workflow state types'],
+  ['integrations/linear/graphql.ts', "ACTIVE_ISSUE_STATE_TYPES = ['triage', 'backlog'", 'Linear workflow state types'],
   ['integrations/github/routes.ts', "GithubIntegration['intake']", 'the intake API of the integration'],
 ];
 

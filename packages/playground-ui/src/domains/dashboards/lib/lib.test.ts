@@ -652,20 +652,13 @@ describe('openingView', () => {
     expect(openingView([view(), view()], 5)).toBe(0);
   });
 
-  it('opens on the openWhen view while its rows load', () => {
-    expect(openingView(views, 'loading')).toBe(0);
-  });
-
-  it('opens on the openWhen view once it has minRows rows', () => {
-    expect(openingView(views, 2)).toBe(0);
-  });
-
-  it('passes over the openWhen view with fewer than minRows rows', () => {
-    expect(openingView(views, 1)).toBe(1);
-  });
-
-  it("passes over the openWhen view when it can't count its rows", () => {
-    expect(openingView(views, 'uncountable')).toBe(1);
+  it.each([
+    ['opens on the openWhen view while its rows load', 'loading', 0],
+    ['opens on the openWhen view once it has minRows rows', 2, 0],
+    ['passes over the openWhen view with fewer than minRows rows', 1, 1],
+    ["passes over the openWhen view when it can't count its rows", 'uncountable', 1],
+  ] as const)('%s', (_title, input, expected) => {
+    expect(openingView(views, input)).toBe(expected);
   });
 
   it('opens on the first view when a passed-over openWhen view is last', () => {
@@ -704,12 +697,102 @@ describe('shapeTimeseries', () => {
       const shaped = shapeTimeseries({
         options: options({ query: 'runs' }),
         responses: new Map([['runs', answer]]),
+        queries: [runs],
         window,
-        hasTraceQueries: false,
       });
       expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.runs).toBe(7);
       // A bucket no series answers stays unset rather than zero.
       expect(shaped.data.filter(b => b.runs !== undefined)).toHaveLength(1);
+    });
+  });
+
+  describe('when a ref reads some groups of a grouped span aggregate', () => {
+    const grouped = (groupBy: string[]): DashboardQuery => ({
+      id: 'runs',
+      source: 'spanAggregate',
+      measures: ['count'],
+      groupBy,
+    });
+    const shape = (ref: Omit<ValueRef, 'query'>, query: DashboardQuery, answer: DashboardAnswer) =>
+      shapeTimeseries({
+        options: options({ query: 'runs', measure: 'count', ...ref }),
+        responses: new Map([['runs', answer]]),
+        queries: [query],
+        window,
+      });
+    const bucketOf = (shaped: ReturnType<typeof shapeTimeseries>) =>
+      shaped.data.find(b => b.ts === new Date(at).getTime())?.runs;
+    const byAgent = spans([
+      { bucket: at, dimensions: { entityName: 'support' }, measures: { count: 3 } },
+      { bucket: at, dimensions: { entityName: 'billing' }, measures: { count: 4 } },
+      { bucket: at, dimensions: { entityName: null }, measures: { count: 5 } },
+    ]);
+
+    it('adds up only the groups it picks, or every group but those it leaves out', () => {
+      const query = grouped(['entityName']);
+      expect(bucketOf(shape({ groups: ['support'] }, query, byAgent))).toBe(3);
+      expect(bucketOf(shape({ groups: ['support', 'billing'] }, query, byAgent))).toBe(7);
+      expect(bucketOf(shape({ notGroups: ['support'] }, query, byAgent))).toBe(9);
+      expect(bucketOf(shape({}, query, byAgent))).toBe(12);
+    });
+
+    it('names a group without a value as the empty string', () => {
+      expect(bucketOf(shape({ groups: [''] }, grouped(['entityName']), byAgent))).toBe(5);
+    });
+
+    it("names a group by its values in the query's groupBy order, joined as metrics series are", () => {
+      const answer = spans([
+        { bucket: at, dimensions: { model: 'gpt-4o', entityName: 'support' }, measures: { count: 3 } },
+        { bucket: at, dimensions: { model: 'gpt-4o', entityName: 'billing' }, measures: { count: 4 } },
+      ]);
+      expect(bucketOf(shape({ groups: ['support|gpt-4o'] }, grouped(['entityName', 'model']), answer))).toBe(3);
+    });
+
+    it('totals only its groups over a range sent without buckets', () => {
+      const answer = spans([
+        { dimensions: { entityName: 'support' }, measures: { count: 3 } },
+        { dimensions: { entityName: 'billing' }, measures: { count: 4 } },
+      ]);
+      const shaped = shapeTimeseries({
+        options: {
+          ...options({ query: 'runs', measure: 'count', groups: ['support'] }),
+          totals: ['runs'],
+          total: { value: { query: 'runs', measure: 'count', groups: ['support'] } },
+        },
+        responses: new Map([['runs', answer]]),
+        queries: [grouped(['entityName'])],
+        window,
+      });
+      expect(shaped.total).toBe(3);
+    });
+  });
+
+  describe('when a span aggregate has buckets nothing happened in', () => {
+    const latency: DashboardQuery = { id: 'latency', source: 'spanAggregate', measures: ['count', 'duration.p95'] };
+    const answer = spans([{ bucket: at, measures: { count: 3, 'duration.p95': 800 } }]);
+    const shape = (measure: string) =>
+      shapeTimeseries({
+        options: {
+          chart: 'line',
+          format: 'count',
+          series: [{ dataKey: 'v', label: 'V', value: { query: 'latency', measure } }],
+        },
+        responses: new Map([['latency', answer]]),
+        queries: [latency],
+        window,
+      });
+
+    it('counts them as 0 for a count or sum', () => {
+      const shaped = shape('count');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(3);
+      expect(shaped.data.every(b => b.v !== undefined)).toBe(true);
+      expect(shaped.data.filter(b => b.v === 0)).toHaveLength(shaped.data.length - 1);
+    });
+
+    it('leaves them out for a percentile, as the line has no value to draw there', () => {
+      const shaped = shape('duration.p95');
+      expect(shaped.data.find(b => b.ts === new Date(at).getTime())?.v).toBe(800);
+      expect(shaped.data.filter(b => b.v !== undefined)).toHaveLength(1);
     });
   });
 });
@@ -776,6 +859,34 @@ describe('timeseriesIssues', () => {
     it('takes a ref picking one group of an average, or every group of a count', () => {
       expect(timeseriesIssues(options({ query: 'duration', groups: ['support'] }), [grouped('avg')])).toEqual([]);
       expect(timeseriesIssues(options({ query: 'duration' }), [grouped('count')])).toEqual([]);
+    });
+  });
+
+  describe.each(['traceAggregate', 'spanAggregate'] as const)('when a grouped %s reads every group', source => {
+    const grouped = (measures: string[], groupBy = ['entityName']): DashboardQuery => ({
+      id: 'duration',
+      source,
+      measures,
+      groupBy,
+    });
+
+    it.each(['duration.p95', 'duration.avg', 'tokens.total.avg', 'errorRate', 'countDistinct.traceId'])(
+      "reports %s, since its groups' values don't add up",
+      measure => {
+        expect(timeseriesIssues(options({ query: 'duration', measure }), [grouped([measure])])).toEqual([
+          "a value reading query 'duration' must pick one group, since its groups' values can't be added up",
+        ]);
+      },
+    );
+
+    it.each(['count', 'errorCount', 'cost.sum', 'timeToFirstToken.count'])('takes %s, which adds up', measure => {
+      expect(timeseriesIssues(options({ query: 'duration', measure }), [grouped([measure])])).toEqual([]);
+    });
+
+    it('takes one group of a percentile, or a percentile of an ungrouped query', () => {
+      const p95 = { query: 'duration', measure: 'duration.p95' };
+      expect(timeseriesIssues(options({ ...p95, groups: ['support'] }), [grouped(['duration.p95'])])).toEqual([]);
+      expect(timeseriesIssues(options(p95), [grouped(['duration.p95'], [])])).toEqual([]);
     });
   });
 });

@@ -258,11 +258,11 @@ describe('background tasks in library mode (no startWorkers)', () => {
     }
     const manager = mastra.backgroundTaskManager!;
 
+    // A portable task: a closure-bound one can't be enqueued on a manager
+    // whose background-task worker is filtered out (#31089).
     const executeFn = vi.fn().mockResolvedValue('never');
-    const { task } = await manager.enqueue(
-      { toolName: 't', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'r1' },
-      ctx(executeFn),
-    );
+    manager.registerStaticExecutor('t', { execute: executeFn });
+    const { task } = await manager.enqueue({ toolName: 't', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'r1' });
     await tick(500);
 
     // With orchestration/backgroundTasks filtered out, the task's evented

@@ -1,18 +1,13 @@
 // @vitest-environment jsdom
-import type { Trajectory } from '@mastra/core/evals';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TraceAsItemDialog } from '../trace-as-item-dialog';
-import {
-  datasetItem,
-  datasetsList,
-  trajectoryWithoutToolCalls,
-  trajectoryWithToolCalls,
-} from './fixtures/add-trace-mocks';
+import { datasetItem, datasetsList, trajectoryWithToolCalls } from './fixtures/add-trace-mocks';
 import { createTraceDetails } from './fixtures/trace-as-item';
 import { server } from '@/test/msw-server';
 
@@ -33,57 +28,45 @@ vi.mock('@/ds/components/CodeEditor', () => ({
 
 afterEach(() => cleanup());
 
-function setupHandlers({
-  trajectory,
-  trajectoryArrives,
-}: {
-  trajectory: Trajectory;
-  trajectoryArrives?: Promise<void>;
-}) {
+function setupHandlers() {
+  const spanRequested = vi.fn();
   const posted = vi.fn<(body: unknown) => void>();
 
   server.use(
+    http.get(`${BASE_URL}/api/observability/traces/trace-1/spans/span-1`, () => {
+      spanRequested();
+      return HttpResponse.json({ span: createTraceDetails('fetched input', 'fetched output') });
+    }),
+    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, () =>
+      HttpResponse.json(trajectoryWithToolCalls),
+    ),
     http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasetsList)),
     http.get(`${BASE_URL}/api/datasets/dataset-1`, () => HttpResponse.json(datasetsList.datasets[0])),
-    http.get(`${BASE_URL}/api/observability/traces/trace-1/trajectory`, async () => {
-      await trajectoryArrives;
-      return HttpResponse.json(trajectory);
-    }),
     http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
       posted(await request.json());
       return HttpResponse.json(datasetItem);
     }),
   );
 
-  return { posted };
+  return { spanRequested, posted };
 }
 
-function renderDialog(input: unknown, output: unknown) {
+function renderDialog(props: Partial<ComponentProps<typeof TraceAsItemDialog>>) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-
-  return render(
+  render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <TraceAsItemDialog
-          rootSpanId="span-1"
-          traceId="trace-1"
-          traceDetails={createTraceDetails(input, output)}
-          isOpen
-          onClose={vi.fn()}
-        />
+        <TraceAsItemDialog traceId="trace-1" isOpen onClose={vi.fn()} {...props} />
       </QueryClientProvider>
     </MastraReactProvider>,
   );
 }
 
 const editor = (name: string) => screen.findByRole<HTMLTextAreaElement>('textbox', { name });
-const isOn = (name: string) => screen.getByRole('switch', { name }).getAttribute('aria-checked') === 'true';
-const next = () => fireEvent.click(screen.getByRole('button', { name: 'Next' }));
 
 const pickDataset = async (name: string) => {
-  // The form opens once the trajectory has loaded; the picker enables once datasets are listed.
   const picker = await screen.findByRole('combobox', { name: 'Dataset' });
   await waitFor(() => expect(picker.getAttribute('data-disabled')).toBeNull());
   fireEvent.click(picker);
@@ -94,123 +77,39 @@ const pickDataset = async (name: string) => {
   await waitFor(() => expect(picker.textContent).toContain(name));
 };
 
-describe('TraceAsItemDialog', () => {
-  describe('when trace input and output contain circular references', () => {
-    it('prepares JSON-safe dataset fields instead of crashing', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      const input: Record<string, unknown> = { prompt: 'hello' };
-      const output: Record<string, unknown> = { answer: 'world' };
-      input.self = input;
-      output.self = output;
+describe('TraceAsItemDialog (deprecated)', () => {
+  describe('when given the root span id', () => {
+    it('loads the trace through the client in context and saves it as an item', async () => {
+      const { posted } = setupHandlers();
+      renderDialog({ rootSpanId: 'span-1' });
 
-      renderDialog(input, output);
-
-      expect((await editor('Input')).value).toContain('"self": "[Circular]"');
-      expect((await editor('Ground truth')).value).toContain('"self": "[Circular]"');
-    });
-  });
-
-  describe('when the trace input and output are plain strings', () => {
-    it('prefills the editors with the raw text', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', 'hi there');
-
-      expect((await editor('Input')).value).toBe('hello');
-      expect((await editor('Ground truth')).value).toBe('hi there');
-    });
-
-    it('saves the text as string input and ground truth', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', 'hi there');
+      expect((await editor('Input')).value).toBe('fetched input');
+      expect((await editor('Ground truth')).value).toBe('fetched output');
 
       await pickDataset('Dataset 1');
-      next();
-      next();
-      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
-
-      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
-      expect(posted.mock.calls[0]?.[0]).toMatchObject({ input: 'hello', groundTruth: 'hi there' });
-    });
-  });
-
-  describe('when the trace output is a string that reads as JSON', () => {
-    it('saves it back as a string', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog('hello', '42');
-
-      await pickDataset('Dataset 1');
-      next();
-      next();
-      fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
-
-      await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
-      expect(posted.mock.calls[0]?.[0]).toMatchObject({ groundTruth: '42' });
-    });
-  });
-
-  describe('when the trajectory is still loading', () => {
-    it('opens the dialog only once the trajectory has arrived, prefilled from it', async () => {
-      let arrive = () => {};
-      const trajectoryArrives = new Promise<void>(resolve => {
-        arrive = resolve;
-      });
-      setupHandlers({ trajectory: trajectoryWithToolCalls, trajectoryArrives });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
-
-      await new Promise(resolve => setTimeout(resolve, 50));
-      expect(screen.queryByRole('dialog')).toBeNull();
-
-      arrive();
-      await screen.findByRole('dialog', { name: 'Input and ground truth' });
-      await pickDataset('Dataset 1');
-      next();
-      expect((await editor('Tool mocks JSON')).value).toContain('getWeather');
-    });
-  });
-
-  describe('when the trace recorded tool calls', () => {
-    it('saves the item to the picked dataset with mocks and trajectory taken from the trace', async () => {
-      const { posted } = setupHandlers({ trajectory: trajectoryWithToolCalls });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
-
-      await pickDataset('Dataset 1');
-      next();
-      expect((await editor('Tool mocks JSON')).value).toContain('getWeather');
-      next();
-      expect(isOn('Expected trajectory')).toBe(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
       fireEvent.click(screen.getByRole('button', { name: 'Add item' }));
 
       await waitFor(() => expect(posted).toHaveBeenCalledTimes(1));
       expect(posted.mock.calls[0]?.[0]).toMatchObject({
-        input: { city: 'Seattle' },
-        groundTruth: { answer: 'rainy' },
-        source: { type: 'trace', referenceId: 'trace-1' },
+        input: 'fetched input',
+        groundTruth: 'fetched output',
         toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
-        expectedTrajectory: {
-          ordering: 'relaxed',
-          steps: [
-            {
-              stepType: 'tool_call',
-              name: "tool: 'getWeather'",
-              toolArgs: { city: 'Seattle' },
-              toolResult: { temp: 52 },
-            },
-          ],
-        },
+        expectedTrajectory: { ordering: 'relaxed' },
+        source: { type: 'trace', referenceId: 'trace-1' },
       });
     });
   });
 
-  describe('when the trace recorded no tool calls', () => {
-    it('leaves tool mocks empty and still expects the trajectory', async () => {
-      setupHandlers({ trajectory: trajectoryWithoutToolCalls });
-      renderDialog({ city: 'Seattle' }, { answer: 'rainy' });
+  describe('when given the trace details', () => {
+    it('prefills from them without loading the root span', async () => {
+      const { spanRequested } = setupHandlers();
+      renderDialog({ rootSpanId: 'span-1', traceDetails: createTraceDetails('given input', 'given output') });
 
-      await pickDataset('Dataset 1');
-      next();
-      expect((await editor('Tool mocks JSON')).value).toBe('');
-      next();
-      expect(isOn('Expected trajectory')).toBe(true);
+      expect((await editor('Input')).value).toBe('given input');
+      expect((await editor('Ground truth')).value).toBe('given output');
+      expect(spanRequested).not.toHaveBeenCalled();
     });
   });
 });

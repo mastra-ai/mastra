@@ -27,7 +27,10 @@ function createNoopModel(modelId: string) {
 describe('getCompressionStartLevel', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('returns level 2 for google/gemini-2.5-flash', async () => {
+  it.each([
+    ['returns level 2 for google/gemini-2.5-flash', 'google/gemini-2.5-flash', 2],
+    ['returns level 1 for non-gemini-2.5-flash models', 'google/gemini-3.1-flash-lite-preview', 1],
+  ] as const)('%s', async (_title, model, expected) => {
     const om = new ObservationalMemory({
       storage: createInMemoryStorage(),
       scope: 'thread',
@@ -36,14 +39,14 @@ describe('getCompressionStartLevel', () => {
         messageTokens: 1000,
       },
       reflection: {
-        model: 'google/gemini-2.5-flash',
+        model,
         observationTokens: 40000,
       },
     });
 
     const level = await (om as any).getCompressionStartLevel();
 
-    expect(level).toBe(2);
+    expect(level).toBe(expected);
   });
 
   it('returns level 2 when auto selects the Gemini default from the Google API key', async () => {
@@ -55,25 +58,6 @@ describe('getCompressionStartLevel', () => {
     });
 
     expect(await (om as any).getCompressionStartLevel()).toBe(2);
-  });
-
-  it('returns level 1 for non-gemini-2.5-flash models', async () => {
-    const om = new ObservationalMemory({
-      storage: createInMemoryStorage(),
-      scope: 'thread',
-      observation: {
-        model: createNoopModel('mock-observer'),
-        messageTokens: 1000,
-      },
-      reflection: {
-        model: 'google/gemini-3.1-flash-lite-preview',
-        observationTokens: 40000,
-      },
-    });
-
-    const level = await (om as any).getCompressionStartLevel();
-
-    expect(level).toBe(1);
   });
 
   it('uses request-scoped model resolution when choosing the compression start level', async () => {

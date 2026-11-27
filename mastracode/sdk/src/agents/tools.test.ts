@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const webToolMocks = vi.hoisted(() => ({
   configuredTools: undefined as
@@ -36,8 +36,15 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
 }
 
 describe('createDynamicTools', () => {
+  beforeEach(() => {
+    // A gateway key in the developer's shell sends `mastra/` aliases to the gateway's
+    // OpenRouter search; these cases cover the no-key route (web-search-route.test.ts covers the other).
+    vi.stubEnv('MASTRA_GATEWAY_API_KEY', '');
+  });
+
   afterEach(() => {
     webToolMocks.configuredTools = undefined;
+    vi.unstubAllEnvs();
   });
 
   it('exposes the configured model-independent web provider', async () => {

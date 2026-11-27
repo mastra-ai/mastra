@@ -66,6 +66,8 @@ const RULE_ROWS: RuleRow[] = [
   // prose
   ['mastra/bare-url', 'prose', 'warn', 'A URL appears as plain text instead of a Markdown link.'],
   ['mastra/vale-unavailable', 'prose', 'error', 'Vale is not installed or failed to start, so prose was not checked. Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose.'],
+  ['mastra/vale-version', 'prose', 'warn', 'The Vale binary is not the version CI uses, so its findings can differ from CI. Run `pnpm vale:download`.'],
+  ['mastra/heading-vocabulary-drift', 'prose', 'error', 'The accept.txt terms copied into `Mastra.HeadingSentenceCase` are out of date. The fix regenerates them.', true],
   // format
   ['mastra/format', 'format', 'error', 'The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).', true],
   // redirects

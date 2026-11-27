@@ -1,5 +1,28 @@
 # @mastra/redis-streams
 
+## 0.9.2-alpha.0
+
+### Patch Changes
+
+- Reclaimed a finished agent run's stream within a day instead of waiting out the seven-day idle backstop. ([#31184](https://github.com/mastra-ai/mastra/pull/31184))
+
+  Idle retention is now resolved per topic. Topics carrying a single agent run or thread (`agent.stream.*`, `agent.control.*`, `agent.thread-stream.*`) use shorter transport defaults — a day for run topics, matching the lifetime of the record that authorizes reading them, and an hour for thread streams. Ungrouped subscribers starting at `earliest` can read retained entries on these topics; expiry removes that backlog. These transport defaults don't change when `CachingPubSub`'s `runLogTtlMs` or `threadStreamLogTtlMs` cache retention requests change. Every other topic keeps `streamIdleTtlMs`, seven days by default, which work queues need so a grouped consumer that was offline still finds its backlog.
+
+  `streamIdleTtlMs` still caps every topic, so lowering it lowers run topics too, and `0` disables expiry everywhere as before. No configuration change is needed:
+
+  ```typescript
+  // Run topics now expire in a day, thread streams in an hour; work queues still get seven days.
+  new RedisStreamsPubSub({ url });
+
+  // Lowering the backstop still lowers everything.
+  new RedisStreamsPubSub({ url, streamIdleTtlMs: 30 * 60 * 1000 });
+  ```
+
+  Also raised the `@mastra/core` peer floor to 1.86.0, the first release that exports the per-topic retention helper these transports now read.
+
+- Updated dependencies [[`0aec008`](https://github.com/mastra-ai/mastra/commit/0aec008954c873153e6037f1d11b26d1a3156d87), [`bd6e62f`](https://github.com/mastra-ai/mastra/commit/bd6e62fe098784b149d7d04948bc66ca68108d0b), [`dc78e49`](https://github.com/mastra-ai/mastra/commit/dc78e49845d7e5bfc2aa826b24e9a104f9428c33), [`9a6be2d`](https://github.com/mastra-ai/mastra/commit/9a6be2d940906b37b573bbf14fdd6ee7633e4c5e), [`7e1eab0`](https://github.com/mastra-ai/mastra/commit/7e1eab088a61f88cd7875bf50118ff3223b5efd7), [`c2b28d4`](https://github.com/mastra-ai/mastra/commit/c2b28d49a7ba6e0339b694e22607869f75b1dd04), [`a5b8a78`](https://github.com/mastra-ai/mastra/commit/a5b8a782708b1bbb1c5b132a2f8de8c0b0145415), [`4fb02e4`](https://github.com/mastra-ai/mastra/commit/4fb02e4f6205d7ee6f1335279ac09841d2482d13), [`d6f54c1`](https://github.com/mastra-ai/mastra/commit/d6f54c1a148edc2d605b3a4c9194d30a85929320), [`a5b8a78`](https://github.com/mastra-ai/mastra/commit/a5b8a782708b1bbb1c5b132a2f8de8c0b0145415), [`2fa9b3e`](https://github.com/mastra-ai/mastra/commit/2fa9b3e0396ccadc359eb562c32588d7dfad88b4), [`b15af8b`](https://github.com/mastra-ai/mastra/commit/b15af8be275465422d016ebba2882ee5252a69e2), [`ab3f19d`](https://github.com/mastra-ai/mastra/commit/ab3f19dad1e65ad176c97e71ffacad5d5b5fd773), [`17cfd26`](https://github.com/mastra-ai/mastra/commit/17cfd2613995be04e9f3ab8a1b91d4d0a26ae800), [`04b03dd`](https://github.com/mastra-ai/mastra/commit/04b03dd6a50a60cc900f255485f8993ade206a35), [`2d35c78`](https://github.com/mastra-ai/mastra/commit/2d35c78da97db7d3ce5570882cac441a51f4386a), [`b6df61e`](https://github.com/mastra-ai/mastra/commit/b6df61eec51f6352696c7eca45beadf00f794230), [`0e27198`](https://github.com/mastra-ai/mastra/commit/0e27198791549ae6a4d4e64e24ba8c2b56afde46), [`ad02b1c`](https://github.com/mastra-ai/mastra/commit/ad02b1c61743b71d32728947a2d7c0ab1700d1b5), [`127897c`](https://github.com/mastra-ai/mastra/commit/127897c8573c62cdedad921b4ad33138b25f181c), [`da66164`](https://github.com/mastra-ai/mastra/commit/da66164f2827ee6cee59d1691a2c78e58601cf2f), [`3a325bb`](https://github.com/mastra-ai/mastra/commit/3a325bb29be1bf6f64dd06b3c129a64a2b706069), [`178e12f`](https://github.com/mastra-ai/mastra/commit/178e12fbeabbe096418e63a9eab4a1153cc61d89), [`9de2483`](https://github.com/mastra-ai/mastra/commit/9de24839be8a44477b56c61a9878282781b12c84), [`cbcf337`](https://github.com/mastra-ai/mastra/commit/cbcf337aabfc0a0f8ea9387d5b06bd893021ff6f), [`9100eb8`](https://github.com/mastra-ai/mastra/commit/9100eb8a78c79046d0001541734fc769254f7119), [`3f526af`](https://github.com/mastra-ai/mastra/commit/3f526aff4a2d59f1dc4bb778e7181cdedd954ec0), [`cbcf337`](https://github.com/mastra-ai/mastra/commit/cbcf337aabfc0a0f8ea9387d5b06bd893021ff6f), [`4af262e`](https://github.com/mastra-ai/mastra/commit/4af262e9c0c47e414cfe0cbc9e0c61275a7441bc), [`d66b3f1`](https://github.com/mastra-ai/mastra/commit/d66b3f151be25128500d1d1acd1d9701b191b623)]:
+  - @mastra/core@1.87.0-alpha.0
+
 ## 0.9.1
 
 ### Patch Changes

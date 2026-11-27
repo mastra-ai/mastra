@@ -168,6 +168,7 @@ export class MastraLLMVNext extends MastraBase {
     workspace,
     agentRunSpan,
     agent,
+    resultType,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -212,6 +213,7 @@ export class MastraLLMVNext extends MastraBase {
         streaming: true,
         parameters: modelSettings,
         ...(toolDefinitions ? { tools: toolDefinitions } : {}),
+        ...(resultType ? { resultType } : {}),
       },
       metadata: {
         runId,

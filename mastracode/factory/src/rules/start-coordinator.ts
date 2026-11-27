@@ -337,10 +337,10 @@ export class FactoryStartCoordinator {
       ownerUserId: sourceSession.userId,
       defaultModelId: sessionModel.modelId,
     });
-    // The tool is `requireApproval`, and that prompt parks the run whether or not
-    // someone pressed Start — a person is reading the plan, not an approval queue.
-    // Starting the run was already the say-so; the rules engine still governs.
-    await session.permissions.setForTool({ toolName: 'factory_transition_work_item', policy: 'allow' });
+    // Factory tools ask by default, and that prompt would park the run whether or not
+    // someone pressed Start. Reporting an outcome moves nothing until the board engine
+    // accepts the move, so the session reports without asking.
+    await session.permissions.setForTool({ toolName: 'factory_report_outcome', policy: 'allow' });
     const threadId = await configureThread(session, request);
     const prepared = await storage.prepareRunStart({
       orgId: request.orgId,

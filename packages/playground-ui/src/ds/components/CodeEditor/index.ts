@@ -1,7 +1,15 @@
 export * from './code-editor';
 export { codeLanguages } from './code-languages';
 export { codeFoldGutter } from './fold-gutter-extension';
-export { highlight, languageForPath, syntaxHighlighter, type HighlightResult, type HighlightToken } from './highlight';
+export {
+  highlight,
+  languageForPath,
+  MAX_HIGHLIGHT_LENGTH,
+  syntaxHighlighter,
+  type HighlightLanguage,
+  type HighlightResult,
+  type HighlightToken,
+} from './highlight';
 export { variableHighlight, VARIABLE_PATTERN } from './variable-highlight-extension';
 export { createVariableAutocomplete } from './variable-autocomplete-extension';
 export { flattenSchemaToVariables, type VariableCompletion } from './schema-to-variables';

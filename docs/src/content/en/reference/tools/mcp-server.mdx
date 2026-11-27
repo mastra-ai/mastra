@@ -363,9 +363,9 @@ A powerful feature of `MCPServer` is its ability to automatically expose your Ma
 - **Tool Naming**: Each agent is converted into a tool with the name `ask_<agentKey>`, where `<agentKey>` is the key you used for that agent in the `agents` object. For instance, if you configure `agents: { myAgentKey: myAgentInstance }`, a tool with the name `ask_myAgentKey` will be created.
 
 - **Tool Functionality**:
-  - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Original agent instructions: `<agent description>`".
+  - **Description**: The generated tool's description will be in the format: "Ask agent `<AgentName>` a question. Agent description: `<agent description>`".
   - **Input**: The tool expects a single object argument with a `message` property (string): `{ message: "Your question for the agent" }`.
-  - **Execution**: When this tool is called, it invokes the corresponding agent's `generate()` method with the provided `query`.
+  - **Execution**: When this tool is called, it invokes the corresponding agent's `generate()` method with the provided `message`.
   - **Output**: The direct result from the agent's `generate()` method is returned as the output of the tool.
 
 - **Name collisions.** If an explicit tool defined in the `tools` configuration has the same name as an agent-derived tool (e.g., a tool with the name `ask_myAgentKey` alongside an agent keyed as `myAgentKey`), the _explicitly defined tool will take precedence_. The agent won't be converted into a tool in this conflicting case, and a warning will be logged.

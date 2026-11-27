@@ -1,8 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useRef } from 'react';
+import { useImperativeHandle, useRef } from 'react';
+import type { LogViewLine } from '../../types';
 import type { LogViewListProps } from '../log-view-list';
+import { LogViewPageEdge } from './log-view-page-edge';
 import { LogViewRow } from './log-view-row';
-import { OlderLogsEdge } from './older-logs-edge';
 import { useDataListKeyboard } from '@/ds/components/DataList';
 import { LogStream } from '@/ds/components/LogStream';
 import { Txt } from '@/ds/components/Txt';
@@ -10,21 +11,26 @@ import { Txt } from '@/ds/components/Txt';
 const ROW_HEIGHT = 24;
 const OVERSCAN = 8;
 
-export type LogViewRowsProps = Omit<LogViewListProps, 'isLoading'>;
+export type LogViewRowsProps<T extends LogViewLine> = Omit<LogViewListProps<T>, 'isLoading'>;
 
-export function LogViewRows({
+export function LogViewRows<T extends LogViewLine>({
   logs,
   isFetchingNextPage,
   hasNextPage,
+  nextPage = 'older',
   logIdMap,
   featuredLogId,
   onLogClick,
   order = 'newest-first',
   wrap = true,
+  timeFractionDigits,
   onFetchNextPage,
-}: LogViewRowsProps) {
+  ref,
+}: LogViewRowsProps<T>) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const isOldestFirst = order === 'oldest-first';
+  const pagesAbove = isOldestFirst === (nextPage === 'older');
+  const startAtEnd = isOldestFirst && nextPage === 'older';
 
   const virtualizer = useVirtualizer({
     count: logs.length,
@@ -35,9 +41,9 @@ export function LogViewRows({
       return (log && logIdMap.get(log)) ?? index;
     },
     overscan: OVERSCAN,
-    anchorTo: isOldestFirst ? 'end' : 'start',
-    followOnAppend: isOldestFirst,
-    initialOffset: isOldestFirst ? () => logs.length * ROW_HEIGHT : 0,
+    anchorTo: startAtEnd ? 'end' : 'start',
+    followOnAppend: startAtEnd,
+    initialOffset: startAtEnd ? () => logs.length * ROW_HEIGHT : 0,
   });
 
   const { getRowProps } = useDataListKeyboard({
@@ -46,17 +52,30 @@ export function LogViewRows({
     onNavigate: index => virtualizer.scrollToIndex(index),
   });
 
-  const loadOlder = () => {
+  useImperativeHandle(ref, () => ({
+    scrollToLog: logId => {
+      const index = logs.findIndex(log => logIdMap.get(log) === logId);
+      if (index >= 0) virtualizer.scrollToIndex(index, { align: 'center' });
+    },
+  }));
+
+  const loadNextPage = () => {
     if (hasNextPage && !isFetchingNextPage) onFetchNextPage?.();
   };
 
   const virtualItems = virtualizer.getVirtualItems();
   const paddingTop = virtualItems[0]?.start ?? 0;
   const paddingBottom = Math.max(0, virtualizer.getTotalSize() - (virtualItems.at(-1)?.end ?? 0));
-  const olderEdge = hasNextPage && <OlderLogsEdge isFetching={isFetchingNextPage} onVisible={loadOlder} />;
+  const pageEdge = hasNextPage && (
+    <LogViewPageEdge
+      label={nextPage === 'older' ? 'Loading older logs' : 'Loading newer logs'}
+      isFetching={isFetchingNextPage}
+      onVisible={loadNextPage}
+    />
+  );
 
   return (
-    <LogStream scrollRef={scrollRef} wrap={wrap} className="flex-1">
+    <LogStream scrollRef={scrollRef} wrap={wrap} fractionDigits={timeFractionDigits} className="flex-1">
       <LogStream.Header>
         <LogStream.HeaderCell>Time</LogStream.HeaderCell>
         <LogStream.HeaderCell>Level</LogStream.HeaderCell>
@@ -67,7 +86,7 @@ export function LogViewRows({
           No logs match your search
         </Txt>
       )}
-      {isOldestFirst && olderEdge}
+      {pagesAbove && pageEdge}
       <LogStream.Spacer height={paddingTop} />
       {virtualItems.map(item => {
         const log = logs[item.index];
@@ -80,6 +99,7 @@ export function LogViewRows({
             index={item.index}
             featured={id === featuredLogId}
             wrap={wrap}
+            timeFractionDigits={timeFractionDigits}
             measureRef={virtualizer.measureElement}
             keyboardProps={getRowProps(item.index)}
             onLogClick={onLogClick}
@@ -87,7 +107,7 @@ export function LogViewRows({
         );
       })}
       <LogStream.Spacer height={paddingBottom} />
-      {!isOldestFirst && olderEdge}
+      {!pagesAbove && pageEdge}
     </LogStream>
   );
 }

@@ -1,4 +1,4 @@
-import type { LogRecord } from '../../types';
+import type { LogViewLine } from '../../types';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar';
 
 export const LOG_VIEW_SEARCH_FIELD = 'search';
@@ -26,7 +26,7 @@ export function logViewSearchText(items: FilterBarItem[]): string {
     .join(' ');
 }
 
-export function filterLogsByFields(logs: LogRecord[], items: FilterBarItem[]): LogRecord[] {
+export function filterLogsByFields<T extends LogViewLine>(logs: T[], items: FilterBarItem[]): T[] {
   const chips = chipFilters(items);
   if (chips.length === 0) return logs;
   return logs.filter(log =>
@@ -40,7 +40,7 @@ export interface LogViewFilterKinds {
 }
 
 export function logViewFilterFields(
-  logs: LogRecord[],
+  logs: LogViewLine[],
   items: FilterBarItem[],
   { search, fieldChips }: LogViewFilterKinds,
 ): FilterBarField[] {

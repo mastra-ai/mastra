@@ -23,8 +23,10 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
+import { phaseOutcomes } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
+import type { FeedMove } from '../feed-events.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -108,7 +110,9 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** The board engine every stage move goes through. Stage moves 503 when absent. */
-  boardEngine?: Pick<FactoryBoardEngine, 'requestMove'>;
+  boardEngine?: Pick<FactoryBoardEngine, 'requestMove' | 'cardDeleted' | 'submitMove'>;
+  /** Tells the project's open boards how a move answered `202` ended. */
+  announceMove?: (scope: { orgId: string; factoryProjectId: string }, move: FeedMove) => void;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   sessionRepository?: (input: {
@@ -201,6 +205,8 @@ function listQueryError(field: PropertyKey | undefined): string {
   }
 }
 
+/** What a person reads when a move taken on earlier broke instead of being refused. */
+const MOVE_FAILED_REASON = 'Factory could not move the card. Try again.';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<string, unknown> | null {
@@ -482,6 +488,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                           }
                         : {}),
                       ...(phase.tools ? { tools: [...phase.tools] } : {}),
+                      outcomes: phaseOutcomes(board, phaseId).map(({ key, label, to }) => ({ key, label, to })),
                     }
                   : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
@@ -902,7 +909,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             return c.json({ error: 'factory_transition_unavailable' }, 503);
           }
           await workItems.ensureReady();
-          const result = await boardEngine.requestMove({
+          const request: FactoryTransitionRequest = {
             ...parsed,
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
@@ -913,7 +920,32 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               ...parsed.ingress,
               identity: `human:${resolved.userId}:${parsed.ingress.identity}`,
             },
-          });
+          };
+          // An engine whose moves take a while answers as soon as the move looks good, and the
+          // board hears how it ended on its feed stream, under the input id answered here. Without
+          // a way to tell the board, the move is answered in full, as before.
+          const { announceMove } = this.deps;
+          const submitted = boardEngine.submitMove && announceMove ? await boardEngine.submitMove(request) : undefined;
+          if (submitted && announceMove && 'inputId' in submitted) {
+            const { inputId } = submitted;
+            const announce = (move: FeedMove) =>
+              announceMove({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId }, move);
+            void submitted.settled.then(
+              settled =>
+                announce(
+                  settled.status === 'accepted'
+                    ? { inputId, status: 'accepted' }
+                    : { inputId, status: 'rejected', code: settled.code, reason: settled.reason },
+                ),
+              (error: unknown) => {
+                console.warn('[Factory] A move the board was promised an answer for failed.', error);
+                announce({ inputId, status: 'rejected', code: 'failed', reason: MOVE_FAILED_REASON });
+              },
+            );
+            return c.json({ inputId }, 202);
+          }
+          const result =
+            submitted && 'answered' in submitted ? submitted.answered : await boardEngine.requestMove(request);
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
         },
@@ -1149,6 +1181,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           await workItems.ensureReady();
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
+          // The card is gone either way; what the engine kept for it is cleaned up on a best effort.
+          try {
+            await boardEngine?.cardDeleted?.({ workItemId: deleted.id });
+          } catch (error) {
+            console.warn("[Factory] Unable to end a deleted card's board run.", error);
+          }
           await audit.emit({
             context: loose(c),
             input: {

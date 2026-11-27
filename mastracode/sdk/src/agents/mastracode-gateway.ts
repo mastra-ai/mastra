@@ -1,6 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { CustomAvailableModel, CustomModelCatalogProvider } from '@mastra/core/agent-controller';
 import {
   GATEWAY_AUTH_HEADER,
@@ -19,7 +18,9 @@ import type {
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
+import { customProviderAuthHeaderName } from '../onboarding/custom-provider-headers.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
+import type { CustomProviderAuthScheme, CustomProviderHeader } from '../onboarding/settings.js';
 import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import {
   buildAnthropicOAuthFetch,
@@ -60,6 +61,7 @@ import {
 } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
+import { createCustomProviderChatModel } from './custom-provider-check.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
 
 const PROVIDERS: Record<string, ProviderConfig> = PROVIDER_REGISTRY;
@@ -83,7 +85,15 @@ function isOrganizationGatewayKey(apiKey: string): boolean {
 
 type ModelRequestHeaders = Record<string, string>;
 
-export type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
+export type MastraCodeCustomProvider = {
+  name: string;
+  url: string;
+  apiKey?: string;
+  /** Absent means `bearer`. */
+  authScheme?: CustomProviderAuthScheme;
+  headers?: CustomProviderHeader[];
+  models?: string[];
+};
 
 export type MastraCodeGatewayOptions = {
   mastraGatewayBaseUrl: string;
@@ -312,9 +322,6 @@ export function hasProviderEnvironmentKey(providerId: string): boolean {
   return (Array.isArray(envVars) ? envVars : [envVars]).some(envVar => Boolean(process.env[envVar]?.trim()));
 }
 
-/** Servers call custom endpoints too: a redirect could aim that call at an address the saved URL never named. */
-const fetchWithoutRedirects: typeof fetch = (input, init) => fetch(input, { ...init, redirect: 'error' });
-
 export class MastraCodeGateway extends MastraModelGateway {
   readonly id = MASTRACODE_GATEWAY_ID;
   readonly name = 'MastraCode Gateway';
@@ -459,6 +466,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     return this.#getCustomProviders().find(provider => providerId === getCustomProviderId(provider.name));
   }
 
+  /** The catalog entries for custom providers that list at least one model. */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
     // Catalog auth (`handlesModel`, `resolveAuth`) reads this store, while
     // `/api-keys` and logins write through other AuthStorage instances. Pick
@@ -472,7 +480,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         name: provider.name,
         url: provider.url,
         apiKeyEnvVar: '',
-        apiKeyHeader: 'Authorization',
+        apiKeyHeader: customProviderAuthHeaderName(provider.authScheme),
         gateway: this.id,
         models,
       };
@@ -512,6 +520,10 @@ export class MastraCodeGateway extends MastraModelGateway {
     return MastraCodeGateway.resolveProviderAuth(request, undefined, this.#credentials);
   }
 
+  /**
+   * The model a session calls. A custom provider wins over a built-in provider
+   * with the same id, and `args.headers` are Mastra's per-request headers.
+   */
   resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
@@ -533,20 +545,21 @@ export class MastraCodeGateway extends MastraModelGateway {
       };
     }
     if (customProvider) {
-      const provider = createOpenAICompatible({
-        name: args.providerId,
-        baseURL: customProvider.url,
-        apiKey: args.apiKey,
-        headers: args.headers,
-        fetch: fetchWithoutRedirects,
+      // `args.apiKey` comes from `resolveAuth`, which hands a custom provider
+      // only its own key.
+      const model = createCustomProviderChatModel({
+        providerId: args.providerId,
+        connection: { ...customProvider, apiKey: args.apiKey },
+        modelId: args.modelId,
+        requestHeaders: args.headers,
       });
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
-        return provider.chatModel(args.modelId);
+        return model;
       }
       return wrapLanguageModel({
-        model: provider.chatModel(args.modelId),
+        model,
         middleware: [middleware],
       });
     }

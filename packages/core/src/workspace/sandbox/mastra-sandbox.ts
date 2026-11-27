@@ -42,6 +42,34 @@ import type {
 import type { CommandResult, ExecuteCommandOptions, SandboxInfo } from './types';
 import { shellQuote } from './utils';
 
+const DEFAULT_RESET_TIMEOUT_MS = 30_000;
+const DESTROYED_STATUSES: readonly ProviderStatus[] = ['destroying', 'destroyed'];
+
+/**
+ * A provider error meaning the environment is already gone: 410, or a 404
+ * coded `not_found` (or uncoded). A 404 with another code may be a routing
+ * error, not proof the environment is gone.
+ */
+function isEnvironmentGoneError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { status, code } = error as { status?: unknown; code?: unknown };
+  if (status === 410) return true;
+  return status === 404 && (code === undefined || code === null || code === 'not_found');
+}
+
+/** True when `work` settled within `timeoutMs`; rejections propagate. */
+async function settledWithin(work: Promise<void>, timeoutMs: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<false>(resolve => {
+    timer = setTimeout(() => resolve(false), timeoutMs);
+  });
+  try {
+    return await Promise.race([work.then(() => true as const), timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Lifecycle hook that fires during sandbox state transitions.
  * Receives the sandbox instance so users can call `executeCommand`, read files, etc.
@@ -783,6 +811,56 @@ export abstract class MastraSandbox<THandle = unknown> extends MastraBase implem
    */
   async destroy(): Promise<void> {
     // Default no-op - subclasses override
+  }
+
+  /**
+   * Replace the sandbox's environment while keeping this instance usable.
+   *
+   * For recovering from an environment that stopped answering. The provider's
+   * `destroy()` releases the environment, and the instance is left `stopped`,
+   * so the next command starts a fresh one and the `onStart` hook sets it up
+   * again. Unlike {@link _destroy}, this does not wait on a start in flight
+   * first (a start hung on the dead environment would block it forever), and
+   * the instance is not marked destroyed, so a run holding it carries on.
+   *
+   * Everything in the old environment is lost. Errors meaning the
+   * environment is already gone (410, or a 404 with no code or `not_found`)
+   * count as success. Each wait is bounded by `timeoutMs` (default 30s).
+   */
+  async _reset(options: { timeoutMs?: number } = {}): Promise<void> {
+    if (this.status === 'destroyed') throw new Error('Cannot reset a destroyed sandbox');
+    const timeoutMs = options.timeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
+    const release = async () => {
+      const released = this.destroy().catch(error => {
+        if (!isEnvironmentGoneError(error)) throw error;
+      });
+      if (!(await settledWithin(released, timeoutMs))) {
+        throw new Error('Timed out destroying the sandbox. Try again.');
+      }
+    };
+
+    // Released before waiting on a start in flight, so a start hung on the
+    // dead environment fails fast once it is gone.
+    await release();
+    const starting = this._startPromise;
+    if (starting) {
+      const settled = await settledWithin(
+        starting.then(
+          () => {},
+          () => {},
+        ),
+        timeoutMs,
+      );
+      if (!settled) throw new Error('The old sandbox is still starting. Try again.');
+      // That start may have found the old environment gone and made another.
+      await release();
+    }
+    // A `_destroy()` from outside may have finished while this waited; it wins.
+    // `includes` because the guard above narrowed `status`, which changes across the awaits.
+    if (DESTROYED_STATUSES.includes(this.status)) {
+      throw new Error('The sandbox was destroyed while it was being recreated.');
+    }
+    this.status = 'stopped';
   }
 
   // ---------------------------------------------------------------------------

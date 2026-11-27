@@ -221,6 +221,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: 'true',
           },
           {
+            name: 'leaseTtlMs',
+            type: 'number',
+            description:
+              "How long, in milliseconds, a run's storage lease lasts without a renewal. Applies to default-engine runs that hold a lease (autoRestartActiveRuns isn't false) on storage with run-ownership support. A step that blocks the event loop for longer lets another instance take the run over. A restart over a lapsed lease doubles it, up to 8 times this value, on storage adapters that report when the lease last changed (in-memory, @mastra/pg and @mastra/libsql). Values that aren't a positive number fall back to the default. Values under 1000 are raised to 1000, and values above 805306367 (about 9 days) are capped. See [steps that block the event loop](/docs/workflows/overview#steps-that-block-the-event-loop).",
+            isOptional: true,
+            defaultValue: '15000',
+          },
+          {
             name: 'shouldPersistSnapshot',
             type: '(params: { stepResults: Record<string, StepResult<any, any, any, any>>; workflowStatus: WorkflowRunStatus }) => boolean',
             description:

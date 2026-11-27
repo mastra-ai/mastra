@@ -195,6 +195,8 @@ export interface Step<
   retries?: number;
   component?: string;
   metadata?: StepMetadata;
+  /** For a step created from a processor, the processor's own id. Kept when the step id is changed. */
+  processorId?: string;
 }
 
 export const getStepResult = (stepResults: Record<string, StepResult<any, any, any, any>>, step: any) => {

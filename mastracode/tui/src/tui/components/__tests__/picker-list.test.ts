@@ -19,17 +19,29 @@ describe('PickerList', () => {
     vi.restoreAllMocks();
   });
 
-  it('centres the window on the selection and clamps it at both ends', () => {
+  it('scrolls only when the selection reaches an edge of the window, and clamps it at both ends', () => {
     const picker = list({ maxVisible: 3 });
-
-    picker.setItems(items(10), 5);
-    expect(strip(picker.render(40))).toEqual(['  item-4', '> item-5', '  item-6', '(6/10)']);
-
     picker.setItems(items(10), 0);
-    expect(strip(picker.render(40))).toEqual(['> item-0', '  item-1', '  item-2', '(1/10)']);
+    expect(strip(picker.render(40))).toEqual(['> item-0', '  item-1', '  item-2', '  (1/10)']);
+
+    picker.setItems(items(10), 2);
+    expect(strip(picker.render(40))).toEqual(['  item-0', '  item-1', '> item-2', '  (3/10)']);
+
+    picker.setItems(items(10), 3);
+    expect(strip(picker.render(40))).toEqual(['  item-1', '  item-2', '> item-3', '  (4/10)']);
 
     picker.setItems(items(10), 9);
-    expect(strip(picker.render(40))).toEqual(['  item-7', '  item-8', '> item-9', '(10/10)']);
+    expect(strip(picker.render(40))).toEqual(['  item-7', '  item-8', '> item-9', '  (10/10)']);
+  });
+
+  it('draws fewer items once the window is limited, keeping the selection in view', () => {
+    const picker = list({ maxVisible: 6 });
+    picker.setItems(items(10), 5);
+    expect(picker.render(40)).toHaveLength(7);
+
+    picker.menuWindow().setLimit(2);
+    expect(strip(picker.render(40))).toEqual(['  item-4', '> item-5', '  (6/10)']);
+    expect(picker.mouseTarget({ row: 2, col: 0, width: 40 })).toBeUndefined();
   });
 
   it('shows every item and no scroll indicator when the list fits or has no limit', () => {
@@ -64,7 +76,7 @@ describe('PickerList', () => {
       '    detail for item-1',
       '> item-2',
       '    detail for item-2',
-      '(3/5)',
+      '  (3/5)',
     ]);
 
     const narrow = picker.render(12);
@@ -95,15 +107,16 @@ describe('PickerList', () => {
     results.forEach((lines, i) => expect(lines).not.toBe(first[i]));
   });
 
-  it('pads each row by paddingX and paddingY', () => {
+  it('cuts lines to the list width with truncate', () => {
     const picker = new PickerList<string>({
-      paddingX: 1,
-      paddingY: 1,
-      renderItem: item => [item],
+      truncate: true,
+      renderItem: item => [`${item} with a very long label`],
       onActivate: () => {},
     });
     picker.setItems(['a', 'b'], 0);
-    expect(picker.render(5)).toEqual(['     ', ' a   ', '     ', '     ', ' b   ', '     ']);
+    const lines = picker.render(10);
+    expect(lines).toHaveLength(2);
+    expect(lines.every(line => visibleWidth(line) <= 10)).toBe(true);
   });
 
   it('maps a clicked row to the item drawn there, across wrapped multi-line items and the scroll window', () => {
@@ -120,11 +133,11 @@ describe('PickerList', () => {
     expect(item2Top).toBeGreaterThan(1);
 
     const target = picker.mouseTarget({ row: item2Top + 1, col: 0, width });
-    expect(target).toMatchObject({ top: item2Top, height: lines.indexOf('(3/5)') - item2Top });
+    expect(target).toMatchObject({ top: item2Top, height: lines.indexOf('  (3/5)') - item2Top });
     target!.activate();
     picker.mouseTarget({ row: 0, col: 0, width })!.activate();
     expect(activated).toEqual([2, 1]);
 
-    expect(picker.mouseTarget({ row: lines.indexOf('(3/5)'), col: 0, width })).toBeUndefined();
+    expect(picker.mouseTarget({ row: lines.indexOf('  (3/5)'), col: 0, width })).toBeUndefined();
   });
 });

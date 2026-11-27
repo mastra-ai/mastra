@@ -102,7 +102,10 @@ describe('resolveInstructionBlocks', () => {
     expect(result).toBe('');
   });
 
-  it('should include a prompt_block_ref when rules pass', async () => {
+  it.each([
+    ['should include a prompt_block_ref when rules pass', 'admin', 'You have admin privileges.'],
+    ['should exclude a prompt_block_ref when rules fail', 'viewer', ''],
+  ] as const)('%s', async (_title, role, expected) => {
     await storage.create({
       promptBlock: {
         id: 'admin-block',
@@ -117,35 +120,8 @@ describe('resolveInstructionBlocks', () => {
     await storage.update({ id: 'admin-block', status: 'published' });
 
     const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'admin-block' }];
-    const result = await resolveInstructionBlocks(
-      blocks,
-      { user: { role: 'admin' } },
-      { promptBlocksStorage: storage },
-    );
-    expect(result).toBe('You have admin privileges.');
-  });
-
-  it('should exclude a prompt_block_ref when rules fail', async () => {
-    await storage.create({
-      promptBlock: {
-        id: 'admin-block',
-        name: 'Admin instructions',
-        content: 'You have admin privileges.',
-        rules: {
-          operator: 'AND',
-          conditions: [{ field: 'user.role', operator: 'equals', value: 'admin' }],
-        },
-      },
-    });
-    await storage.update({ id: 'admin-block', status: 'published' });
-
-    const blocks: AgentInstructionBlock[] = [{ type: 'prompt_block_ref', id: 'admin-block' }];
-    const result = await resolveInstructionBlocks(
-      blocks,
-      { user: { role: 'viewer' } },
-      { promptBlocksStorage: storage },
-    );
-    expect(result).toBe('');
+    const result = await resolveInstructionBlocks(blocks, { user: { role } }, { promptBlocksStorage: storage });
+    expect(result).toBe(expected);
   });
 
   describe('per-usage rules on prompt_block_ref', () => {
@@ -188,26 +164,24 @@ describe('resolveInstructionBlocks', () => {
       await storage.update({ id: 'shared-default-user-prompt', status: 'published' });
     });
 
-    it('uses the runtime slot and skips the fallback ref when userPrompt is present', async () => {
-      const result = await resolveInstructionBlocks(
-        slotWithFallback,
-        { userPrompt: 'Please answer in a concise engineering-review style.' },
-        { promptBlocksStorage: storage },
-      );
-      expect(result).toBe('Follow the platform safety policy.\n\nPlease answer in a concise engineering-review style.');
+    it.each([
+      [
+        'uses the runtime slot and skips the fallback ref when userPrompt is present',
+        'Please answer in a concise engineering-review style.',
+        'Follow the platform safety policy.\n\nPlease answer in a concise engineering-review style.',
+      ],
+      [
+        'uses the fallback ref when userPrompt is an empty string',
+        '',
+        'Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.',
+      ],
+    ] as const)('%s', async (_title, userPrompt, expected) => {
+      const result = await resolveInstructionBlocks(slotWithFallback, { userPrompt }, { promptBlocksStorage: storage });
+      expect(result).toBe(expected);
     });
 
     it('uses the fallback ref when userPrompt is absent', async () => {
       const result = await resolveInstructionBlocks(slotWithFallback, {}, { promptBlocksStorage: storage });
-      expect(result).toBe('Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.');
-    });
-
-    it('uses the fallback ref when userPrompt is an empty string', async () => {
-      const result = await resolveInstructionBlocks(
-        slotWithFallback,
-        { userPrompt: '' },
-        { promptBlocksStorage: storage },
-      );
       expect(result).toBe('Follow the platform safety policy.\n\nAnswer in a friendly, balanced style.');
     });
 
@@ -313,7 +287,10 @@ describe('resolveInstructionBlocks', () => {
     expect(result).toBe('Welcome Eve, your tier is gold.');
   });
 
-  it('should include an inline prompt_block when rules pass', async () => {
+  it.each([
+    ['should include an inline prompt_block when rules pass', true, 'You have premium access.'],
+    ['should exclude an inline prompt_block when rules fail', false, ''],
+  ] as const)('%s', async (_title, isPremium, expected) => {
     const blocks: AgentInstructionBlock[] = [
       {
         type: 'prompt_block',
@@ -324,31 +301,8 @@ describe('resolveInstructionBlocks', () => {
         },
       },
     ];
-    const result = await resolveInstructionBlocks(
-      blocks,
-      { user: { isPremium: true } },
-      { promptBlocksStorage: storage },
-    );
-    expect(result).toBe('You have premium access.');
-  });
-
-  it('should exclude an inline prompt_block when rules fail', async () => {
-    const blocks: AgentInstructionBlock[] = [
-      {
-        type: 'prompt_block',
-        content: 'You have premium access.',
-        rules: {
-          operator: 'AND',
-          conditions: [{ field: 'user.isPremium', operator: 'equals', value: true }],
-        },
-      },
-    ];
-    const result = await resolveInstructionBlocks(
-      blocks,
-      { user: { isPremium: false } },
-      { promptBlocksStorage: storage },
-    );
-    expect(result).toBe('');
+    const result = await resolveInstructionBlocks(blocks, { user: { isPremium } }, { promptBlocksStorage: storage });
+    expect(result).toBe(expected);
   });
 
   it('should mix text, prompt_block_ref, and inline prompt_block', async () => {

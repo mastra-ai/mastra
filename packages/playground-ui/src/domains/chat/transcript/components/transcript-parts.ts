@@ -1,0 +1,140 @@
+import type { ReasoningPart, ToolInvocationPart } from '@mastra/react/ui';
+import { isTerminalInvocationState } from '../services/transcript';
+import type { MessageEntry, SuspensionPrompt, ToolCall } from '../services/transcript';
+
+import { isRecord } from './transcript-shared';
+import { getReasoningContent } from '@/domains/chat/messages/reasoning-content';
+import { exitedWithFailure, isTaskTool } from '@/ds/components/ai/tool-call';
+
+export type MessagePart = MessageEntry['message']['content']['parts'][number];
+export type ToolPart = Extract<MessagePart, { type: 'tool-invocation' }>;
+export type DataMessagePart = Extract<MessagePart, { type: `data-${string}` }>;
+export type DrawsDataPart = (part: DataMessagePart) => boolean;
+
+function isDataPart(part: MessagePart): part is DataMessagePart {
+  return part.type.startsWith('data-');
+}
+
+/**
+ * Whether text shows anything. Models told to end a turn with an empty message
+ * often send a zero-width space, which `trim()` keeps.
+ */
+export function hasVisibleText(text: string): boolean {
+  return /[^\s\u200B-\u200D\u2060\uFEFF]/.test(text);
+}
+
+export function messageText(parts: MessagePart[]): string {
+  return parts
+    .flatMap(part => (isRecord(part) && part.type === 'text' && hasVisibleText(part.text) ? [part.text] : []))
+    .join('\n\n')
+    .trim();
+}
+
+export function terminalInvocationStatus(
+  invocation: ToolInvocationPart['toolInvocation'],
+): 'done' | 'error' | undefined {
+  if (!isTerminalInvocationState(invocation.state)) return undefined;
+  if (invocation.state !== 'result') return 'error';
+  return 'isError' in invocation && invocation.isError === true ? 'error' : 'done';
+}
+
+export function renderableParts(entry: MessageEntry, drawsData?: DrawsDataPart): MessagePart[] {
+  return mergeProse((entry.message.content.parts ?? []).filter(part => isRecord(part) && keepsSlot(part, drawsData)));
+}
+
+function mergeProse(parts: MessagePart[]): MessagePart[] {
+  const merged: MessagePart[] = [];
+
+  for (const part of parts) {
+    const previous = merged.at(-1);
+    if (part.type === 'text' && previous?.type === 'text') {
+      merged[merged.length - 1] = { ...previous, text: previous.text + part.text };
+      continue;
+    }
+    merged.push(part);
+  }
+
+  return merged;
+}
+
+function keepsSlot(part: MessagePart, drawsData: DrawsDataPart | undefined): boolean {
+  if (isDataPart(part)) return drawsData?.(part) ?? false;
+  switch (part.type) {
+    case 'text':
+    case 'reasoning':
+    case 'file':
+    case 'error':
+      return true;
+    case 'tool-invocation':
+      return !isTaskTool(part.toolInvocation.toolName);
+    default:
+      return false;
+  }
+}
+
+/** Persisted reasoning carries no state; it is streaming exactly while its message is. */
+export function reasoningWithState(part: ReasoningPart, streaming: boolean): ReasoningPart {
+  return { ...part, state: part.state ?? (streaming ? 'streaming' : 'done') };
+}
+
+export function draws(
+  part: MessagePart,
+  entry: MessageEntry,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  drawsData?: DrawsDataPart,
+): boolean {
+  if (!isRecord(part)) return false;
+  if (isDataPart(part)) return drawsData?.(part) ?? false;
+
+  switch (part.type) {
+    case 'text':
+      return hasVisibleText(part.text);
+    case 'reasoning':
+      return getReasoningContent(reasoningWithState(part, Boolean(entry.streaming))) !== undefined;
+    case 'tool-invocation':
+      return !isTaskTool(part.toolInvocation.toolName) && !awaitsPrompt(part, suspensions, entry.runtimeTools);
+    case 'file':
+      return true;
+    case 'error':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function awaitsPrompt(
+  part: ToolInvocationPart,
+  suspensions: ReadonlyMap<string, SuspensionPrompt>,
+  runtimeTools: MessageEntry['runtimeTools'],
+): boolean {
+  const tool = toolFromInvocationPart(part, runtimeTools?.[part.toolInvocation.toolCallId]);
+  return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
+}
+
+export function toolFromInvocationPart(
+  part: ToolInvocationPart,
+  runtime?: ToolCall,
+  messageCreatedAt?: Date | string,
+): ToolCall {
+  const invocation = part.toolInvocation;
+  const parsedCreatedAt = messageCreatedAt === undefined ? undefined : new Date(messageCreatedAt).getTime();
+  const fallbackCreatedAt = Number.isFinite(parsedCreatedAt) ? parsedCreatedAt : undefined;
+  const persistedResult = 'result' in invocation ? invocation.result : undefined;
+  const terminalStatus = terminalInvocationStatus(invocation);
+  const result = terminalStatus
+    ? (persistedResult ?? invocation.errorText ?? runtime?.result)
+    : (runtime?.result ?? persistedResult ?? invocation.errorText);
+  return {
+    toolCallId: invocation.toolCallId,
+    toolName: invocation.toolName,
+    argsText: runtime?.argsText ?? '',
+    args: runtime?.args ?? ('args' in invocation ? invocation.args : undefined),
+    status: exitedWithFailure(invocation.toolName, runtime?.exit?.exitCode)
+      ? 'error'
+      : (terminalStatus ?? runtime?.status ?? 'running'),
+    result,
+    output: runtime?.output ?? '',
+    createdAt: part.createdAt ?? runtime?.createdAt ?? fallbackCreatedAt,
+    exit: runtime?.exit,
+  };
+}

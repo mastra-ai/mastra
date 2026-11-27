@@ -38,7 +38,7 @@ async function setup() {
     await pgKnowledgeTransactionClient(tx).none(`INSERT INTO ${claims} (claim) VALUES ($1)`, [id]);
   };
   const drop = () => pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-  return { host, claimed, claim, drop };
+  return { knowledge, host, claimed, claim, drop };
 }
 
 describe('pgKnowledgeTransactionClient from @mastra/pg', () => {
@@ -77,6 +77,34 @@ describe('pgKnowledgeTransactionClient from @mastra/pg', () => {
       expect((await t.host.startRun('b1', { admit: t.claim('c1') })).status).toBe('started');
       expect((await t.host.startRun('b1', { admit: t.claim('c2') })).status).toBe('skipped');
       expect(await t.claimed()).toEqual(['c1']);
+    } finally {
+      await t.drop();
+    }
+  });
+
+  it('commits a host row written in getStorage().transaction()', async () => {
+    const t = await setup();
+    try {
+      const storage = await t.knowledge.getStorage();
+      await storage.transaction(t.claim('c1'));
+      expect(await t.claimed()).toEqual(['c1']);
+    } finally {
+      await t.drop();
+    }
+  });
+
+  it('rolls a host row back with getStorage().transaction()', async () => {
+    const t = await setup();
+    try {
+      const storage = await t.knowledge.getStorage();
+      const failure = new Error('stop');
+      await expect(
+        storage.transaction(async tx => {
+          await t.claim('c1')(tx);
+          throw failure;
+        }),
+      ).rejects.toBe(failure);
+      expect(await t.claimed()).toEqual([]);
     } finally {
       await t.drop();
     }

@@ -80,81 +80,23 @@ describe('migrationPromptMessages', () => {
         expect(userMessage?.content.text).toContain('mastraMigration tool');
       });
 
-      it('should return messages for specific area: tools', async () => {
+      it.each([
+        ['should return messages for specific area: tools', 'tools'],
+        ['should return messages for specific area: workflows', 'workflows'],
+        ['should return messages for specific area: memory', 'memory'],
+        ['should return messages for specific area: evals', 'evals'],
+        ['should return messages for specific area: mcp', 'mcp'],
+        ['should return messages for specific area: vectors', 'vectors'],
+        ['should return messages for specific area: storage', 'storage'],
+      ] as const)('%s', async (_title, area) => {
         const messages = await migrationPromptMessages.getPromptMessages!({
           name: 'upgrade-to-v1',
-          args: { area: 'tools' },
+          args: { area },
           extra: {} as MCPRequestHandlerExtra,
         });
 
         const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('tools');
-      });
-
-      it('should return messages for specific area: workflows', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'workflows' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('workflows');
-      });
-
-      it('should return messages for specific area: memory', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'memory' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('memory');
-      });
-
-      it('should return messages for specific area: evals', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'evals' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('evals');
-      });
-
-      it('should return messages for specific area: mcp', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'mcp' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('mcp');
-      });
-
-      it('should return messages for specific area: vectors', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'vectors' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('vectors');
-      });
-
-      it('should return messages for specific area: storage', async () => {
-        const messages = await migrationPromptMessages.getPromptMessages!({
-          name: 'upgrade-to-v1',
-          args: { area: 'storage' },
-          extra: {} as MCPRequestHandlerExtra,
-        });
-
-        const userMessage = messages.find(m => m.role === 'user');
-        expect(userMessage?.content.text).toContain('storage');
+        expect(userMessage?.content.text).toContain(area);
       });
 
       it('should handle invalid area by instructing to check with mastraMigration tool', async () => {

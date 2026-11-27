@@ -318,6 +318,19 @@ function stageTransitionMessage(
   return `This work was moved from the ${fromStage} stage to the ${toStage} stage.`;
 }
 
+const interruptedRuns = new WeakSet<FactoryTransitionRequest>();
+
+/**
+ * Internal to Factory's board engines: marks this very request object as a person's move whose
+ * card's run the engine stopped for it, so the move isn't refused because the card is busy. The
+ * mark is no field of the request: nothing a caller writes on a request sets it, a copy of the
+ * request doesn't carry it, and it is stored nowhere.
+ */
+export function markRunInterrupted(request: FactoryTransitionRequest): FactoryTransitionRequest {
+  interruptedRuns.add(request);
+  return request;
+}
+
 function isHumanTransition(request: FactoryTransitionRequest): boolean {
   return request.actor.type === 'human' && request.ingress.type === 'human';
 }
@@ -651,6 +664,7 @@ export class FactoryTransitionService {
     if (
       isHumanTransition(request) &&
       !request.initialEntry &&
+      !(interruptedRuns.has(request) && !crossesBoards) &&
       // Leaving the board strands whatever run is queued or underway, so every cross-board move of
       // a busy card is refused — whatever cause it names, even into a phase sharing the old one's
       // name or a phase that starts nothing itself.
@@ -728,7 +742,7 @@ export class FactoryTransitionService {
               code: 'approval_required',
               reason:
                 exitTool.id === 'submit_plan'
-                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically), then move the card into ${board.phases[request.stage]?.name ?? request.stage} with factory_transition_work_item.`
+                  ? `${fromPhase!.name} ends when submit_plan comes back with an approved plan; until then the card stays here. Call submit_plan and wait for a person to approve the plan (or for it to be approved automatically); its approval is the outcome that moves the card into ${board.phases[request.stage]?.name ?? request.stage}.`
                   : `${fromPhase!.name} ends when ${exitTool.id} succeeds; until then the card stays here. A person can also move it from the Factory board or a chat they are signed in to.`,
             };
           }

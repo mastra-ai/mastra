@@ -106,7 +106,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
       console.log(
         JSON.stringify({
           provider: 'autumn',
-          sdk: 'autumn-js@1.5.72',
+          sdk: 'autumn-js@1.6.27',
           api: '2.6.0',
           scenario,
           opening,
@@ -200,7 +200,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     console.log(
       JSON.stringify({
         provider: 'autumn',
-        sdk: 'autumn-js@1.5.72',
+        sdk: 'autumn-js@1.6.27',
         api: '2.6.0',
         customerId,
         featureId,

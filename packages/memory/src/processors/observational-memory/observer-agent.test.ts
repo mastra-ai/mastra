@@ -99,20 +99,21 @@ describe('optimizeObservationsForContext', () => {
     expect(optimized).toContain('🔴');
   });
 
-  it('should simplify arrows', () => {
-    const observations = '- Task -> completed successfully';
+  it.each([
+    ['should simplify arrows', '- Task -> completed successfully', '->'],
+    [
+      'should collapse multiple newlines',
+      `Line 1
+
+
+
+Line 2`,
+      '\n\n\n',
+    ],
+  ] as const)('%s', (_title, observationsValue, expected) => {
+    const observations = observationsValue;
     const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('->');
-  });
-
-  it('should collapse multiple newlines', () => {
-    const observations = `Line 1
-
-
-
-Line 2`;
-    const optimized = optimizeObservationsForContext(observations);
-    expect(optimized).not.toContain('\n\n\n');
+    expect(optimized).not.toContain(expected);
   });
 
   it('should preserve markdown link text', () => {

@@ -1,6 +1,10 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { describe, expect, it, vi } from 'vitest';
+import { boardRegistryOf } from '../boards/registry.js';
+import { compileStoredBoard } from '../boards/stored-board.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { workSeedWithTriage } from '../boards/work-seeds.js';
+import { workBoard } from '../boards/work.js';
 
 import { LiveSessions } from '../session/live-sessions.js';
 import type { LiveSession } from '../session/live-sessions.js';
@@ -120,6 +124,7 @@ function setup({
   audit = [],
   subscriptions = [],
   sessions,
+  boards = createTriageWorkRegistry(),
 }: {
   items?: Card[];
   bindings?: FactoryRunBindingRecord[];
@@ -127,6 +132,7 @@ function setup({
   audit?: AuditEventRow[];
   subscriptions?: WorkItemSubscription[];
   sessions?: FactoryReadToolDependencies['sessions'];
+  boards?: FactoryReadToolDependencies['boards'];
 }) {
   const deps: FactoryReadToolDependencies = {
     workItems: {
@@ -155,7 +161,7 @@ function setup({
       ),
     },
     audit: { list: vi.fn(async () => ({ events: audit })) },
-    boards: createTriageWorkRegistry(),
+    boards,
     ...(sessions ? { sessions } : {}),
   };
   const tools = createFactoryReadTools(scope, deps) as Record<
@@ -170,6 +176,7 @@ type ListResult = {
   counts: { total: number; byStage: Record<string, number> };
   items: Array<{ id: string; number: number | null; activeWorker: { role: string; sessionId: string } | null }>;
   truncated: boolean;
+  boards: Array<{ id: string; name: string }>;
 };
 
 function follow(workItemId: string, sessionId: string, reason: WorkItemSubscription['reason']): WorkItemSubscription {
@@ -220,6 +227,26 @@ describe('factory_list_work_items', () => {
     expect(await ids({ active: true })).toEqual(['b']);
     expect(await ids({ active: false })).toEqual(['c', 'a']);
     expect(await ids({ requestedBy: 'me' })).toEqual(['b']);
+  });
+
+  it('finds a renamed board by its displayed name and lists each board with its name', async () => {
+    const openSource = compileStoredBoard({ ...workSeedWithTriage(), name: 'Open source' }, workBoard);
+    const { run } = setup({ items: rows, boards: boardRegistryOf([openSource]) });
+    const result = await run<ListResult>('factory_list_work_items', { board: 'open SOURCE' });
+    expect(result.items.map(row => row.id)).toEqual(['b', 'a']);
+    expect(result.boards).toEqual([{ id: 'work', name: 'Open source' }]);
+  });
+
+  it('refuses a displayed name that more than one board shares', async () => {
+    const seed = workSeedWithTriage();
+    const boards = boardRegistryOf([
+      compileStoredBoard({ ...seed, name: 'Open source' }, workBoard),
+      compileStoredBoard({ ...seed, key: 'oss', name: 'Open source' }, workBoard),
+    ]);
+    const { run } = setup({ items: rows, boards });
+    await expect(run('factory_list_work_items', { board: 'Open source' })).rejects.toThrow(
+      'Board "Open source" matches more than one board; use its id instead: work (Open source), oss (Open source).',
+    );
   });
 
   it('numbers a card filed by hand and finds it by that #number', async () => {

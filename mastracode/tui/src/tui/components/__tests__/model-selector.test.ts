@@ -1,6 +1,7 @@
 import type { TUI } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
+import { MenuFrame } from '../../prompt-slot.js';
 import type { ModelItem } from '../model-selector.js';
 import { makeCustomModelItem, ModelSelectorComponent } from '../model-selector.js';
 
@@ -75,7 +76,9 @@ describe('makeCustomModelItem', () => {
       onCancel: vi.fn(),
     });
 
-    for (const character of 'unmatched-bare-id') selector.handleInput(character);
+    const frame = new MenuFrame(selector);
+
+    for (const character of 'unmatched-bare-id') frame.handleInput(character);
 
     expect(
       selector
@@ -85,6 +88,27 @@ describe('makeCustomModelItem', () => {
     ).toContain('Use: unmatched-bare-id');
     selector.handleInput('\r');
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'unmatched-bare-id' }));
+  });
+});
+
+describe('model search', () => {
+  it('selects the best match while typing, wherever the cursor was', () => {
+    const onSelect = vi.fn();
+    const selector = new ModelSelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      models: Array.from({ length: 30 }, (_, i) => ({
+        id: `mock/model-${i}`,
+        provider: 'mock',
+        modelName: `model-${i}`,
+        hasApiKey: true,
+      })),
+      onSelect,
+      onCancel: vi.fn(),
+    });
+    selector.handleInput('\x1b[A');
+    selector.setFilter('model-2');
+    selector.handleInput('\r');
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'mock/model-2' }));
   });
 });
 
@@ -137,7 +161,7 @@ describe('Codex fast model selection', () => {
         onCancel: vi.fn(),
       })
         .render(100)
-        .map(line => stripAnsi(line).trim())
+        .map(line => stripAnsi(line).trim().replace(/ {2,}/g, ' '))
         .filter(line => line.includes('openai/'))
         .slice(0, 2);
 
@@ -254,7 +278,9 @@ describe('MastraCode gateway catalog models', () => {
   it('lists and selects a typed custom provider model under its canonical id', () => {
     const { selector, onSelect, screen } = createSelector([...models, ...customProviderModels]);
 
-    for (const character of 'acme-local/gemma-4-31b') selector.handleInput(character);
+    const frame = new MenuFrame(selector);
+
+    for (const character of 'acme-local/gemma-4-31b') frame.handleInput(character);
 
     expect(screen()).not.toContain('Use: acme-local/gemma-4-31b');
     expect(screen()).not.toContain('mastracode/');
@@ -271,7 +297,9 @@ describe('MastraCode gateway catalog models', () => {
       { id: 'mastracode/ollama/llama-4', provider: 'mastracode/ollama', modelName: 'llama-4', hasApiKey: true },
     ]);
 
-    for (const character of 'ollama/llama-4') selector.handleInput(character);
+    const frame = new MenuFrame(selector);
+
+    for (const character of 'ollama/llama-4') frame.handleInput(character);
     selector.handleInput('\r');
 
     expect(onSelect).toHaveBeenCalledTimes(1);
@@ -283,7 +311,9 @@ describe('MastraCode gateway catalog models', () => {
   it('saves a typed id that matches no catalog row exactly as typed', () => {
     const { selector, onSelect, screen } = createSelector([...models, ...customProviderModels]);
 
-    for (const character of 'acme-local/gemma-5') selector.handleInput(character);
+    const frame = new MenuFrame(selector);
+
+    for (const character of 'acme-local/gemma-5') frame.handleInput(character);
 
     expect(screen()).toContain('Use: acme-local/gemma-5');
     selector.handleInput('\r');

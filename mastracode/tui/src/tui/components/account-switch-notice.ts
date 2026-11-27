@@ -7,8 +7,10 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
-import { accountSwitchNoticeText, modelFallbackNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
-import type { AccountSwitchPartData, ModelFallbackPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { accountSwitchNoticeText } from '@mastra/code-sdk/auth/account-rotation-processor';
+import type { AccountSwitchPartData } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { modelFallbackNoticeText } from '@mastra/code-sdk/model-fallback';
+import type { ModelFallbackPartData } from '@mastra/code-sdk/model-fallback';
 
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -35,16 +37,12 @@ export class AccountSwitchNoticeComponent extends Container {
 
 export type PackFallbackNoticeData = ModelFallbackPartData;
 
-export function packFallbackNoticeText(data: PackFallbackNoticeData): string {
-  return modelFallbackNoticeText(data).replace('Switched model route:', 'Switched model pack:');
-}
-
 export class PackFallbackNoticeComponent extends Container {
   private textChild: Text;
 
   constructor(data: PackFallbackNoticeData) {
     super();
-    this.textChild = new Text(theme.fg('muted', `  ⇄ ${packFallbackNoticeText(data)}`), BOX_INDENT, 0);
+    this.textChild = new Text(theme.fg('muted', `  ⇄ ${modelFallbackNoticeText(data)}`), BOX_INDENT, 0);
     this.addChild(this.textChild);
   }
 

@@ -24,19 +24,21 @@ const KEY = 'test:traces:saved-filters';
 describe('saveTraceFiltersToStorage', () => {
   beforeEach(() => localStorage.clear());
 
-  it('persists filters together with a relative date preset', () => {
-    saveTraceFiltersToStorage(new URLSearchParams('status=error&datePreset=last-7d'), KEY);
+  it.each([
+    [
+      'persists filters together with a relative date preset',
+      'status=error&datePreset=last-7d',
+      'status=error&datePreset=last-7d',
+    ],
+    [
+      'never persists a custom date range, since absolute dates go stale',
+      'status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02',
+      'status=error',
+    ],
+  ] as const)('%s', (_title, input, expected) => {
+    saveTraceFiltersToStorage(new URLSearchParams(input), KEY);
 
-    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error&datePreset=last-7d');
-  });
-
-  it('never persists a custom date range, since absolute dates go stale', () => {
-    saveTraceFiltersToStorage(
-      new URLSearchParams('status=error&datePreset=custom&dateFrom=2026-01-01&dateTo=2026-01-02'),
-      KEY,
-    );
-
-    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe('status=error');
+    expect(loadTraceFiltersFromStorage(KEY)?.toString()).toBe(expected);
   });
 
   it('clears the saved set when no filter is left', () => {

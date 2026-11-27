@@ -314,7 +314,12 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
               ...(connection.connectedAt ? { connectedAt: connection.connectedAt } : {}),
             }));
           const needsLinking = provider.binding.needsLinking;
-          return c.json({ connections, ...(needsLinking.length > 0 ? { needsLinking } : {}) });
+          const detached = provider.binding.detached;
+          return c.json({
+            connections,
+            ...(needsLinking.length > 0 ? { needsLinking } : {}),
+            ...(detached.length > 0 ? { detached } : {}),
+          });
         } catch (err) {
           return platformError(c, err);
         }
@@ -379,6 +384,8 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         const c = loose(rawContext);
         const provider = providerFromParam(c, providers);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
+        // Providers that link only through their own flow (Linear's migration) never link org connections.
+        if (!provider.binding.linkOrgConnectionsAtBoot) return c.json({ error: 'linking_not_supported' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         if (!(await auth.isOrganizationAdmin(c, resolved.tenant.orgId))) {
@@ -391,8 +398,11 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
           );
         }
         try {
-          const result = await provider.binding.linkOrgConnections();
-          return c.json(result);
+          // An admin's explicit request also links connections someone detached.
+          const { linked, needsLinking, detached } = await provider.binding.linkOrgConnections({
+            relinkDetached: true,
+          });
+          return c.json({ linked, needsLinking, detached });
         } catch (err) {
           return platformError(c, err);
         }

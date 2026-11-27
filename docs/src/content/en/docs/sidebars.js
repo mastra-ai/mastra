@@ -906,7 +906,8 @@ const sidebars = {
       },
       items: [
         { type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' },
-        { type: 'doc', id: 'mastra-platform/alerts', label: 'Alerts and notifications' },
+        { type: 'doc', id: 'mastra-platform/observability/alerts', label: 'Alerts' },
+        { type: 'doc', id: 'mastra-platform/observability/import-traces', label: 'Import traces' },
       ],
     },
     {
@@ -939,6 +940,7 @@ const sidebars = {
       collapsible: false,
       className: 'sidebar-group-name',
       items: [
+        { type: 'doc', id: 'mastra-platform/mcp', label: 'MCP server', customProps: { tags: ['new'] } },
         { type: 'doc', id: 'mastra-platform/team-members', label: 'Team members' },
         { type: 'doc', id: 'mastra-platform/access-tokens', label: 'Access tokens' },
       ],

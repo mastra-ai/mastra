@@ -4,7 +4,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { FactorySkillInfo, FactorySkillsResponse, StoredBoardResponse } from '../../../../../api/types';
+import type {
+  FactorySkillInfo,
+  FactorySkillsResponse,
+  IntakeDryRunResponse,
+  StoredBoardResponse,
+} from '../../../../../api/types';
 import { createAppRoutes } from '../../../../router';
 
 export const FACTORY_ID = 'fp-1';
@@ -43,9 +48,22 @@ export function stubFactory(factory: Record<string, unknown> = {}) {
       return HttpResponse.json({ project });
     }),
     http.get(`${PROJECT_URL}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    // The board's live feed: none here, so cards refresh by refetching.
+    http.get(`${PROJECT_URL}/feed-events`, () => new HttpResponse(null, { status: 404 })),
     http.get(`${PROJECT_URL}/metrics`, () => HttpResponse.json({ error: 'unavailable' }, { status: 500 })),
     http.get(`${TEST_BASE_URL}/web/factory/skills`, () =>
       HttpResponse.json({ skills: BUILT_IN_SKILLS, canEdit: true } satisfies FactorySkillsResponse),
+    ),
+    // The board canvas counts what each rule filed lately; nothing was filed here.
+    http.post(`${PROJECT_URL}/intake/dry-run`, () =>
+      HttpResponse.json({
+        evaluator: 'intake-order',
+        sampled: 0,
+        boards: [],
+        notRouted: [],
+        items: [],
+        canEdit: true,
+      } satisfies IntakeDryRunResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
