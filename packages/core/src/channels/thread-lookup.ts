@@ -2,7 +2,7 @@ import type { AgentControllerRequestContext } from '../agent-controller/types';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { RequestContext } from '../request-context';
 import type { AgentChannels } from './agent-channels';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, isUsableRenderContext } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 
 /** The channels a run's tools and processors post through, read lazily since they attach after the agent is built. */
@@ -22,8 +22,9 @@ export async function resolveChannelRenderContext(
   channels?: ChannelsSource,
 ): Promise<ChatChannelRenderContext | undefined> {
   if (!requestContext) return undefined;
-  const stashed = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-  if (stashed) return stashed;
+  // A replica restores this entry from JSON as a method-less husk; rebuild from the thread instead.
+  const stashed = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+  if (isUsableRenderContext(stashed)) return stashed;
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   const threadId = controller?.threadId ?? parseMemoryRequestContext(requestContext)?.thread?.id;
   if (!threadId) return undefined;

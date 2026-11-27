@@ -1,4 +1,4 @@
-import type { ModelPack, ModelPackSet } from '@mastra/factory/model-packs';
+import type { ModelPack, ModelPackSet } from './model-packs';
 
 export function withPackSaved(set: ModelPackSet, pack: ModelPack): ModelPackSet {
   const exists = set.modelPacks.some(existing => existing.id === pack.id);

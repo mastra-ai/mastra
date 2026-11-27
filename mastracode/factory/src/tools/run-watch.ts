@@ -156,3 +156,39 @@ export function runOutcome(
       return { status: 'done' };
   }
 }
+
+/**
+ * The reports of a session's runs, for a session whose card's board engine is told when a run
+ * waits on a person. The engine may take the card's other inputs first, so nothing waits on that
+ * telling: the person hears of the wait, and the run's end is reported, without it.
+ */
+export function reportsTellingOfWaits({
+  reportRunEnd,
+  notifyApproval,
+  runPaused,
+  answersItself,
+}: {
+  reportRunEnd: SessionRunEndReport;
+  notifyApproval: SessionApprovalReport;
+  /** Tells the board engine that the session's run waits for a person's answer. */
+  runPaused: () => Promise<void>;
+  answersItself: (toolCallId: string) => boolean;
+}): { report: SessionRunEndReport; onApprovalRequested: SessionApprovalReport } {
+  const paused = () =>
+    void (async () => runPaused())().catch(error => {
+      console.warn('[Factory] Unable to tell the board engine a session waits for approval.', error);
+    });
+  return {
+    report: async (outcome, since) => {
+      const reported = reportRunEnd(outcome, since);
+      if (outcome.status === 'blocked' && (outcome.approval || outcome.decision)) paused();
+      await reported;
+    },
+    onApprovalRequested: async request => {
+      const notified = notifyApproval(request);
+      // A call Factory answers itself waits on nobody.
+      if (!answersItself(request.toolCallId)) paused();
+      await notified;
+    },
+  };
+}

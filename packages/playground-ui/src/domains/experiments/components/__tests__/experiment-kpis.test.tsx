@@ -47,19 +47,13 @@ describe('ExperimentKpis', () => {
         },
       );
 
-    it('shows the total cost in fractional cents', () => {
+    it.each([
+      ['shows the total cost in fractional cents', '$0.012'],
+      ['shows the average duration per item under the run duration', '1.85s avg per item'],
+      ['shows the total token count', '12,400'],
+    ] as const)('%s', (_title, input) => {
       renderWithMetrics();
-      expect(screen.getByText('$0.012')).toBeDefined();
-    });
-
-    it('shows the average duration per item under the run duration', () => {
-      renderWithMetrics();
-      expect(screen.getByText('1.85s avg per item')).toBeDefined();
-    });
-
-    it('shows the total token count', () => {
-      renderWithMetrics();
-      expect(screen.getByText('12,400')).toBeDefined();
+      expect(screen.getByText(input)).toBeDefined();
     });
 
     it('splits the total tokens into input and output', () => {

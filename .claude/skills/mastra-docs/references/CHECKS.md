@@ -15,7 +15,7 @@ pnpm check --no-vale                        # skip Vale (CI runs Vale separately
 
 The command exits `1` when any error is reported and `0` otherwise. Warnings and info findings never fail it. New rules start as warnings and become errors once existing content is clean.
 
-With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale needs its binary, which is gitignored, so run `pnpm vale:download` once per checkout. When the binary is missing or Vale fails to start, `pnpm check` reports a `mastra/vale-unavailable` error and exits `1`. Pass `--no-vale` only when you mean to skip Vale.
+With file arguments, file-level checks (frontmatter, structure, links, prose, format) only look at those files. Sidebar and redirect checks always run repo-wide. Vale needs its binary, which is gitignored, so run `pnpm vale:download` once per checkout. When the binary is missing or Vale fails to start, `pnpm check` reports a `mastra/vale-unavailable` error and exits `1`. Pass `--no-vale` only when you mean to skip Vale. When the binary isn't the version CI uses, it reports a `mastra/vale-version` warning, because Vale releases can change which findings appear. Run `pnpm vale:download` again to update it.
 
 ## JSON output
 
@@ -108,6 +108,8 @@ Vale also honors its own `{/* vale off */}` and `{/* vale on */}` comments.
 | `mastra/external-mdx-parse`             | links       | error    | No      | A page in a synced directory is not valid MDX, so its links and anchors were not checked.                                                             |
 | `mastra/bare-url`                       | prose       | warn     | No      | A URL appears as plain text instead of a Markdown link.                                                                                               |
 | `mastra/vale-unavailable`               | prose       | error    | No      | Vale is not installed or failed to start, so prose was not checked. Run `pnpm vale:download`, or pass `--no-vale` to skip Vale on purpose.            |
+| `mastra/vale-version`                   | prose       | warn     | No      | The Vale binary is not the version CI uses, so its findings can differ from CI. Run `pnpm vale:download`.                                             |
+| `mastra/heading-vocabulary-drift`       | prose       | error    | Yes     | The accept.txt terms copied into `Mastra.HeadingSentenceCase` are out of date. The fix regenerates them.                                              |
 | `mastra/format`                         | format      | error    | Yes     | The file is not formatted with oxfmt (MDX via `@mastra/lint-docs/oxfmt-mdx`).                                                                         |
 | `mastra/redirect-duplicate`             | redirects   | error    | No      | `vercel.redirects.json` has two redirects with the same source.                                                                                       |
 | `mastra/redirect-chain`                 | redirects   | error    | No      | A redirect points to the source of another redirect.                                                                                                  |

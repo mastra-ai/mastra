@@ -144,15 +144,18 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return empty array when MASTRA_PACKAGES_FILE is not set', async () => {
+    it.each([
+      ['should return empty array when MASTRA_PACKAGES_FILE is not set', false],
+      ['should return cmsEnabled true when editor is configured', true],
+    ] as const)('%s', async (_title, input) => {
       delete process.env.MASTRA_PACKAGES_FILE;
 
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(false) } as any);
+      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(input) } as any);
 
       expect(result).toEqual({
         packages: [],
         isDev: false,
-        cmsEnabled: false,
+        cmsEnabled: input,
         liveKitConnectionRouteEnabled: false,
         observabilityEnabled: false,
         storageType: undefined,
@@ -214,23 +217,6 @@ describe('System Handlers', () => {
       });
     });
 
-    it('should return cmsEnabled true when editor is configured', async () => {
-      delete process.env.MASTRA_PACKAGES_FILE;
-
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({ mastra: createMockMastra(true) } as any);
-
-      expect(result).toEqual({
-        packages: [],
-        isDev: false,
-        cmsEnabled: true,
-        liveKitConnectionRouteEnabled: false,
-        observabilityEnabled: false,
-        storageType: undefined,
-        observabilityStorageType: undefined,
-        observabilityRuntimeStrategy: undefined,
-      });
-    });
-
     it('advertises recording review for the exact default LiveKit GET route', async () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra(false, undefined, false, {
@@ -277,17 +263,20 @@ describe('System Handlers', () => {
       expect(result).toMatchObject({ liveKitConnectionRouteEnabled: false });
     });
 
-    it('should return filesystem capabilities for local code-source editor storage', async () => {
+    it.each([
+      ['should return filesystem capabilities for local code-source editor storage', 'code', 'filesystem'],
+      ['should return database capabilities for db-source editor storage', 'db', 'database'],
+    ] as const)('%s', async (_title, value, storage) => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
-        mastra: createMockMastra({ getSource: () => 'code' }),
+        mastra: createMockMastra({ getSource: () => value }),
       } as any);
 
       expect(result).toMatchObject({
         cmsEnabled: true,
-        editorSource: 'code',
+        editorSource: value,
         editorSourceCapabilities: {
-          source: 'code',
-          storage: 'filesystem',
+          source: value,
+          storage,
           canSave: true,
           canOpenChangeRequest: false,
         },
@@ -417,23 +406,6 @@ describe('System Handlers', () => {
           canSave: false,
           canOpenChangeRequest: false,
           unavailableReason: 'Missing source provider write permission.',
-        },
-      });
-    });
-
-    it('should return database capabilities for db-source editor storage', async () => {
-      const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
-        mastra: createMockMastra({ getSource: () => 'db' }),
-      } as any);
-
-      expect(result).toMatchObject({
-        cmsEnabled: true,
-        editorSource: 'db',
-        editorSourceCapabilities: {
-          source: 'db',
-          storage: 'database',
-          canSave: true,
-          canOpenChangeRequest: false,
         },
       });
     });

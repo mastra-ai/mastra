@@ -224,7 +224,11 @@ describe('RoleImpersonationProvider', () => {
     expect(screen.getByTestId('impersonated-permissions').textContent).toBe('null');
   });
 
-  it('honors a custom apiPrefix', async () => {
+  it.each([
+    ['honors a custom apiPrefix', '/mastra'],
+    ['strips a trailing slash from apiPrefix', '/mastra/'],
+    ['adds a leading slash when apiPrefix has none', 'mastra'],
+  ] as const)('%s', async (_title, apiPrefix) => {
     const onRequest = vi.fn();
     server.use(
       http.get(`${BASE_URL}/mastra/auth/roles/admin/permissions`, ({ request }) => {
@@ -233,7 +237,7 @@ describe('RoleImpersonationProvider', () => {
       }),
     );
 
-    const { handle } = renderConsumer({ apiPrefix: '/mastra' });
+    const { handle } = renderConsumer({ apiPrefix });
 
     await act(async () => {
       await handle.current!.start({ id: 'admin', name: 'Admin' });
@@ -260,44 +264,6 @@ describe('RoleImpersonationProvider', () => {
 
     expect(onRequest).toHaveBeenCalledTimes(1);
     expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/auth/roles/admin/permissions`);
-  });
-
-  it('strips a trailing slash from apiPrefix', async () => {
-    const onRequest = vi.fn();
-    server.use(
-      http.get(`${BASE_URL}/mastra/auth/roles/admin/permissions`, ({ request }) => {
-        onRequest(request.url);
-        return HttpResponse.json(adminPermissions);
-      }),
-    );
-
-    const { handle } = renderConsumer({ apiPrefix: '/mastra/' });
-
-    await act(async () => {
-      await handle.current!.start({ id: 'admin', name: 'Admin' });
-    });
-
-    expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
-  });
-
-  it('adds a leading slash when apiPrefix has none', async () => {
-    const onRequest = vi.fn();
-    server.use(
-      http.get(`${BASE_URL}/mastra/auth/roles/admin/permissions`, ({ request }) => {
-        onRequest(request.url);
-        return HttpResponse.json(adminPermissions);
-      }),
-    );
-
-    const { handle } = renderConsumer({ apiPrefix: 'mastra' });
-
-    await act(async () => {
-      await handle.current!.start({ id: 'admin', name: 'Admin' });
-    });
-
-    expect(onRequest).toHaveBeenCalledTimes(1);
-    expect(onRequest.mock.calls[0][0]).toBe(`${BASE_URL}/mastra/auth/roles/admin/permissions`);
   });
 
   it('URL-encodes the roleId', async () => {

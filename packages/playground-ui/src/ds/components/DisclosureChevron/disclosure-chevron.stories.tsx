@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import { Button } from '../Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../Collapsible';
 import { DropdownMenu } from '../DropdownMenu';
@@ -53,5 +54,32 @@ export const InCollapsibleTrigger: Story = {
         <p className="py-2 text-body-sm text-muted-foreground">The chevron turns while the section is open.</p>
       </CollapsibleContent>
     </Collapsible>
+  ),
+};
+
+export const Directions: Story = {
+  render: function Render() {
+    const [open, setOpen] = useState(false);
+
+    return (
+      <Button size="lg" aria-expanded={open} onClick={() => setOpen(value => !value)}>
+        <DisclosureChevron direction="down" />
+        <DisclosureChevron direction="up" />
+        <DisclosureChevron direction="right" />
+        Toggle
+      </Button>
+    );
+  },
+};
+
+export const InDetails: Story = {
+  render: () => (
+    <details>
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-body-sm text-foreground">
+        More details
+        <DisclosureChevron className="size-icon-md text-muted-foreground" />
+      </summary>
+      <p className="py-2 text-body-sm text-muted-foreground">The chevron follows the details element.</p>
+    </details>
   ),
 };

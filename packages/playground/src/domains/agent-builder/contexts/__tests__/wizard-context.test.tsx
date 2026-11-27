@@ -261,24 +261,27 @@ describe('WizardProvider', () => {
       await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
     });
 
-    it('includes integrations when a configured Slack platform exists', async () => {
+    it.each([
+      [
+        'includes integrations when a configured Slack platform exists',
+        true,
+        false,
+        'ready>identity>instructions>library>integrations>end',
+      ],
+      [
+        'excludes integrations when only a non-Slack platform is configured',
+        false,
+        true,
+        'ready>identity>instructions>library>end',
+      ],
+    ] as const)('%s', async (_title, isConfigured, isConfiguredValue, input) => {
       setPlatformsHandler([
-        { id: 'slack', name: 'Slack', isConfigured: true },
-        { id: 'discord', name: 'Discord', isConfigured: false },
+        { id: 'slack', name: 'Slack', isConfigured },
+        { id: 'discord', name: 'Discord', isConfigured: isConfiguredValue },
       ]);
 
       const { getByTestId } = renderWizard({ initialStep: 'ready' });
-      await expectSteps(getByTestId, 'ready>identity>instructions>library>integrations>end');
-    });
-
-    it('excludes integrations when only a non-Slack platform is configured', async () => {
-      setPlatformsHandler([
-        { id: 'slack', name: 'Slack', isConfigured: false },
-        { id: 'discord', name: 'Discord', isConfigured: true },
-      ]);
-
-      const { getByTestId } = renderWizard({ initialStep: 'ready' });
-      await expectSteps(getByTestId, 'ready>identity>instructions>library>end');
+      await expectSteps(getByTestId, input);
     });
   });
 

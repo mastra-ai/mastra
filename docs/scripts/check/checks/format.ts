@@ -1,7 +1,9 @@
 import { execFile } from 'child_process'
 import fs from 'fs/promises'
+import os from 'os'
 import path from 'path'
 import { promisify } from 'util'
+import { Worker } from 'worker_threads'
 import { CONTENT_ROOT } from '../content'
 import { finding } from '../finding'
 import type { Check, CheckResult, ContentFile, Finding } from '../types'
@@ -23,16 +25,45 @@ export function isFormattedFile(file: Pick<ContentFile, 'path' | 'section'>): bo
   )
 }
 
-type FormatMdx = (source: string, options?: Record<string, unknown>, filePath?: string) => Promise<string>
-
-async function loadFormatter(rootDir: string): Promise<{ formatMdx: FormatMdx; options: Record<string, unknown> }> {
-  const mod = (await import('@mastra/lint-docs/oxfmt-mdx')) as { formatMdx: FormatMdx }
+async function loadOptions(rootDir: string): Promise<Record<string, unknown>> {
   // Same option handling as the oxfmt-mdx CLI: drop keys that only apply to file selection.
   const options = JSON.parse(await fs.readFile(path.join(rootDir, '.oxfmtrc.json'), 'utf-8')) as Record<string, unknown>
   delete options.$schema
   delete options.ignorePatterns
   delete options.overrides
-  return { formatMdx: mod.formatMdx, options }
+  return options
+}
+
+type FormatResult = { path: string; raw: string; formatted: string } | { path: string; error: string }
+
+const FORMAT_WORKERS = Math.max(1, Math.min(8, os.availableParallelism()))
+const MIN_FILES_PER_WORKER = 25
+
+/**
+ * Formats MDX files across worker threads. Formatting is CPU-bound remark work, and on the main thread it would
+ * also block the MDX checks that run alongside it.
+ */
+async function formatFiles(files: ContentFile[], options: Record<string, unknown>): Promise<FormatResult[]> {
+  const count = Math.min(FORMAT_WORKERS, Math.ceil(files.length / MIN_FILES_PER_WORKER))
+  const chunks = Array.from({ length: count }, (_, i) =>
+    files.filter((_, j) => j % count === i).map(file => ({ path: file.path, absolutePath: file.absolutePath })),
+  )
+  const results = await Promise.all(
+    chunks.map(
+      chunk =>
+        new Promise<FormatResult[]>((resolve, reject) => {
+          const worker = new Worker(new URL('./format-worker.mjs', import.meta.url), {
+            workerData: { files: chunk, options },
+          })
+          worker.once('message', resolve)
+          worker.once('error', reject)
+          worker.once('exit', code => {
+            if (code !== 0) reject(new Error(`Format worker exited with code ${code}`))
+          })
+        }),
+    ),
+  )
+  return results.flat()
 }
 
 /** Runs `oxfmt` on non-MDX files and returns the paths that need formatting. */
@@ -65,33 +96,25 @@ export const formatCheck: Check = {
     const findings: Finding[] = []
     const result: CheckResult = { findings, fixed: 0 }
     const fixFormat = ctx.fix && ctx.isRuleActive('mastra/format')
-    const { formatMdx, options } = await loadFormatter(ctx.rootDir)
-
-    for (const file of ctx.files.filter(isFormattedFile)) {
-      if (ctx.fix && !ctx.isRuleActive('mastra/format', file)) continue
-      const raw = await fs.readFile(file.absolutePath, 'utf-8')
-      let formatted: string
-      try {
-        formatted = await formatMdx(raw, options, file.path)
-      } catch (error) {
+    const files = ctx.files.filter(
+      file => isFormattedFile(file) && !(ctx.fix && !ctx.isRuleActive('mastra/format', file)),
+    )
+    const byPath = new Map(files.map(file => [file.path, file]))
+    for (const item of files.length > 0 ? await formatFiles(files, await loadOptions(ctx.rootDir)) : []) {
+      if ('error' in item) {
         findings.push(
-          finding(
-            'mastra/format',
-            `Formatter failed: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`,
-            { file: file.path },
-            { fixable: false },
-          ),
+          finding('mastra/format', `Formatter failed: ${item.error}`, { file: item.path }, { fixable: false }),
         )
         continue
       }
-      if (formatted === raw) continue
+      if (item.formatted === item.raw) continue
       if (fixFormat) {
-        await fs.writeFile(file.absolutePath, formatted)
+        await fs.writeFile(byPath.get(item.path)!.absolutePath, item.formatted)
         result.fixed!++
       } else {
         findings.push(
           finding('mastra/format', 'File is not formatted; run `pnpm check --fix --rule mastra/format`', {
-            file: file.path,
+            file: item.path,
           }),
         )
       }

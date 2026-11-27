@@ -6,16 +6,21 @@ import { ChatChannelGenerativeUIProcessor, RENDER_CARD_TOOL_NAME } from './gener
 import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 
+/** A live render context: real ones always carry `wrapStream` (issue #31310 guards on it). */
 function renderContext(overrides: Partial<ChatChannelRenderContext> = {}) {
   const post = vi.fn(async (_card: unknown) => ({ id: 'msg-1' }));
   const render = {
     platform: 'slack',
     generativeUI: true,
     chatThread: { id: 'slack:C1:1.1', post },
+    wrapStream: (stream: unknown) => stream,
     ...overrides,
   } as unknown as ChatChannelRenderContext;
   return { render, post };
 }
+
+/** The method-less object a JSON snapshot round-trip leaves on a replica's request context. */
+const husk = { platform: 'slack', generativeUI: true, chatThread: {} } as unknown as ChatChannelRenderContext;
 
 function args(opts: { render?: ChatChannelRenderContext; tools?: Record<string, unknown>; threadId?: string }) {
   const requestContext = new RequestContext();
@@ -69,6 +74,23 @@ describe('ChatChannelGenerativeUIProcessor', () => {
     await processor.processInputStep(stepArgs);
     expect(buildRenderContextForThread).toHaveBeenCalledTimes(1);
     expect(buildRenderContextForThread).toHaveBeenCalledWith('thread-1');
+  });
+
+  it('rebuilds when a replica left a method-less husk on the request context (#31310)', async () => {
+    const { render } = renderContext();
+    const buildRenderContextForThread = vi.fn(async () => render);
+    const processor = new ChatChannelGenerativeUIProcessor({ buildRenderContextForThread });
+
+    const result = await processor.processInputStep(args({ render: husk, threadId: 'thread-1' }));
+
+    expect(result!.tools).toHaveProperty(RENDER_CARD_TOOL_NAME);
+    expect(buildRenderContextForThread).toHaveBeenCalledWith('thread-1');
+  });
+
+  it('leaves the run alone when a husk has no thread to rebuild from (#31310)', async () => {
+    const processor = new ChatChannelGenerativeUIProcessor();
+
+    expect(await processor.processInputStep(args({ render: husk }))).toBeUndefined();
   });
 
   it('posts a valid spec to the thread as a Chat SDK card', async () => {

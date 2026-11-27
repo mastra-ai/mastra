@@ -28,14 +28,22 @@ import {
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
+import { awaitMoveAnswer, moveAnswerStream } from '../ui/domains/factory/services/submittedMoves';
 import type {
   BoardSnapshot,
   CreateWorkItemInput,
   FactoryBoard,
+  TransitionOutcome,
   UpdateWorkItemInput,
   WorkItem,
   WorkItemStageEntry,
 } from '../ui/domains/factory/services/workItems';
+
+/**
+ * How long a submitted move waits for its answer. The server may hold a move for two minutes
+ * while the run it stops ends; past this the server that took it on is taken to be gone.
+ */
+const SUBMITTED_MOVE_WAIT_MS = 150_000;
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   if (!factoryProjectId) throw new Error('No Factory selected');
@@ -479,15 +487,29 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
   const mutationKey = cardMoveMutationKey(factoryProjectId);
   const mutation = useMutation({
     mutationKey,
-    mutationFn: ({ item, board, stage, cause = 'board_drag', reenter }: TransitionWorkItemVariables) =>
-      transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
+    mutationFn: async ({
+      item,
+      board,
+      stage,
+      cause = 'board_drag',
+      reenter,
+    }: TransitionWorkItemVariables): Promise<TransitionOutcome> => {
+      const askedUnder = moveAnswerStream();
+      const answer = await transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
         board,
         stage,
         expectedRevision: item.revision,
         requestId: crypto.randomUUID(),
         cause,
         ...(reenter ? { reenter } : {}),
-      }),
+      });
+      if (answer.status !== 'submitted') return answer;
+      // The move stays pending, and its card "moving…", until the feed stream tells how it ended.
+      const { inputId } = answer;
+      const ended = await awaitMoveAnswer(inputId, SUBMITTED_MOVE_WAIT_MS, askedUnder);
+      if (!ended) return { status: 'unanswered', inputId };
+      return ended.status === 'accepted' ? { status: 'landed', inputId } : ended;
+    },
     onMutate: async ({ item, stage, reenter = false }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const enteredAt = new Date().toISOString();
@@ -511,6 +533,9 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         cards.map(item => {
           if (result.status === 'rejected') return moveUndone(variables.item)(item);
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
+          // A move answered later names no revision: the card stays where it was dragged, and the
+          // settle's re-read downloads it whatever version the server names.
+          if (result.status !== 'accepted') return { ...item, version: undefined };
           if (result.revision <= item.revision) return item;
           const previousItem = variables.item;
           return {

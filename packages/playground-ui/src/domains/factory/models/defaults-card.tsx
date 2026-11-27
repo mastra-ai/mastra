@@ -1,19 +1,23 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useLocation } from 'react-router';
 
-import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { MODEL_DEFAULTS_ANCHORS } from '../../../settingsSections';
-import { IconTile } from './IconTile';
-import { MODEL_DEFAULTS_ICONS, MODEL_DEFAULTS_LABELS, MODEL_DEFAULTS_TONES, defaultsInUse } from './model-routes';
-import type { ModelDefaults } from './model-routes';
-import { UsedByLanes } from './UsedByLanes';
+import { IconTile } from './icon-tile';
+import {
+  MODEL_DEFAULTS_ANCHORS,
+  MODEL_DEFAULTS_ICONS,
+  MODEL_DEFAULTS_LABELS,
+  MODEL_DEFAULTS_TONES,
+  defaultsInUse,
+} from './model-routes';
+import type { FactoryModelScope, ModelDefaults } from './model-routes';
+import { UsedByLanes } from './used-by-lanes';
+import { Button } from '@/ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Txt } from '@/ds/components/Txt';
+import { SettingsContainer } from '@/ds/new/settings';
+import { cn } from '@/utils/cn';
 
 export const DEFAULTS_HEADER_CLASS = 'flex flex-wrap items-center gap-x-3 gap-y-2';
 export const DEFAULTS_CONTENT_CLASS = 'flex flex-col gap-3 pt-3';
@@ -34,20 +38,25 @@ export function DefaultsCard({
   scope,
   packs,
   providers,
+  openedByLink = false,
 }: {
   defaults: ModelDefaults;
   scope: FactoryModelScope;
   packs: ReactNode;
   providers: ReactNode;
+  /** The page was opened on this card's anchor, so start it expanded even when unused. */
+  openedByLink?: boolean;
 }) {
   const inUse = defaultsInUse(scope, defaults);
-  const anchor = MODEL_DEFAULTS_ANCHORS[defaults];
-  const openedByLink = useLocation().hash === `#${anchor}`;
   const [expanded, setExpanded] = useState(openedByLink);
 
   return (
     <SettingsContainer>
-      <section id={anchor} aria-label={MODEL_DEFAULTS_LABELS[defaults]} className="scroll-mt-4">
+      <section
+        id={MODEL_DEFAULTS_ANCHORS[defaults]}
+        aria-label={MODEL_DEFAULTS_LABELS[defaults]}
+        className="scroll-mt-4"
+      >
         <Collapsible open={inUse || expanded} onOpenChange={setExpanded}>
           <header className={DEFAULTS_HEADER_CLASS}>
             <DefaultsIdentity defaults={defaults} className={inUse ? undefined : 'opacity-60'} />
@@ -66,7 +75,7 @@ export function DefaultsCard({
           </header>
           <CollapsibleContent className={DEFAULTS_CONTENT_CLASS}>
             {packs}
-            <hr className="border-border1" />
+            <hr className="h-px border-0 bg-border" />
             {providers}
           </CollapsibleContent>
         </Collapsible>
