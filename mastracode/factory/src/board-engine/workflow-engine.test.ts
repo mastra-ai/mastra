@@ -19,7 +19,8 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
 import { DispatcherBoardEngine } from './engine.js';
 import type { FactoryBoardEngine, FactoryCardRuns } from './engine.js';
-import { WorkflowBoardEngine } from './workflow-engine.js';
+import { createWorkflowBoardEngine, WorkflowBoardEngine } from './workflow-engine.js';
+import type { WorkflowBoardEngineOptions } from './workflow-engine.js';
 
 const ORG = 'org-1';
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -31,6 +32,7 @@ function replica(
   before?: () => Promise<void>,
   runs?: FactoryCardRuns,
   interruptWaitMs?: number,
+  deadlines?: WorkflowBoardEngineOptions['deadlines'],
 ) {
   const boards = createBoardRegistry();
   const transitionService = new FactoryTransitionService({
@@ -43,10 +45,10 @@ function replica(
     await before?.();
     return transitionService.transition(request);
   };
-  const engine = new WorkflowBoardEngine(
-    { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) },
-    { interruptWaitMs },
-  );
+  const context = { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) };
+  const engine = deadlines
+    ? createWorkflowBoardEngine({ deadlines })(context)
+    : new WorkflowBoardEngine(context, { interruptWaitMs });
   const mastra = new Mastra({
     storage: new LibSQLStore({ id: `board-runs-${randomUUID()}`, url: runsUrl }),
     workflows: engine.workflows,
@@ -57,12 +59,12 @@ function replica(
 }
 
 /** A Work card in Planning with a bound planning session, and an engine whose workflow Mastra runs. */
-async function setup() {
+async function setup(deadlines?: WorkflowBoardEngineOptions['deadlines']) {
   const storage = (await createFactoryStorageForTests()).workItems;
   const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const runsUrl = `file:${join(dir, 'runs.db')}`;
-  const { engine, mastra } = replica(storage, runsUrl);
+  const { engine, mastra } = replica(storage, runsUrl, undefined, undefined, undefined, deadlines);
   const prepared = await storage.prepareRunStart({
     orgId: ORG,
     userId: 'user-1',
@@ -414,6 +416,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded(binding, engine)).resolves.toBe(true);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -424,7 +427,7 @@ describe('the workflow board engine', () => {
     const { engine, item, binding } = await setup();
     const chat = { ...binding, runsAgain: undefined };
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
-    const probing = { state: 'probing', phase: 'planning', probes: 1 };
+    const probing = { state: 'probing', deadlineAt: expect.any(Number), phase: 'planning', probes: 1 };
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
 
     await expect(engine.runEnded({ ...chat, runEnd: 'run-2' }, engine)).resolves.toBe(false);
@@ -486,7 +489,11 @@ describe('the workflow board engine', () => {
     });
     await storage.update({ orgId: ORG, id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     await engine.runEnded({ ...binding, runEnd: 'run-1', runsAgain: true }, engine);
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', probes: 1 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'probing',
+      deadlineAt: expect.any(Number),
+      probes: 1,
+    });
 
     const move = await personMove(storage, item.id, 'planning', 'drag-1')();
     await expect(engine.requestMove({ ...move, board: 'parked' })).resolves.toMatchObject({ status: 'accepted' });
@@ -508,7 +515,11 @@ describe('the workflow board engine', () => {
     };
     const first = await engine.requestMove(byAgent);
     expect(first).toMatchObject({ status: 'accepted' });
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running', probes: 0 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      deadlineAt: expect.any(Number),
+      probes: 0,
+    });
     await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
     await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
     const flagged = await engine.describe({ workItemId: item.id });
@@ -540,6 +551,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-1' }, engine)).resolves.toBe(false);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -575,6 +587,7 @@ describe('the workflow board engine', () => {
     await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 0,
       attempts: 1,
@@ -582,7 +595,11 @@ describe('the workflow board engine', () => {
 
     // The run that ran again ended without an outcome: probing keeps the attempts counted.
     await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'probing', attempts: 1 });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'probing',
+      deadlineAt: expect.any(Number),
+      attempts: 1,
+    });
 
     await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: true, decisionId: 'decision-1' });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
@@ -614,6 +631,58 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('gives a running or probing card a deadline, keeps it while the card stays so, and drops it otherwise', async () => {
+    const { storage, engine, item, binding } = await setup({ runningMs: 60_000, probingMs: 5_000 });
+    const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    const deadline = async () => (await engine.describe({ workItemId: item.id }))?.deadlineAt;
+    const within = async (ms: number, ask: () => Promise<unknown>) => {
+      const from = Date.now();
+      await ask();
+      const at = await deadline();
+      expect(at).toBeGreaterThanOrEqual(from + ms);
+      expect(at).toBeLessThanOrEqual(Date.now() + ms);
+      return at;
+    };
+
+    const running = await within(60_000, () =>
+      engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' }),
+    );
+    // A retry of the same phase run is the same stretch of running.
+    await engine.runFailed(card, { code: 'run_failed', attempt: 2, terminal: false, decisionId: 'decision-1' });
+    await expect(deadline()).resolves.toBe(running);
+
+    await within(5_000, () => engine.runEnded({ ...binding, runEnd: 'run-1' }, engine));
+    await engine.runPaused(binding);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'awaiting_approval' });
+    await expect(deadline()).resolves.toBeUndefined();
+
+    await engine.runEnded({ ...binding, runEnd: 'run-2' }, engine);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'needs_attention' });
+    await expect(deadline()).resolves.toBeUndefined();
+
+    // Start runs the phase again: a new stretch of running with a deadline of its own.
+    await within(60_000, async () =>
+      engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true }),
+    );
+    await engine.requestMove(await personMove(storage, item.id, 'intake', 'drag-1')());
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'resting' });
+    await expect(deadline()).resolves.toBeUndefined();
+  });
+
+  it('gives a running card six hours and a probing card half an hour by default', async () => {
+    const { engine, item, binding } = await setup();
+    const from = Date.now();
+    await engine.runEnded({ ...binding, runEnd: 'run-1' }, engine);
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeGreaterThanOrEqual(from + 30 * 60_000);
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeLessThanOrEqual(Date.now() + 30 * 60_000);
+
+    await engine.runFailed(
+      { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role },
+      { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' },
+    );
+    expect((await engine.describe({ workItemId: item.id }))?.deadlineAt).toBeGreaterThanOrEqual(from + 6 * 3_600_000);
+  });
+
   it('counts a failed attempt once, however many times it is told', async () => {
     const { engine, item, binding } = await setup();
     const card = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
@@ -623,7 +692,7 @@ describe('the workflow board engine', () => {
 
     await engine.runFailed(card, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
 
-    expect(probing).toMatchObject({ state: 'probing', attempts: 1 });
+    expect(probing).toMatchObject({ state: 'probing', deadlineAt: expect.any(Number), attempts: 1 });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual(probing);
   });
 
@@ -664,7 +733,10 @@ describe('the workflow board engine', () => {
     await engine.runFailed(seat, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
     // A session working another role's phase doesn't stop this one.
     await engine.runStopped({ ...seat, role: 'review' });
-    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({
+      state: 'running',
+      deadlineAt: expect.any(Number),
+    });
 
     await engine.runStopped(seat);
     await engine.runStopped(seat);
@@ -684,6 +756,7 @@ describe('the workflow board engine', () => {
     await engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true });
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 0,
     });
@@ -702,6 +775,7 @@ describe('the workflow board engine', () => {
     expect(told).toEqual([false, false]);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -762,6 +836,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -800,6 +875,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(false);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 1,
       lastOutcome: 'advance',
@@ -861,6 +937,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -974,6 +1051,7 @@ describe('the workflow board engine', () => {
     await engine.runEnded({ ...binding, runEnd: 'run-4' }, engine);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'probing',
+      deadlineAt: expect.any(Number),
       phase: 'planning',
       probes: 1,
     });
@@ -1004,6 +1082,7 @@ describe('the workflow board engine', () => {
     await expect(engine.runEnded({ ...binding, runEnd: 'run-2' }, engine)).resolves.toBe(true);
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',
@@ -1043,6 +1122,7 @@ describe('the workflow board engine', () => {
 
     await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
       state: 'running',
+      deadlineAt: expect.any(Number),
       phase: 'execute',
       probes: 0,
       lastOutcome: 'advance',

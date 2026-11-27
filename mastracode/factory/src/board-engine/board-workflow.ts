@@ -41,6 +41,8 @@ const runStateSchema = z.object({
   attempts: z.number().int().nonnegative().optional(),
   /** The failure code that left the card needing attention, never its error text. */
   failure: z.string().optional(),
+  /** When a `running` or `probing` card is looked at again if nothing else happened (epoch ms). */
+  deadlineAt: z.number().int().nonnegative().optional(),
   /** The latest failed attempts heard (decision id and attempt), so telling of one again counts nothing. */
   countedFailures: z.array(z.string()).max(COUNTED_FAILURES).optional(),
   /** The latest run ends heard, so telling of one again counts nothing. */

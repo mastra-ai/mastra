@@ -41,6 +41,7 @@ export type {
 } from './factory.js';
 export { DispatcherBoardEngine, createDispatcherBoardEngine } from './board-engine/engine.js';
 export { WorkflowBoardEngine, createWorkflowBoardEngine } from './board-engine/workflow-engine.js';
+export type { WorkflowBoardEngineOptions } from './board-engine/workflow-engine.js';
 export { FACTORY_BOARD_WORKFLOW_ID, FACTORY_CARD_STEP_STATES, boardRunId } from './board-engine/board-workflow.js';
 export type { FactoryCardRunState } from './board-engine/board-workflow.js';
 export type {

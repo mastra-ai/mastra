@@ -46,6 +46,9 @@ const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RES
 
 /** How long a person's move waits for the run it stopped to end, before it goes ahead regardless. */
 const INTERRUPT_WAIT_MS = 120_000;
+/** How long a card may be `running` or `probing` before the sweeper looks at it. */
+const RUNNING_DEADLINE_MS = 6 * 60 * 60_000;
+const PROBING_DEADLINE_MS = 30 * 60_000;
 /** What a card that needs attention tells the person looking at it. */
 const NO_OUTCOME_REASON = "The agent's run ended twice without reporting how the phase ended.";
 const STOPPED_REASON = 'Stopped by a person.';
@@ -125,70 +128,109 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly #context: FactoryBoardEngineContext;
 
   readonly #interruptWaitMs: number;
+  readonly #deadlines: { running: number; probing: number };
 
-  constructor(context: FactoryBoardEngineContext, options: { interruptWaitMs?: number } = {}) {
+  constructor(
+    context: FactoryBoardEngineContext,
+    options: WorkflowBoardEngineOptions & { interruptWaitMs?: number } = {},
+  ) {
     this.#context = context;
     this.#interruptWaitMs = options.interruptWaitMs ?? INTERRUPT_WAIT_MS;
+    this.#deadlines = {
+      running: options.deadlines?.runningMs ?? RUNNING_DEADLINE_MS,
+      probing: options.deadlines?.probingMs ?? PROBING_DEADLINE_MS,
+    };
     this.workflow = createFactoryBoardWorkflow({
       apply: async (inputId, workItemId, state) => {
-        const pending = this.#pending.get(inputId);
-        if (!pending || pending.answer) return undefined;
-        if ('runEnded' in pending) {
-          if (pending.runEnded.workItemId !== workItemId) return undefined;
-          try {
-            const next = await this.#stateAfterRunEnd(pending.runEnded, state);
-            pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
-            return next;
-          } catch (error) {
-            pending.answer = { error };
-            return undefined;
-          }
-        }
-        if ('runFailed' in pending) {
-          if (pending.runFailed.workItemId !== workItemId) return undefined;
-          try {
-            const next = await this.#stateAfterRunFailure(pending.runFailed, pending.failure, state);
-            pending.answer = { heard: true };
-            return next;
-          } catch (error) {
-            pending.answer = { error };
-            return undefined;
-          }
-        }
-        if ('runStopped' in pending) {
-          if (pending.runStopped.workItemId !== workItemId) return undefined;
-          try {
-            const next = await this.#stateAfterRunStop(pending.runStopped, state);
-            pending.answer = { heard: true };
-            return next;
-          } catch (error) {
-            pending.answer = { error };
-            return undefined;
-          }
-        }
-        if ('runPaused' in pending) {
-          if (pending.runPaused.workItemId !== workItemId) return undefined;
-          try {
-            const next = await this.#stateAfterRunPause(pending.runPaused, pending, state);
-            pending.answer = { paused: true };
-            return next;
-          } catch (error) {
-            pending.answer = { error };
-            return undefined;
-          }
-        }
-        if (pending.request.workItemId !== workItemId) return undefined;
-        try {
-          const result = await context.transitionService.transition(pending.request);
-          pending.answer = { result };
-          return await this.#stateAfterMove(pending.request, result, state);
-        } catch (error) {
-          // A failed move is the caller's to report; the card's run keeps waiting for the next one.
-          pending.answer ??= { error };
-          return undefined;
-        }
+        const next = await this.#apply(inputId, workItemId, state);
+        return next && this.#withDeadline(state, next);
       },
     });
+  }
+
+  /**
+   * The record with its deadline: entering `running` or `probing` (a new state, or the same one in
+   * a new visit of a phase) starts one, staying keeps it, and any other state has none.
+   */
+  #withDeadline(previous: FactoryCardRunRecord, next: FactoryCardRunRecord): FactoryCardRunRecord {
+    const { deadlineAt: set, ...rest } = next;
+    if (next.state !== 'running' && next.state !== 'probing') return rest;
+    // An input that sets a deadline of its own (a sweep giving a live run more time) keeps it.
+    if (set !== undefined && set !== previous.deadlineAt) return next;
+    const stays =
+      previous.state === next.state &&
+      previous.deadlineAt !== undefined &&
+      next.board !== undefined &&
+      next.phase !== undefined &&
+      sameVisit(previous, next.board, next.phase);
+    return {
+      ...rest,
+      deadlineAt: stays ? previous.deadlineAt : Date.now() + this.#deadlines[next.state],
+    };
+  }
+
+  async #apply(
+    inputId: string,
+    workItemId: string,
+    state: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const context = this.#context;
+    const pending = this.#pending.get(inputId);
+    if (!pending || pending.answer) return undefined;
+    if ('runEnded' in pending) {
+      if (pending.runEnded.workItemId !== workItemId) return undefined;
+      try {
+        const next = await this.#stateAfterRunEnd(pending.runEnded, state);
+        pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
+        return next;
+      } catch (error) {
+        pending.answer = { error };
+        return undefined;
+      }
+    }
+    if ('runFailed' in pending) {
+      if (pending.runFailed.workItemId !== workItemId) return undefined;
+      try {
+        const next = await this.#stateAfterRunFailure(pending.runFailed, pending.failure, state);
+        pending.answer = { heard: true };
+        return next;
+      } catch (error) {
+        pending.answer = { error };
+        return undefined;
+      }
+    }
+    if ('runStopped' in pending) {
+      if (pending.runStopped.workItemId !== workItemId) return undefined;
+      try {
+        const next = await this.#stateAfterRunStop(pending.runStopped, state);
+        pending.answer = { heard: true };
+        return next;
+      } catch (error) {
+        pending.answer = { error };
+        return undefined;
+      }
+    }
+    if ('runPaused' in pending) {
+      if (pending.runPaused.workItemId !== workItemId) return undefined;
+      try {
+        const next = await this.#stateAfterRunPause(pending.runPaused, pending, state);
+        pending.answer = { paused: true };
+        return next;
+      } catch (error) {
+        pending.answer = { error };
+        return undefined;
+      }
+    }
+    if (pending.request.workItemId !== workItemId) return undefined;
+    try {
+      const result = await context.transitionService.transition(pending.request);
+      pending.answer = { result };
+      return await this.#stateAfterMove(pending.request, result, state);
+    } catch (error) {
+      // A failed move is the caller's to report; the card's run keeps waiting for the next one.
+      pending.answer ??= { error };
+      return undefined;
+    }
   }
 
   /** The workflows the host registers with Mastra. */
@@ -651,4 +693,20 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   }
 }
 
-export const createWorkflowBoardEngine: FactoryBoardEngineFactory = context => new WorkflowBoardEngine(context);
+export interface WorkflowBoardEngineOptions {
+  /** How long a card may stay `running` (default 6 h) or `probing` (default 30 min) before a sweep looks at it. */
+  deadlines?: { runningMs?: number; probingMs?: number };
+}
+
+/**
+ * The workflow engine. `createWorkflowBoardEngine` is a factory itself; call it with options
+ * (`createWorkflowBoardEngine({ deadlines })`) to get one that uses them.
+ */
+export function createWorkflowBoardEngine(context: FactoryBoardEngineContext): WorkflowBoardEngine;
+export function createWorkflowBoardEngine(options: WorkflowBoardEngineOptions): FactoryBoardEngineFactory;
+export function createWorkflowBoardEngine(
+  arg: FactoryBoardEngineContext | WorkflowBoardEngineOptions,
+): WorkflowBoardEngine | FactoryBoardEngineFactory {
+  if ('transitionService' in arg) return new WorkflowBoardEngine(arg);
+  return context => new WorkflowBoardEngine(context, arg);
+}
