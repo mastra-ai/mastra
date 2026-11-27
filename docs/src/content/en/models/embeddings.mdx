@@ -50,7 +50,7 @@ DeepInfra serves OpenAI-compatible embedding models. Pass the full namespaced mo
 const embedder = new ModelRouterEmbeddingModel('deepinfra/BAAI/bge-base-en-v1.5')
 ```
 
-Set `DEEPINFRA_API_KEY` to authenticate. The list above is a subset, so any embedding model DeepInfra serves works as long as you pass the full namespaced ID (for example `deepinfra/<org>/<model>`). To target a compatible or proxy endpoint instead, pass an explicit `url` as shown in [Custom Providers](#custom-providers).
+Set `DEEPINFRA_API_KEY` to authenticate. Any embedding model DeepInfra serves works as long as you pass the full namespaced ID (for example `deepinfra/<org>/<model>`). To target a compatible or proxy endpoint instead, pass an explicit `url` as shown in [Custom Providers](#custom-providers).
 
 ### VoyageAI
 
