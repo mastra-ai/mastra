@@ -4647,6 +4647,12 @@ type Shared_Type_94 = {
   targetType: ('agent' | 'workflow' | 'scorer' | 'processor') | null;
   targetId: string | null;
   scorerIds?: (string[] | null) | undefined;
+  /** Stored-scorer version IDs pinned for this experiment, keyed by scorer ID */
+  scorerVersions?:
+    | ({
+        [key: string]: string;
+      } | null)
+    | undefined;
   name?: string | undefined;
   description?: string | undefined;
   metadata?:

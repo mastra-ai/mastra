@@ -11,7 +11,7 @@
     "openpangu-2.0-pro"
   ],
   "reasoning": {
-    "openpangu-2.0-pro": [
+    "deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -20,12 +20,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash-1017": [
+    "openpangu-2.0-pro": [
       {
         "type": "toggle"
       },
@@ -43,7 +38,21 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "glm-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "openpangu-2.0-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -65,15 +74,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "openpangu-2.0-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

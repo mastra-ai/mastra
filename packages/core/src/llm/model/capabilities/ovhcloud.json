@@ -50,34 +50,10 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-397b-a17b": [
+    "qwen3.5-9b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "gemma-4-26b-a4b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "nemotron3-omni-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "deepseek-v4.1-flash-1017": [
@@ -92,13 +68,13 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "qwen3.5-9b": [
+    "qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "laguna-xs-2.1": [
+    "nemotron3-nano-30b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -116,10 +92,34 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "nemotron3-nano-30b": [
+    "gemma-4-26b-a4b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "laguna-xs-2.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "nemotron3-omni-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ]
   }
