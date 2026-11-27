@@ -3,10 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   boardConfigPath,
   boardIntakePath,
-  boardSkillPath,
-  boardSkillsPath,
   INTAKE_ORDER_ANCHOR,
-  newSkillPath,
   parseBoardConfigPath,
   readCanvasFocus,
 } from '../boardConfigPaths';
@@ -64,38 +61,11 @@ describe('board config paths', () => {
     });
   });
 
-  it("keeps the factory skills page beside a board's settings, apart from a phase named skills", () => {
-    expect(parseBoardConfigPath(boardSkillsPath('fp-1', 'review'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'review',
-      skills: true,
-    });
-    expect(parseBoardConfigPath(boardSkillsPath('fp-1', 'release notes'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'release notes',
-      skills: true,
-    });
-    expect(parseBoardConfigPath(boardConfigPath('fp-1', 'work', 'skills'))).toEqual({
-      factoryId: 'fp-1',
-      boardId: 'work',
-      phaseKey: 'skills',
-    });
-  });
-
-  it('keeps a skill page and the new skill form beside the skills page, even for a skill named new', () => {
-    expect(boardSkillPath('fp-1', 'work', 'new')).toBe('/factories/fp-1/work/skills/new');
-    expect(newSkillPath('fp-1', 'release notes')).toBe('/factories/fp-1/boards/release%20notes/new-skill');
-    for (const path of [boardSkillPath('fp-1', 'work', 'release notes'), newSkillPath('fp-1', 'work')]) {
-      expect(parseBoardConfigPath(path)).toEqual({ factoryId: 'fp-1', boardId: 'work', skills: true });
-    }
-  });
-
   it('ignores the board itself, the old rules pages and other pages', () => {
     expect(parseBoardConfigPath('/factories/fp-1/work')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/boards/release')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/settings/board')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/config/planning/extra')).toBeUndefined();
-    expect(parseBoardConfigPath('/factories/fp-1/work/skills/plan/extra')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/work/rules')).toBeUndefined();
     expect(parseBoardConfigPath('/factories/fp-1/review/config')).toBeUndefined();
   });
