@@ -177,6 +177,30 @@ describe.each(['default', 'evented'] as const)('resume by another caller (%s)', 
     },
   );
 
+  it('same process, resume passes nothing: later steps drop the starting call toolsets', async () => {
+    globalRunRegistry.clear();
+    const storage = new InMemoryStore();
+    const log: Log = { offered: [], ran: [] };
+    const agent = createRuntime(engine, storage, log);
+
+    const stream = await agent.stream('Go', {
+      requestContext: caller('alice'),
+      toolsets: { start: { alice_call: tool('alice_call', log) } },
+    });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBeTruthy();
+
+    await drain(await agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! }));
+
+    expect(log.offered[1]).toEqual(['alice_agent', 'alice_default', 'approve']);
+  });
+
   it('same process, resume passes only toolsets: later steps offer the resume toolsets', async () => {
     globalRunRegistry.clear();
     const storage = new InMemoryStore();
