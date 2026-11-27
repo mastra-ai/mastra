@@ -12,7 +12,9 @@
     "├── processor_run: \"output stream processor: Structured Output\"",
     "│   ├── generic: \"agent:prepare-tools\"",
     "│   ├── processor_run: \"llm request processor: provider-history-compat\"",
-    "│   └── processor_run: \"llm request processor: unsupported-file-handler\"",
+    "│   ├── processor_run: \"llm request processor: unsupported-file-handler\"",
+    "│   ├── model_generation: \"llm: 'mock-model-id'\"",
+    "│   └── model_inference: \"inference: 0\"",
     "└── processor_run: \"output step processor: structured-output\""
   ],
   "spans": [
@@ -553,12 +555,88 @@
                   "shortCircuited": false
                 }
               }
+            },
+            {
+              "span": {
+                "id": "<span-14>",
+                "traceId": "<trace-1>",
+                "name": "llm: 'mock-model-id'",
+                "type": "model_generation",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-10>",
+                "entityType": "output_processor",
+                "entityId": "structured-output",
+                "attributes": {
+                  "provider": "mock-provider",
+                  "model": "mock-model-id",
+                  "usageOnly": true,
+                  "finishReason": "stop",
+                  "responseId": "<responseId-2>",
+                  "responseModel": "mock-model-id",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
+                  }
+                },
+                "metadata": {
+                  "runId": "<runId-1>",
+                  "environment": "test"
+                }
+              }
+            },
+            {
+              "span": {
+                "id": "<span-15>",
+                "traceId": "<trace-1>",
+                "name": "inference: 0",
+                "type": "model_inference",
+                "completed": true,
+                "isEvent": false,
+                "isRootSpan": false,
+                "parentId": "<span-10>",
+                "entityType": "output_processor",
+                "entityId": "structured-output",
+                "attributes": {
+                  "provider": "mock-provider",
+                  "model": "mock-model-id",
+                  "usageOnly": true,
+                  "finishReason": "stop",
+                  "responseId": "<responseId-2>",
+                  "responseModel": "mock-model-id",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
+                  "usage": {
+                    "inputTokens": 15,
+                    "outputTokens": 25,
+                    "inputDetails": {
+                      "text": 15
+                    },
+                    "outputDetails": {
+                      "text": 25
+                    }
+                  }
+                },
+                "metadata": {
+                  "runId": "<runId-1>",
+                  "environment": "test"
+                }
+              }
             }
           ]
         },
         {
           "span": {
-            "id": "<span-14>",
+            "id": "<span-16>",
             "traceId": "<trace-1>",
             "name": "output step processor: structured-output",
             "type": "processor_run",

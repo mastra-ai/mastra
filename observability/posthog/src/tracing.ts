@@ -3,6 +3,7 @@ import type {
   ExportedFeedback,
   FeedbackEvent,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
   SpanErrorInfo,
   UsageStats,
 } from '@mastra/core/observability';
@@ -466,6 +467,8 @@ export class PosthogExporter extends TrackingExporter<
    */
   private withCallInput(span: AnyExportedSpan, traceData: PosthogTraceData): AnyExportedSpan {
     if (span.type !== SpanType.MODEL_INFERENCE || !this.isModelCall(span)) return span;
+    // A usage-only span stands in for a model call Mastra hides, so it has no conversation.
+    if ((span.attributes as ModelInferenceAttributes | undefined)?.usageOnly) return span;
 
     const generation = this.findGeneration(span, traceData);
     if (!generation?.input) return span;

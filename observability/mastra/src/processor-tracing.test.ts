@@ -1492,13 +1492,19 @@ describe('Processor Tracing Tests', () => {
       // Model spans created inside the moderation agent must not leak — this
       // covers MODEL_GENERATION and its descendants (MODEL_STEP,
       // MODEL_INFERENCE, MODEL_CHUNK), which inherit the agent's tracingPolicy
-      // via the model tracker.
+      // via the model tracker. The moderation model call is exported only as
+      // one usage span under the processor, so trace exporters can price it.
       const modelSpans = testExporter.getModelSpans();
-      expect(modelSpans.length).toBe(1);
-      expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+      expect(modelSpans.length).toBe(2);
+      const mainModel = modelSpans.find(s => s.parentSpanId === agentSpans[0]?.id);
+      const usageSpan = modelSpans.find(s => s.parentSpanId === processorSpans[0]?.id);
+      expect(mainModel).toBeDefined();
+      expect(usageSpan?.attributes?.usage).toMatchObject({ inputTokens: 10, outputTokens: 5 });
+      expect(usageSpan?.input).toBeUndefined();
+      expect(usageSpan?.output).toBeUndefined();
       // Only the main agent's MODEL_STEP/INFERENCE/CHUNK should be present;
       // each must be a descendant of the main agent's MODEL_GENERATION.
-      const mainModelId = modelSpans[0]?.id;
+      const mainModelId = mainModel?.id;
       const modelStepSpans = testExporter.getModelStepSpans();
       expect(modelStepSpans.every(s => s.parentSpanId === mainModelId)).toBe(true);
       const modelChunkSpans = testExporter.getModelChunkSpans();

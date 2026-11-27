@@ -272,7 +272,13 @@ export function validateTrace(trace: TraceRecord): void {
  * Find the most recent model span that contains conversation history
  */
 function findPrimaryLLMSpan(spanTree: SpanTree, rootAgentSpan: SpanRecord): SpanRecord {
-  const directLLMSpans = getChildrenOfType<SpanRecord>(spanTree, rootAgentSpan.spanId, SpanType.MODEL_GENERATION);
+  // A usage-only span stands in for a hidden model call, such as the model a
+  // processor runs. It has no conversation, so it is never the primary span.
+  const directLLMSpans = getChildrenOfType<SpanRecord>(
+    spanTree,
+    rootAgentSpan.spanId,
+    SpanType.MODEL_GENERATION,
+  ).filter(span => !span.attributes?.usageOnly);
   if (directLLMSpans.length > 0) {
     // There should only be one model generation span per agent run which is a direct child of the root agent span
     return directLLMSpans[0]!;

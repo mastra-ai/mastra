@@ -316,8 +316,9 @@ export class SentryExporter extends BaseExporter {
       const resolvedParentId = this.resolveParentSpanId(span.parentSpanId);
       if (resolvedParentId) {
         const parentData = this.spanMap.get(resolvedParentId);
-        if (parentData?.spanType === SpanType.AGENT_RUN) {
-          const modelAttr = span.attributes as ModelGenerationAttributes;
+        const modelAttr = span.attributes as ModelGenerationAttributes;
+        // A usage-only span is a model call Mastra hides, not the agent's own call.
+        if (parentData?.spanType === SpanType.AGENT_RUN && !modelAttr.usageOnly) {
           parentData.generation = {
             model: modelAttr.model,
             output: span.output,

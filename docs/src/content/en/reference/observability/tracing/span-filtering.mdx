@@ -111,6 +111,8 @@ Span filtering happens at export time in this order:
 1. `spanOutputProcessors` transform the remaining spans.
 1. `spanFilter` decides whether to keep the final exported span.
 
+When an internal model call is dropped, Mastra still exports a model generation span and an inference span for it under the nearest exported span. These spans have the model, provider, and token usage of the call, and no input or output, so exporters can show its cost. Both spans have `usageOnly: true` in their attributes.
+
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
 
 ## Related

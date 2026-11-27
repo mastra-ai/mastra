@@ -4,6 +4,7 @@
 
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
+import { coreFeatures } from '@mastra/core/features';
 import type { IMastraLogger } from '@mastra/core/logger';
 import { RegisteredLogger } from '@mastra/core/logger';
 import { InternalSpans, SpanType, TracingEventType, noOpLoggerContext } from '@mastra/core/observability';
@@ -82,6 +83,17 @@ function injectEnvironmentMetadata(
 // Abstract Base Class
 // ============================================================================
 
+/** One hidden model call, to attribute to the closest exported ancestor span. */
+type UsageRollup = {
+  hiddenSpan: AnySpan;
+  endAttributes?: ModelGenerationAttributes;
+  ancestor: AnySpan;
+  usage: UsageStats;
+  provider?: string;
+  model?: string;
+  usageIncomplete?: boolean;
+};
+
 /**
  * Abstract base class for all Observability implementations in Mastra.
  */
@@ -116,6 +128,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * `captureExcludedModelUsage` can still build cost context.
    */
   #excludedModelMeta = new WeakMap<AnySpan, { provider?: string; model?: string }>();
+  // Usage spans stand in for a hidden model call whose metrics the rollup already emitted.
+  #usageSpans = new WeakSet<AnySpan>();
 
   constructor(config: ObservabilityInstanceConfig) {
     super({ component: RegisteredLogger.OBSERVABILITY, name: config.serviceName });
@@ -324,10 +338,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       );
     }
 
-    // For excluded MODEL_GENERATION spans the constructor clears attributes,
-    // losing provider/model needed for cost estimation. Stash them from the
-    // original creation options so captureExcludedModelUsage can use them.
-    if (rest.type === SpanType.MODEL_GENERATION && this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION)) {
+    // For excluded or hidden MODEL_GENERATION spans the constructor clears
+    // attributes, losing provider/model needed for cost estimation. Stash them
+    // from the original creation options so captureExcludedModelUsage and
+    // captureModelUsageRollup can use them.
+    if (
+      rest.type === SpanType.MODEL_GENERATION &&
+      (this.config.excludeSpanTypes?.includes(SpanType.MODEL_GENERATION) ||
+        (span.isInternal && !this.config.includeInternalSpans))
+    ) {
       const attrs = rest.attributes as ModelGenerationAttributes | undefined;
       const model = resolveModelId(attrs?.responseModel, attrs?.model);
       if (attrs?.provider || model) {
@@ -939,7 +958,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanWasProcessed = true;
 
       try {
-        if (processedSpan) {
+        if (processedSpan && !this.#usageSpans.has(span)) {
           emitAutoExtractedMetrics(processedSpan, this.getMetricsContext(processedSpan));
           const processedAttrs = processedSpan.attributes as ModelGenerationAttributes | undefined;
           if (excludedModelUsage && !processedAttrs?.usage) {
@@ -1009,13 +1028,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   private captureModelUsageRollup<TType extends SpanType>(
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
-  ):
-    | { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean }
-    | undefined {
+  ): UsageRollup | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     // If the span itself will be exported, the existing auto-extract pipeline
     // emits its metrics; nothing to roll up.
     if (!span.isInternal || this.config.includeInternalSpans) return undefined;
+    // A usage span is the result of a rollup, so it never starts another one.
+    if (this.#usageSpans.has(span)) return undefined;
 
     // For excluded spans, end() options carry the only copy of attributes —
     // the live span discards them in DefaultSpan#end. The liveAttrs fallback
@@ -1029,11 +1048,20 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     const ancestor = this.findExportedAncestor(span);
     if (!ancestor) return undefined;
 
-    const provider = endAttrs?.provider ?? liveAttrs?.provider;
-    const model = resolveModelId(endAttrs?.responseModel, endAttrs?.model, liveAttrs?.responseModel, liveAttrs?.model);
+    // The constructor clears the start-time attributes of a hidden span, so
+    // provider and model come from the creation-time stash.
+    const stashed = this.#excludedModelMeta.get(span);
+    const provider = endAttrs?.provider ?? liveAttrs?.provider ?? stashed?.provider;
+    const model = resolveModelId(
+      endAttrs?.responseModel,
+      endAttrs?.model,
+      liveAttrs?.responseModel,
+      liveAttrs?.model,
+      stashed?.model,
+    );
     const usageIncomplete = endAttrs?.usageIncomplete ?? liveAttrs?.usageIncomplete;
 
-    return { ancestor, usage, provider, model, usageIncomplete };
+    return { hiddenSpan: span, endAttributes: endAttrs, ancestor, usage, provider, model, usageIncomplete };
   }
 
   /**
@@ -1076,15 +1104,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Accumulate usage onto the ancestor's `internalUsage` attribute (for trace
    * UI visibility) and emit auto-extracted token metrics now, using the
    * ancestor's metrics context so cost / token labels point at the visible
-   * span instead of the hidden agent that incurred them.
+   * span instead of the hidden agent that incurred them. Then export one
+   * usage span, so trace exporters can price the hidden model call.
    */
-  private applyUsageRollup(target: {
-    ancestor: AnySpan;
-    usage: UsageStats;
-    provider?: string;
-    model?: string;
-    usageIncomplete?: boolean;
-  }): void {
+  private applyUsageRollup(target: UsageRollup): void {
     const { ancestor, usage, provider, model, usageIncomplete } = target;
 
     // Mutate the live ancestor's attributes directly. BaseSpan's constructor
@@ -1098,6 +1121,64 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       emitTokenMetricsForUsage(usage, provider, model, usageIncomplete, this.getMetricsContext(ancestor));
     } catch (err) {
       this.logger.error('[Observability] Usage rollup metric emission error:', err);
+    }
+
+    this.exportUsageSpan(target);
+  }
+
+  /**
+   * Export a usage span under the ancestor for one hidden model call: a
+   * MODEL_GENERATION span and a MODEL_INFERENCE span, with the model,
+   * provider and usage of the call, and no input or output. Trace exporters
+   * price model spans only, so without it the cost of the hidden call does
+   * not reach them.
+   */
+  private exportUsageSpan({
+    hiddenSpan,
+    endAttributes,
+    ancestor,
+    usage,
+    provider,
+    model,
+    usageIncomplete,
+  }: UsageRollup) {
+    // A span that has ended can no longer take child spans: exporters and the
+    // OTel bridge have closed it, and a late child would start a new trace. So
+    // the usage spans go under the closest exported span that is still open.
+    // An output stream processor span, for example, ends with the first model
+    // step, before the hidden call it runs at the end of the stream.
+    let parent: AnySpan | undefined = ancestor;
+    while (parent && (parent.endTime || this.isFilteredFromExport(parent))) parent = parent.parent;
+    if (!parent) return;
+
+    try {
+      const usageSpan = parent.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: hiddenSpan.name,
+        startTime: hiddenSpan.startTime,
+        attributes: { provider, model, usageOnly: true },
+      });
+      this.#usageSpans.add(usageSpan);
+
+      // Exporters read the usage of a model call from different spans: some
+      // from MODEL_GENERATION, the OpenTelemetry-based ones from MODEL_INFERENCE.
+      // The inference span is a sibling, not a child: an exporter can create
+      // these two short spans in any order, and a LangSmith child run inherits
+      // the usage of its parent run, which prices the call twice.
+      if (coreFeatures.has('model-inference-span')) {
+        const inferenceSpan = parent.createChildSpan({
+          type: SpanType.MODEL_INFERENCE,
+          name: 'inference: 0',
+          startTime: hiddenSpan.startTime,
+          attributes: { provider, model, usageOnly: true },
+        });
+        this.#usageSpans.add(inferenceSpan);
+        inferenceSpan.end({ attributes: { ...endAttributes, usage } });
+      }
+
+      usageSpan.end({ attributes: { ...endAttributes, usage, usageIncomplete } });
+    } catch (err) {
+      this.logger.error('[Observability] Usage span export error:', err);
     }
   }
 

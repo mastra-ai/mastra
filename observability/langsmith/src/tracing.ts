@@ -608,6 +608,8 @@ export class LangSmithExporter extends TrackingExporter<
     const usage = formatUsageMetrics(attributes?.usage);
 
     if (span.type === SpanType.MODEL_INFERENCE) {
+      // A usage-only call is priced on its sibling MODEL_GENERATION.
+      if (attributes?.usageOnly) return undefined;
       // A resumed run replays the call it was suspended on, with the usage it had and no response.
       if (span.endTime && span.metadata?.resumed && !attributes?.completionStartTime) return undefined;
       if (conversation?.ended) return undefined;
@@ -681,7 +683,9 @@ export class LangSmithExporter extends TrackingExporter<
     if (span.type === SpanType.MODEL_GENERATION || span.type === SpanType.MODEL_INFERENCE) {
       const modelAttr = attributes as ModelGenerationAttributes | ModelInferenceAttributes;
       const isInference = span.type === SpanType.MODEL_INFERENCE;
-      if (isNew && !isInference) {
+      // A usage-only span stands in for a model call Mastra hides, so it is no part of a conversation.
+      const usageOnly = modelAttr.usageOnly === true;
+      if (isNew && !isInference && !usageOnly) {
         const conversation: Conversation = {
           input: toChatMessages(span.input?.messages),
           calls: [],
@@ -690,7 +694,7 @@ export class LangSmithExporter extends TrackingExporter<
         };
         traceData.setExtraValue(CONVERSATION + span.id, conversation);
       }
-      const conversation = this.findConversation(span, traceData);
+      const conversation = usageOnly ? undefined : this.findConversation(span, traceData);
       const usage = this.countedUsage(span, conversation);
       payload.run_type = usage ? 'llm' : DEFAULT_SPAN_TYPE;
       payload.metadata.usage_metadata = usage;
@@ -725,7 +729,7 @@ export class LangSmithExporter extends TrackingExporter<
       const holdsAnswer = usage && text && !isAnswerShown;
       const isShownByCalls = !isInference && conversation?.counted && !holdsAnswer;
       const isTitle = 'resultType' in modelAttr && modelAttr.resultType === 'title_generation';
-      if (isShownByCalls || isTitle) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
+      if (isShownByCalls || isTitle || usageOnly) payload.metadata[LS_MESSAGE_VIEW_EXCLUDE] = true;
 
       // See: https://docs.langchain.com/langsmith/log-llm-trace
       if (modelAttr.model !== undefined) {

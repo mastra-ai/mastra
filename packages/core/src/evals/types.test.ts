@@ -390,6 +390,28 @@ describe('extractTrajectoryFromTrace', () => {
     expect(result.steps[0]!.name).toBe('real-tool');
   });
 
+  it('leaves out the usage-only model span of a model call that a processor runs', () => {
+    const result = extractTrajectoryFromTrace([
+      createSpan({ spanId: 'agent-root', spanType: SpanType.AGENT_RUN, name: 'agent' }),
+      createSpan({
+        spanId: 'processor',
+        parentSpanId: 'agent-root',
+        spanType: SpanType.PROCESSOR_RUN,
+        name: 'output stream processor: Structured Output',
+      }),
+      createSpan({
+        spanId: 'usage',
+        parentSpanId: 'processor',
+        spanType: SpanType.MODEL_GENERATION,
+        name: "llm: 'gpt-4o-mini'",
+        attributes: { usageOnly: true, usage: { inputTokens: 100, outputTokens: 7 } },
+      }),
+    ]);
+
+    expect(result.steps).toEqual([expect.objectContaining({ stepType: 'processor_run' })]);
+    expect(result.steps[0]!.children).toBeUndefined();
+  });
+
   it('promotes children of skipped spans rather than dropping them', () => {
     const root = createSpan({
       spanId: 'agent-root',
