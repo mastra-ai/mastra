@@ -84,4 +84,31 @@ describe('importer key paths read a page’s parents in one call', () => {
     expect(refs).toContain(knowledgeLinkRefKey('docs:acme#notion/a/p'));
     expect(refs).not.toContain(knowledgeLinkRefKey('docs:acme#notion/b/p'));
   });
+
+  it('refreshes links to a deep page without reading its ancestors one by one', async () => {
+    const { knowledge, run } = setup();
+    await run([
+      upsert({ sourceId: 'a' }),
+      upsert({ sourceId: 'b', parent: 'a' }),
+      upsert({ sourceId: 'c', parent: 'b' }),
+      upsert({ sourceId: 'd', parent: 'c' }),
+    ]);
+    const storage = await knowledge.getStorage();
+    const [scope] = await storage.getScopesByAddress(['docs:acme']);
+    const at = (path: string) => storage.getPageByPath({ scopeId: scope!.id, path: path.split('/'), read: 'all' });
+    const deep = (await at('notion/a/b/c/d'))!;
+    const ancestors = new Set(
+      (await Promise.all(['notion', 'notion/a', 'notion/a/b', 'notion/a/b/c'].map(at))).map(found => found!.id),
+    );
+
+    const getPage = vi.spyOn(storage, 'getPage');
+    const getPageParents = vi.spyOn(storage, 'getPageParents');
+    const sources = vi.spyOn(storage, 'listPageBodyLinkSources');
+    await refreshKnowledgeLinksTo(storage, [deep]);
+    expect(sources.mock.calls.flatMap(([input]) => input.refs)).toContain(
+      knowledgeLinkRefKey('docs:acme#notion/a/b/c/d'),
+    );
+    expect(getPage.mock.calls.filter(([input]) => ancestors.has(input.id))).toEqual([]);
+    expect(getPageParents).toHaveBeenCalledWith({ parentId: deep.parentId, read: 'all' });
+  });
 });
