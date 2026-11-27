@@ -109,6 +109,11 @@ describe('runTui', () => {
       expect(stderr).toHaveBeenCalledWith(
         '--new starts the interactive TUI; headless runs already start a new thread unless --continue or --thread is passed\n',
       );
+      process.exitCode = undefined;
+
+      process.argv = ['node', 'mastracode', '--continue', '--prompt', '--pack=foo', '--new'];
+      await runTui();
+      expect(process.exitCode).toBe(1);
       expect(createMastraCode).not.toHaveBeenCalled();
     } finally {
       process.exitCode = undefined;

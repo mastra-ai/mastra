@@ -607,8 +607,9 @@ async function main() {
     process.exit(1);
   };
 
+  // Headless, ACP and the no-TTY fallback read process.argv, so check the flag there.
   const rejectNewThreadFlag = (reason: string): boolean => {
-    if (!newThreadFlag.startNewThread) return false;
+    if (!takeNewThreadFlag(process.argv).startNewThread) return false;
     process.stderr.write(`--new starts the interactive TUI; ${reason}\n`);
     process.exitCode = 1;
     return true;
