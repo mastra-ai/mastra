@@ -10,6 +10,7 @@ import type { BoardKind } from '@mastra/playground-ui/domains/factory';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { BoardNavigationProvider } from '@mastra/playground-ui/domains/factory';
 import { BoardContent } from './board/BoardContent';
+import { useBoardHost } from './board/useBoardHost';
 import { useRouterBoardNavigation } from './board/useRouterBoardNavigation';
 import { BoardLoadingSkeleton } from '../domains/factory/components/BoardLoadingSkeleton';
 import { LoadErrorState } from '../ui/LoadErrorState';
@@ -71,11 +72,18 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
 
 function InstalledBoard({ factory, definition }: { factory: FactoryProject; definition: InstalledBoardInfo }) {
   const kind = definition.id;
-  const navigation = useRouterBoardNavigation(factory.id);
+  const navigation = useRouterBoardNavigation(factory.id, kind);
+  const host = useBoardHost(factory, definition);
   if (factory.repositories.length === 0) return <ConnectRepositoryEmptyState factoryId={factory.id} />;
   return (
     <BoardNavigationProvider value={navigation}>
-      <BoardContent key={`${factory.id}:${kind}`} factory={factory} kind={kind} definition={definition} />
+      <BoardContent
+        key={`${factory.id}:${kind}`}
+        factoryProjectId={factory.id}
+        kind={kind}
+        definition={definition}
+        host={host}
+      />
     </BoardNavigationProvider>
   );
 }

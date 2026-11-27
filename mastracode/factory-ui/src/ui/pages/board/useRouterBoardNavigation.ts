@@ -3,13 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { boardConfigPath } from '../../domains/boardConfig/boardConfigPaths';
 import type { BoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { factoryAttentionTargetPath } from '../../domains/factory/services/attention';
-import { rememberedBoardPath } from '../../domains/factory/services/boardViews';
+import { rememberedBoardPath, saveBoardView } from '../../domains/factory/services/boardViews';
 import { settingsSectionPath } from '../../domains/settings/settingsSections';
 import { cardPath, threadPath } from '../../domains/workspaces/services/factoryPaths';
 import { HrefLink } from '../../ui/HrefLink';
 
 /** Factory's board links and view state, read from and written to the router. */
-export function useRouterBoardNavigation(factoryId: string): BoardNavigation {
+export function useRouterBoardNavigation(factoryId: string, boardId?: string): BoardNavigation {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -26,8 +26,11 @@ export function useRouterBoardNavigation(factoryId: string): BoardNavigation {
       newIntakeRuleHref: boardId => boardConfigPath(factoryId, boardId, undefined, { newRule: {} }),
       intakeSettingsHref: () => settingsSectionPath(factoryId, 'intake'),
       searchParams,
-      replaceSearchParams: params => setSearchParams(params, { replace: true }),
+      replaceSearchParams: params => {
+        if (boardId) saveBoardView(factoryId, boardId, params);
+        setSearchParams(params, { replace: true });
+      },
     }),
-    [factoryId, navigate, searchParams, setSearchParams],
+    [factoryId, boardId, navigate, searchParams, setSearchParams],
   );
 }

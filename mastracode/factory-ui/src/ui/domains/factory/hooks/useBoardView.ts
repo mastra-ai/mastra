@@ -19,7 +19,6 @@ import type { BoardViewSettings } from '../boardSavedViews';
 import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
 import type { BoardSort } from '../boardSort';
 import type { BoardKind } from '@mastra/playground-ui/domains/factory';
-import { saveBoardView } from '../services/boardViews';
 
 export const BOARD_SEARCH_QUERY = 'search';
 
@@ -56,10 +55,7 @@ export function useBoardView({
 }): BoardView {
   const { searchParams, replaceSearchParams } = useBoardNavigation();
 
-  const replaceParams = (params: URLSearchParams) => {
-    saveBoardView(factoryProjectId, kind, params);
-    replaceSearchParams(params);
-  };
+  const replaceParams = replaceSearchParams;
 
   const savedViews = useSavedViews<BoardViewSettings>({
     storageKey: savedBoardViewsStorageKey(factoryProjectId, kind),

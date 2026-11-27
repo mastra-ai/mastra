@@ -15,6 +15,8 @@ import type { InstalledBoardInfo } from '../../../../api/types';
  * The board shows cards only. The server files every new issue and pull request of a connected
  * source as a card, through the project's intake rules, so no provider's list is read here.
  */
+export type BoardIntakeSetup = ReturnType<typeof useBoardIntakeSetup>;
+
 export function useBoardIntakeSetup({
   factoryProjectId,
   repositories,

@@ -8,6 +8,12 @@ import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
 import type { BoardParticipant } from '../boardPeople';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
+
+/** Which issue sources the host has connected, so the board only offers filters that can match. */
+export interface BoardFilterSources {
+  connectedSources: ReadonlySet<string>;
+  linearProjects?: readonly LinearProject[];
+}
 import { BoardSourceIcon } from './BoardSourceIcon';
 import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';
 import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';

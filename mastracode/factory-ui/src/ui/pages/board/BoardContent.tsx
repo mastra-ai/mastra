@@ -27,8 +27,6 @@ import {
   useWorkItemFilterOptionsQuery,
   useCardSessions,
 } from '@mastra/react/hooks/factory';
-import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
-import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { shownBoardPhases } from '../../domains/factory/boardPhases';
 import type { ShownPhase } from '../../domains/factory/boardPhases';
 import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
@@ -41,7 +39,8 @@ import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
 import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
 import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
-import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
+import type { BoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
+import type { BoardFilterSources } from '../../domains/factory/components/boardFilterFields';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
@@ -50,7 +49,6 @@ import type { DragPayload } from '../../domains/factory/boardDrag';
 import type { FactoryProject } from '../../domains/workspaces/services/github';
 
 import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
-import { useBoardRepository } from '../../domains/factory/hooks/useBoardRepository';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStages } from './BoardStages';
 
@@ -64,17 +62,26 @@ const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
 
+/** What the host app knows that the board can't fetch itself: who is looking, and the project's connections. */
+export interface BoardHost {
+  viewer?: { userId?: string; name?: string; email?: string; githubLogin?: string | null };
+  repository?: string;
+  filterSources: BoardFilterSources;
+  intake: BoardIntakeSetup;
+}
+
 export function BoardContent({
-  factory,
+  factoryProjectId,
   kind,
   definition,
+  host,
 }: {
-  factory: FactoryProject;
+  factoryProjectId: string;
   kind: BoardKind;
   definition: InstalledBoardInfo;
+  host: BoardHost;
 }) {
-  const factoryProjectId = factory.id;
-  const repository = useBoardRepository(factoryProjectId);
+  const { repository, intake, viewer } = host;
   // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
   const loop = boardLoop(definition);
   const runsLoop = loop !== undefined;
@@ -82,10 +89,8 @@ export function BoardContent({
   // uses) takes no new cards: its cards come from pull requests.
   const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
-  const auth = useFactoryAuth();
-  const currentUserId = auth.data?.user?.userId;
-  const githubStatus = useGithubStatusQuery();
-  const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
+  const currentUserId = viewer?.userId;
+  const personId = boardPersonIdentity(currentUserId, viewer?.githubLogin);
   const reviewsPullRequests = boardLoop(definition)?.pullRequestReview !== undefined;
   const boardView = useBoardView({ factoryProjectId, kind, reviewsPullRequests, currentUserId, personId });
   const { searchParams, filters, sort, layout } = boardView;
@@ -126,7 +131,6 @@ export function BoardContent({
     }
     items.handleDrop(payload, stage, cause);
   };
-  const intake = useBoardIntakeSetup({ factoryProjectId, repositories: factory.repositories, definition });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const cardSessions = useCardSessions(factoryProjectId);
   const decisions = useBoardDecisions(factoryProjectId);
@@ -153,7 +157,7 @@ export function BoardContent({
   const participants = boardParticipants({
     people: filterOptions?.people ?? NO_PEOPLE,
     activityPage,
-    currentUser: auth.data?.user,
+    currentUser: viewer,
     personId,
   });
   const availableLabels = filterOptions?.labels ?? NO_LABELS;
@@ -360,6 +364,7 @@ export function BoardContent({
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
+            filterSources={host.filterSources}
             aside={
               <div className="flex items-center gap-2">
                 <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />
