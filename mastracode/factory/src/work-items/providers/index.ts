@@ -1,4 +1,4 @@
-import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import { externalAdapter } from './base.js';
 import { factoryWorkItemAdapter } from './factory.js';
 import { githubWorkItemAdapter } from './github.js';

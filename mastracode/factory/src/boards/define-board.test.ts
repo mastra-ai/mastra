@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
 import {
   FACTORY_ROLE_STAGES,
   FACTORY_RULE_STAGES,
   isTerminalFactoryRuleStage,
   isWorkingFactoryRuleStage,
-} from '../rules/types.js';
+} from '@internal/factory-contract';
+import { describe, expect, it } from 'vitest';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
 import { triageWorkBoard } from './test-utils.js';

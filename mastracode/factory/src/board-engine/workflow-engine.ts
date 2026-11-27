@@ -1,6 +1,7 @@
-import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/storage';
+import { phaseMayStartRun } from '@internal/factory-contract';
 
-import { phaseMayStartRun } from '../boards/busy-card.js';
+import type { FactoryTransitionResult } from '@internal/factory-contract';
+import { isRunFenceConflictError, runOutsideRunFenceScope } from '@mastra/core/storage';
 import { boardForWorkItem } from '../boards/index.js';
 import { startsInAutoPhase } from '../boards/phase-automation.js';
 import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
@@ -9,7 +10,6 @@ import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import { markRunInterrupted } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
-import type { FactoryTransitionResult } from '../rules/types.js';
 import {
   boardRunId,
   APPLIED_MOVES,

@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { PullRequestStatus } from '@internal/factory-contract';
 import type { ReactNode } from 'react';
 
 import type { WorkspaceChangeRequest } from '../context/WorkspacePanelContext';

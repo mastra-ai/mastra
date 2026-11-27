@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { needsApproval } from '@internal/factory-contract';
 
+import { describe, expect, it } from 'vitest';
 import { awaitsAcceptance, defineBoard, workBoard } from '../boards/index.js';
 import { triageWorkBoard } from '../boards/test-utils.js';
-import { needsApproval } from './types.js';
 
 describe('needsApproval', () => {
   const labeled = { workItem: { labels: ['bug', 'Status: Needs Approval'] } };

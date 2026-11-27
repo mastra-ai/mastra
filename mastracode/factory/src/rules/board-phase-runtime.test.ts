@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { LLMock } from '@copilotkit/aimock';
+import type { RuleGroup } from '@internal/factory-contract';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
@@ -18,8 +19,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FactoryBoardEngine, FactoryBoardEngineFactory } from '../board-engine/engine.js';
 import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { defineBoard } from '../boards/index.js';
@@ -32,7 +33,6 @@ import type { MemorySettingsStorage } from '../storage/domains/memory-settings/b
 import { factoryProjectSettingsUserId } from '../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { isolatedPostgresSchemaForTests } from '../storage/test-utils.js';
-import type { RuleGroup } from './rule-group.js';
 
 class TestSandbox extends MastraSandbox {
   readonly id = randomUUID();

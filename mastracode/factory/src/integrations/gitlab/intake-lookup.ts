@@ -1,6 +1,6 @@
+import { externalSourceForWorkItem } from '@internal/factory-contract';
 import { cardRuleFacts } from '../../boards/card-facts.js';
 import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
-import { externalSourceForWorkItem } from '../../rules/types.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { GitLabIssue, GitLabMergeRequest } from './api.js';
 import { encodeIssueReference, GITLAB_TRUSTED_ACCESS_LEVEL, normalizeGitLabHost } from './integration.js';

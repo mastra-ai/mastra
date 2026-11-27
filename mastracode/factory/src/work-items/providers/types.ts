@@ -1,5 +1,4 @@
-import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
-import type { WorkItemProvider } from '../../storage/domains/work-items/work-item-schema.js';
+import type { ExternalWorkItemSource, WorkItemProvider } from '@internal/factory-contract';
 
 export interface ProviderWorkItemSource {
   provider: WorkItemProvider;

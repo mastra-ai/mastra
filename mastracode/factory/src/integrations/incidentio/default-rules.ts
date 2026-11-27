@@ -1,9 +1,5 @@
+import type { FactoryIncidentioEventName, FactoryIncidentioRuleContext, FactoryRuleHandler } from '@internal/factory-contract';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
-import type {
-  FactoryIncidentioEventName,
-  FactoryIncidentioRuleContext,
-  FactoryRuleHandler,
-} from '../../rules/types.js';
 
 export type IncidentioRuleOverrides = Partial<
   Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null | undefined>

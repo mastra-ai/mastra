@@ -24,6 +24,7 @@ function makeFakeSandbox(overrides: Partial<Record<string, unknown>> = {}) {
     domain: vi.fn((port: number) => `https://port-${port}.vercel.run`),
     runCommand: vi.fn(),
     writeFiles: vi.fn().mockResolvedValue(undefined),
+    extendTimeout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -501,6 +502,49 @@ describe('VercelSandbox', () => {
 
       const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(runArgs.env).toEqual({ GH_TOKEN: 'tok_1' });
+    });
+  });
+
+  describe('extendTimeout()', () => {
+    it('starts the sandbox then forwards the exact duration', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.extendTimeout(600_000);
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledWith(600_000);
+      // Creation must precede the extension, not race it.
+      const createOrder = createMock.mock.invocationCallOrder[0]!;
+      const extendOrder = (fake.extendTimeout as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+      expect(createOrder).toBeLessThan(extendOrder);
+    });
+
+    it('reuses the running sandbox across repeated calls', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.extendTimeout(600_000);
+      await sandbox.extendTimeout(120_000);
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledTimes(2);
+      expect(fake.extendTimeout).toHaveBeenNthCalledWith(1, 600_000);
+      expect(fake.extendTimeout).toHaveBeenNthCalledWith(2, 120_000);
+    });
+
+    it('propagates an SDK rejection unchanged', async () => {
+      const failure = new Error('sandbox_max_timeout_exceeded');
+      const fake = makeFakeSandbox({
+        extendTimeout: vi.fn().mockRejectedValue(failure),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await expect(sandbox.extendTimeout(600_000)).rejects.toBe(failure);
     });
   });
 

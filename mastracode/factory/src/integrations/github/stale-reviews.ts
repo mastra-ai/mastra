@@ -1,6 +1,6 @@
+import type { FactoryDismissStaleReviewsDecision } from '@internal/factory-contract';
 import type { Review, VersionControl } from '../../capabilities/version-control.js';
 import { normalizedVerdictLine } from '../../review-verdict.js';
-import type { FactoryDismissStaleReviewsDecision } from '../../rules/types.js';
 
 export function isFactoryApproveVerdict(body: string | null | undefined): boolean {
   return /^verdict: ?(approve|approved)$/.test(normalizedVerdictLine(body ?? undefined) ?? '');

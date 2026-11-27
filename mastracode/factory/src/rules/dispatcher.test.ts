@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryCommitDecision } from '@internal/factory-contract';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -7,8 +8,8 @@ import { createSignal } from '@mastra/core/signals';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
 import { createDispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
@@ -57,7 +58,6 @@ import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import type { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryTransitionRequest } from './transition-service.js';
-import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 

@@ -1,14 +1,26 @@
+import {
+  authorTrusted,
+  externalSourceForWorkItem,
+  isHumanActorId,
+  isUpdateEvent,
+  workItemSource,
+} from '@internal/factory-contract';
+import type {
+  BoardEventFacts,
+  FactoryCommitDecision,
+  FactoryRuleActor,
+  FactoryRuleCausalEntry,
+  FactoryRuleRejectionCode,
+} from '@internal/factory-contract';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
+
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
-
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
-import { isUpdateEvent } from '../boards/board-events.js';
-import type { BoardEventFacts } from '../boards/board-events.js';
 import { cardRuleFacts } from '../boards/card-facts.js';
 import {
   boardFlow,
@@ -58,7 +70,6 @@ import type { FactoryOpenRun, OpenRunLedger } from '../session/run-audit.js';
 import { sessionHoldsWork } from '../session/session-unloader.js';
 import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
-import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import {
@@ -94,13 +105,6 @@ import { latestRunEnd } from './phase-outcome-move.js';
 import { causeOf, isProviderCallError, publicFailureReason } from './public-failure-reason.js';
 import { isRunBearingDecision } from './run-bearing.js';
 import type { FactoryTransitionService } from './transition-service.js';
-import type {
-  FactoryCommitDecision,
-  FactoryRuleActor,
-  FactoryRuleCausalEntry,
-  FactoryRuleRejectionCode,
-} from './types.js';
-import { authorTrusted, externalSourceForWorkItem, workItemSource } from './types.js';
 import { eventRouteIngress, foldUpdate, updateGroup } from './update-fold.js';
 import {
   assertFactoryDecisionTarget,

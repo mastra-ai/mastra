@@ -1,5 +1,6 @@
-import { phaseMayStartRun } from '@mastra/factory/boards/busy-card';
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import { phaseMayStartRun } from '@internal/factory-contract';
+import type { SessionRowStatus } from '@internal/factory-contract';
+export { BUSY_CARD_MOVE_REFUSAL } from '@internal/factory-contract';
 import type { BoardCardStatus } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
@@ -74,8 +75,6 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
     wick: sessionStatus,
   };
 }
-
-export { BUSY_CARD_MOVE_REFUSAL } from '@mastra/factory/boards/busy-card';
 
 export function canStartRun(ownerKind: BoardCardOwner['kind']): boolean {
   return ownerKind === 'free';

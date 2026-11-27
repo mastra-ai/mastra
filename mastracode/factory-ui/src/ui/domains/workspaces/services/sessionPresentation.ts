@@ -2,7 +2,7 @@ import {
   SLACK_SESSION_BRANCH_PREFIX,
   USER_BRANCH_PREFIX,
   USER_SESSION_BRANCH_PREFIX,
-} from '@mastra/factory/work-item-branch';
+} from '@internal/factory-contract';
 
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';

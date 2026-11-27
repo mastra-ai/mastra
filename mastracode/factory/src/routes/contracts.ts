@@ -1,19 +1,22 @@
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { validateSkillContent } from '@mastra/core/skills';
-import { z } from 'zod';
-
 import {
+  cardRuleGroupSchema,
   CLOSE_REASONS,
   INTAKE_ROUTE_RULE_FIELDS,
-  routeEventsProblem,
+  PULL_REQUEST_STATUSES,
   ROUTE_EVENTS,
+  routeEventsProblem,
+  ruleGroupSchema,
   STATUS_EVENTS,
-} from '../boards/board-events.js';
+} from '@internal/factory-contract';
+import type { CardChangeRequest } from '@internal/factory-contract';
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
+import { validateSkillContent } from '@mastra/core/skills';
+import { z } from 'zod';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
 import type { ModelPackSet } from '../model-packs.js';
-import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
   SESSION_ROW_ALL_OWNERS,
@@ -29,8 +32,6 @@ import {
 } from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
-import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
-import type { CardChangeRequest } from '../work-items/change-requests.js';
 import {
   UUID_PATTERN,
   uuidSchema,

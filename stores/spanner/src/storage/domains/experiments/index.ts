@@ -57,6 +57,7 @@ function rowToExperiment(row: Record<string, any>): Experiment {
     targetType: t.targetType ?? null,
     targetId: t.targetId == null ? null : String(t.targetId),
     scorerIds: t.scorerIds ?? null,
+    scorerVersions: t.scorerVersions ?? null,
     status: t.status,
     totalItems: Number(t.totalItems ?? 0),
     succeededCount: Number(t.succeededCount ?? 0),
@@ -190,6 +191,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         'variantId',
         'trialIndex',
         'scorerIds',
+        'scorerVersions',
       ],
     });
     await this.db.alterTable({
@@ -281,6 +283,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         targetType: input.targetType ?? null,
         targetId: input.targetId ?? null,
         scorerIds: input.scorerIds ?? null,
+        scorerVersions: input.scorerVersions ?? null,
         status: 'pending',
         totalItems: input.totalItems,
         succeededCount: 0,
@@ -312,6 +315,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           targetType: experiment.targetType,
           targetId: experiment.targetId,
           scorerIds: experiment.scorerIds,
+          scorerVersions: experiment.scorerVersions,
           status: experiment.status,
           totalItems: experiment.totalItems,
           succeededCount: 0,

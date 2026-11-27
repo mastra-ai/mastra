@@ -1,7 +1,7 @@
 import { RuleEditorView } from '@mastra/playground-ui/domains/factory';
 import type { RuleTargetBoard } from '@mastra/playground-ui/domains/factory';
-import { matchesOutsiderPullRequests } from '@mastra/factory/boards/board-events';
-import type { RuleCondition } from '@mastra/factory/rules/rule-group';
+import { matchesOutsiderPullRequests } from '@internal/factory-contract';
+import type { RuleCondition } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useEffect, useRef, useState } from 'react';
 

@@ -7,10 +7,12 @@
  * the same cards while `created_by` / stage history record who acted.
  */
 
+import { workItemSource } from '@internal/factory-contract';
+import type { FactoryRuleBoardFlow, WorkItemSource } from '@internal/factory-contract';
 import type { ApiRoute } from '@mastra/core/server';
+
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
-
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
@@ -36,8 +38,6 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
-import { workItemSource } from '../rules/types.js';
-import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { RunRepositoryResolution } from '../session/work-item-repository.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';

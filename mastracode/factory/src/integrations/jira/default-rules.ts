@@ -1,5 +1,5 @@
+import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '@internal/factory-contract';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
-import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type JiraRuleOverrides = Partial<
   Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null | undefined>

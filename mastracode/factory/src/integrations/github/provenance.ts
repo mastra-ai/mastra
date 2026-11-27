@@ -1,4 +1,4 @@
-import type { FactoryRuleJsonValue } from '../../rules/types.js';
+import type { FactoryRuleJsonValue } from '@internal/factory-contract';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';

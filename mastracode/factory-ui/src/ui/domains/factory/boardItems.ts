@@ -1,8 +1,12 @@
-import { metadataLabels } from '@mastra/factory/work-items/card-labels';
-import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
-import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
-import { changeRequestNumber } from '@mastra/factory/work-items/change-requests';
-import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
+import {
+  AUTO_TRIAGED_LABEL,
+  changeRequestNumber,
+  metadataLabels,
+  NEEDS_APPROVAL_LABEL,
+  sourceExternalId,
+  workItemBranch,
+  workItemThreadTitle,
+} from '@internal/factory-contract';
 import { isValid } from 'date-fns';
 
 import type { WorkItem } from './services/workItems';

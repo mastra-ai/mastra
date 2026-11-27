@@ -1,5 +1,5 @@
-import { closeReason } from '../../boards/board-events.js';
-import type { BoardEventFacts } from '../../boards/board-events.js';
+import { closeReason } from '@internal/factory-contract';
+import type { BoardEventFacts, FactoryLinearRuleContext, FactoryRuleDecision } from '@internal/factory-contract';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -14,7 +14,6 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
 import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
-import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';

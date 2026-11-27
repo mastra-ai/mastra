@@ -1,4 +1,4 @@
-import type { WorkItemSourceRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 
 import { describe, expect, it } from 'vitest';
 

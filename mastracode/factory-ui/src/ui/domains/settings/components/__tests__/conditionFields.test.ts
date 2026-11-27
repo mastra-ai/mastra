@@ -1,6 +1,6 @@
 import { DEFAULT_INTAKE_ROUTES } from '@mastra/factory/boards/work-routes';
-import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import { cardRuleGroupSchema } from '@internal/factory-contract';
+import type { RuleGroup } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
 import { conditionFields, describeRule, intakeRouteFacts } from '../conditionFields';

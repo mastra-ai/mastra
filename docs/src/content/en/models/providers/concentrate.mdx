@@ -7,7 +7,7 @@ description: "Browse Concentrate model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/concentrate.svg" alt="Concentrate logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Concentrate
 
-Access 164 Concentrate models through Mastra's model router. Authentication is handled automatically using the `CONCENTRATE_API_KEY` environment variable.
+Access 157 Concentrate models through Mastra's model router. Authentication is handled automatically using the `CONCENTRATE_API_KEY` environment variable.
 
 Learn more in the [Concentrate documentation](https://concentrate.ai/docs).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "concentrate/apodex-1.1-mini"
+  model: "concentrate/beam-1.0-501b-a23b"
 });
 
 // Generate a response
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "concentrate/apodex-1.1-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
   {
     "model": "concentrate/beam-1.0-501b-a23b",
     "imageInput": false,
@@ -282,8 +270,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 163840,
     "maxOutput": 32768,
-    "inputCost": 0.7,
-    "outputCost": 2.5
+    "inputCost": 0.5,
+    "outputCost": 2.15
   },
   {
     "model": "concentrate/deepseek-v3-1",
@@ -570,8 +558,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.13,
-    "outputCost": 0.4
+    "inputCost": 0.1,
+    "outputCost": 0.34
   },
   {
     "model": "concentrate/gemma-4-31b",
@@ -1217,7 +1205,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 204800,
-    "maxOutput": 131072,
+    "maxOutput": 8192,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -1228,56 +1216,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 51200,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "concentrate/minimax-m2-1-highspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 51200,
-    "inputCost": 0.6,
-    "outputCost": 2.4
-  },
-  {
-    "model": "concentrate/minimax-m2-5",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "concentrate/minimax-m2-5-highspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 51200,
-    "inputCost": 0.6,
-    "outputCost": 2.4
-  },
-  {
-    "model": "concentrate/minimax-m2-7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131072,
+    "contextWindow": 196608,
+    "maxOutput": 8192,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -1288,10 +1228,10 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 204800,
+    "contextWindow": 196608,
     "maxOutput": 131072,
-    "inputCost": 0.6,
-    "outputCost": 2.4
+    "inputCost": 0.38,
+    "outputCost": 1.7
   },
   {
     "model": "concentrate/minimax-m3",
@@ -1352,30 +1292,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.7,
     "outputCost": 2.1
-  },
-  {
-    "model": "concentrate/mistral-medium-3",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 0.4,
-    "outputCost": 2
-  },
-  {
-    "model": "concentrate/mistral-medium-3.1",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32000,
-    "inputCost": 0.4,
-    "outputCost": 2
   },
   {
     "model": "concentrate/mistral-small-3.1",
@@ -1794,8 +1710,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.6,
-    "outputCost": 3.6
+    "inputCost": 0.45,
+    "outputCost": 3
   },
   {
     "model": "concentrate/qwen3.5-9b",
@@ -2030,7 +1946,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.concentrate.ai/v1",
-    id: "concentrate/apodex-1.1-mini",
+    id: "concentrate/beam-1.0-501b-a23b",
     apiKey: process.env.CONCENTRATE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -2051,7 +1967,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "concentrate/ultramarine-1-flash"
-      : "concentrate/apodex-1.1-mini";
+      : "concentrate/beam-1.0-501b-a23b";
   }
 });
 ```

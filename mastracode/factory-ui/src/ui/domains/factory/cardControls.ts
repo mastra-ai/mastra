@@ -1,4 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo } from '../../../api/types';
 import { boardCardState } from './boardCardState';

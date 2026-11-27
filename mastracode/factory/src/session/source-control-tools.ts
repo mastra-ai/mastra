@@ -1,9 +1,10 @@
+import { mergeRequestNumberFromBranch } from '@internal/factory-contract';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import { getFactoryAuthOrgId, getFactoryAuthUserFromContext, getFactoryAuthUserId } from '../auth.js';
 import type { CommitCheck, CommitCheckStatus, VersionControl } from '../capabilities/version-control.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -23,7 +24,6 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
 import type { ChangeTarget } from './self-review-gate.js';

@@ -1,5 +1,5 @@
-import { externallyAuthored } from '../rules/types.js';
-import type { FactoryInvokeSkillDecision, FactoryStageRuleContext } from '../rules/types.js';
+import { externallyAuthored } from '@internal/factory-contract';
+import type { FactoryInvokeSkillDecision, FactoryStageRuleContext } from '@internal/factory-contract';
 import type { BoardDefinition } from './define-board.js';
 
 /** How the card came into the phase. */

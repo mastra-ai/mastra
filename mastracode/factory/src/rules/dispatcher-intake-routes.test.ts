@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import { describe, expect, it, vi } from 'vitest';
+import type { BoardEventFacts, FactoryCommitDecision, RuleGroup } from '@internal/factory-contract';
 
-import type { BoardEventFacts } from '../boards/board-events.js';
+import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { arrivalRuleFacts } from '../boards/intake-routing.js';
@@ -16,9 +16,7 @@ import {
 import type { IntakeEvaluator, StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
 import { asProjectFromBeforeIntakeEvaluator, createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
-import type { RuleGroup } from './rule-group.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryCommitDecision } from './types.js';
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
 

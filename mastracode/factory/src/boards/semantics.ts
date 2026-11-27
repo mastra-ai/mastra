@@ -1,31 +1,28 @@
-import type {
-  FactoryRuleBoardClosure,
-  FactoryRuleBoardFlow,
-  FactoryRuleIntakeTarget,
-  FactoryRulePhaseContext,
-} from '../rules/types.js';
-import type { Card } from '../storage/domains/work-items/base.js';
-import type { MetricsPhaseOutcomes } from '../storage/domains/work-items/metrics.js';
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
-import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import {
+  DEFAULT_BOARD_ID,
   isOpenPullRequestSource,
   isPullRequestCard,
   pullRequestSourceNumber,
   pullRequestSources,
   reviewedPullRequest,
   trustedPullRequestSource,
-} from '../work-items/change-requests.js';
-import type { SourcedItem } from '../work-items/change-requests.js';
-import { DEFAULT_BOARD_ID } from './default-board.js';
-import { REVIEW_CONTEXT } from './define-board.js';
+  workItemBranch,
+  workItemBranchSource,
+} from '@internal/factory-contract';
 import type {
-  BoardEventIntegration,
-  BoardEventRules,
-  BoardPhase,
   BoardPhaseKind,
-  BoardToolResultRuleHandler,
-} from './define-board.js';
+  FactoryRuleBoardClosure,
+  FactoryRuleBoardFlow,
+  FactoryRuleIntakeTarget,
+  FactoryRulePhaseContext,
+  SourcedItem,
+  WorkItemSourceRow,
+} from '@internal/factory-contract';
+export { sourceExternalId } from '@internal/factory-contract';
+import type { Card } from '../storage/domains/work-items/base.js';
+import type { MetricsPhaseOutcomes } from '../storage/domains/work-items/metrics.js';
+import { REVIEW_CONTEXT } from './define-board.js';
+import type { BoardEventIntegration, BoardEventRules, BoardPhase, BoardToolResultRuleHandler } from './define-board.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
@@ -496,5 +493,3 @@ function trailingDigits(value: string): string | undefined {
   while (start > 0 && value.charCodeAt(start - 1) >= 48 && value.charCodeAt(start - 1) <= 57) start--;
   return start < value.length ? value.slice(start) : undefined;
 }
-
-export { sourceExternalId } from '../work-items/source-external-id.js';

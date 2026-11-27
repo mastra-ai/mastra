@@ -1,11 +1,11 @@
-import type { AnyWorkflow } from '@mastra/core/workflows';
+import type { FactoryTransitionResult } from '@internal/factory-contract';
 
+import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { BoardRegistry } from '../boards/index.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryTransitionResult } from '../rules/types.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryCardRunState } from './board-workflow.js';
 

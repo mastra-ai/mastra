@@ -1,10 +1,10 @@
+import { FACTORY_LINEAR_EVENTS } from '@internal/factory-contract';
+import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleItemContext } from '@internal/factory-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { FACTORY_LINEAR_EVENTS } from '../../rules/types.js';
-import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';

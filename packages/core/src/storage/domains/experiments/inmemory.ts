@@ -48,6 +48,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       targetType: input.targetType ?? null,
       targetId: input.targetId ?? null,
       scorerIds: input.scorerIds ?? null,
+      scorerVersions: input.scorerVersions ?? null,
       name: input.name,
       description: input.description,
       metadata: input.metadata,

@@ -1,8 +1,8 @@
+import type { FactoryRuleRejectionCode } from '@internal/factory-contract';
 import type {
   FactoryDispatchFailureCode,
   StoredFactoryDispatchFailureCode,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryRuleRejectionCode } from './types.js';
 
 interface FactoryDispatchFailureMetadata {
   /** A person may retry the failed decision. */

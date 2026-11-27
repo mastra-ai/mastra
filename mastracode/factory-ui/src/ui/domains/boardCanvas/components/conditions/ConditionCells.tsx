@@ -5,7 +5,7 @@ import {
   ConditionRowSummary,
 } from '@mastra/playground-ui/domains/factory';
 import type { ConditionCellNode } from '@mastra/playground-ui/domains/factory';
-import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleGroup } from '@internal/factory-contract';
 import type { FilterBarField, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { useState } from 'react';
 

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import type { RuleGroup } from '@internal/factory-contract';
 
-import type { RuleGroup } from '../rules/rule-group.js';
+import { describe, expect, it } from 'vitest';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 import { defineBoard } from './define-board.js';

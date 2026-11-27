@@ -19,6 +19,18 @@
     "kimi-k3-1-pro"
   ],
   "reasoning": {
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "inkling-2-small": [
       {
         "type": "effort",
@@ -31,24 +43,6 @@
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "kimi-k3-1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "gemma4-31b": [
       {
         "type": "effort",
@@ -59,6 +53,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "kimi-k3-1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

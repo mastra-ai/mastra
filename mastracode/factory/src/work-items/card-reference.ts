@@ -1,4 +1,4 @@
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 
 /**
  * What people paste to name an issue or pull request, turned into the key its card's source

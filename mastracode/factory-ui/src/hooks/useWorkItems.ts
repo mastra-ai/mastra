@@ -1,4 +1,4 @@
-import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage } from '@internal/factory-contract';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   keepPreviousData,

@@ -4,15 +4,14 @@
  * count live here, so the page never downloads the board to count them.
  */
 
-import type { z } from 'zod';
+import { metadataLabels, workItemBranchSource } from '@internal/factory-contract';
 
+import type { FactoryRuleBoardFlow } from '@internal/factory-contract';
+import type { z } from 'zod';
 import type { InstalledBoard } from '../boards/index.js';
 import { boardFlow, boardForWorkItem, isPullRequestCard } from '../boards/index.js';
-import type { FactoryRuleBoardFlow } from '../rules/types.js';
 import type { Card, FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
-import { workItemBranchSource } from '../work-item-branch.js';
 import { sourceMetadata } from '../work-items/card-facts.js';
-import { metadataLabels } from '../work-items/card-labels.js';
 import type { workItemStartersResponseSchema } from './contracts.js';
 
 export type WorkItemStarters = z.infer<typeof workItemStartersResponseSchema>;

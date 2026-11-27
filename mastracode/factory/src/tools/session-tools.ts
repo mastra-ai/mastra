@@ -1,8 +1,9 @@
+import { USER_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl } from '../links.js';
 import { buildModelCatalog, listSessionScopedCredentials } from '../routes/config.js';
@@ -21,7 +22,6 @@ import type { CustomProvidersStorage } from '../storage/domains/custom-providers
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { resolveSessionThread } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
 import type { FactoryToolScope } from './scope.js';

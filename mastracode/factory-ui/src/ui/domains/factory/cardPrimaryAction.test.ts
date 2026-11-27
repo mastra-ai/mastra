@@ -9,7 +9,7 @@ import { boardCardState } from './boardCardState';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
-import type { WorkItemSourceRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import type { WorkItemSourceRow } from '@internal/factory-contract';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const plan: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };

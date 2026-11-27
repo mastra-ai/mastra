@@ -1,4 +1,4 @@
-import type { PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { PullRequestStatus } from '@internal/factory-contract';
 import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 
 import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from '../changeRequestState';

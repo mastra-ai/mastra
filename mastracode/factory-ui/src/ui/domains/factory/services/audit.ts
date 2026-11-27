@@ -1,7 +1,11 @@
-import type { AuditAction } from '@mastra/factory/storage/domains/audit/actions';
-import { isAuditActorType } from '@mastra/factory/storage/domains/audit/actors';
-import type { AuditTarget } from '@mastra/factory/storage/domains/audit/base';
-import type { WireAuditActor, WireAuditEvent, WireAuditPage } from '@mastra/factory/storage/domains/audit/wire';
+import { isAuditActorType } from '@internal/factory-contract';
+import type {
+  AuditAction,
+  AuditTarget,
+  WireAuditActor,
+  WireAuditEvent,
+  WireAuditPage,
+} from '@internal/factory-contract';
 
 export type { AuditTarget };
 export type AuditActorProfile = WireAuditActor;

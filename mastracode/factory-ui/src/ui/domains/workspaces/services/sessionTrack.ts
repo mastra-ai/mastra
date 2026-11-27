@@ -1,4 +1,4 @@
-import { isHumanActorId } from '@mastra/factory/storage/domains/audit/actors';
+import { isHumanActorId } from '@internal/factory-contract';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { differenceInCalendarDays } from 'date-fns';
 

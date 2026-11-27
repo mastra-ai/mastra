@@ -1,4 +1,4 @@
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+import type { WorkItemSourceRow } from './work-item-rows.js';
 
 export interface SourcedItem {
   readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;

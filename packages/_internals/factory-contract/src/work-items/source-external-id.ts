@@ -1,4 +1,4 @@
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+import type { WorkItemSourceRow } from './work-item-rows.js';
 
 /** A source row's external id without the type/workspace scope storage prefixes it with. */
 export function sourceExternalId(source: Pick<WorkItemSourceRow, 'sourceType' | 'workspaceId' | 'externalId'>): string {

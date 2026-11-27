@@ -350,6 +350,36 @@ await handle.kill()
 
 See the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
+### Methods
+
+#### `extendTimeout(ms)`
+
+Asks Vercel to keep the running session alive for `ms` more milliseconds, so a run can outlive the timeout the sandbox was created with:
+
+```typescript
+const sandbox = new VercelSandbox({ timeout: 300_000 })
+await sandbox.start()
+
+// Keeps the same session alive for another 10 minutes.
+await sandbox.extendTimeout(600_000)
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'ms',
+    type: 'number',
+    description: 'Milliseconds to add to the running session deadline.',
+  },
+]}
+/>
+
+**Returns:** `Promise<void>`. It resolves once the running session deadline has moved by `ms`.
+
+The call extends the live session deadline only, so `60_000` keeps the same MicroVM running for 60 seconds longer without changing the `timeout` the sandbox was constructed with (which `getInfo().metadata.timeout` keeps reporting). If the sandbox isn't running yet, `extendTimeout()` starts it first. Repeated calls reuse the same session instead of creating a new one. Vercel caps the total session duration by plan, so extending past that limit rejects with the provider error unchanged.
+
 :::note
 
 The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.
