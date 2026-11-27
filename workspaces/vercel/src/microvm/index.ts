@@ -124,11 +124,15 @@ export interface VercelSandboxOptions extends Omit<MastraSandboxOptions, 'proces
   failoverRegions?: SandboxRegion[];
   /**
    * Vercel Drive mounts, keyed by the mount path inside the sandbox, e.g.
-   * `{ '/data': drive }` or `{ '/data': { drive: 'drv_...', mode: 'read-write' } }`.
+   * `{ '/data': drive }` or `{ '/data': { drive: 'my-drive', mode: 'read-write' } }`.
+   * A value is a `Drive` instance (read-write), a `drive.snapshot()` (read-only),
+   * or an explicit `{ drive: string, mode }` where `drive` is the Drive's name.
    *
-   * Mounts are creation-time inputs: the SDK applies them when the sandbox is
-   * created or resumed, so they cannot be added to a running sandbox. Creating,
-   * sharing, and deleting the Drive itself stays with the caller.
+   * Mounts are creation-time inputs: the SDK applies them only when it creates
+   * the sandbox, so they cannot be added to a running sandbox. A named sandbox
+   * that already exists is resumed unchanged and keeps the mounts it was
+   * created with. Creating, sharing, and deleting the Drive itself stays with
+   * the caller.
    */
   mounts?: SandboxMounts;
   /** Default environment variables inherited by all commands. */

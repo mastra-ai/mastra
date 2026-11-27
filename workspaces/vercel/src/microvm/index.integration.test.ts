@@ -140,8 +140,13 @@ describe.skipIf(!HAS_CREDS)('VercelSandbox Integration', () => {
 
         const write = await first.executeCommand('sh', ['-c', `printf '%s' '${contents}' > /data/marker.txt`]);
         expect(write.success).toBe(true);
-        // Stop to detach the Drive before remounting it in a second sandbox.
-        await first._stop();
+        // Destroy to detach the Drive before remounting it in a second sandbox.
+        // Stopping would snapshot the sandbox and drop this unnamed instance's
+        // only handle (`stop()` sets `_sandbox = null`, and `attach()` returns
+        // null without a name), so the later `_destroy()` could no longer delete
+        // it and the run would leak a sandbox. Destroying also detaches the
+        // Drive, so it does both in one step.
+        await first._destroy();
 
         second = new VercelSandbox({
           ...credentialOptions(),

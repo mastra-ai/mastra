@@ -168,7 +168,7 @@ const sandbox = new VercelSandbox({
 })
 ```
 
-Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a later process starting a sandbox with the same name creates it in the same regions. An empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when Vercel fails over, the SDK's session object reports the region the running VM uses:
+Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a sandbox created for a name uses them. When a sandbox with that name already exists, `getOrCreate` resumes it unchanged: the supplied `region` and `failoverRegions` don't reconfigure it. An empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when Vercel fails over, the SDK's session object reports the region the running VM uses:
 
 ```typescript
 await sandbox.start()
@@ -186,6 +186,8 @@ import { VercelSandbox } from '@mastra/vercel'
 const drive = await Drive.getOrCreate({ name: 'agent-data' })
 
 const sandbox = new VercelSandbox({
+  // A Drive and the sandbox that mounts it must share a region.
+  region: drive.region,
   mounts: { '/data': drive },
 })
 
@@ -193,13 +195,17 @@ await sandbox.start()
 await sandbox.executeCommand('sh', ['-c', 'echo hello > /data/marker.txt'])
 ```
 
-Mount paths must be absolute and can't overlap. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or a `{ drive, mode }` pair where `mode` is `'read-write'` or `'snapshot'`:
+Mount paths must be absolute and can't overlap. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or an explicit `{ drive: string, mode }` pair where `drive` is the Drive's name and `mode` is `'read-write'` or `'snapshot'`:
 
 ```typescript
 const sandbox = new VercelSandbox({
   mounts: {
+    // A Drive instance mounts read-write.
     '/data': drive,
+    // The SDK's snapshot helper mounts a read-only copy.
     '/snapshot': drive.snapshot(),
+    // The explicit form takes the Drive's name and a mode.
+    '/archive': { drive: drive.name, mode: 'read-write' },
   },
 })
 ```
@@ -214,7 +220,7 @@ const result = await reader.executeCommand('cat', ['/data/marker.txt'])
 console.log(result.stdout) // hello
 ```
 
-Mounts are applied when the sandbox starts. A sandbox already running keeps the mounts it started with.
+Mounts are applied when the sandbox is created. A sandbox already running keeps the mounts it started with, and a named sandbox that already exists resumes unchanged with the mounts it was created with.
 
 ### Constructor parameters
 
@@ -320,7 +326,7 @@ Mounts are applied when the sandbox starts. A sandbox already running keeps the 
     name: 'mounts',
     type: 'SandboxMounts',
     description:
-      'Vercel Drives to mount inside the sandbox. Keys are absolute paths inside the sandbox, values are a `Drive` or `{ drive, mode }`.',
+      "Vercel Drives to mount inside the sandbox at creation. Keys are absolute paths inside the sandbox; values are a `Drive` instance, a `drive.snapshot()`, or an explicit `{ drive: string, mode }` where `drive` is the Drive's name.",
     isOptional: true,
   },
   {
