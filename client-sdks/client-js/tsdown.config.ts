@@ -9,6 +9,9 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
+  deps: {
+    alwaysBundle: ['@internal/factory-contract'],
+  },
   onSuccess: async () => {
     await generateTypes(
       process.cwd(),

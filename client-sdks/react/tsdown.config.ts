@@ -46,6 +46,7 @@ export default defineConfig(options => ({
   dts: false,
   treeshake: true,
   deps: {
+    alwaysBundle: ['@internal/factory-contract'],
     neverBundle: [/^@mastra\/core/, /^@tanstack\/react-query/],
   },
   onSuccess: async () => {
