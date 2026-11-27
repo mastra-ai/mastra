@@ -11,10 +11,13 @@ import {
   groupDepth,
   insertItem,
   normalize,
+  placeOf,
   pruneEmptyGroups,
   removeNode,
   removeNodes,
   setGroupLogic,
+  setGroupScope,
+  setNegated,
   updateItem,
 } from './filter-bar-tree';
 import type { FilterBarExpression, FilterBarGroup, FilterBarItem, FilterBarNode } from './types';
@@ -146,6 +149,68 @@ describe('filter-bar-tree', () => {
 
     it('drops everything when nothing is pinned', () => {
       expect(clearRemovable(expr, new Set()).nodes).toEqual([]);
+    });
+  });
+
+  describe('when negating a node', () => {
+    it('flags an item at any depth, and unflags it without leaving the key behind', () => {
+      const negated = setNegated(expr, 'e', true);
+      expect(g2(negated).nodes[0]).toEqual({ ...item('e'), negated: true });
+      expect(g2(setNegated(negated, 'e', false)).nodes[0]).toEqual(item('e'));
+    });
+
+    it('flags a group without touching its conditions', () => {
+      const negated = setNegated(expr, 'g2', true);
+      expect(g2(negated)).toEqual({ ...group('g2', item('e'), item('f')), negated: true });
+    });
+  });
+
+  describe('when scoping a group', () => {
+    it('sets and clears the scope of a nested group', () => {
+      const scoped = setGroupScope(expr, 'g2', { id: 'spans', quantifierId: 'none' });
+      expect(g2(scoped).scope).toEqual({ id: 'spans', quantifierId: 'none' });
+      expect(g2(setGroupScope(scoped, 'g2', undefined))).toEqual(g2(expr));
+    });
+  });
+
+  describe('when locating a place', () => {
+    // a AND NOT (b OR (spans: e OR f))
+    const placed: FilterBarExpression = {
+      logic: 'and',
+      nodes: [
+        item('a'),
+        {
+          ...group('g1', item('b'), {
+            ...group('g2', item('e'), { ...item('f'), negated: true }),
+            scope: { id: 'spans', quantifierId: 'some' },
+          }),
+          negated: true,
+        },
+      ],
+    };
+
+    it('reads the root as plain', () => {
+      expect(placeOf(placed, undefined)).toEqual({ negated: false });
+      expect(placeOf(placed, undefined, 'a')).toEqual({ negated: false });
+    });
+
+    it('carries a negated ancestor down to the conditions under it', () => {
+      expect(placeOf(placed, 'g1')).toEqual({ groupId: 'g1', negated: true });
+      expect(placeOf(placed, 'g2', 'e')).toEqual({
+        groupId: 'g2',
+        negated: true,
+        scope: { id: 'spans', quantifierId: 'some' },
+      });
+    });
+
+    it('counts an item negated by itself', () => {
+      const plain = setNegated(placed, 'g1', false);
+      expect(placeOf(plain, 'g2', 'e').negated).toBe(false);
+      expect(placeOf(plain, 'g2', 'f').negated).toBe(true);
+    });
+
+    it('reads an unknown group as the root', () => {
+      expect(placeOf(placed, 'gone')).toEqual({ negated: false });
     });
   });
 });

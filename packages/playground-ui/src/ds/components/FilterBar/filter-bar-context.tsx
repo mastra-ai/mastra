@@ -12,9 +12,11 @@ import {
   insertItem,
   mergeCondition,
   normalize,
+  placeOf as placeInTree,
   pruneEmptyGroups,
   removeNode,
   setGroupLogic,
+  setNegated as setTreeNegated,
   updateItem as updateTreeItem,
 } from './filter-bar-tree';
 import type { FilterBarValueInput } from './filter-bar-tree';
@@ -22,11 +24,13 @@ import { isFilterBarGroup } from './types';
 import type {
   DraftStage,
   FilterBarCommit,
+  FilterBarCustomField,
   FilterBarDraft,
   FilterBarExpression,
   FilterBarField,
   FilterBarGroup,
   FilterBarItem,
+  FilterBarPlace,
   FilterBarLogic,
   FilterBarNode,
   FilterBarOperator,
@@ -36,7 +40,7 @@ import type {
 
 type SegmentKey = `${string}:${FilterBarSegment}`;
 
-const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['field', 'operator', 'value', 'remove'];
+const SEGMENTS_LEFT_TO_RIGHT: FilterBarSegment[] = ['negate', 'field', 'operator', 'value', 'remove'];
 const SEGMENTS_RIGHT_TO_LEFT: FilterBarSegment[] = [...SEGMENTS_LEFT_TO_RIGHT].reverse();
 
 /** Default nesting bound for advanced-filter groups (root-level group = depth 1). */
@@ -95,6 +99,10 @@ export type FilterBarContextValue = {
   /** Removes a group and everything below it. */
   removeGroup: (groupId: string) => void;
   setLogic: (groupId: string, logic: FilterBarLogic) => void;
+  /** Whether items and groups may be negated (the bar's `negatable`). */
+  negatable: boolean;
+  /** Negates an item or a group, or turns its negation off. */
+  setNegated: (id: string, negated: boolean) => void;
   /** Nesting level of a group (root-level = 1); 0 when unknown. */
   getGroupDepth: (groupId: string) => number;
   /** Root group whose advanced-filter popover is open. */
@@ -105,10 +113,27 @@ export type FilterBarContextValue = {
   inputTarget: string | undefined;
   /** Point the input at a group (or back at the root with `undefined`) and focus it. */
   openGroupInput: (groupId: string | undefined) => void;
-  getField: (fieldId: string) => FilterBarField | undefined;
+  /** Fields offered in a group (`undefined` = root). */
+  fieldsAt: (groupId: string | undefined) => FilterBarField[];
+  /**
+   * The custom field named by typed text in a group, when the bar takes one and the name is
+   * neither empty nor already a listed field.
+   */
+  customFieldAt: (groupId: string | undefined, text: string) => FilterBarField | undefined;
+  /** Resolves a field id in a group: listed fields first, then the custom field's prefix. */
+  getField: (fieldId: string, groupId?: string) => FilterBarField | undefined;
+  /** Group holding a rendered item or the draft; `undefined` = root. */
+  groupOfItem: (itemId: string) => string | undefined;
+  /** Where a condition in `groupId` sits; pass `itemId` to count its own negation. */
+  placeOf: (groupId: string | undefined, itemId?: string) => FilterBarPlace;
+  /** The bar's `validateItem`. */
+  validateItem?: (item: FilterBarItem, place: FilterBarPlace) => string | undefined;
   getOperator: (operatorId: string) => FilterBarOperator | undefined;
-  /** Operators allowed for a field (`field.operators` or every root operator). */
-  getFieldOperators: (field: FilterBarField) => FilterBarOperator[];
+  /**
+   * Operators allowed for a field (`field.operators` or every root operator). With a
+   * `place`, also narrowed by the bar's `operatorsFor`.
+   */
+  getFieldOperators: (field: FilterBarField, place?: FilterBarPlace) => FilterBarOperator[];
   registerSegment: (itemId: string, segment: FilterBarSegment, el: HTMLElement | null) => void;
   registerInput: (el: HTMLInputElement | null) => void;
   /**
@@ -167,6 +192,18 @@ export type FilterBarProviderProps = {
    * default "Couldn't load values.".
    */
   describeSuggestionsError?: (error: unknown) => string | undefined;
+  /** Lets each item and group be negated ("not …"). */
+  negatable?: boolean;
+  /** Lets the field step take names outside `fields`, under a prefix. */
+  customField?: FilterBarCustomField;
+  /** Message for a committed condition that is wrong where it sits; `undefined` when fine. */
+  validateItem?: (item: FilterBarItem, place: FilterBarPlace) => string | undefined;
+  /**
+   * Operator ids a field allows where a condition sits (for example no word search under a
+   * negation); `undefined` keeps every operator of the field. Keep it stable (module scope or
+   * memoized): option lists are cached per field and place until it changes.
+   */
+  operatorsFor?: (field: FilterBarField, place: FilterBarPlace) => readonly string[] | undefined;
   children: ReactNode;
 };
 
@@ -214,6 +251,10 @@ export function FilterBarProvider({
   maxDepth = DEFAULT_MAX_GROUP_DEPTH,
   ariaLabel,
   describeSuggestionsError,
+  negatable = false,
+  customField,
+  validateItem,
+  operatorsFor,
   children,
 }: FilterBarProviderProps) {
   const segments = useRef(new Map<SegmentKey, HTMLElement>());
@@ -234,12 +275,43 @@ export function FilterBarProvider({
     [onValueChange, flat],
   );
 
-  const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
+  const fieldsAt = useCallback((_groupId: string | undefined) => fields, [fields]);
+  // Built once per name (and per `customField` object) so a custom field keeps its identity
+  // and its cached operators.
+  const buildCustomField = useMemo(() => {
+    const built = new Map<string, FilterBarField>();
+    return (id: string): FilterBarField | undefined => {
+      if (!customField || id.length <= customField.prefix.length || !id.startsWith(customField.prefix)) return;
+      let field = built.get(id);
+      if (!field) {
+        field = { ...customField.field, id, label: id };
+        built.set(id, field);
+      }
+      return field;
+    };
+  }, [customField]);
+  const customFieldAt = useCallback(
+    (groupId: string | undefined, text: string) => {
+      if (!customField) return;
+      const trimmed = text.trim();
+      const name = trimmed.startsWith(customField.prefix) ? trimmed.slice(customField.prefix.length) : trimmed;
+      const id = `${customField.prefix}${name}`;
+      if (fieldsAt(groupId).some(f => f.id === id)) return;
+      return buildCustomField(id);
+    },
+    [customField, fieldsAt, buildCustomField],
+  );
+  const getField = useCallback(
+    (fieldId: string, groupId?: string) => fieldsAt(groupId).find(f => f.id === fieldId) ?? buildCustomField(fieldId),
+    [fieldsAt, buildCustomField],
+  );
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  // Cached per field so a chip's operator and its option list stay the same objects across renders.
+  // Cached per field (and place) so a chip's operator and its option lists stay the same
+  // objects across renders.
   const getFieldOperators = useMemo(() => {
     const cache = new WeakMap<FilterBarField, FilterBarOperator[]>();
-    return (field: FilterBarField) => {
+    const placed = new WeakMap<FilterBarField, Map<string, FilterBarOperator[]>>();
+    const ofField = (field: FilterBarField) => {
       const cached = cache.get(field);
       if (cached) return cached;
       const allowed = field.operators ? new Set(field.operators) : undefined;
@@ -252,7 +324,22 @@ export function FilterBarProvider({
       cache.set(field, result);
       return result;
     };
-  }, [operators]);
+    return (field: FilterBarField, place?: FilterBarPlace) => {
+      const all = ofField(field);
+      if (!place || !operatorsFor) return all;
+      const key = `${place.negated}:${place.scope?.id ?? ''}:${place.scope?.quantifierId ?? ''}`;
+      let byPlace = placed.get(field);
+      if (!byPlace) placed.set(field, (byPlace = new Map()));
+      let result = byPlace.get(key);
+      if (!result) {
+        const ids = operatorsFor(field, place);
+        const allowed = ids ? new Set(ids) : undefined;
+        result = allowed ? all.filter(o => allowed.has(o.id)) : all;
+        byPlace.set(key, result);
+      }
+      return result;
+    };
+  }, [operators, operatorsFor]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -289,7 +376,7 @@ export function FilterBarProvider({
       reflectedCommitIdRef.current = lastCommit.item.id;
     }
   }, [lastCommit, expression]);
-  const { rendered, items, leaving, rootGroupOf } = useMemo(() => {
+  const { rendered, items, leaving, rootGroupOf, holderOf } = useMemo(() => {
     const present = idsOf(expression.nodes);
     let rendered: FilterBarExpression =
       leavingIds.size === 0
@@ -308,8 +395,19 @@ export function FilterBarProvider({
       if (isFilterBarGroup(node))
         for (const { item } of flattenItems({ logic: 'and', nodes: [node] })) rootGroupOf.set(item.id, node.id);
     }
-    return { rendered, items: flattenItems(rendered).map(e => e.item), leaving, rootGroupOf };
+    const entries = flattenItems(rendered);
+    const holderOf = new Map(entries.map(e => [e.item.id, e.groupId]));
+    return { rendered, items: entries.map(e => e.item), leaving, rootGroupOf, holderOf };
   }, [expression, lastCommit, leavingIds]);
+  const groupOfItem = useCallback(
+    (itemId: string) =>
+      holderOf.has(itemId) ? holderOf.get(itemId) : draft?.id === itemId ? draft.groupId : undefined,
+    [holderOf, draft],
+  );
+  const placeOf = useCallback(
+    (groupId: string | undefined, itemId?: string) => placeInTree(rendered, groupId, itemId),
+    [rendered],
+  );
 
   // Consumers who derive root ids from the field hold one root filter per field: this is the
   // one `fieldId` already has, which a new filter on that field updates instead of duplicating.
@@ -361,7 +459,7 @@ export function FilterBarProvider({
       const existing = fieldItem(fieldId, groupId);
       if (existing) {
         // An unknown field has no operator contract to widen into: the new filter replaces the old one.
-        const field = getField(fieldId);
+        const field = getField(fieldId, groupId);
         const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
         const item = { ...existing, ...condition };
         emit(updateTreeItem(exprRef.current, existing.id, condition));
@@ -433,6 +531,14 @@ export function FilterBarProvider({
     (groupId: string, logic: FilterBarLogic) => {
       emit(setGroupLogic(exprRef.current, groupId, logic));
       announce(`Conditions joined with ${logic}`);
+    },
+    [emit, announce],
+  );
+
+  const setNegated = useCallback(
+    (id: string, negated: boolean) => {
+      emit(setTreeNegated(exprRef.current, id, negated));
+      announce(negated ? 'Filter negated' : 'Negation removed');
     },
     [emit, announce],
   );
@@ -585,12 +691,19 @@ export function FilterBarProvider({
       addGroup,
       removeGroup,
       setLogic,
+      negatable,
+      setNegated,
       getGroupDepth,
       openGroupId,
       setOpenGroup,
       inputTarget,
       openGroupInput,
+      fieldsAt,
+      customFieldAt,
       getField,
+      groupOfItem,
+      placeOf,
+      validateItem,
       getOperator,
       getFieldOperators,
       registerSegment,
@@ -626,12 +739,19 @@ export function FilterBarProvider({
       addGroup,
       removeGroup,
       setLogic,
+      negatable,
+      setNegated,
       getGroupDepth,
       openGroupId,
       setOpenGroup,
       inputTarget,
       openGroupInput,
+      fieldsAt,
+      customFieldAt,
       getField,
+      groupOfItem,
+      placeOf,
+      validateItem,
       getOperator,
       getFieldOperators,
       registerSegment,

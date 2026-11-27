@@ -9,6 +9,7 @@ import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
@@ -165,7 +166,7 @@ export function FilterBarGroupEditor({
       data-slot="filter-bar-group-editor"
       data-depth={depth}
       role="group"
-      aria-label={`Conditions joined with ${group.logic}`}
+      aria-label={`Conditions joined with ${group.logic}${group.negated ? ', negated' : ''}`}
       className={cn('flex min-w-0 flex-col', className)}
     >
       {rows.length > 0 && (
@@ -197,6 +198,19 @@ export function FilterBarGroupEditor({
         >
           Group
         </Button>
+        {ctx.negatable && (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<IconCircleBanSign />}
+            className={group.negated ? 'text-destructive-foreground' : 'text-muted-foreground'}
+            aria-label="Negate group"
+            aria-pressed={Boolean(group.negated)}
+            onClick={() => ctx.setNegated(group.id, !group.negated)}
+          >
+            Not
+          </Button>
+        )}
         {onRemove && (
           <Button
             variant="ghost"
@@ -235,7 +249,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         <IconFolder1 className="size-icon-sm text-muted-foreground" />
         <Txt as="span" variant="label" tone="ink">
-          Group
+          {group.negated ? 'Not group' : 'Group'}
         </Txt>
         <Txt as="span" variant="label" tone="muted">
           {count} {count === 1 ? 'condition' : 'conditions'}

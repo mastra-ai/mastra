@@ -74,7 +74,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       <div
         ref={rootRef}
         role="group"
-        aria-label={`Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`}
+        aria-label={`Advanced filter, ${group.negated ? 'not, ' : ''}${count} ${count === 1 ? 'condition' : 'conditions'}`}
         aria-hidden={leaving || undefined}
         data-slot="filter-bar-advanced"
         data-initial={initial || undefined}
@@ -93,6 +93,7 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
           title="Edit advanced filter"
         >
           <IconCodeBrackets aria-hidden />
+          {group.negated && <span className="text-destructive-foreground">not</span>}
           <span className="truncate">Advanced filter</span>
           {count > 0 && (
             <Txt as="span" variant="column" tone="muted" aria-hidden>

@@ -3,6 +3,7 @@ export type { FilterBarChipsProps, FilterBarProps } from './filter-bar';
 export {
   FilterBarChip,
   FilterBarChipField,
+  FilterBarChipNegate,
   FilterBarChipOperator,
   FilterBarChipValue,
   FilterBarChipRemove,

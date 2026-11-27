@@ -7,7 +7,14 @@ import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from '.
 import { FilterBarInput } from './filter-bar-input';
 import { FilterBarTimeRange } from './filter-bar-time-range';
 import { isFilterBarGroup } from './types';
-import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
+import type {
+  FilterBarCustomField,
+  FilterBarExpression,
+  FilterBarField,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarPlace,
+} from './types';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +50,24 @@ export type FilterBarProps = FilterBarValueProps & {
    * to explain a server limit. Return `undefined` to keep the default "Couldn't load values.".
    */
   describeSuggestionsError?: (error: unknown) => string | undefined;
+  /** Lets each condition and group be negated ("not …"), stored as `negated: true` on the node. */
+  negatable?: boolean;
+  /**
+   * Lets the field step take a name outside `fields` under a prefix (e.g. `metadata.` + what
+   * was typed). Keep the object stable: custom fields are cached per instance.
+   */
+  customField?: FilterBarCustomField;
+  /**
+   * Message for a committed condition that is wrong where it sits (e.g. an operator not allowed
+   * under a negation); shown on its chip. Field-level `validateInput` runs first.
+   */
+  validateItem?: (item: FilterBarItem, place: FilterBarPlace) => string | undefined;
+  /**
+   * Operator ids a field allows where a condition sits (e.g. no word search under a negation);
+   * `undefined` keeps every operator of the field. Fields left with none are not offered there,
+   * and a chip whose operator is ruled out reads invalid. Keep the function stable.
+   */
+  operatorsFor?: (field: FilterBarField, place: FilterBarPlace) => readonly string[] | undefined;
   /** Accessible label of the trailing "remove every filter" button. */
   clearLabel?: string;
   className?: string;
@@ -107,6 +132,10 @@ export function FilterBar({
   maxDepth,
   'aria-label': ariaLabel = 'Filters',
   describeSuggestionsError,
+  negatable,
+  customField,
+  validateItem,
+  operatorsFor,
   clearLabel = 'Clear filters',
   className,
   children,
@@ -121,6 +150,10 @@ export function FilterBar({
       maxDepth={maxDepth}
       ariaLabel={ariaLabel}
       describeSuggestionsError={describeSuggestionsError}
+      negatable={negatable}
+      customField={customField}
+      validateItem={validateItem}
+      operatorsFor={operatorsFor}
     >
       <FilterBarSurface className={className} clearLabel={clearLabel}>
         {children}

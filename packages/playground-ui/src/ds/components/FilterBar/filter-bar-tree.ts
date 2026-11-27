@@ -1,10 +1,12 @@
 import type {
   FilterBarExpression,
   FilterBarGroup,
+  FilterBarGroupScope,
   FilterBarItem,
   FilterBarLogic,
   FilterBarNode,
   FilterBarOperator,
+  FilterBarPlace,
 } from './types';
 import { isFilterBarGroup } from './types';
 
@@ -86,6 +88,12 @@ const mapGroup = (
   nodes.map(node => {
     if (!isFilterBarGroup(node)) return node;
     return node.id === groupId ? fn(node) : { ...node, nodes: mapGroup(node.nodes, groupId, fn) };
+  });
+
+const mapNode = (nodes: FilterBarNode[], id: string, fn: (node: FilterBarNode) => FilterBarNode): FilterBarNode[] =>
+  nodes.map(node => {
+    if (node.id === id) return fn(node);
+    return isFilterBarGroup(node) ? { ...node, nodes: mapNode(node.nodes, id, fn) } : node;
   });
 
 const mapItems = (nodes: FilterBarNode[], fn: (item: FilterBarItem) => FilterBarItem): FilterBarNode[] =>
@@ -183,3 +191,46 @@ export const clearRemovable = (expr: FilterBarExpression, pinned: ReadonlySet<st
     ...expr,
     nodes: filterNodes(expr.nodes, node => isFilterBarGroup(node) || pinned.has(node.id)),
   });
+
+/** Flags an item or a group at any depth as negated; `false` drops the flag. */
+export const setNegated = (expr: FilterBarExpression, id: string, negated: boolean): FilterBarExpression => ({
+  ...expr,
+  nodes: mapNode(expr.nodes, id, ({ negated: _, ...node }) => (negated ? { ...node, negated: true } : node)),
+});
+
+/** Sets which related records a group reads; `undefined` makes it a plain group again. */
+export const setGroupScope = (
+  expr: FilterBarExpression,
+  groupId: string,
+  scope: FilterBarGroupScope | undefined,
+): FilterBarExpression => ({
+  ...expr,
+  nodes: mapGroup(expr.nodes, groupId, ({ scope: _, ...group }) => (scope ? { ...group, scope } : group)),
+});
+
+/** Groups from the root down to `groupId`, outermost first; empty when not found. */
+const pathTo = (nodes: FilterBarNode[], groupId: string): FilterBarGroup[] => {
+  for (const node of nodes) {
+    if (!isFilterBarGroup(node)) continue;
+    if (node.id === groupId) return [node];
+    const nested = pathTo(node.nodes, groupId);
+    if (nested.length > 0) return [node, ...nested];
+  }
+  return [];
+};
+
+/**
+ * Where a condition in `groupId` sits: negated when it (`itemId`) or a group above it is,
+ * scoped by the nearest scoped group above it. A group not in the tree reads as the root.
+ */
+export const placeOf = (expr: FilterBarExpression, groupId: string | undefined, itemId?: string): FilterBarPlace => {
+  const path = groupId ? pathTo(expr.nodes, groupId) : [];
+  const holder = path.at(-1);
+  const own = itemId ? (holder ?? expr).nodes.find(node => node.id === itemId) : undefined;
+  const scope = path.findLast(group => group.scope)?.scope;
+  return {
+    ...(holder && { groupId: holder.id }),
+    negated: Boolean(own?.negated) || path.some(group => group.negated),
+    ...(scope && { scope }),
+  };
+};
