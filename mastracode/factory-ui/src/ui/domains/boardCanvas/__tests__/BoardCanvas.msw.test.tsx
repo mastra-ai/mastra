@@ -109,28 +109,21 @@ describe('Opening board settings', () => {
     expect(await screen.findByRole('list', { name: 'Phases' })).toBeInTheDocument();
   });
 
-  it('sends old Settings › Skills links to the skills, which lead back to the Work board settings', async () => {
+  it("returns from Settings › Skills, opened from a phase's skill, to that phase", async () => {
     stubFactory();
     serveBoard(storedWorkBoard());
-    const { router } = renderAt(`/factories/${FACTORY_ID}/settings/skills`);
+    const { router } = renderAt(`${CONFIG}/planning`);
+    const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills`);
-    const breadcrumb = within(await screen.findByRole('navigation', { name: 'Breadcrumb' }));
-    expect(breadcrumb.getByRole('link', { name: 'Work' })).toHaveAttribute('href', CONFIG);
-  });
-
-  it('lists the factory skills beside a custom board, leading back to its settings', async () => {
-    stubFactory();
-    serveBoard(releaseBoard(), RELEASE_URL);
-    renderAt(`/factories/${FACTORY_ID}/boards/release/skills`);
-
-    expect(await screen.findByRole('heading', { name: 'Skills' })).toBeInTheDocument();
-    const breadcrumb = within(await screen.findByRole('navigation', { name: 'Breadcrumb' }));
-    expect(await breadcrumb.findByRole('link', { name: 'Release Preview' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/boards/release/config`,
+    await user.click(await screen.findByRole('link', { name: 'All skills' }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/skills`));
+    await user.click(await screen.findByRole('link', { name: 'factory-plan' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/skills/factory-plan`),
     );
+    await user.click(await screen.findByRole('button', { name: 'Back to app' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`${CONFIG}/planning`));
   });
 });
 
@@ -187,7 +180,7 @@ describe('Leaving board settings with unsaved changes', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Discard' }));
 
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills/factory-plan`),
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/skills/factory-plan`),
     );
   });
 });
@@ -226,7 +219,7 @@ describe("A phase's skill", () => {
     const phasePath = router.state.location.pathname;
     await user.click(planning.getByRole('link', { name: 'Edit factory-plan' }));
     await waitFor(() =>
-      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work/skills/factory-plan`),
+      expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/settings/skills/factory-plan`),
     );
     const description = await screen.findByRole('textbox', { name: 'Description' });
     await user.clear(description);
@@ -238,7 +231,7 @@ describe("A phase's skill", () => {
     expect(writes[0]).toContain('description: "Plans small work"');
     expect(screen.getByRole('link', { name: 'Back to Skills' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/work/skills`,
+      `/factories/${FACTORY_ID}/settings/skills`,
     );
 
     await router.navigate(-1);

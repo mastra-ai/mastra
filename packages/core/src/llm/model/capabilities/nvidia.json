@@ -79,12 +79,6 @@
         "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "google/diffusiongemma-26b-a4b-it": [
       {
         "type": "effort",
@@ -96,10 +90,10 @@
         "type": "toggle"
       }
     ],
-    "minimaxai/minimax-m3.1-flash": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -108,29 +102,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "nvidia/nemotron-3.5-lightning-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -145,6 +123,11 @@
         "max": 32768
       }
     ],
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+      {
+        "type": "toggle"
+      }
+    ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
@@ -156,7 +139,24 @@
         "max": 32768
       }
     ],
+    "nvidia/nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimaxai/minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "stepfun-ai/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]

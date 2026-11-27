@@ -2,8 +2,8 @@ import { PhaseSettingsPanel } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
 import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
-import { HrefLink } from '../../../../ui/HrefLink';
-import { boardSkillPath, boardSkillsPath, newSkillPath } from '../../../boardConfig/boardConfigPaths';
+import { SettingsHrefLink } from '../../../settings/components/SettingsHrefLink';
+import { newSkillPath, settingsSectionPath, skillPath } from '../../../settings/settingsSections';
 import {
   DEFAULT_SESSION,
   MAX_OUTCOMES,
@@ -93,9 +93,9 @@ export function PhasePanel({
       kindLocked={kindLocked}
       skills={skills}
       skillsEditable={skillsEditable}
-      skillHref={skillName ? boardSkillPath(factoryId, boardId, skillName) : undefined}
-      skillsHref={boardSkillsPath(factoryId, boardId)}
-      newSkillHref={newSkillPath(factoryId, boardId)}
+      skillHref={skillName ? skillPath(factoryId, skillName) : undefined}
+      skillsHref={settingsSectionPath(factoryId, 'skills')}
+      newSkillHref={newSkillPath(factoryId)}
       skillBadges={skill ? skillBadges(skill) : []}
       outcomes={{
         defaults,
@@ -148,7 +148,7 @@ export function PhasePanel({
       autoApproveProblem={
         unfinished.includes('autoApproveWhen') ? undefined : cardRuleProblem(phase.exitTool?.autoApproveWhen)
       }
-      LinkComponent={HrefLink}
+      LinkComponent={SettingsHrefLink}
       onName={name => onChange({ ...phase, name })}
       onDescription={description => onChange({ ...phase, description })}
       onKind={kind => onChange(withKind(phase, kind, phases))}

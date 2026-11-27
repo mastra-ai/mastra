@@ -6,6 +6,7 @@ import type { RenderHookOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
+import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
 
 /**
  * Base URL every test stubs against. `src` is platform-agnostic and
@@ -31,7 +32,9 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
     <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
-          <ApiConfigProvider config={TEST_API}>{children}</ApiConfigProvider>
+          <ApiConfigProvider config={TEST_API}>
+            <FactoryPlatformConnect>{children}</FactoryPlatformConnect>
+          </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>
     </ThemeProvider>

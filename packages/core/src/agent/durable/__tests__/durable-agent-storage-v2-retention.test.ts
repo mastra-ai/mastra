@@ -89,12 +89,13 @@ describe('DurableAgent storage v2 retention', () => {
     let finish: any;
     const retained = () => ({ draft: count('state-draft'), state: count('state'), patch: count('state-patch') });
     for (let turn = 1; turn <= TURNS; turn++) {
-      // Without dropping them, the loop run gains a draft, a full state and a patch per turn.
+      // Without dropping them, the loop run gains a draft, a full state and a patch per turn. Patches
+      // since the latest full state stay until they outgrow it, a few turns' worth here.
       // Poll one settled view of all three: waiting on the draft alone can read the others mid-write.
       await expect
         .poll(() => {
           const { draft, state, patch } = retained();
-          return draft === 1 && state <= 2 && patch <= 2;
+          return draft === 1 && state <= 2 && patch <= 3;
         })
         .toBe(true);
 

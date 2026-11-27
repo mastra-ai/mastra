@@ -1,5 +1,6 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ProviderRowsSkeleton } from '../providers/ProviderRows';
+import { MODEL_DEFAULTS_ANCHORS, ModelRoutingView } from '@mastra/playground-ui/domains/factory';
+import { useLocation } from 'react-router';
 import { useState } from 'react';
 
 import {
@@ -11,12 +12,8 @@ import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { FactoryModelPacks } from '../packs/FactoryModelPacks';
 import { PersonalModelPacks } from '../packs/PersonalModelPacks';
 import { ProviderList } from '../providers/ProviderList';
-import { SettingsSubsection } from '../../SettingsSubsection';
-import { DefaultsCard } from './DefaultsCard';
 import { savedModelScope } from './model-routes';
 import { ModelRoutingChangeDialog } from './ModelRoutingChangeDialog';
-import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
-import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 
 // Keyed by Factory so a pending request is dropped on a Factory switch and never saves or reopens elsewhere.
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
@@ -43,53 +40,32 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
     setModelScope.mutate(scope);
   };
 
+  const hash = useLocation().hash.slice(1);
+  const openedDefaults = (['personal', 'factory'] as const).find(d => MODEL_DEFAULTS_ANCHORS[d] === hash);
+
   return (
-    <SettingsSubsection
-      scope="factory"
-      title="Model routing"
-      description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
-      action={
-        modelScope ? (
-          <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />
-        ) : (
-          projectQuery.isPending && (
-            <Skeleton className="h-control-md w-72 rounded-full motion-reduce:before:animate-none" />
-          )
-        )
-      }
+    <ModelRoutingView
+      scope={modelScope}
+      loading={projectQuery.isPending}
+      pending={saving}
+      error={error?.message}
+      onPickScope={pickScope}
+      openedDefaults={openedDefaults}
+      providersSkeleton={<ProviderRowsSkeleton />}
+      personal={{ packs: <PersonalModelPacks />, providers: <ProviderList credentialScope="user" /> }}
+      factory={{
+        packs: <FactoryModelPacks factoryId={factoryId} />,
+        providers: <ProviderList credentialScope="org" />,
+      }}
     >
-      <div className="flex flex-col gap-6">
-        {error && (
-          <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-            {error.message}
-          </Txt>
-        )}
-        {projectQuery.isPending && <ModelRoutingSkeleton />}
-        {modelScope && (
-          <div className="flex flex-col gap-3">
-            <DefaultsCard
-              defaults="personal"
-              scope={modelScope}
-              packs={<PersonalModelPacks />}
-              providers={<ProviderList credentialScope="user" />}
-            />
-            <DefaultsCard
-              defaults="factory"
-              scope={modelScope}
-              packs={<FactoryModelPacks factoryId={factoryId} />}
-              providers={<ProviderList credentialScope="org" />}
-            />
-          </div>
-        )}
-        {modelScope && (
-          <ModelRoutingChangeDialog
-            from={modelScope}
-            to={requestedScope}
-            onConfirm={confirmScope}
-            onCancel={() => setRequestedScope(undefined)}
-          />
-        )}
-      </div>
-    </SettingsSubsection>
+      {modelScope && (
+        <ModelRoutingChangeDialog
+          from={modelScope}
+          to={requestedScope}
+          onConfirm={confirmScope}
+          onCancel={() => setRequestedScope(undefined)}
+        />
+      )}
+    </ModelRoutingView>
   );
 }
