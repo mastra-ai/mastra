@@ -136,7 +136,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       // Sync any processor mutation back into the chunk so streaming clients see
       // the post-processor value, not the raw tool return.
-      const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
+      const postProcessorResult = readToolResultFromMessageList(
+        rest.messageList,
+        chunk.payload.toolCallId,
+        chunk.payload.args,
+      );
       if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
       }

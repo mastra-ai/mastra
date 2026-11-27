@@ -65,6 +65,8 @@ import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
 import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
+  isSameToolCall,
+  isSameToolInvocation,
   isTerminalToolInvocationState,
 } from './utils/tool-invocation-state';
 
@@ -129,27 +131,43 @@ function mergeBackgroundTasks(
  * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
  * stays canonical, and a stale or edited echo can't overwrite it. Live state may fill in a
  * pending call or advance a background result from running to completed or failed.
+ *
+ * A live part is matched to its own stored occurrence rather than to whichever part last carried
+ * the id. A gateway can restart tool-call numbering every step, so the same id can name more than
+ * one invocation (#31609); pairing by id alone would let a live later step's part be mistaken for
+ * an echo and swallowed. Matching by call identity still pairs a genuine echo, and a live part for
+ * a call nothing stored describes is left untouched so it survives the merge as its own occurrence.
  */
 function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
-  const storedParts = new Map<string, MastraToolInvocationPart>();
+  const storedParts: MastraToolInvocationPart[] = [];
   for (const part of stored.content.parts) {
-    if (part.type === 'tool-invocation') storedParts.set(part.toolInvocation.toolCallId, part);
+    if (part.type === 'tool-invocation') storedParts.push(part);
   }
-  if (storedParts.size === 0) return live;
+  if (storedParts.length === 0) return live;
 
+  // A stored part is spent once a live part has been paired with it, so a repeated id lines up with
+  // its own occurrence instead of reusing the part an earlier occurrence already claimed.
+  const spent = new Set<number>();
   let changed = false;
   const parts = live.content.parts.map(part => {
     if (part.type !== 'tool-invocation') return part;
-    const storedPart = storedParts.get(part.toolInvocation.toolCallId);
-    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state))
-      return part;
+    const { toolCallId, toolName, args } = part.toolInvocation;
+    const storedIndex = storedParts.findIndex(
+      (candidate, i) =>
+        !spent.has(i) &&
+        candidate.toolInvocation.toolCallId === toolCallId &&
+        isSameToolCall(toolCallId, args, candidate.toolInvocation),
+    );
+    const storedPart = storedIndex === -1 ? undefined : storedParts[storedIndex]!;
+    if (!storedPart) return part; // the live part describes a call the stored history does not hold
+    spent.add(storedIndex);
+    if (advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state)) return part;
     const storedTask = storedPart.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
     const liveTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
     if (storedTask?.status === 'running' && (liveTask?.status === 'completed' || liveTask?.status === 'failed')) {
       return part;
     }
     changed = true;
-    const { toolCallId, toolName, args } = part.toolInvocation;
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
   });
   return changed ? { ...live, content: { ...live.content, parts } } : live;
@@ -1284,7 +1302,10 @@ export class MessageList {
           this.promptConversionMode,
         );
 
-        const storedModelOutputs = new Map<string, unknown>();
+        // A toolCallId can name more than one invocation when a later step reuses it (#31609), so a
+        // mapped output is kept per invocation, in call order, and handed to the model messages in
+        // that same order rather than letting the last one stand for every occurrence.
+        const storedModelOutputs = new Map<string, unknown[]>();
         for (const dbMsg of this.messages) {
           if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
 
@@ -1299,30 +1320,35 @@ export class MessageList {
               // so the raw result must be kept.
               (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
             ) {
-              storedModelOutputs.set(
-                part.toolInvocation.toolCallId,
-                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-              );
+              const outputs = storedModelOutputs.get(part.toolInvocation.toolCallId) ?? [];
+              outputs.push((part.providerMetadata.mastra as Record<string, unknown>).modelOutput);
+              storedModelOutputs.set(part.toolInvocation.toolCallId, outputs);
             }
           }
         }
 
         if (storedModelOutputs.size > 0) {
+          const usedOutputs = new Map<string, number>();
           for (const modelMsg of modelMessages) {
             if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
 
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
-              if (part.type === 'tool-result' && storedModelOutputs.has(part.toolCallId)) {
-                // The stored modelOutput is substituted into `output` here. The
-                // internal `mastra.modelOutput` marker stays on the part: input
-                // processors read it to tell a toModelOutput-mapped result apart
-                // from a raw fallback (see ToolCallFilter).
-                modelMsg.content[i] = {
-                  ...part,
-                  output: storedModelOutputs.get(part.toolCallId) as any,
-                };
-              }
+              if (part.type !== 'tool-result') continue;
+              const outputs = storedModelOutputs.get(part.toolCallId);
+              if (!outputs) continue;
+              // Conversion emits one result per stored invocation, in call order. If it dropped any,
+              // the newest mapping stands in for the occurrences that are left.
+              const position = usedOutputs.get(part.toolCallId) ?? 0;
+              usedOutputs.set(part.toolCallId, position + 1);
+              // The stored modelOutput is substituted into `output` here. The
+              // internal `mastra.modelOutput` marker stays on the part: input
+              // processors read it to tell a toModelOutput-mapped result apart
+              // from a raw fallback (see ToolCallFilter).
+              modelMsg.content[i] = {
+                ...part,
+                output: (outputs[position] ?? outputs[outputs.length - 1]) as any,
+              };
             }
           }
         }
@@ -2026,25 +2052,35 @@ export class MessageList {
 
     // Pass 1: exact toolCallId match. Covers client tools and well-behaved
     // providers where the call and result share an id.
+    //
+    // An id does not name one invocation: a response may reuse a toolCallId that an earlier step
+    // already finished (some gateways restart tool-call numbering every step, #31609). The result
+    // then belongs to whichever stored copy describes the same call, and a copy still waiting for
+    // its outcome outranks one that already has one. An outcome matching no stored copy at all is a
+    // new occurrence and is left for `add`/`MessageMerger` to insert.
     for (let m = this.messages.length - 1; m >= 0; m--) {
       const msg = this.messages[m]!;
       if (msg.role !== 'assistant' || !msg.content?.parts) continue;
 
-      // A response may reuse a toolCallId that an earlier step already finished (some gateways
-      // restart tool-call numbering every step, #31609). The result belongs to the invocation that
-      // is still pending; the finished one only matches when nothing else does.
-      let finishedIndex = -1;
-      for (let i = 0; i < msg.content.parts.length; i++) {
+      let sameCallPending = -1;
+      let sameCallFinished = -1;
+      let anyPending = -1;
+      for (let i = msg.content.parts.length - 1; i >= 0; i--) {
         const part = msg.content.parts[i];
         if (part?.type !== 'tool-invocation' || part.toolInvocation?.toolCallId !== toolCallId) continue;
-        if (!isTerminalToolInvocationState(part.toolInvocation.state)) {
-          this.mergeToolResultIntoPart(msg, i, inputPart, metadata);
-          return true;
+        const pending = !isTerminalToolInvocationState(part.toolInvocation.state);
+        if (pending && anyPending === -1) anyPending = i;
+        if (!isSameToolInvocation(part.toolInvocation, inputPart.toolInvocation)) continue;
+        if (pending) {
+          if (sameCallPending === -1) sameCallPending = i;
+        } else if (sameCallFinished === -1) {
+          sameCallFinished = i;
         }
-        if (finishedIndex === -1) finishedIndex = i;
       }
-      if (finishedIndex !== -1) {
-        this.mergeToolResultIntoPart(msg, finishedIndex, inputPart, metadata);
+      const matchedIndex =
+        sameCallPending !== -1 ? sameCallPending : sameCallFinished !== -1 ? sameCallFinished : anyPending;
+      if (matchedIndex !== -1) {
+        this.mergeToolResultIntoPart(msg, matchedIndex, inputPart, metadata);
         return true;
       }
     }

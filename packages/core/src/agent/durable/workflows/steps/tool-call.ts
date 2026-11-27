@@ -2670,7 +2670,7 @@ export function createDurableToolCallStep() {
             ownership?.throwIfLost();
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
-            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
+            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId, cleanedArgs);
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }

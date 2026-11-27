@@ -8,6 +8,11 @@
  * `call_0`, step 2 calls `lookup({q:"b"})` as `call_0` again (control: `call_1`),
  * step 3 answers, so the third prompt must contain both calls and both results.
  * Plain, memory-backed and durable agents share the same message-list merge.
+ *
+ * The second block covers the same reuse through a provider-executed say-do
+ * tool: the gateway returns the call and its result in one response, so the
+ * message list only ever sees a completed part and there is no separate
+ * `updateToolInvocation` pass to disambiguate the occurrences.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -58,6 +63,38 @@ const textStream = (id: string, text: string) =>
     { type: 'text-end', id: `${id}-text` },
     { type: 'finish', finishReason: 'stop', usage },
   ]);
+
+/** A provider-executed call whose result arrives in the same response, as gateways do. */
+const providerCallStream = (id: string, toolCallId: string, q: string) =>
+  stream([
+    { type: 'stream-start', warnings: [] },
+    { type: 'response-metadata', id, modelId: 'mock-model', timestamp: new Date(0) },
+    {
+      type: 'tool-call',
+      toolCallType: 'function',
+      toolCallId,
+      toolName: 'web_search',
+      input: JSON.stringify({ q }),
+      providerExecuted: true,
+    },
+    {
+      type: 'tool-result',
+      toolCallId,
+      toolName: 'web_search',
+      result: { answer: `result-${q}` },
+      providerExecuted: true,
+    },
+    { type: 'finish', finishReason: 'tool-calls', usage },
+  ]);
+
+const webSearch = {
+  type: 'provider-defined' as const,
+  id: 'test.web_search',
+  name: 'web_search',
+  inputSchema: z.object({ q: z.string() }),
+  outputSchema: z.object({ answer: z.string() }),
+  args: {},
+};
 
 /** Step 1 and 2 call `lookup`, step 3 answers — `secondId` is the reused or distinct id. */
 function scriptedModel(secondId: string, captured: Captured) {
@@ -139,5 +176,81 @@ describe('tool call id reuse within a run (#31609)', () => {
     const prompts = await runAgent(kind, 'call_1');
     expect(toolCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_1 {"q":"b"}']);
     expect(toolResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_1 {"answer":"result-b"}']);
+  });
+});
+
+/** Step 1 and 2 let the provider return `web_search`'s result inline; step 3 answers. */
+function scriptedProviderModel(secondId: string, captured: Captured) {
+  return new MockLanguageModelV2({
+    doStream: async ({ prompt }) => {
+      captured.prompts.push(prompt as any[]);
+      const step = captured.prompts.length;
+      if (step === 1) return providerCallStream('s1', 'call_0', 'a');
+      if (step === 2) return providerCallStream('s2', secondId, 'b');
+      return textStream('s3', 'done');
+    },
+  });
+}
+
+const asObject = (value: unknown) => (typeof value === 'string' ? JSON.parse(value) : value);
+
+const providerCallsIn = (prompt: any[]) =>
+  partsIn(prompt)
+    .filter(part => part.type === 'tool-call')
+    .map(part => `${part.toolCallId} ${JSON.stringify(asObject(part.input))}`);
+
+const providerResultsIn = (prompt: any[]) =>
+  partsIn(prompt)
+    .filter(part => part.type === 'tool-result')
+    .map(part => `${part.toolCallId} ${JSON.stringify(asObject(part.output?.value ?? part.output ?? part.result))}`);
+
+describe('provider-executed call and result in one response (#31609)', () => {
+  const pubsubs: EventEmitterPubSub[] = [];
+
+  beforeEach(() => {
+    pubsubs.length = 0;
+  });
+
+  afterEach(async () => {
+    globalRunRegistry.clear();
+    await Promise.all(pubsubs.splice(0).map(pubsub => pubsub.close()));
+  });
+
+  async function runProviderAgent(kind: Kind, secondId: string): Promise<any[][]> {
+    const captured: Captured = { prompts: [] };
+    const base = new Agent({
+      id: 'repro',
+      name: 'repro',
+      instructions: 'test',
+      model: scriptedProviderModel(secondId, captured) as LanguageModelV2,
+      tools: { web_search: webSearch },
+      ...(kind === 'plain' ? {} : { memory: new MockMemory({ storage: new InMemoryStore() }) }),
+    });
+    const pubsub = new EventEmitterPubSub();
+    pubsubs.push(pubsub);
+    const agent = kind === 'durable' ? createDurableAgent({ agent: base, pubsub }) : base;
+    new Mastra({ agents: { repro: agent }, storage: new InMemoryStore(), logger: false });
+
+    const out = await (agent as any).stream('go', {
+      maxSteps: 5,
+      ...(kind === 'plain' ? {} : { memory: { thread: `p-${kind}-${secondId}`, resource: 'r' } }),
+    });
+    for await (const _chunk of out.fullStream) {
+      // drain to completion
+    }
+    await out.cleanup?.();
+    return captured.prompts;
+  }
+
+  it.each<Kind>(['plain', 'memory', 'durable'])('%s: keeps both calls when a later step reuses call_0', async kind => {
+    const prompts = await runProviderAgent(kind, 'call_0');
+    expect(providerCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_0 {"q":"b"}']);
+    expect(providerResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_0 {"answer":"result-b"}']);
+  });
+
+  it.each<Kind>(['plain', 'memory', 'durable'])('%s: keeps distinct second-step ids separate', async kind => {
+    const prompts = await runProviderAgent(kind, 'call_1');
+    expect(providerCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_1 {"q":"b"}']);
+    expect(providerResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_1 {"answer":"result-b"}']);
   });
 });

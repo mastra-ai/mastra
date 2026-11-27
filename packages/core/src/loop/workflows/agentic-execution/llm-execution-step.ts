@@ -107,7 +107,7 @@ import { trackOpenReasoning, watchInterruptibleStream } from '../../shared/inter
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { describeNonSuccessFinishReason } from '../../shared/non-success-finish-reason';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
-import { readToolResultFromMessageList } from '../../shared/read-tool-result';
+import { hasPendingToolInvocation, readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
@@ -1079,6 +1079,11 @@ async function processOutputStream<OUTPUT = undefined>({
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
           if (outputProcessors && outputProcessors.length > 0) {
+            // Whether this result resolves a call the list already holds. The read-back
+            // below syncs a processor's write into that occurrence, so it needs the
+            // occurrence to exist: a same-response result has none yet, and a reused
+            // toolCallId must not be read back from an earlier step's finished call.
+            const resolvesStoredCall = hasPendingToolInvocation(messageList, chunk.payload.toolCallId);
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1099,9 +1104,15 @@ async function processOutputStream<OUTPUT = undefined>({
 
               // Sync any processor mutation back into the chunk so streaming clients
               // see the post-processor value, not the raw tool return.
-              const postProcessorResult = readToolResultFromMessageList(messageList, chunk.payload.toolCallId);
-              if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
-                (chunk.payload as { result: unknown }).result = postProcessorResult;
+              if (resolvesStoredCall) {
+                const postProcessorResult = readToolResultFromMessageList(
+                  messageList,
+                  chunk.payload.toolCallId,
+                  chunk.payload.args,
+                );
+                if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+                  (chunk.payload as { result: unknown }).result = postProcessorResult;
+                }
               }
             } catch (error) {
               if (error instanceof TripWire) {
@@ -1124,20 +1135,26 @@ async function processOutputStream<OUTPUT = undefined>({
           }
 
           // Patch the deferred tool-call to state:'result' with the (possibly
-          // post-processor-mutated) value. For same-stream results no matching
-          // part exists yet — updateToolInvocation returns false and
-          // buildMessagesFromChunks handles the merge.
-          messageList.updateToolInvocation({
-            type: 'tool-invocation',
-            toolInvocation: {
-              toolCallId: chunk.payload.toolCallId,
-              toolName: chunk.payload.toolName,
-              args: chunk.payload.args,
-              ...getToolResultInvocationState(chunk.payload),
-            },
-            providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
-            providerExecuted: inferredProviderExecuted,
-          });
+          // post-processor-mutated) value. Only a deferred result has a call waiting here:
+          // the call arrived in an earlier step and was committed as state:'call'. A
+          // same-stream result has no part yet, and a reused toolCallId must not patch the
+          // earlier step's finished call (#31609). Both are left to buildMessagesFromChunks.
+          if (hasPendingToolInvocation(messageList, chunk.payload.toolCallId)) {
+            messageList.updateToolInvocation({
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: chunk.payload.toolCallId,
+                toolName: chunk.payload.toolName,
+                args: chunk.payload.args,
+                ...getToolResultInvocationState(chunk.payload),
+              },
+              providerMetadata: withToolPayloadTransformProviderMetadata(
+                chunk.payload.providerMetadata,
+                chunk.metadata,
+              ),
+              providerExecuted: inferredProviderExecuted,
+            });
+          }
         }
         // The result determines which MODEL_STEP owns the provider tool call, so the
         // PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
@@ -1517,7 +1534,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 writer: recoveryWriter,
                 abortSignal: options?.abortSignal,
               });
-              const processedResult = readToolResultFromMessageList(messageList, work.toolCallId);
+              const processedResult = readToolResultFromMessageList(messageList, work.toolCallId, work.args);
               if (processedResult !== undefined) transformed.payload.result = processedResult;
             }
             chunks.push(transformed as CollectedChunk);

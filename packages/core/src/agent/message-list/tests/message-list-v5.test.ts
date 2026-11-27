@@ -1816,6 +1816,60 @@ describe('MessageList V5 Support', () => {
       expect(toolResultPart.output.value).toBe('Temperature: 72°F, sunny');
     });
 
+    it('should map each modelOutput to its own occurrence when a toolCallId is reused (#31609)', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Search twice', 'input');
+
+      // Two finished calls that a gateway numbered the same, each with its own mapped output.
+      const reusedIdMessage: MastraDBMessage = {
+        id: 'msg-reused-id',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'a' },
+                result: { raw: 'a-raw' },
+              },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'first-output' } } },
+            },
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'b' },
+                result: { raw: 'b-raw' },
+              },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'second-output' } } },
+            },
+          ],
+        },
+      };
+
+      list.add(reusedIdMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResultOutputs = prompt
+        .filter(m => m.role === 'tool')
+        .flatMap(m => (m as any).content as any[])
+        .filter(part => part.type === 'tool-result')
+        .map(part => part.output?.value);
+      expect(toolResultOutputs).toEqual(['first-output', 'second-output']);
+    });
+
     it('should preserve raw result in stored messages when modelOutput is set', async () => {
       const list = new MessageList({ threadId, resourceId });
 

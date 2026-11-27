@@ -491,6 +491,56 @@ describe('MessageList.updateToolInvocation', () => {
     expect((parts[2] as any).type).toBe('text');
   });
 
+  it('should update the newest matching occurrence when a toolCallId is reused (#31609)', () => {
+    const messageList = new MessageList();
+
+    // Two finished calls share an id; only the newer one describes the incoming result.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'lookup',
+          args: { q: 'a' },
+          result: { answer: 'result-a' },
+        },
+      },
+      { type: 'step-start' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'lookup',
+          args: { q: 'b' },
+          result: { answer: 'result-b' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'call_0',
+        toolName: 'lookup',
+        args: { q: 'b' },
+        result: { answer: 'result-b-final' },
+      },
+    });
+
+    expect(updated).toBe(true);
+
+    const parts = msg.content.parts as any[];
+    // The earlier call keeps its own result...
+    expect(parts[0].toolInvocation.state).toBe('result');
+    expect(parts[0].toolInvocation.result).toEqual({ answer: 'result-a' });
+    // ...and the result lands on the occurrence that describes the same call.
+    expect(parts[2].toolInvocation.result).toEqual({ answer: 'result-b-final' });
+  });
+
   it('should skip user-role messages when searching', () => {
     const messageList = new MessageList();
 
