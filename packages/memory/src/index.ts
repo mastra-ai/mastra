@@ -3304,7 +3304,8 @@ Notes:
    * @param args.metadata - Additional metadata to merge with clone metadata
    * @param args.options - Options for filtering which messages to include
    * @param args.options.messageLimit - Maximum number of messages to copy (from most recent)
-   * @param args.options.messageFilter - Filter messages by date range or specific IDs
+   * @param args.options.messageFilter - Filter messages by date range or specific IDs. With observational
+   *   memory and no filter or limit, only the messages after `lastObservedAt` are copied; pass `{}` for all.
    * @param memoryConfig - Optional memory configuration override
    * @returns The newly created thread and the cloned messages
    *
@@ -3381,11 +3382,13 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const result = await memoryStore.copyThread(args);
-
-    // Fetch source thread once for working memory and OM cloning
+    // Fetch source thread once for the default message filter, working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
     const sourceResourceId = sourceThread?.resourceId;
+
+    const result = await memoryStore.copyThread(
+      await this.withContextWindowFilter(memoryStore, args, sourceResourceId),
+    );
 
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
@@ -3701,6 +3704,28 @@ Notes:
         );
       }
     }
+  }
+
+  /**
+   * With observational memory, the context window is the observations plus the messages created
+   * after `lastObservedAt` (the same boundary `getContext` loads by). When the caller names no
+   * message filter or limit, copy only those messages: the observations carry the rest.
+   */
+  private async withContextWindowFilter(
+    memoryStore: MemoryStorage,
+    args: StorageCloneThreadInput,
+    sourceResourceId: string | undefined,
+  ): Promise<StorageCloneThreadInput> {
+    if (!memoryStore.supportsObservationalMemory || !sourceResourceId) return args;
+    if (args.options?.messageFilter !== undefined || args.options?.messageLimit !== undefined) return args;
+
+    const sourceOM =
+      (await memoryStore.getObservationalMemory(args.sourceThreadId, sourceResourceId)) ??
+      (await memoryStore.getObservationalMemory(null, sourceResourceId));
+    if (!sourceOM?.lastObservedAt) return args;
+
+    const startDate = new Date(new Date(sourceOM.lastObservedAt).getTime() + 1);
+    return { ...args, options: { ...args.options, messageFilter: { startDate } } };
   }
 
   /**

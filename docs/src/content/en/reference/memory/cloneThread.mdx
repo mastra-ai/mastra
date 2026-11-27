@@ -82,7 +82,8 @@ const { thread, clonedMessages } = await memory.cloneThread({
           {
             name: 'messageFilter',
             type: 'MessageFilter',
-            description: 'Filter criteria for selecting which messages to clone.',
+            description:
+              'Filter criteria for selecting which messages to clone. With Observational Memory, the default is the messages after `lastObservedAt`; pass `{}` to clone every message.',
             isOptional: true,
             properties: [
               {
@@ -274,3 +275,16 @@ When [Observational Memory](/docs/memory/observational-memory) is enabled, `clon
 - **Resource-scoped OM (deprecated, different `resourceId`)**: The OM record is cloned to the new resource. Message IDs are remapped and any thread-identifying tags within observations are updated to reference the cloned thread.
 
 Only the current (most recent) OM generation is cloned. Older history generations aren't copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.
+
+### Messages copied with Observational Memory
+
+When the source thread has observations and you pass neither `messageLimit` nor `messageFilter`, `cloneThread()` copies only the messages in the context window: those created after the OM record's `lastObservedAt`. The observations already carry the earlier messages, so the clone starts with the same context as the source. The source thread keeps all of its messages.
+
+A thread without OM, or whose OM hasn't observed anything yet, still copies every message. To copy every message from a thread with observations, pass an empty filter:
+
+```typescript
+const { thread } = await memory.cloneThread({
+  sourceThreadId: 'thread-123',
+  options: { messageFilter: {} },
+})
+```
