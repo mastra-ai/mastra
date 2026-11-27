@@ -99,8 +99,10 @@ type Story = StoryObj;
 function Demo({
   fields = FIELDS,
   initial = [],
+  applyMultiSelectOnDismiss,
   children,
 }: {
+  applyMultiSelectOnDismiss?: boolean;
   fields?: FilterBarField[];
   initial?: FilterBarItem[];
   children?: (items: FilterBarItem[]) => React.ReactNode;
@@ -108,7 +110,13 @@ function Demo({
   const [items, setItems] = useState<FilterBarItem[]>(initial);
   return (
     <div className="grid w-full max-w-3xl gap-3">
-      <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
+      <FilterBar
+        fields={fields}
+        operators={DEFAULT_FILTER_OPERATORS}
+        value={items}
+        onValueChange={setItems}
+        applyMultiSelectOnDismiss={applyMultiSelectOnDismiss}
+      >
         <FilterBar.Chips />
         <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
@@ -132,6 +140,21 @@ export const WithPrefilledFilters: Story = {
         { id: '4', fieldId: 'traceId', operatorId: 'is-empty', value: '' },
       ]}
     />
+  ),
+};
+
+export const ApplyMultiSelectOnDismiss: Story = {
+  name: 'Multi-select applies on dismiss',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `applyMultiSelectOnDismiss`, an "is any of" selection applies when you click outside or tab away; there is no Done button. Esc or Cancel discards the changes, and typed text only becomes a value with Enter.',
+      },
+    },
+  },
+  render: () => (
+    <Demo applyMultiSelectOnDismiss initial={[{ id: '1', fieldId: 'tags', operatorId: 'in', value: ['production'] }]} />
   ),
 };
 

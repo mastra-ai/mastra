@@ -2,7 +2,12 @@ import type { BaseUIEvent } from '@base-ui/react/types';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
+import {
+  ApplyOnDismissHint,
+  FILTER_BAR_CONTROL_SIZE,
+  FilterBarFieldLabel,
+  alwaysHighlightProps,
+} from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
@@ -96,6 +101,9 @@ function FilterBarInputImpl({
     return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
   }, [ctx.fields, offerAdvanced, groupId]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
+  const applyOnDismiss = ctx.applyMultiSelectOnDismiss === true && step === 'value' && operator?.arity === 'many';
+  // Set while the popup is being dismissed: focus stays where the user clicked or tabbed to.
+  const dismissingRef = useRef(false);
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
   useEffect(() => {
@@ -130,7 +138,7 @@ function FilterBarInputImpl({
     (fieldId: string, operatorId: string, value: FilterBarValue) => {
       withHighlightReset(() => commitDraft({ fieldId, operatorId }, value));
       setQuery('');
-      inputRef.current?.focus();
+      if (!dismissingRef.current) inputRef.current?.focus();
     },
     [withHighlightReset, commitDraft],
   );
@@ -183,8 +191,12 @@ function FilterBarInputImpl({
     enabled: open && step === 'value',
     setQuery,
     onCommit: value => {
-      if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
+      // An empty selection never adds a filter.
+      if (Array.isArray(value) && value.length === 0) close();
+      else if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
+    applyOnDismiss,
+    onCancel: close,
   });
 
   // Leaving a group's input hands the target back to the bar; empty groups are pruned when the
@@ -220,7 +232,9 @@ function FilterBarInputImpl({
       // Consumed here: an enclosing popover (advanced filter) must not close on it.
       event.stopPropagation();
       event.preventBaseUIHandler();
-      stepBack();
+      // A multi-selection being built is discarded as a whole; focus stays in the input.
+      if (applyOnDismiss) close();
+      else stepBack();
       return;
     }
     if (!open && (event.key === 'ArrowDown' || event.key === 'Enter')) {
@@ -326,8 +340,20 @@ function FilterBarInputImpl({
           ) {
             return;
           }
-          if (next) setOpen(true);
-          else close();
+          if (next) {
+            setOpen(true);
+            return;
+          }
+          // Dismissed (outside click or Tab out): apply the selection being built, never typed text.
+          if (applyOnDismiss) {
+            dismissingRef.current = true;
+            try {
+              valueStep.applySelection();
+            } finally {
+              dismissingRef.current = false;
+            }
+          }
+          close();
         }}
         {...alwaysHighlightProps}
         modal={false}
@@ -435,12 +461,20 @@ function FilterBarInputImpl({
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => valueStep.submitFreeText()}
                   >
-                    Apply
+                    {applyOnDismiss ? 'Add' : 'Apply'}
                     <Kbd size="xs">↵</Kbd>
                   </Button>
                 </div>
               )}
-              {step === 'value' && valueStep.isMany && (
+              {applyOnDismiss && (
+                <div className="flex items-center justify-between gap-2 border-t border-border py-1 pr-1 pl-[.9em]">
+                  <ApplyOnDismissHint step={valueStep} />
+                  <Button type="button" size="sm" variant="ghost" onMouseDown={e => e.preventDefault()} onClick={close}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+              {step === 'value' && valueStep.isMany && !applyOnDismiss && (
                 <div className="flex items-center justify-end gap-1 border-t border-border p-1">
                   <Button
                     size="sm"

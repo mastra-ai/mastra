@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -51,7 +52,9 @@ function Harness({
   readOnlyIds = [],
   nonRemovableIds = [],
   describeSuggestionsError,
+  applyMultiSelectOnDismiss,
 }: {
+  applyMultiSelectOnDismiss?: boolean;
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
   operators?: FilterBarOperator[];
@@ -66,6 +69,7 @@ function Harness({
       fields={fields}
       operators={operators}
       describeSuggestionsError={describeSuggestionsError}
+      applyMultiSelectOnDismiss={applyMultiSelectOnDismiss}
       value={items}
       onValueChange={next => {
         setItems(next);
@@ -1772,5 +1776,260 @@ describe('FilterBar', () => {
       expect(getChips()).toHaveLength(2);
       expect(argAt(onChange, 0, 0)).toHaveLength(2);
     });
+  });
+});
+
+describe('FilterBar applyMultiSelectOnDismiss', () => {
+  const press = (target: Element) => {
+    fireEvent.pointerDown(target, { pointerType: 'mouse', button: 0 });
+    fireEvent.mouseDown(target, { button: 0 });
+    fireEvent.pointerUp(target, { pointerType: 'mouse', button: 0 });
+    fireEvent.mouseUp(target, { button: 0 });
+    fireEvent.click(target, { button: 0 });
+  };
+
+  function OptInHarness(props: Omit<Parameters<typeof Harness>[0], 'applyMultiSelectOnDismiss'>) {
+    return (
+      <>
+        <Harness {...props} applyMultiSelectOnDismiss />
+        <button type="button" data-testid="elsewhere">
+          Elsewhere
+        </button>
+      </>
+    );
+  }
+
+  const elsewhere = () => screen.getByTestId('elsewhere');
+
+  /** Opens "Status is any of" in the typeahead. */
+  async function openNewStatusSelection() {
+    const input = getInput();
+    input.focus();
+    type('status');
+    key('Enter');
+    fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+    await screen.findByRole('option', { name: 'Running' });
+    return input;
+  }
+
+  describe('adding a filter', () => {
+    it('applies the selection once when the user clicks outside, without a Done button', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      const input = await openNewStatusSelection();
+
+      expect(screen.queryByRole('button', { name: /^Done/ })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      expect(screen.getByText('Applies when you click away')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(screen.getByRole('option', { name: 'Running' }).hasAttribute('data-selected')).toBe(true);
+
+      await userEvent.setup().click(elsewhere());
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(argAt(onChange, 0, 0)).toMatchObject([
+        { fieldId: 'status', operatorId: 'in', value: ['running', 'error'] },
+      ]);
+      // Focus stays on what was clicked instead of jumping back to the filter input.
+      expect(document.activeElement).toBe(elsewhere());
+      expect(input.value).toBe('');
+    });
+
+    it('adds nothing when dismissed with an empty selection', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      await openNewStatusSelection();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+
+      press(elsewhere());
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+      expect(getChips()).toHaveLength(0);
+    });
+
+    it('never turns typed search text into a value on dismissal', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      await openNewStatusSelection();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+
+      type('custom');
+      await screen.findByText('Press Enter to add "custom"');
+      press(elsewhere());
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running'] });
+    });
+
+    it('adds typed text only through Enter', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      await openNewStatusSelection();
+      type('custom');
+      await screen.findByText('Press Enter to add "custom"');
+      key('Enter');
+      expect(onChange).not.toHaveBeenCalled();
+      expect((await screen.findByRole('option', { name: 'custom' })).hasAttribute('data-selected')).toBe(true);
+
+      press(elsewhere());
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['custom'] });
+    });
+
+    it('applies with Ctrl/Cmd+Enter and keeps focus in the input', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      const input = await openNewStatusSelection();
+      fireEvent.click(screen.getByRole('option', { name: 'Success' }));
+      key('Enter', { metaKey: true });
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'status', operatorId: 'in', value: ['success'] });
+      expect(document.activeElement).toBe(input);
+    });
+
+    it('discards the selection on Escape and keeps focus in the input', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      const input = await openNewStatusSelection();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+
+      key('Escape');
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input.dataset.step).toBe('field');
+      expect(document.activeElement).toBe(input);
+    });
+
+    it('discards the selection on Cancel', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      await openNewStatusSelection();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
+      press(elsewhere());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('leaves single-value operators unchanged', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness onChange={onChange} />);
+      getInput().focus();
+      type('status');
+      key('Enter');
+      fireEvent.click(await screen.findByRole('option', { name: 'is' }));
+      await screen.findByRole('option', { name: 'Running' });
+      expect(screen.queryByText('Applies when you click away')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+
+      press(elsewhere());
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Running' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('editing a filter', () => {
+    const initial: FilterBarItem[] = [{ id: 's', fieldId: 'status', operatorId: 'in', value: ['running'] }];
+    const openValue = async () => {
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: Running' }));
+      return screen.findByRole('option', { name: 'Error' });
+    };
+
+    it('applies the edited selection once on outside click, without a Done button', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      expect(screen.queryByRole('button', { name: /^Done/ })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      fireEvent.click(screen.getByRole('option', { name: 'Success' }));
+      expect(onChange).not.toHaveBeenCalled();
+
+      await userEvent.setup().click(elsewhere());
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)).toMatchObject([{ id: 's', value: ['running', 'error', 'success'] }]);
+      expect(document.activeElement).toBe(elsewhere());
+    });
+
+    it('applies the edited selection once when the user tabs out of the dropdown', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      const user = userEvent.setup();
+      // The first Tab lands on Cancel inside the dropdown, which must not apply.
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
+      await user.tab();
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)).toMatchObject([{ id: 's', value: ['running', 'error'] }]);
+    });
+
+    it('does nothing when the selection ends up unchanged', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+
+      press(elsewhere());
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Error' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('removes the filter when every value was deselected', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+
+      press(elsewhere());
+      await waitFor(() => expect(onChange).toHaveBeenCalledTimes(1));
+      expect(argAt(onChange, 0, 0)).toEqual([]);
+    });
+
+    it('restores the previous selection on Escape', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      pressActive({ key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Error' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+
+      await openValue();
+      expect(screen.getByRole('option', { name: 'Running' }).hasAttribute('data-selected')).toBe(true);
+      expect(screen.getByRole('option', { name: 'Error' }).hasAttribute('data-selected')).toBe(false);
+    });
+
+    it('restores the previous selection on Cancel', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Error' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => expect(screen.queryByRole('option', { name: 'Error' })).toBeNull());
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('removes the filter on Ctrl/Cmd+Enter with nothing selected and moves focus to the input', async () => {
+      const onChange = vi.fn();
+      render(<OptInHarness initial={initial} onChange={onChange} />);
+      await openValue();
+      fireEvent.click(screen.getByRole('option', { name: 'Running' }));
+      pressActive({ key: 'Enter', ctrlKey: true } as { key: string });
+      expect(argAt(onChange, 0, 0)).toEqual([]);
+      await waitFor(() => expect(document.activeElement).toBe(getInput()));
+    });
+  });
+
+  it('keeps the Done button when not opted in', async () => {
+    render(<Harness />);
+    await openNewStatusSelection();
+    expect(screen.getByRole('button', { name: /^Done/ })).toBeTruthy();
   });
 });

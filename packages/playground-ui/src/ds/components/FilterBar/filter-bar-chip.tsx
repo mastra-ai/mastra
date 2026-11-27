@@ -23,6 +23,7 @@ import { getFieldSuggestions } from './use-value-suggestions';
 import { Button } from '@/ds/components/Button/Button';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Kbd } from '@/ds/components/Kbd/kbd';
+import { Txt } from '@/ds/components/Txt';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
 import { IconLock } from '@/ds/icons/central/IconLock';
@@ -312,6 +313,8 @@ type SegmentComboboxProps<T> = {
   onQueryChange: (query: string) => void;
   onSelect: (item: T) => void;
   onOpen?: () => void;
+  /** Called when the popup is dismissed by anything but Escape: an outside click, Tab out, or the trigger. */
+  onDismiss?: () => void;
   /** Popup content: typically a `SegmentSearchInput` followed by a `FilterBarOptionList`. */
   children: ReactNode;
 };
@@ -367,6 +370,7 @@ function SegmentCombobox<T>({
   onQueryChange,
   onSelect,
   onOpen,
+  onDismiss,
   children,
 }: SegmentComboboxProps<T>) {
   const ctx = useFilterBarContext();
@@ -416,9 +420,12 @@ function SegmentCombobox<T>({
       }}
       onItemHighlighted={item => setHighlighted(item ?? null)}
       open={open}
-      onOpenChange={next => {
+      onOpenChange={(next, details) => {
         if (next) onOpen?.();
-        else onQueryChange('');
+        else {
+          if (details.reason !== 'escape-key') onDismiss?.();
+          onQueryChange('');
+        }
         chip.setOpenSegment(next ? segment : null);
       }}
       {...alwaysHighlightProps}
@@ -562,13 +569,23 @@ function ValueEditor() {
   const open = chip.openSegment === 'value';
   const [query, setQuery] = useState('');
 
+  const applyOnDismiss = ctx.applyMultiSelectOnDismiss === true && chip.operator?.arity === 'many';
   const close = useCallback(() => chip.setOpenSegment(null), [chip]);
+  // Set while the popup is being dismissed: Base UI settles focus itself (the clicked target, or
+  // the next tabbable on Tab), so an emptied filter must not pull focus to a neighbour.
+  const dismissingRef = useRef(false);
   const onCommit = useCallback(
     (value: FilterBarValue) => {
-      ctx.updateItem(chip.item.id, { value });
+      if (Array.isArray(value) && value.length === 0) {
+        // Apply-on-dismiss only: every value was deselected, so the condition goes.
+        ctx.removeItem(chip.item.id);
+        if (!dismissingRef.current) ctx.focusAfterRemove(chip.index);
+      } else {
+        ctx.updateItem(chip.item.id, { value });
+      }
       close();
     },
-    [ctx, chip.item.id, close],
+    [ctx, chip.item.id, chip.index, close],
   );
 
   const step = useValueStep({
@@ -579,7 +596,19 @@ function ValueEditor() {
     initialValue: chip.item.value,
     setQuery,
     onCommit,
+    applyOnDismiss,
+    onCancel: close,
   });
+
+  const onDismiss = () => {
+    if (!applyOnDismiss) return;
+    dismissingRef.current = true;
+    try {
+      step.applySelection();
+    } finally {
+      dismissingRef.current = false;
+    }
+  };
 
   const ValueInput = VALUE_INPUTS[chip.field?.type ?? 'text'];
 
@@ -595,6 +624,7 @@ function ValueEditor() {
       query={query}
       onQueryChange={setQuery}
       onSelect={step.handleSelect}
+      onDismiss={onDismiss}
       // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
       onOpen={() =>
         setQuery(!Array.isArray(chip.item.value) && !chip.field?.suggestions ? String(chip.item.value) : '')
@@ -612,8 +642,10 @@ type ValueInputProps = {
 
 /** Suggestion list + multi-select footer, shared by every value input. */
 function ValueOptions({ step, onCancel }: ValueInputProps) {
+  const ctx = useFilterBarContext();
   const chip = useChip();
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
+  const applyOnDismiss = ctx.applyMultiSelectOnDismiss === true && step.isMany;
   return (
     <>
       {step.validationMessage && (
@@ -631,9 +663,17 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           emptyText={step.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'}
         />
       )}
-      {step.isMany && (
+      {applyOnDismiss && (
+        <div className="flex items-center justify-between gap-2 border-t border-border py-1 pr-1 pl-[.9em]">
+          <ApplyOnDismissHint step={step} />
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {step.isMany && !applyOnDismiss && (
         <div className="flex items-center justify-end gap-1 border-t border-border p-1">
-          <Button size="sm" variant="ghost" onClick={onCancel}>
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
           <Button size="sm" variant="default" onClick={() => step.commitDone()}>
@@ -643,6 +683,18 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Footer caption of an apply-on-dismiss multi-select: typed text only becomes a value through
+ * Enter, so say so while there is some; otherwise say how the selection is applied.
+ */
+export function ApplyOnDismissHint({ step }: { step: Pick<ValueInputProps['step'], 'pendingText'> }) {
+  return (
+    <Txt variant="caption" tone="muted" className="min-w-0 truncate" aria-live="polite">
+      {step.pendingText !== undefined ? `Press Enter to add "${step.pendingText}"` : 'Applies when you click away'}
+    </Txt>
   );
 }
 
