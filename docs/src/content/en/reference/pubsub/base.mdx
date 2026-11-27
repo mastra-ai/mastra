@@ -200,7 +200,7 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     name: 'redeliversUnacked',
     type: 'boolean',
     description:
-      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this, and only after 30 seconds or more. Evented workflows and agents that run on several processes need `true`. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).",
+      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this. Evented workflows and agents that run on several processes need `true`. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents).",
   },
 ]}
 />

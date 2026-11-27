@@ -89,8 +89,7 @@ export const mastra = new Mastra({
   {
     name: 'reclaimIdleMs',
     type: 'number',
-    description:
-      'Minimum idle time before an event can be reclaimed. Keep it at 30000 or more for evented workflows: a step event reclaimed sooner can be dropped as a duplicate.',
+    description: 'Minimum idle time before an event can be reclaimed.',
     isOptional: true,
     defaultValue: '60000',
   },
