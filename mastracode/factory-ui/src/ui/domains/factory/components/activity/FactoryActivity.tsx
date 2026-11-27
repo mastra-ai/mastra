@@ -100,7 +100,7 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
               </div>
             )}
             <span className="text-muted-foreground duration-slow ease-out-custom group-has-[[aria-controls]:hover]/band:text-foreground flex transition-colors motion-reduce:transition-none">
-              <DisclosureChevron open={open} className="duration-slow size-icon-sm" />
+              <DisclosureChevron open={open} className="size-icon-sm" />
             </span>
           </div>
         </div>
