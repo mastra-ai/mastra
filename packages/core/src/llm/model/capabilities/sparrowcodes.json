@@ -25,6 +25,36 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
+    "openai/gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "sparrow/auto": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
     "google/gemini-4-argon": [
       {
         "type": "effort",
@@ -49,42 +79,6 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-6.1-terra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "sparrow/auto": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -97,7 +91,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-fable-5.1": [
+    "anthropic/claude-haiku-5.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -109,10 +103,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "anthropic/claude-haiku-5.5": [
+    "anthropic/claude-fable-5.1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
       }
     ]
   }

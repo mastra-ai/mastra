@@ -9861,9 +9861,9 @@
       },
       "qwen/qwen3.6-35b-a3b": {
         "cost": {
-          "input": 0.1,
-          "output": 0.9,
-          "cache_read": 0.04,
+          "input": 0.05,
+          "output": 0.69,
+          "cache_read": 0.024,
           "cache_write": 0
         }
       },
@@ -30995,7 +30995,7 @@
       },
       "Qwen/Qwen3-Next-80B-A3B-Instruct": {
         "cost": {
-          "input": 0.09,
+          "input": 0.1,
           "output": 1.1
         }
       },
@@ -31199,8 +31199,8 @@
       },
       "deepseek-ai/DeepSeek-V4-Pro": {
         "cost": {
-          "input": 0.640586,
-          "output": 1.5039
+          "input": 0.888188,
+          "output": 1.5082
         }
       },
       "deepseek-ai/DeepSeek-V4-Pro-0813": {
@@ -31259,8 +31259,8 @@
       },
       "google/gemma-4-31B-it": {
         "cost": {
-          "input": 0.34,
-          "output": 0.1
+          "input": 0.164,
+          "output": 0.275
         }
       },
       "ibm-granite/granite-4.2-8b": {
@@ -35383,23 +35383,23 @@
       },
       "deepseek/deepseek-v4-flash-vision-exp": {
         "cost": {
-          "input": 0.44,
-          "output": 1.32,
-          "cache_read": 0.028
+          "input": 0.2156,
+          "output": 0.6468,
+          "cache_read": 0.00686
         }
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
           "input": 0.888188,
-          "output": 1.5039,
+          "output": 1.5082,
           "cache_read": 0.2
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.25,
+          "input": 0.0999,
           "output": 5,
-          "cache_read": 0.125
+          "cache_read": 0.0999
         }
       },
       "deepseek/deepseek-v4.1-flash": {
@@ -37491,8 +37491,8 @@
       "qwen/qwen3.6-35b-a3b": {
         "cost": {
           "input": 0.05,
-          "output": 0.7,
-          "cache_read": 0.025
+          "output": 0.69,
+          "cache_read": 0.024
         }
       },
       "qwen/qwen3.6-flash": {
@@ -38196,9 +38196,9 @@
       },
       "~deepseek/deepseek-pro-latest": {
         "cost": {
-          "input": 0.25,
+          "input": 0.0999,
           "output": 5,
-          "cache_read": 0.125
+          "cache_read": 0.0999
         }
       },
       "~deepseek/deepseek-v4-flash-latest": {
@@ -50150,8 +50150,8 @@
       },
       "deepseek/deepseek-v4-flash-vision-exp": {
         "cost": {
-          "input": 0.2156,
-          "output": 0.6468,
+          "input": 0.238238,
+          "output": 0.714714,
           "cache_read": 0.00686
         }
       },
@@ -52860,9 +52860,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -60842,23 +60842,23 @@
       },
       "deepseek/deepseek-v4-flash-vision-exp": {
         "cost": {
-          "input": 0.44,
-          "output": 1.32,
-          "cache_read": 0.028
+          "input": 0.2156,
+          "output": 0.6468,
+          "cache_read": 0.00686
         }
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
           "input": 0.888188,
-          "output": 1.5039,
+          "output": 1.5082,
           "cache_read": 0.2
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.25,
+          "input": 0.0999,
           "output": 5,
-          "cache_read": 0.125
+          "cache_read": 0.0999
         }
       },
       "deepseek/deepseek-v4.1-flash": {
@@ -61213,8 +61213,7 @@
       "google/gemma-3-27b-it": {
         "cost": {
           "input": 0.08,
-          "output": 0.45,
-          "cache_read": 0.04
+          "output": 0.16
         }
       },
       "google/gemma-3-4b-it": {
@@ -61225,9 +61224,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.0765,
-          "output": 0.255,
-          "cache_read": 0.0425
+          "input": 0.09,
+          "output": 0.3,
+          "cache_read": 0.05
         }
       },
       "google/gemma-4-26b-a4b-it:free": {
@@ -63779,9 +63778,9 @@
       },
       "~deepseek/deepseek-pro-latest": {
         "cost": {
-          "input": 0.111,
-          "output": 4.44,
-          "cache_read": 0.097
+          "input": 0.0999,
+          "output": 5,
+          "cache_read": 0.0999
         }
       },
       "~deepseek/deepseek-v4-flash-latest": {

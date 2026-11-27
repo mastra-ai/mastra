@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parseMemoryRequestContext } from '../memory/types';
 import type { ProcessInputStepArgs } from '../processors/index';
 import { createTool } from '../tools/tool';
-import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY, isUsableRenderContext } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 
 export const GENERATIVE_UI_PROCESSOR_ID = 'chat-channel-generative-ui';
@@ -149,8 +149,9 @@ export class ChatChannelGenerativeUIProcessor {
     requestContext: ProcessInputStepArgs['requestContext'],
     state: Record<string, unknown> | undefined,
   ): Promise<ChatChannelRenderContext | undefined> {
-    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    if (inbound) return inbound;
+    const inbound = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+    // A replica restores this entry from JSON as a method-less husk; rebuild from the thread instead.
+    if (isUsableRenderContext(inbound)) return inbound;
 
     // Resolved once per run; `null` remembers a thread that isn't channel-backed.
     if (state && 'render' in state) return (state.render as ChatChannelRenderContext | null) ?? undefined;

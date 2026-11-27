@@ -15,6 +15,8 @@ export interface Conversation {
   input: unknown[] | undefined;
   /** What each ended call added, in the order they ended, with the MODEL_STEP it ran in. */
   calls: Array<{ stepId: string | undefined; message: AssistantMessage }>;
+  /** What each ended MODEL_STEP holds, for a step a resumed run replays without calling the model. */
+  steps: Array<{ id: string; endTime: Date; message: AssistantMessage }>;
   /** Tool results as the model was given them, keyed by toolCallId. */
   toolResults: Map<unknown, string>;
   /** Usage of the calls that ended so far; absent until one has. */
@@ -118,10 +120,18 @@ export function messageOfCall(result: ModelStepResult): AssistantMessage | undef
  * tool results. Tools the provider ran inside this call come last, ahead of the answer in its output.
  */
 export function messagesOfCall(
-  { input, calls, toolResults }: Conversation,
-  result: ModelStepResult = {},
+  { input, calls, steps, toolResults }: Conversation,
+  call: { parentSpanId?: string; startTime: Date; output?: unknown },
 ): unknown[] | undefined {
   if (!input) return undefined;
+  const result = (call.output ?? {}) as ModelStepResult;
+  // A step can end before its own call is exported, so it counts only once it is in the past.
+  const replayed = steps.filter(
+    step =>
+      step.id !== call.parentSpanId &&
+      new Date(step.endTime) <= new Date(call.startTime) &&
+      !calls.some(({ stepId }) => stepId === step.id),
+  );
   const withResults = (message: AssistantMessage) => [
     message,
     ...(message.tool_calls ?? [])
@@ -131,7 +141,7 @@ export function messagesOfCall(
   const providerTools = toolCallsIn(result).filter(toolCall => toolCall.providerExecuted);
   return [
     ...input,
-    ...calls.flatMap(call => withResults(call.message)),
+    ...[...replayed, ...calls].flatMap(({ message }) => withResults(message)),
     ...(providerTools.length ? withResults(toAssistantMessage('', providerTools)) : []),
   ];
 }

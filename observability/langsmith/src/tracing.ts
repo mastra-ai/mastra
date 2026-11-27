@@ -571,6 +571,9 @@ export class LangSmithExporter extends TrackingExporter<
         // A processor rejected this step's answer, so the next call is sent without it.
         if ((span.attributes as ModelStepAttributes | undefined)?.finishReason === 'retry') {
           conversation.calls = conversation.calls.filter(call => call.stepId !== span.id);
+        } else if (!span.errorInfo && span.output && span.endTime) {
+          const message = messageOfCall(span.output as ModelStepResult);
+          if (message) conversation.steps.push({ id: span.id, endTime: span.endTime, message });
         }
         break;
       case SpanType.TOOL_CALL:
@@ -682,6 +685,7 @@ export class LangSmithExporter extends TrackingExporter<
         const conversation: Conversation = {
           input: toChatMessages(span.input?.messages),
           calls: [],
+          steps: [],
           toolResults: new Map(),
         };
         traceData.setExtraValue(CONVERSATION + span.id, conversation);
@@ -696,7 +700,7 @@ export class LangSmithExporter extends TrackingExporter<
 
       if (isInference && conversation) {
         // The span's own input is a preview that only names tool calls and results.
-        const messages = messagesOfCall(conversation, span.output);
+        const messages = messagesOfCall(conversation, span);
         if (messages) payload.inputs = { ...payload.inputs, messages };
       }
 
