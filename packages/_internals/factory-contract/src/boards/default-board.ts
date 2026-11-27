@@ -4,3 +4,8 @@
  * Work board) and its default routes name it; nothing else about it is special.
  */
 export const DEFAULT_BOARD_ID = 'work';
+
+/** A card's board; rows filed before boards existed belong to the default board. */
+export function boardIdOf(item: { board?: string | null }): string {
+  return item.board ?? DEFAULT_BOARD_ID;
+}
