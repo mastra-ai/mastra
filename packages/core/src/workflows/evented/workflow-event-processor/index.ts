@@ -1931,7 +1931,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (loopFailure) throw loopFailure;
   }
 
-  /** Hands a nested run's successful result to the parent step that runs it. */
   /**
    * The occurrence a nested run's hand-back completes the parent's step under. On storage v1 the
    * hand-back carries the parent's step results as the occurrence that started the child saw them.
@@ -1955,6 +1954,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     return metadata.startedBy;
   }
 
+  /** Hands a nested run's successful result to the parent step that runs it. */
   async #handNestedSuccessToParent({
     parentWorkflow,
     nestedRunId,
