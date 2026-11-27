@@ -37,7 +37,10 @@ function sourceControl() {
   });
   return {
     integrationId: 'github',
-    sessions: { getBySessionId: vi.fn(async (sessionId: string) => row(sessionId)) },
+    sessions: {
+      getBySessionId: vi.fn(async (sessionId: string) => row(sessionId)),
+      setSandboxUser: vi.fn(async () => {}),
+    },
     projectRepositories: {
       get: vi.fn(async ({ id }: { id: string }) => ({
         id,

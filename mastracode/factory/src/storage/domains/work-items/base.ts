@@ -222,6 +222,7 @@ export type FactoryDispatchStatus =
   | 'failed';
 
 const FACTORY_DISPATCH_FAILURE_CODES = [
+  'sandbox_vault_owner_required',
   'session_unavailable',
   'source_control_missing',
   'source_repository_missing',

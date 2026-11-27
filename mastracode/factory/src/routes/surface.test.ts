@@ -1,17 +1,24 @@
 import assert from 'node:assert/strict';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
+import type { PlatformFactorySandboxOptions } from '@mastra/platform-workspace';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createTestBoard, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { destroyDetachedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { __clearSessionSandboxesForTests } from '../sandbox/session-sandbox.js';
 import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
+import { createWorkspaceFactory } from '../workspace.js';
 import { resolveDeploymentModelProviders } from './config.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
@@ -94,6 +101,331 @@ const boards = createTriageWorkRegistry();
 const olderWork = new Map([['work', selfReviewWorkBoard]]);
 
 describe('prepareFactoryRuleBinding', () => {
+  it.each(
+    [
+      { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-1' },
+      { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-2' },
+      { modelScope: 'factory', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: null },
+      { modelScope: 'factory', approvedBy: undefined, sandboxUserId: null, restartBy: null },
+      { modelScope: 'factory', approvedBy: 'agent:session:requester-1', sandboxUserId: null, restartBy: null },
+      { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-1' },
+      { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: 'approver-2' },
+      { modelScope: 'user', approvedBy: 'approver-1', sandboxUserId: 'approver-1', restartBy: null },
+      { modelScope: 'user', approvedBy: undefined, sandboxUserId: null, restartBy: null },
+      { modelScope: 'user', approvedBy: 'agent:session:requester-1', sandboxUserId: null, restartBy: null },
+    ].flatMap(test => [
+      { ...test, provider: 'railway', mode: 'vault', cold: false },
+      ...(test.approvedBy === 'approver-1'
+        ? ['token', 'legacy-token', 'vault'].flatMap(mode =>
+            [false, true]
+              .filter(cold => mode !== 'vault' || cold)
+              .map(cold => ({ ...test, provider: 'railway', mode, cold })),
+          )
+        : []),
+      ...(test.approvedBy === 'approver-1'
+        ? ['local', 'docker', 'e2b'].map(provider => ({ ...test, provider, mode: 'token', cold: false }))
+        : []),
+    ]),
+  )(
+    'persists the vault actor for a $provider $mode $modelScope card started by $approvedBy then $restartBy (cold: $cold)',
+    async ({ modelScope, approvedBy, sandboxUserId, restartBy, provider, mode, cold }) => {
+      const { seeded, sourceControl, project } = await seedFactoryWithRepository({
+        modelScope,
+        defaultModelId: 'mastra/anthropic/claude-opus-5',
+      });
+      await seeded.credentials.setCredential({ orgId: project.orgId }, 'anthropic', {
+        type: 'api_key',
+        key: 'test-org-key',
+      });
+      const { item } = await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: 'requester-1',
+        factoryProjectId: project.id,
+        input: {
+          board: 'work',
+          title: 'Run with a credential vault',
+          stages: ['triage'],
+          sessions: {},
+          metadata: { repository: 'mastra-ai/mastra' },
+        },
+      });
+      const controller = new AgentController({
+        id: 'code',
+        storage: new InMemoryStore(),
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            agent: new Agent({
+              id: 'work',
+              name: 'Work',
+              instructions: 'Work on the card.',
+              model: 'mastra/anthropic/claude-opus-5',
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      let coordinator = new FactoryStartCoordinator(
+        controller,
+        seeded.workItems,
+        undefined,
+        sourceControl,
+        undefined,
+        undefined,
+        undefined,
+        provider,
+      );
+      const input = { ...bindingInput(project.id), item };
+      if (approvedBy) (input.record as { approvedBy?: string }).approvedBy = approvedBy;
+      await prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, input, undefined, {
+        workItems: seeded.workItems,
+        modelCredentials: seeded.credentials,
+        customProviders: seeded.customProviders,
+        deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+      });
+      const updated = await seeded.workItems.get({ orgId: project.orgId, id: item.id });
+      const sessionId = updated?.sessions.triage?.sessionId;
+      assert(sessionId);
+      // Read back from storage, not the coordinator's live request: a delayed worker must see the same actor.
+      const storedSession = await sourceControl.sessions.getBySessionId(sessionId);
+      expect(storedSession).toMatchObject({
+        userId:
+          modelScope === 'factory'
+            ? `factory-project:${project.id}`
+            : approvedBy === 'approver-1'
+              ? 'approver-1'
+              : 'user-1',
+        sandboxUserId,
+      });
+      assert(storedSession);
+      if (provider !== 'railway') {
+        await sourceControl.sessions.setSandbox({
+          id: storedSession.id,
+          sandboxId: 'existing-token-vm',
+          sandboxWorkdir: '/workspace',
+        });
+        await sourceControl.sessions.markMaterialized({ id: storedSession.id });
+        const before = await sourceControl.sessions.getBySessionId(sessionId);
+        const restartInput = {
+          ...input,
+          record: { ...input.record, id: 'decision-2', approvedBy: restartBy },
+          item: (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))!,
+        };
+        await prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, restartInput, undefined, {
+          workItems: seeded.workItems,
+          modelCredentials: seeded.credentials,
+          customProviders: seeded.customProviders,
+          deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+        });
+        expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.sessions.triage?.sessionId).toBe(
+          sessionId,
+        );
+        expect(await sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({
+          sandboxId: 'existing-token-vm',
+          sandboxUserId,
+          branch: before!.branch,
+          originThreadId: before!.originThreadId,
+        });
+        return;
+      }
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+      vi.stubGlobal('fetch', async (url: string | URL | Request) => {
+        expect(String(url)).toBe('https://api.github.com/repos/mastra-ai/mastra/commits/HEAD');
+        return new Response('a'.repeat(40));
+      });
+      onTestFinished(() => {
+        vi.unstubAllGlobals();
+        vi.unstubAllEnvs();
+        __clearSessionSandboxesForTests();
+      });
+      const requests: { path: string; actor: string | null; body: string }[] = [];
+      const sandbox = new PlatformFactorySandbox({
+        accessToken: 'test-platform-token',
+        projectId: 'platform-project',
+        environmentId: 'platform-environment',
+        // A deployment-wide identity must not become an automation run's vault actor.
+        actingUserId: 'deployment-owner',
+        fetch: async (url, init) => {
+          const path = new URL(String(url)).pathname;
+          const actor = new Headers(init?.headers).get('x-acting-user-id');
+          requests.push({ path, actor, body: String(init?.body ?? '') });
+          if (actor !== 'approver-1' && actor !== 'approver-2') {
+            return Response.json({ error: 'vault_user_not_member' }, { status: 403 });
+          }
+          if (path.endsWith('/exec-lease')) {
+            return Response.json({
+              provider: 'railway',
+              sandboxId: 'vault-vm',
+              providerResourceId: 'railway-vm',
+              jwt: 'lease-for-approver',
+              wsEndpoint: 'wss://exec.test',
+              subprotocol: 'railway-shell',
+              expiresAt: '2030-01-01T00:00:00.000Z',
+            });
+          }
+          return Response.json({
+            id: `vault-vm-${actor}`,
+            ...(mode === 'legacy-token' ? {} : { vault: mode === 'vault' }),
+            createdAt: '2026-11-24T00:00:00.000Z',
+          });
+        },
+        webSocketFactory: () => {
+          const socket: ReturnType<NonNullable<PlatformFactorySandboxOptions['webSocketFactory']>> = {
+            binaryType: 'arraybuffer',
+            onopen: null,
+            onmessage: null,
+            onclose: null,
+            onerror: null,
+            send: () => {
+              queueMicrotask(() => {
+                const output = new TextEncoder().encode('\u0001/workspace\n');
+                socket.onmessage?.({ data: output.buffer });
+                socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+              });
+            },
+            close: () => {},
+          };
+          queueMicrotask(() => socket.onopen?.({}));
+          return socket;
+        },
+      });
+      // Resolve afresh from durable storage, as a delayed worker does, with the synthetic session owner.
+      const requestContext = new RequestContext();
+      requestContext.set('user', { organizationId: project.orgId, workosId: storedSession.userId });
+      requestContext.set('controller', { sessionId, getState: () => ({}), setState: async () => {} });
+      const resolveWorkspace = () =>
+        createWorkspaceFactory({
+          sandbox,
+          sourceControls: [
+            {
+              id: 'github',
+              storage: sourceControl,
+              versionControl: {
+                getRepositoryAccess: async () => ({
+                  cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+                  authorization: { token: 'repo-access-token', username: 'x-access-token' },
+                }),
+                getRepositoriesAccess: async () => [],
+              },
+            },
+          ],
+          projects: seeded.projects,
+          workItems: seeded.workItems,
+        })({ requestContext });
+      let workspace = await resolveWorkspace();
+      assert(workspace?.sandbox);
+      const invoke = async () => {
+        assert(workspace?.sandbox);
+        await workspace.getToolsConfig()!.hooks!.beforeToolCall!({
+          toolName: 'execute_command',
+          workspaceToolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+          input: { command: 'pwd' },
+          context: { requestContext },
+        } as never);
+        return workspace.sandbox!.executeCommand('pwd');
+      };
+      if (!sandboxUserId) {
+        await expect(invoke()).rejects.toThrow('vault_user_not_member');
+        expect(requests.every(request => request.actor === null)).toBe(true);
+        // Even bypassing Factory's guard, the provider must not borrow the deployment identity.
+        await expect(workspace.sandbox.start()).rejects.toThrow('vault_user_not_member');
+        expect(requests.length).toBeGreaterThan(0);
+        expect(requests.every(request => request.actor === null)).toBe(true);
+        // A legacy vault VM without an authenticated actor also refuses automation -> automation.
+        await sourceControl.sessions.setSandbox({
+          id: storedSession.id,
+          sandboxId: 'unattributed-vm',
+          sandboxWorkdir: '/workspace',
+          sandboxCredentialMode: 'vault',
+        });
+        __clearSessionSandboxesForTests();
+        await expect(
+          prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, input, undefined, {
+            workItems: seeded.workItems,
+            modelCredentials: seeded.credentials,
+            customProviders: seeded.customProviders,
+            deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+          }),
+        ).rejects.toMatchObject({ code: 'sandbox_vault_owner_required' });
+        return;
+      }
+      await expect(invoke()).resolves.toMatchObject({ success: true, exitCode: 0 });
+      expect(requests.some(request => request.path.endsWith('/sandbox'))).toBe(true);
+      expect(requests.some(request => request.path.endsWith('/exec-lease'))).toBe(true);
+      expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
+      if (mode === 'vault') expect(requests.every(request => !request.body.includes('GH_TOKEN'))).toBe(true);
+      const reloaded = await sourceControl.sessions.getBySessionId(sessionId);
+      assert(reloaded?.sandboxId);
+      expect(reloaded.sandboxCredentialMode).toBe(mode === 'vault' ? 'vault' : 'token');
+      requestContext.set('user', { organizationId: project.orgId, workosId: 'requester-1' });
+      if (mode === 'vault') await expect(invoke()).rejects.toThrow('credential vault');
+      else await expect(invoke()).resolves.toMatchObject({ exitCode: 0 });
+      requestContext.set('user', { organizationId: project.orgId, workosId: storedSession.userId });
+      __clearSessionSandboxesForTests();
+      workspace = await resolveWorkspace();
+      await expect(invoke()).resolves.toMatchObject({ success: true, exitCode: 0 });
+      expect(requests.filter(request => request.path.endsWith('/exec-lease'))).toHaveLength(2);
+      expect(requests.every(request => request.actor === sandboxUserId)).toBe(true);
+
+      if (mode === 'legacy-token') {
+        await sourceControl.sessions.setSandbox({ id: reloaded.id, sandboxId: null });
+        await sourceControl.sessions.setSandbox({ id: reloaded.id, sandboxId: reloaded.sandboxId });
+      }
+      if (cold) __clearSessionSandboxesForTests();
+      coordinator = new FactoryStartCoordinator(
+        controller,
+        seeded.workItems,
+        undefined,
+        sourceControl,
+        undefined,
+        undefined,
+        undefined,
+        provider,
+        sandbox,
+      );
+      const restartInput = {
+        ...input,
+        record: { ...input.record, id: 'decision-2', approvedBy: restartBy },
+        item: (await seeded.workItems.get({ orgId: project.orgId, id: item.id }))!,
+      };
+      const restart = () =>
+        prepareFactoryRuleBinding(sourceControl, coordinator, seeded.projects, boards, restartInput, undefined, {
+          workItems: seeded.workItems,
+          modelCredentials: seeded.credentials,
+          customProviders: seeded.customProviders,
+          deploymentModelProviders: resolveDeploymentModelProviders(undefined),
+        });
+      const beforeRestart = requests.length;
+      if (mode === 'vault' && restartBy !== approvedBy) {
+        await expect(restart()).rejects.toMatchObject({
+          code: 'sandbox_vault_owner_required',
+          message: expect.stringContaining("this card's sandbox acts as approver-1"),
+        });
+      } else {
+        await restart();
+      }
+      expect((await seeded.workItems.get({ orgId: project.orgId, id: item.id }))?.sessions.triage?.sessionId).toBe(
+        sessionId,
+      );
+      expect(await sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({
+        sandboxUserId,
+        sandboxId: reloaded.sandboxId,
+        branch: reloaded.branch,
+        originThreadId: reloaded.originThreadId,
+      });
+      expect(
+        requests.slice(beforeRestart).every(request => request.path.endsWith(`/sandbox/${reloaded.sandboxId}`)),
+      ).toBe(true);
+      __clearSessionSandboxesForTests();
+      await destroyDetachedSessionSandbox({ session: reloaded, sandbox });
+      expect(requests.at(-1)).toMatchObject({
+        path: expect.stringContaining('/sandbox/vault-vm'),
+        actor: sandboxUserId,
+      });
+    },
+  );
   it.each(['factory', 'hybrid'] as const)(
     'blocks a direct Anthropic PR review in %s scope after its org key is removed, then starts it on Gateway',
     async modelScope => {

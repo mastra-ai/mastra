@@ -671,6 +671,48 @@ describe('SourceControlStorage', () => {
     ).resolves.toMatchObject({ status: 'conflict', reason: 'stale_owner', session: { userId: 'user-2' } });
   });
 
+  it("clears the session's sandbox in the same write as an owner transfer that releases it", async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000035',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-owner-release',
+      baseBranch: 'main',
+    });
+    await github.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/w' });
+
+    await expect(
+      github.sessions.transferOwner({
+        sessionId: session.sessionId,
+        expectedUserId: 'user-1',
+        toUserId: 'user-2',
+        releaseSandbox: true,
+      }),
+    ).resolves.toMatchObject({
+      status: 'updated',
+      releasedSandboxId: 'vm-1',
+      session: { userId: 'user-2', sandboxId: null },
+    });
+    // A start the previous owner had in flight can't record its VM on the transferred session.
+    await github.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/w',
+      expectedUserId: 'user-1',
+    });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ sandboxId: null });
+    await github.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-2',
+      sandboxWorkdir: '/w',
+      expectedUserId: 'user-2',
+    });
+    await expect(github.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ sandboxId: 'vm-2' });
+  });
+
   it('transfers a legacy shared session whose visibility was never written', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -1746,6 +1788,67 @@ describe('SourceControlStorageInMemory sessions', () => {
     await store.sessions.markMaterialized({ id: session.id });
     const second = await store.sessions.getBySessionId(session.sessionId);
     expect(second?.materializedAt?.getTime()).toBe(first!.materializedAt!.getTime());
+  });
+
+  it("clears the session's sandbox in the same write as an owner transfer that releases it", async () => {
+    const store = new SourceControlStorageInMemory();
+    const installation = await store.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '1',
+    });
+    const repository = await store.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '2', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await store.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const link = await store.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+    });
+    const session = await store.sessions.create({
+      sessionId: '00000000-0000-4000-8000-00000000aab0',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-00000000aab0',
+      baseBranch: 'main',
+    });
+    await store.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/w' });
+
+    await expect(
+      store.sessions.transferOwner({
+        sessionId: session.sessionId,
+        expectedUserId: 'user-1',
+        toUserId: 'user-2',
+        releaseSandbox: true,
+      }),
+    ).resolves.toMatchObject({
+      status: 'updated',
+      releasedSandboxId: 'vm-1',
+      session: { userId: 'user-2', sandboxId: null },
+    });
+    // A start the previous owner had in flight can't record its VM on the transferred session.
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/w',
+      expectedUserId: 'user-1',
+    });
+    await expect(store.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ sandboxId: null });
+    await store.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-2',
+      sandboxWorkdir: '/w',
+      expectedUserId: 'user-2',
+    });
+    await expect(store.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ sandboxId: 'vm-2' });
   });
 
   it("mutes and unmutes a side session's reports", async () => {

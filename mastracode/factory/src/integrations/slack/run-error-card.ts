@@ -31,11 +31,11 @@ export function runErrorCard(
   error: Error,
   { requestContext, target }: { requestContext?: RequestContext; target?: RunErrorLinkTarget },
 ) {
-  const { title, message, recoveries, model } = describeRunError(error);
+  const { title, message, recoveries, model, vaultUrl } = describeRunError(error);
   const requestId = providerRequestId(error);
   const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
   const credential = model && recoveries.includes('credentials') ? credentialLine(requestContext, model) : undefined;
-  const links = target ? recoveryLinks(target, recoveries) : [];
+  const links = target ? recoveryLinks(target, recoveries, vaultUrl) : [];
   // A click continues the run as if the clicker had replied in the thread.
   const retry = recoveries.includes('continue')
     ? [Button({ id: CONTINUE_RUN_ACTION_ID, label: 'Continue', style: 'primary' })]
@@ -65,7 +65,11 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;
 }
 
-function recoveryLinks({ factoryProjectId, sessionUrl }: RunErrorLinkTarget, recoveries: RunErrorRecovery[]) {
+function recoveryLinks(
+  { factoryProjectId, sessionUrl }: RunErrorLinkTarget,
+  recoveries: RunErrorRecovery[],
+  vaultUrl?: string,
+) {
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
   const memoryUrl = factoryProjectId && memorySettingsLink(factoryProjectId);
   const links = recoveries.flatMap(recovery => {
@@ -78,6 +82,8 @@ function recoveryLinks({ factoryProjectId, sessionUrl }: RunErrorLinkTarget, rec
         return memoryUrl ? [{ url: memoryUrl, label: 'Change memory model' }] : [];
       case 'credits':
         return [];
+      case 'vault':
+        return vaultUrl ? [{ url: vaultUrl, label: 'Enable vault' }] : [];
       // A reply in the thread continues the run; a mention in a new thread starts a new session.
       case 'continue':
       case 'new_session':

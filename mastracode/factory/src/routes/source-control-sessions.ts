@@ -5,12 +5,15 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import { z } from 'zod';
 
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
+import { assertVaultSandboxCaller, sessionSandboxCredentialMode, vaultOwnerRefusal } from '../sandbox/vault.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
   isRunBound,
@@ -58,6 +61,12 @@ export interface SourceControlSessionRoutesOptions {
   sessionRetirement?: SessionRetirementCoordinator;
   /** Whether the host sandbox can recreate a session's sandbox (false for local). */
   sandboxRecreateSupported?: boolean;
+  /**
+   * Whether this host's sandboxes can act with their owner's credential vault (the platform provider). The
+   * Files-tab start restricts non-owners only when the sandbox is positively known to use the vault.
+   */
+  vaultSandboxes?: boolean;
+  sandbox?: FactorySandbox;
   /** How long recreate waits for an aborted run to settle before destroying. */
   abortSettleTimeoutMs?: number;
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'> &
@@ -117,6 +126,30 @@ async function followsCard(
     if (following?.orgId === tenant.orgId && following.userId === tenant.userId) return true;
   }
   return false;
+}
+
+/**
+ * Release only a positively identified vault sandbox. Token and unknown-mode VMs retain their prior lifecycle.
+ */
+async function sandboxBoundToPreviousOwner(
+  options: SourceControlSessionRoutesOptions,
+  session: SourceControlSession,
+  newOwnerId: string,
+): Promise<boolean> {
+  if (!options.vaultSandboxes) return false;
+  if (session.sandboxCredentialMode) return session.sandboxCredentialMode === 'vault' && session.userId !== newOwnerId;
+  const mode = await sessionSandboxCredentialMode(session, options.sandbox);
+  if (mode) return mode === 'vault' && session.userId !== newOwnerId;
+  const existing = peekSessionSandbox(session.id)?.sandbox;
+  if (!existing) return false;
+  return assertVaultSandboxCaller(existing, {
+    ownerId: session.userId,
+    callerId: newOwnerId,
+    sessionId: session.sessionId,
+  }).then(
+    () => false,
+    () => true,
+  );
 }
 
 function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean {
@@ -668,6 +701,35 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const controller = options.controller;
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
+        // A vault sandbox acts with the credential vault of the user it was built for, so only that user may
+        // start it. Anyone else (an org admin, or a new owner before the previous owner's sandbox is released)
+        // is refused only after a positive vault report. Read-only discovery never starts a sandbox;
+        // token and unknown-mode sessions retain their prior startup behavior.
+        {
+          const online = await controller.getSession(session.sessionId);
+          const existing = peekSessionSandbox(session.id)?.sandbox ?? online?.getWorkspace()?.sandbox;
+          const refusal = existing
+            ? await assertVaultSandboxCaller(existing, {
+                ownerId: session.userId,
+                callerId: resolved.tenant.userId,
+                sessionId: session.sessionId,
+              }).then(
+                () => undefined,
+                (error: unknown) => error,
+              )
+            : options.vaultSandboxes &&
+                (await sessionSandboxCredentialMode(session, options.sandbox)) === 'vault' &&
+                resolved.tenant.userId !== session.userId
+              ? vaultOwnerRefusal(session.sessionId)
+              : undefined;
+          if (refusal) {
+            return c.json(
+              { error: "Only the session's owner can start a sandbox that may use their credential vault." },
+              403,
+            );
+          }
+        }
+
         try {
           const live =
             (await controller.getSession(session.sessionId)) ??
@@ -751,10 +813,20 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (session.userId === userId) return c.json({ session });
         const refusal = await ownershipRefusal(session, options);
         if (refusal) return c.json({ error: refusal.error }, refusal.status);
+        // A vault sandbox was built for the previous owner and acts with their credential vault. The transfer
+        // clears its id in the same write, so no instance built from here on can resume it as the new owner.
+        const releaseSandbox = await sandboxBoundToPreviousOwner(options, session, userId);
+        if (releaseSandbox && !options.sessionRetirement) {
+          return c.json(
+            { error: "Can't release the previous owner's sandbox here, so ownership was not changed." },
+            503,
+          );
+        }
         const transferred = await sourceControl.sessions.transferOwner({
           sessionId,
           expectedUserId: expectedOwnerId,
           toUserId: userId,
+          ...(releaseSandbox ? { releaseSandbox } : {}),
         });
         if (transferred.status === 'conflict') {
           const current = transferred.session;
@@ -779,6 +851,21 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           await controller.deleteSession({ sessionId }).catch(error => {
             console.error('[Factory Sessions] Failed to recycle transferred live session', { sessionId, error });
           });
+        }
+        // Destroy the previous owner's VM. Its id is already off the session, so a failure leaves a VM nobody
+        // can reach from the session, which the provider reaps when idle.
+        if (releaseSandbox) {
+          await options.sessionRetirement
+            ?.releasePreviousOwnerSandbox({
+              sourceControl,
+              orgId,
+              sessionId,
+              previousOwnerId: expectedOwnerId,
+              sandboxId: transferred.releasedSandboxId ?? null,
+            })
+            .catch(error => {
+              console.error("[Factory Sessions] Failed to destroy the previous owner's sandbox", { sessionId, error });
+            });
         }
         const newOwner = (await resolveOwnerProfiles([userId])).get(userId) ?? { id: userId };
         await markOwnerChange(options, transferred.session, newOwner).catch(error => {
