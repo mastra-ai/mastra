@@ -34,5 +34,3 @@ export * from './card-activity';
 export * from './run-queue-menu';
 export * from './starts-toggle';
 export * from './phase-run-fields';
-export * from './board-map';
-export * from './board-config-nav';

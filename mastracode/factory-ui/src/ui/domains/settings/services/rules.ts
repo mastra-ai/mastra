@@ -27,24 +27,6 @@ export function ruleProblem<Rule>(schema: z.ZodType<Rule>, rule: Rule | null | u
   return 'problem' in checked ? checked.problem : undefined;
 }
 
-/** A rule typed as JSON, or why the server would refuse it. Empty text clears the rule. */
-export function readRawRule<Rule>(schema: z.ZodType<Rule>, text: string): { rule: Rule | null } | { problem: string } {
-  if (text.trim() === '') return { rule: null };
-  let value: unknown;
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return { problem: 'Not valid JSON.' };
-  }
-  return validateRule(schema, value);
-}
-
-/** Why the server would refuse a rule typed as JSON, if it would. */
-export function rawRuleProblem<Rule>(schema: z.ZodType<Rule>, text: string): string | undefined {
-  const read = readRawRule(schema, text);
-  return 'problem' in read ? read.problem : undefined;
-}
-
 type Condition = { field?: unknown; operator?: unknown; value?: unknown };
 type Group = { operator?: unknown; conditions?: unknown };
 

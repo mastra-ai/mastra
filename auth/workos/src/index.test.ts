@@ -1,50 +1,26 @@
 import type { JwtPayload } from '@mastra/auth';
 import { verifyJwks } from '@mastra/auth';
+import { sessionEncryption } from '@workos/authkit-session';
+import type { User } from '@workos-inc/node';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+import { workosSdkMock } from './_types/workos-sdk-mock';
 import { MastraAuthWorkos } from './index';
 
-// Mock the WorkOS class
-const mockListOrganizationMemberships = vi.fn();
-const mockGetUser = vi.fn();
-const mockWorkOSConstructor = vi.fn();
-const mockCreateOrganizationMembership = vi.fn();
-const mockCreateOrganization = vi.fn();
-const mockGetOrganizationByExternalId = vi.fn();
+// One shared mock for the WorkOS SDK, registered identically by every test file
+// in this package. The package runs with `isolate: false`, so the first file to
+// import the SDK decides the mock that every later file receives — two
+// different mocks made the suites depend on which file ran first. See
+// ./_types/workos-sdk-mock.ts.
+vi.mock('@workos-inc/node');
 
-vi.mock('@workos-inc/node', () => {
-  // Use a class for constructor (Vitest v4 requirement)
-  class MockWorkOS {
-    userManagement: any;
-    organizations: any;
-
-    constructor(apiKey?: string, options?: any) {
-      mockWorkOSConstructor(apiKey, options);
-      this.userManagement = {
-        getJwksUrl: vi.fn().mockReturnValue('https://mock-jwks-url'),
-        listOrganizationMemberships: mockListOrganizationMemberships,
-        getUser: mockGetUser,
-        createOrganizationMembership: mockCreateOrganizationMembership,
-      };
-      this.organizations = {
-        createOrganization: mockCreateOrganization,
-        getOrganizationByExternalId: mockGetOrganizationByExternalId,
-      };
-    }
-  }
-
-  // Mock the GenerateLinkIntent enum used by admin-portal.ts
-  const GenerateLinkIntent = {
-    SSO: 'sso',
-    DSync: 'dsync',
-    AuditLogs: 'audit_logs',
-    LogStreams: 'log_streams',
-  };
-
-  return {
-    WorkOS: MockWorkOS,
-    GenerateLinkIntent,
-  };
-});
+const mockWorkOSConstructor = workosSdkMock.construct;
+const mockListOrganizationMemberships = workosSdkMock.userManagement.listOrganizationMemberships;
+const mockGetUser = workosSdkMock.userManagement.getUser;
+const mockCreateOrganizationMembership = workosSdkMock.userManagement.createOrganizationMembership;
+const mockCreateOrganization = workosSdkMock.organizations.createOrganization;
+const mockGetOrganizationByExternalId = workosSdkMock.organizations.getOrganizationByExternalId;
+const mockAuthenticateWithCode = workosSdkMock.userManagement.authenticateWithCode;
 
 // Mock the verifyJwks function
 vi.mock('@mastra/auth', () => ({
@@ -56,7 +32,8 @@ vi.mock('@mastra/auth', () => ({
 
 // Mock @workos/authkit-session
 const mockWithAuth = vi.fn();
-vi.mock('@workos/authkit-session', () => {
+vi.mock('@workos/authkit-session', async () => {
+  const actual = await vi.importActual<typeof import('@workos/authkit-session')>('@workos/authkit-session');
   class MockAuthService {
     withAuth = mockWithAuth;
     constructor() {}
@@ -67,10 +44,9 @@ vi.mock('@workos/authkit-session', () => {
   return {
     AuthService: MockAuthService,
     CookieSessionStorage: MockCookieSessionStorage,
-    sessionEncryption: vi.fn().mockReturnValue({
-      encrypt: vi.fn(),
-      decrypt: vi.fn(),
-    }),
+    // Keep the real seal/unseal implementation: the handleCallback regression
+    // we cover is its behaviour on the user payload (see the handleCallback suite).
+    sessionEncryption: actual.sessionEncryption,
   };
 });
 
@@ -88,6 +64,7 @@ describe('MastraAuthWorkos', () => {
     mockCreateOrganizationMembership.mockReset();
     mockCreateOrganization.mockReset();
     mockGetOrganizationByExternalId.mockReset();
+    mockAuthenticateWithCode.mockReset();
     vi.mocked(verifyJwks).mockReset();
     // Reset environment variables
     delete process.env.WORKOS_API_KEY;
@@ -174,6 +151,133 @@ describe('MastraAuthWorkos', () => {
       expect(auth.mapUserToResourceId?.({ id: 'user-1', workosId: 'wos_1', email: 'a@b.com' } as any)).toBe(
         'tenant:user-1',
       );
+    });
+  });
+
+  describe('handleCallback', () => {
+    const createAuth = () =>
+      new MastraAuthWorkos({
+        apiKey: mockApiKey,
+        clientId: mockClientId,
+        redirectUri: mockRedirectUri,
+        session: { cookiePassword: mockCookiePassword },
+      });
+
+    const buildUser = (lastSignInAt: Date | null): User => ({
+      object: 'user',
+      id: 'user_01H',
+      email: 'ada@example.com',
+      emailVerified: true,
+      profilePictureUrl: 'https://example.com/ada.png',
+      name: 'Ada Lovelace',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      lastSignInAt,
+      locale: 'en-US',
+      createdAt: new Date('2025-12-31T23:59:59.000Z'),
+      updatedAt: new Date('2026-01-02T03:04:05.678Z'),
+      externalId: 'external-123',
+      metadata: { plan: 'pro' },
+    });
+
+    const buildAuthResponse = (user: User) => ({
+      user,
+      organizationId: 'org_01H',
+      accessToken: 'access-token-123',
+      refreshToken: 'refresh-token-456',
+      impersonator: { email: 'admin@example.com', reason: 'support' },
+    });
+
+    const readCookie = (cookies: string[] | undefined) => {
+      expect(cookies).toHaveLength(1);
+      const cookie = cookies![0];
+      const [pair, ...attributes] = cookie.split('; ');
+      const separator = pair.indexOf('=');
+      return {
+        name: pair.slice(0, separator),
+        value: pair.slice(separator + 1),
+        attributes,
+      };
+    };
+
+    // The WorkOS Node SDK v12 returns `Date` objects for `createdAt`, `updatedAt`
+    // and `lastSignInAt`. iron-webcrypto (used by @workos/authkit-session's
+    // sessionEncryption) throws "Data is not JSON serializable" on `Date`, so
+    // sealing the raw session payload used to fail before handleCallback could
+    // return the session cookie.
+    it.each([
+      ['a populated lastSignInAt', new Date('2026-01-01T00:00:00.000Z')],
+      ['a null lastSignInAt', null],
+    ])('seals the session when the user has %s', async (_label, lastSignInAt) => {
+      const user = buildUser(lastSignInAt);
+      mockAuthenticateWithCode.mockResolvedValue(buildAuthResponse(user));
+
+      const auth = createAuth();
+      const result = await auth.handleCallback('auth-code', 'state-value');
+
+      // The code exchange happened exactly once, with the configured client.
+      expect(mockAuthenticateWithCode).toHaveBeenCalledTimes(1);
+      expect(mockAuthenticateWithCode).toHaveBeenCalledWith({
+        clientId: mockClientId,
+        code: 'auth-code',
+      });
+
+      // The WorkOS user is mapped to the EEUser identity unchanged.
+      expect(result.user).toEqual({
+        id: user.id,
+        email: user.email,
+        name: 'Ada Lovelace',
+        avatarUrl: 'https://example.com/ada.png',
+        metadata: {
+          workosId: user.id,
+          emailVerified: true,
+          createdAt: user.createdAt,
+        },
+        workosId: user.id,
+        organizationId: 'org_01H',
+      });
+      expect(result.tokens).toEqual({
+        accessToken: 'access-token-123',
+        refreshToken: 'refresh-token-456',
+      });
+
+      // The cookie carries the sealed session with the existing attributes.
+      const cookie = readCookie(result.cookies);
+      expect(cookie.name).toBe('wos_session');
+      expect(cookie.value.length).toBeGreaterThan(0);
+      expect(cookie.attributes).toContain('Path=/');
+      expect(cookie.attributes).toContain('HttpOnly');
+      expect(cookie.attributes).toContain('SameSite=Lax');
+
+      // The cookie round-trips through the real seal/unseal implementation.
+      const session = await sessionEncryption.unsealData<{
+        accessToken: string;
+        refreshToken: string;
+        user: User;
+        organizationId?: string;
+        impersonator?: { email: string; reason: string | null };
+      }>(cookie.value, { password: mockCookiePassword });
+
+      expect(session.accessToken).toBe('access-token-123');
+      expect(session.refreshToken).toBe('refresh-token-456');
+      expect(session.organizationId).toBe('org_01H');
+      expect(session.impersonator).toEqual({ email: 'admin@example.com', reason: 'support' });
+
+      // Every user field survives the round-trip, with the three Date fields
+      // normalized to ISO strings (lastSignInAt stays null when it was null).
+      expect(session.user).toEqual({
+        ...user,
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString(),
+        lastSignInAt: lastSignInAt?.toISOString() ?? null,
+      });
+      expect(session.user.createdAt).toBe(user.createdAt.toISOString());
+      expect(session.user.updatedAt).toBe(user.updatedAt.toISOString());
+      expect(session.user.lastSignInAt).toBe(lastSignInAt?.toISOString() ?? null);
+
+      // Normalization must not mutate the fixture the SDK handed us.
+      expect(user.createdAt).toBeInstanceOf(Date);
+      expect(user.updatedAt).toBeInstanceOf(Date);
     });
   });
 

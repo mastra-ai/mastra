@@ -5036,9 +5036,9 @@
       },
       "moonshot/kimi-k3": {
         "cost": {
-          "input": 3,
+          "input": 0.6,
           "output": 15,
-          "cache_read": 0.3
+          "cache_read": 0.2
         }
       },
       "morph/morph-v3-fast": {
@@ -5548,9 +5548,9 @@
       },
       "zhipu/glm-5.2": {
         "cost": {
-          "input": 1.4,
-          "output": 4.4,
-          "cache_read": 0.26
+          "input": 0.31,
+          "output": 2.4,
+          "cache_read": 0.075
         }
       },
       "zhipu/glm-5.3": {
@@ -9845,9 +9845,9 @@
       },
       "qwen/qwen3-30b-a3b-instruct-2507": {
         "cost": {
-          "input": 0.09,
-          "output": 0.3,
-          "cache_read": 0.09,
+          "input": 0.045,
+          "output": 0.62,
+          "cache_read": 0.02,
           "cache_write": 0
         }
       },
@@ -21175,6 +21175,13 @@
           "cache_read": 0.012
         }
       },
+      "inclusionAI/LingSante-3.1-air-VL": {
+        "cost": {
+          "input": 0.06,
+          "output": 0.18,
+          "cache_read": 0.012
+        }
+      },
       "meta-llama/Llama-3.3-70B-Instruct-Turbo": {
         "cost": {
           "input": 0.1,
@@ -21265,6 +21272,13 @@
           "input": 0.06,
           "output": 0.16,
           "cache_read": 0.03
+        }
+      },
+      "nvidia/NVIDIA-Nemotron-3.5-Super-VL": {
+        "cost": {
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.02
         }
       },
       "openai/gpt-oss-120b": {
@@ -24232,8 +24246,8 @@
       },
       "kimi-k2.6": {
         "cost": {
-          "input": 0.6561,
-          "output": 3.280499
+          "input": 0.6585,
+          "output": 3.292499
         }
       },
       "kimi-k2.7-code": {
@@ -24405,8 +24419,8 @@
       },
       "ministral-3-14b-instruct-2512": {
         "cost": {
-          "input": 0.32805,
-          "output": 0.4374
+          "input": 0.32925,
+          "output": 0.439
         }
       },
       "ministral-3b-2512": {
@@ -24699,8 +24713,8 @@
       },
       "qwen3-coder-next": {
         "cost": {
-          "input": 0.164025,
-          "output": 0.8748
+          "input": 0.164625,
+          "output": 0.878
         }
       },
       "qwen3-max": {
@@ -26664,6 +26678,20 @@
           "input": 1.25,
           "output": 4.25,
           "cache_read": 0.15
+        }
+      },
+      "accounts/fireworks/models/nemotron-3-ultra-nvfp4": {
+        "cost": {
+          "input": 0.6,
+          "output": 2.4,
+          "cache_read": 0.12
+        }
+      },
+      "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b": {
+        "cost": {
+          "input": 0.05,
+          "output": 0.2,
+          "cache_read": 0.01
         }
       },
       "accounts/fireworks/models/qwen3p8-2p4t-a95b": {
@@ -31009,8 +31037,8 @@
       },
       "Qwen/Qwen3.5-9B": {
         "cost": {
-          "input": 0.1,
-          "output": 0.15
+          "input": 0.085,
+          "output": 0.125
         }
       },
       "Qwen/Qwen3.6-27B": {
@@ -31077,6 +31105,12 @@
         "cost": {
           "input": 1,
           "output": 3
+        }
+      },
+      "XiaomiMiMo/MiMo-V2.6-Flash-MOPD": {
+        "cost": {
+          "input": 0.5,
+          "output": 1
         }
       },
       "XiaomiMiMo/MiMo-V2.6-Flash-RL": {
@@ -31165,8 +31199,8 @@
       },
       "deepseek-ai/DeepSeek-V4-Pro": {
         "cost": {
-          "input": 0.888188,
-          "output": 1.5082
+          "input": 0.640586,
+          "output": 1.5039
         }
       },
       "deepseek-ai/DeepSeek-V4-Pro-0813": {
@@ -31257,6 +31291,12 @@
         "cost": {
           "input": 0.3,
           "output": 0.9
+        }
+      },
+      "inclusionAI/LingSante-3.1-air-VL": {
+        "cost": {
+          "input": 0.06,
+          "output": 0.18
         }
       },
       "meta-llama/Llama-3.1-70B-Instruct": {
@@ -31563,8 +31603,8 @@
       },
       "zai-org/GLM-5.2": {
         "cost": {
-          "input": 0.643,
-          "output": 1.978
+          "input": 0.5625,
+          "output": 1.8
         }
       },
       "zai-org/GLM-5.3": {
@@ -31646,13 +31686,6 @@
           "input": 0.178,
           "output": 0.68,
           "cache_read": 0.089
-        }
-      },
-      "inkling": {
-        "cost": {
-          "input": 1.0888,
-          "output": 4.40964,
-          "cache_read": 0.185096
         }
       },
       "kimi-k3": {
@@ -32625,9 +32658,9 @@
       },
       "zai-org/GLM-5.3-Flash": {
         "cost": {
-          "input": 0.185,
+          "input": 0.15,
           "output": 0.5,
-          "cache_read": 0.07,
+          "cache_read": 0.04,
           "cache_write": 0
         }
       }
@@ -35358,15 +35391,15 @@
       "deepseek/deepseek-v4-pro": {
         "cost": {
           "input": 0.888188,
-          "output": 1.5082,
+          "output": 1.5039,
           "cache_read": 0.2
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.111,
-          "output": 4.44,
-          "cache_read": 0.097
+          "input": 0.25,
+          "output": 5,
+          "cache_read": 0.125
         }
       },
       "deepseek/deepseek-v4.1-flash": {
@@ -35698,9 +35731,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.047,
-          "output": 0.168,
-          "cache_read": 0.023
+          "input": 0.05,
+          "output": 0.18,
+          "cache_read": 0.025
         }
       },
       "google/gemma-4-31b-it": {
@@ -35799,6 +35832,13 @@
         "cost": {
           "input": 0,
           "output": 0
+        }
+      },
+      "inclusionai/lingsante-3.1-air-vl": {
+        "cost": {
+          "input": 0.06,
+          "output": 0.18,
+          "cache_read": 0.012
         }
       },
       "inference-net/schematron-v2-small": {
@@ -36242,6 +36282,12 @@
         "cost": {
           "input": 0.57,
           "output": 2.3
+        }
+      },
+      "moonshotai/kimi-k2-0905": {
+        "cost": {
+          "input": 0.6,
+          "output": 2.5
         }
       },
       "moonshotai/kimi-k2.5": {
@@ -37046,9 +37092,9 @@
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.017,
-          "output": 0.085,
-          "cache_read": 0.0085
+          "input": 0.0153,
+          "output": 0.0765,
+          "cache_read": 0.00765
         }
       },
       "openai/gpt-oss-safeguard-120b": {
@@ -38150,9 +38196,9 @@
       },
       "~deepseek/deepseek-pro-latest": {
         "cost": {
-          "input": 0.111,
-          "output": 4.44,
-          "cache_read": 0.097
+          "input": 0.25,
+          "output": 5,
+          "cache_read": 0.125
         }
       },
       "~deepseek/deepseek-v4-flash-latest": {
@@ -50798,6 +50844,13 @@
           "cache_read": 0.015
         }
       },
+      "inclusionai/ling-3.0-flash-sante": {
+        "cost": {
+          "input": 0.075,
+          "output": 0.22,
+          "cache_read": 0.015
+        }
+      },
       "inclusionai/ling-3.0-flash-vl": {
         "cost": {
           "input": 0.06,
@@ -52807,9 +52860,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.834,
-          "output": 2.501,
-          "cache_read": 0.042
+          "input": 0.7506,
+          "output": 2.2509,
+          "cache_read": 0.0378
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -60797,15 +60850,15 @@
       "deepseek/deepseek-v4-pro": {
         "cost": {
           "input": 0.888188,
-          "output": 1.5082,
+          "output": 1.5039,
           "cache_read": 0.2
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.111,
-          "output": 4.44,
-          "cache_read": 0.097
+          "input": 0.25,
+          "output": 5,
+          "cache_read": 0.125
         }
       },
       "deepseek/deepseek-v4.1-flash": {
@@ -61166,16 +61219,15 @@
       },
       "google/gemma-3-4b-it": {
         "cost": {
-          "input": 0.04,
-          "output": 0.05,
-          "cache_read": 0.02
+          "input": 0.05,
+          "output": 0.1
         }
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.09,
-          "output": 0.3,
-          "cache_read": 0.05
+          "input": 0.0765,
+          "output": 0.255,
+          "cache_read": 0.0425
         }
       },
       "google/gemma-4-26b-a4b-it:free": {
@@ -61256,6 +61308,13 @@
           "output": 0
         }
       },
+      "inclusionai/lingsante-3.1-air-vl": {
+        "cost": {
+          "input": 0.06,
+          "output": 0.18,
+          "cache_read": 0.012
+        }
+      },
       "inference-net/schematron-v2-small": {
         "cost": {
           "input": 0.05,
@@ -61325,9 +61384,9 @@
       },
       "meta-llama/llama-3.3-70b-instruct": {
         "cost": {
-          "input": 0.71,
-          "output": 0.71,
-          "cache_read": 0.71
+          "input": 0.59,
+          "output": 0.79,
+          "cache_read": 0.295
         }
       },
       "meta-llama/llama-4-maverick": {
@@ -61359,8 +61418,8 @@
       },
       "meta/muse-glimmer-30b": {
         "cost": {
-          "input": 0.35,
-          "output": 1.5,
+          "input": 0.3,
+          "output": 1.2,
           "cache_read": 0.04
         }
       },
@@ -61585,11 +61644,22 @@
           "output": 2.5
         }
       },
+      "moonshotai/kimi-k2": {
+        "cost": {
+          "input": 0.57,
+          "output": 2.3
+        }
+      },
+      "moonshotai/kimi-k2-0905": {
+        "cost": {
+          "input": 0.6,
+          "output": 2.5
+        }
+      },
       "moonshotai/kimi-k2.5": {
         "cost": {
-          "input": 0.5,
-          "output": 2.5,
-          "cache_read": 0.15
+          "input": 0.6,
+          "output": 3
         }
       },
       "moonshotai/kimi-k2.6": {
@@ -68229,6 +68299,13 @@
         }
       },
       "qwen/qwen3.8-27b": {
+        "cost": {
+          "input": 0.24,
+          "output": 2.2,
+          "cache_read": 0.05
+        }
+      },
+      "qwen/qwen3.8-27b-fast": {
         "cost": {
           "input": 0.45,
           "output": 3.2,

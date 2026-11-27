@@ -1,6 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { syntaxHighlighting } from '@codemirror/language';
+import type { Language } from '@codemirror/language';
 import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -8,7 +9,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { forwardRef, useMemo } from 'react';
+import { forwardRef, use, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
 import {
@@ -19,7 +20,8 @@ import {
 } from './codemirror-field';
 import type { CodemirrorFont } from './codemirror-field';
 import { codeFoldGutter } from './fold-gutter-extension';
-import { syntaxHighlighter } from './highlight';
+import { loadLanguage, syntaxHighlighter } from './highlight';
+import type { HighlightLanguage } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { Button } from '@/ds/components/Button';
@@ -31,7 +33,18 @@ import type { JsonSchema } from '@/lib/json-schema';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
-export type CodeEditorLanguage = 'json' | 'markdown';
+export type CodeEditorLanguage = HighlightLanguage | 'text';
+
+const editorLanguages = new Map<HighlightLanguage, Promise<Language | undefined>>();
+
+function loadEditorLanguage(language: HighlightLanguage) {
+  let loaded = editorLanguages.get(language);
+  if (!loaded) {
+    loaded = loadLanguage(language).catch(() => undefined);
+    editorLanguages.set(language, loaded);
+  }
+  return loaded;
+}
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (font: CodemirrorFont = 'mono'): Extension => {
@@ -118,6 +131,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       'Code editor',
     );
     const theme = useCodemirrorTheme(font);
+    const loadedLanguage =
+      language === 'json' || language === 'markdown' || language === 'text'
+        ? undefined
+        : use(loadEditorLanguage(language));
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
     const canFormat = showFormatButton && language === 'json' && editable !== false && Boolean(onChange);
 
@@ -144,6 +161,8 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
         exts.push(markdown({ base: markdownLanguage, codeLanguages }));
+      } else if (loadedLanguage) {
+        exts.push(loadedLanguage);
       }
 
       if (highlightVariables && language === 'markdown') {
@@ -163,7 +182,17 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [extraExtensions, variant, language, highlightVariables, schema, editable, lineWrapping, contentAttributes]);
+    }, [
+      extraExtensions,
+      variant,
+      language,
+      loadedLanguage,
+      highlightVariables,
+      schema,
+      editable,
+      lineWrapping,
+      contentAttributes,
+    ]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>

@@ -345,6 +345,8 @@ const textRows: TokenRow[] = [
   },
 ];
 
+const lineRows: TokenRow[] = [{ token: 'canvas-link', use: 'Links between nodes on a board canvas' }];
+
 const productRoles = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];
 
 const chartRows: TokenRow[] = [
@@ -456,13 +458,16 @@ export const Semantic: Story = {
       <FoundationPage
         eyebrow="Color"
         title="Semantic"
-        description="Surface and text roles. Status and badge roles live in Foundations/Status."
+        description="Surface, text and line roles. Status and badge roles live in Foundations/Status."
       >
         <FoundationSection label="Surfaces" description="Containers, outer to inner.">
           <TokenTable rows={surfaceRows} theme={theme} />
         </FoundationSection>
         <FoundationSection label="Text" description="Three tones. The distance between them is the hierarchy.">
           <TokenTable rows={textRows} theme={theme} />
+        </FoundationSection>
+        <FoundationSection label="Lines" description="Strokes that join things, never a container's edge.">
+          <TokenTable rows={lineRows} theme={theme} />
         </FoundationSection>
       </FoundationPage>
     );
