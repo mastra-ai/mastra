@@ -106,6 +106,24 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(bad.error?.message).toBeTruthy();
   }, 30_000);
 
+  it('refuses a tool that needs approval instead of running it without one', async () => {
+    const execute = vi.fn(async () => ({ refunded: true }));
+    const refund = createTool({
+      id: 'refund',
+      description: 'Refund an order',
+      inputSchema: z.object({ orderId: z.string() }),
+      requireApproval: true,
+      execute,
+    });
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { refund }, sandbox });
+
+    const result = await run(tool, `return await external_refund({ orderId: 'o-1' });`);
+    expect(result.success).toBe(false);
+    expect(result.error?.message).toMatch(/needs approval/);
+    expect(execute).not.toHaveBeenCalled();
+  }, 30_000);
+
   it('reports program errors without crashing', async () => {
     const sandbox = new LocalSandbox();
     const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox });

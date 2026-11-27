@@ -8,10 +8,15 @@
  */
 
 import { z } from 'zod/v4';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { EntityType, SpanType, createObservabilityContext } from '../../observability';
+import type { AnySpan } from '../../observability';
+import { resolveCurrentSpan } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { createTool } from '../tool';
 import type { Tool } from '../tool';
+import { getNeedsApprovalFn } from '../toolchecks';
 import { isValidationError } from '../validation';
 import { createCodeModeInstructions } from './stub-generator';
 import { StdioCodeModeTransport } from './transport';
@@ -48,8 +53,14 @@ export interface CodeModeResult {
   instructions: string;
 }
 
+interface OrchestratedTool {
+  description?: string;
+  requireApproval?: unknown;
+  execute?: (args: any, ctx: any) => Promise<any>;
+}
+
 /** Resolve the tool key -> tool map keyed by the tool's effective id. */
-function indexToolsById(config: CodeModeConfig): Map<string, { execute?: (args: any, ctx: any) => Promise<any> }> {
+function indexToolsById(config: CodeModeConfig): Map<string, OrchestratedTool> {
   const map = new Map();
   for (const [key, tool] of Object.entries(config.tools)) {
     const id = (tool as { id?: string }).id ?? key;
@@ -99,24 +110,60 @@ export function createCodeModeTool(
         }
       }
 
-      // Each external_* call re-enters the real Mastra tool pipeline (validation,
-      // request-context checks, tracing) on the host, with the outer tool's context.
-      const dispatch: CodeModeToolDispatcher = async (toolId, args) => {
-        const tool = toolsById.get(toolId);
-        if (!tool?.execute) {
-          throw new Error(`Tool "${toolId}" is not available in Code Mode`);
-        }
-        const result = await tool.execute(args, {
-          mastra: ctx?.mastra,
-          requestContext: ctx?.requestContext,
-          abortSignal: ctx?.abortSignal,
-          workspace: ctx?.workspace,
-        });
-        if (isValidationError(result)) {
-          throw new Error(result.message ?? `Invalid input for tool "${toolId}"`);
-        }
-        return result;
-      };
+      // Each external_* call runs the real Mastra tool on the host (validation,
+      // request context), with the outer tool's context, traced as a tool call.
+      const dispatchUnder =
+        (codeSpan: AnySpan | undefined): CodeModeToolDispatcher =>
+        async (toolId, args) => {
+          const tool = toolsById.get(toolId);
+          if (!tool?.execute) {
+            throw new Error(`Tool "${toolId}" is not available in Code Mode`);
+          }
+          // Approval happens in the agent loop, which a call from the program bypasses.
+          if (tool.requireApproval || getNeedsApprovalFn(tool)) {
+            throw new Error(
+              `Tool "${toolId}" needs approval, so Code Mode cannot call it. Give it to the agent as a direct tool.`,
+            );
+          }
+          const span = codeSpan?.createChildSpan({
+            type: SpanType.TOOL_CALL,
+            name: `tool: '${toolId}'`,
+            input: args,
+            entityType: EntityType.TOOL,
+            entityId: toolId,
+            entityName: toolId,
+            attributes: { toolDescription: tool.description, toolType: 'tool' },
+          });
+          let result: unknown;
+          try {
+            result = await tool.execute(args, {
+              mastra: ctx?.mastra,
+              requestContext: ctx?.requestContext,
+              abortSignal: ctx?.abortSignal,
+              workspace: ctx?.workspace,
+              ...createObservabilityContext({ currentSpan: span }),
+            });
+          } catch (error) {
+            span?.error({
+              error: error as Error,
+              ...executionFailureTermination(error),
+              attributes: { success: false },
+            });
+            throw error;
+          }
+          if (isValidationError(result)) {
+            span?.end({ output: result, ...executionFailureTermination(result), attributes: { success: false } });
+            throw new Error(result.message ?? `Invalid input for tool "${toolId}"`);
+          }
+          span?.end({
+            output: result,
+            outcome: 'success',
+            stopReason: null,
+            stopReasonContext: null,
+            attributes: { success: true },
+          });
+          return result;
+        };
 
       // The TypeScript program is written to a .ts module by the transport;
       // the sandbox's node strips the type annotations natively at import.
@@ -125,7 +172,8 @@ export function createCodeModeTool(
           sandbox,
           program: code,
           toolIds,
-          dispatch,
+          // `observe.span` runs this callback inside the span it opened.
+          dispatch: dispatchUnder(resolveCurrentSpan()),
           timeout,
           abortSignal: ctx?.abortSignal,
           onExternalCall: (tool, args) => ctx.observe.log('info', 'code-mode external call', { tool, args }),

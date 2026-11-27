@@ -102,6 +102,7 @@ For `createCodeMode()` to work well, keep these tips in mind:
 
 - Keep tools focused, so each does one thing well and the model composes them in code.
 - Code mode helps most when calls can be parallelized with `Promise.all`.
+- Give tools that need approval (`requireApproval`) to the agent as direct tools. Code mode refuses to call them, because approval happens in the agent loop and a call from the function would skip it.
 
 Visit the [`createCodeMode()` reference](/reference/tools/create-code-mode) for configuration options, return values, result shape, and instructions inspection.
 
