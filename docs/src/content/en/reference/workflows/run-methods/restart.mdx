@@ -19,6 +19,8 @@ const result = await run.start({ inputData: { value: 'initial data' } })
 const restartedResult = await run.restart()
 ```
 
+On the evented engine with `@mastra/pg` or `@mastra/libsql`, `restart()` takes the run over from any worker still running it. A step whose result was saved before the restart keeps it. A step the restart claimed first runs again, and the earlier worker's save of it is refused. See [restart workflows](/docs/workflows/overview#restarting-active-workflow-runs).
+
 ## Parameters
 
 <PropertiesTable

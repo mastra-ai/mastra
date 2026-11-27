@@ -524,7 +524,7 @@ If a process stops renewing its lease but keeps executing, for example because i
 
 Evented runs on a pubsub whose broker redelivers unacknowledged events are left to the broker: when a worker stops mid-step, the broker redelivers the step's event to another worker, and booting instances don't restart the run. Scheduled runs are the exception, because their events stay in the process that fired them, so recovery restarts them. On any other pubsub, including the default in-process one, recovery restarts every active evented run at once. The in-process pubsub delivers events only inside one process, so running several instances on one storage with it isn't supported for evented workflows or agents. See [evented workflows and agents](/docs/server/pubsub#evented-workflows-and-agents) for the PubSub backends and storage adapters that support several instances.
 
-A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step that already saved its result doesn't run again when its event arrives late, for example after a broker redelivery or a `restart()` that ran while the step was saving its result. The run continues from the saved result instead. This needs a storage adapter with run-ownership support. Workflows that set `autoRestartActiveRuns: false`, including durable agent workflows, run the step again. Make steps with side effects idempotent, so a repeated step has no additional effect.
+A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step that already saved its result doesn't run again when its event arrives late, for example after a broker redelivery or a `restart()` that applied after the step saved its result. The run continues from the saved result instead. This needs a storage adapter with run-ownership support. Workflows that set `autoRestartActiveRuns: false`, including durable agent workflows, run the step again. Make steps with side effects idempotent, so a repeated step has no additional effect.
 
 A step's `execute` function receives `runId` and `workflowId`. Combine them with the `id` you gave the step in `createStep()`, plus a name for each side effect when the step performs more than one, to build an idempotency key.
 
@@ -623,6 +623,8 @@ const result = await run.start({ inputData: { value: 'initial data' } })
 
 const restartedResult = await run.restart()
 ```
+
+On the evented engine with `@mastra/pg` or `@mastra/libsql`, `restart()` takes the run over even while another worker still runs it, because evented runs hold no storage lease. Before it runs anything, the restart claims each step it restarts. A step that saved its result before the claim keeps it and doesn't run again. Once the restart claimed a step, the save of the worker that was running it is refused, and the step runs again under the restart. The steps after it run once. When two `restart()` calls race, each step has one owner. A restart that applies after the run ended leaves the run as it is. On other storage adapters, a `restart()` of a live evented run starts a second execution next to the first.
 
 ### Identifying active workflow runs
 
