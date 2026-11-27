@@ -5,8 +5,12 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryTransitionResult } from '../rules/types.js';
-import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryRuleRejectionCode, FactoryTransitionResult } from '../rules/types.js';
+import type {
+  FactoryDispatchFailureCode,
+  FactoryRunBindingRecord,
+  WorkItemsStorage,
+} from '../storage/domains/work-items/base.js';
 import type { FactoryCardRunState } from './board-workflow.js';
 
 /**
@@ -36,6 +40,21 @@ export type FactoryRunEndedBinding = Pick<
    */
   runsAgain?: boolean;
 };
+
+/** A card and the role whose runs work it: the seat a run of the card's phase sits in, bound or not yet. */
+export type FactoryCardSeat = Pick<FactoryRunEndedBinding, 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'>;
+
+/** One failed attempt at running a card's phase: its failure code, never its error text. */
+export interface FactoryRunFailure {
+  /** The dispatch failure's code, or a board rule's refusal code when a rule refused the run's move. */
+  code: FactoryDispatchFailureCode | FactoryRuleRejectionCode;
+  /** Which attempt of the decision failed, counting from 1. */
+  attempt: number;
+  /** True when no attempt follows this one. */
+  terminal: boolean;
+  /** The decision that ran the phase; with `attempt`, it names this failure. */
+  decisionId: string;
+}
 
 /**
  * Decides how a card moves across its board. Every stage change from outside the engine (a
@@ -77,6 +96,17 @@ export interface FactoryBoardEngine {
    * on once someone answers. For an engine that keeps what a card is doing.
    */
   runPaused?(binding: FactoryRunEndedBinding, reason: 'approval'): Promise<void>;
+  /**
+   * Tells the engine that an attempt at running a card's phase failed, for an engine that keeps
+   * what a card is doing. The dispatcher tells it once it recorded the failure, `terminal` when
+   * it won't try again. It can be told more than once for one attempt.
+   */
+  runFailed?(seat: FactoryCardSeat, failure: FactoryRunFailure): Promise<void>;
+  /**
+   * Tells the engine that a person stopped the run of a session bound to a card, for an engine
+   * that keeps what a card is doing. The card stays in its phase until someone starts it again.
+   */
+  runStopped?(seat: FactoryCardSeat): Promise<void>;
   /**
    * What the card is doing as the engine last recorded it, for an engine that keeps that. Nothing
    * for a card it has no record of.

@@ -7,12 +7,14 @@ import { pendingPhaseOutcome } from '../boards/phase-outcomes.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
+import { failureLabel } from '../rules/public-failure-reason.js';
 import { markRunInterrupted } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
 import type { FactoryTransitionResult } from '../rules/types.js';
 import {
   boardRunId,
   APPLIED_MOVES,
+  COUNTED_FAILURES,
   COUNTED_RUN_ENDS,
   createFactoryBoardWorkflow,
   FACTORY_BOARD_WORKFLOW_ID,
@@ -25,6 +27,8 @@ import type {
   FactoryCardPlacement,
   FactoryCardPlacementResult,
   FactoryRunEndedBinding,
+  FactoryCardSeat,
+  FactoryRunFailure,
   FactorySubmittedMove,
 } from './engine.js';
 
@@ -44,6 +48,9 @@ const RUN_TAKEN_ERROR_IDS = new Set(['WORKFLOW_RUN_NOT_SUSPENDED', 'WORKFLOW_RES
 const INTERRUPT_WAIT_MS = 120_000;
 /** What a card that needs attention tells the person looking at it. */
 const NO_OUTCOME_REASON = "The agent's run ended twice without reporting how the phase ended.";
+const STOPPED_REASON = 'Stopped by a person.';
+/** What a card is doing while a run works its phase, which a person's Stop ends. */
+const RUN_STATES = new Set<FactoryCardRunRecord['state']>(['running', 'probing', 'awaiting_approval']);
 const NOT_RUN_AGAIN_REASON =
   "The agent's run ended without reporting how the phase ended, and it will not be run again.";
 
@@ -64,6 +71,15 @@ type PendingInput =
       board: string;
       phase: string;
       answer?: { paused: true } | { error: unknown };
+    }
+  | {
+      runFailed: FactoryCardSeat;
+      failure: FactoryRunFailure;
+      answer?: { heard: true } | { error: unknown };
+    }
+  | {
+      runStopped: FactoryCardSeat;
+      answer?: { heard: true } | { error: unknown };
     };
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
@@ -79,7 +95,13 @@ function carried(previous: FactoryCardRunRecord): Partial<FactoryCardRunRecord> 
     ...(previous.lastOutcome ? { lastOutcome: previous.lastOutcome } : {}),
     ...(previous.countedRunEnds ? { countedRunEnds: previous.countedRunEnds } : {}),
     ...(previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {}),
+    ...(previous.countedFailures ? { countedFailures: previous.countedFailures } : {}),
   };
+}
+
+/** The failed attempts counted in this visit of the phase; a phase entered anew starts with none. */
+function attemptsIn(previous: FactoryCardRunRecord, board: string, phase: string): Partial<FactoryCardRunRecord> {
+  return sameVisit(previous, board, phase) && previous.attempts !== undefined ? { attempts: previous.attempts } : {};
 }
 
 /**
@@ -116,6 +138,28 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
           try {
             const next = await this.#stateAfterRunEnd(pending.runEnded, state);
             pending.answer = { outcome: next?.state === 'running' && next.lastOutcome !== undefined };
+            return next;
+          } catch (error) {
+            pending.answer = { error };
+            return undefined;
+          }
+        }
+        if ('runFailed' in pending) {
+          if (pending.runFailed.workItemId !== workItemId) return undefined;
+          try {
+            const next = await this.#stateAfterRunFailure(pending.runFailed, pending.failure, state);
+            pending.answer = { heard: true };
+            return next;
+          } catch (error) {
+            pending.answer = { error };
+            return undefined;
+          }
+        }
+        if ('runStopped' in pending) {
+          if (pending.runStopped.workItemId !== workItemId) return undefined;
+          try {
+            const next = await this.#stateAfterRunStop(pending.runStopped, state);
+            pending.answer = { heard: true };
             return next;
           } catch (error) {
             pending.answer = { error };
@@ -202,7 +246,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * card sits in one phase at the revision the person saw, its board allows the move, and the
    * request wasn't answered before (one that was is answered the same again, and moves nothing).
    */
-  async #movable(request: FactoryTransitionRequest): Promise<{ mayStartRun: boolean; userId: string } | undefined> {
+  async #movable(request: FactoryTransitionRequest): Promise<{ stopsRun: boolean; userId: string } | undefined> {
     if (request.actor.type !== 'human' || request.ingress.type !== 'human') return undefined;
     if (request.initialEntry || request.cause === 'run_start') return undefined;
     if (request.toBoard !== undefined && request.toBoard !== request.board) return undefined;
@@ -222,7 +266,9 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       request.ingress.identity,
     );
     if (answered) return undefined;
-    return { mayStartRun: phaseMayStartRun(board.phaseKind(request.stage)), userId: request.actor.id };
+    const kind = board.phaseKind(request.stage);
+    // A phase that runs takes the card from the run going now; a terminal one (Cancel) ends it.
+    return { stopsRun: phaseMayStartRun(kind) || kind === 'terminal', userId: request.actor.id };
   }
 
   /**
@@ -231,12 +277,14 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * A run that hasn't ended in time keeps its record and its card, and the move is refused as
    * busy, and so is a move by a person who may not drive the run's session. A move the board
    * wouldn't take anyway (another revision, no such edge) or already answered stops nothing.
+   * A move into a terminal phase (Cancel) stops the run the same way; one that can't stop it
+   * still commits, as it did before, since a terminal phase starts nothing to be busy with.
    */
   async #interrupts(request: FactoryTransitionRequest): Promise<boolean> {
     const runs = this.#context.runs;
     const move = runs ? await this.#movable(request) : undefined;
     if (!runs || !move) return false;
-    if (!move.mayStartRun || !(await runs.inFlight(request))) return false;
+    if (!move.stopsRun || !(await runs.inFlight(request))) return false;
     // A run another process holds, or one on a session the person may not drive, isn't stopped
     // from here, so the move is refused as busy at once instead of after the wait.
     if (!(await runs.stop(request, { userId: move.userId }))) return false;
@@ -267,13 +315,42 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
   }
 
+  /**
+   * Tells the card's run that an attempt at running its phase failed: it counts the attempt, and
+   * the last one leaves the card needing attention, with the failure's label as the reason.
+   */
+  async runFailed(seat: FactoryCardSeat, failure: FactoryRunFailure): Promise<void> {
+    const pending = { runFailed: seat, failure } satisfies PendingInput as Extract<
+      PendingInput,
+      { runFailed: unknown }
+    >;
+    await this.#ask(seat, pending);
+    if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
+  }
+
+  /**
+   * Tells the card's run that a person stopped its phase's run: the card stays where it is and
+   * needs attention until someone starts the phase again. Who stopped it isn't the run's to keep.
+   */
+  async runStopped(seat: FactoryCardSeat): Promise<void> {
+    const pending = { runStopped: seat } satisfies PendingInput as Extract<PendingInput, { runStopped: unknown }>;
+    await this.#ask(seat, pending);
+    if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
+  }
+
   /** What the card's run last recorded the card doing; nothing for a card no input was asked of. */
   async describe(card: CardRef): Promise<FactoryCardRunState | undefined> {
     if (!this.workflow.mastra) return undefined;
     const run = await this.workflow.getWorkflowRunById(boardRunId(card.workItemId), { withNestedWorkflows: false });
     const recorded = (run?.steps?.phase as { payload?: FactoryCardRunRecord } | undefined)?.payload;
     if (!recorded?.state) return undefined;
-    const { countedRunEnds: _counted, appliedMoves: _applied, board: _board, ...state } = recorded;
+    const {
+      countedRunEnds: _counted,
+      appliedMoves: _applied,
+      countedFailures: _failures,
+      board: _board,
+      ...state
+    } = recorded;
     return state;
   }
 
@@ -342,6 +419,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     const moves = previous.appliedMoves ? { appliedMoves: previous.appliedMoves } : {};
     const counted = {
       ...moves,
+      ...(previous.countedFailures ? { countedFailures: previous.countedFailures } : {}),
+      ...attemptsIn(previous, board.id, phase),
       ...(binding.runEnd && !heard.includes(binding.runEnd)
         ? { countedRunEnds: [...heard, binding.runEnd].slice(-COUNTED_RUN_ENDS) }
         : previous.countedRunEnds
@@ -397,7 +476,64 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
       phase,
       board: board.id,
       probes: sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0,
+      ...attemptsIn(previous, board.id, phase),
       ...carried(previous),
+    };
+  }
+
+  /**
+   * What the card is doing once an attempt at running its phase failed. A failure of a session
+   * that doesn't work the card's phase, or one already counted, changes nothing.
+   */
+  async #stateAfterRunFailure(
+    card: FactoryCardSeat,
+    failure: FactoryRunFailure,
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const item = await this.#context.workItems.get({ orgId: card.orgId, id: card.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !phase) return undefined;
+    const board = (await toBoardSource(this.#context.boards).load(card)).get(boardForWorkItem(item));
+    if (!board || board.phaseKind(phase) !== 'working' || board.roleForPhase(phase) !== card.role) return undefined;
+    const key = `${failure.decisionId}:${failure.attempt}`;
+    const heard = previous.countedFailures ?? [];
+    if (heard.includes(key)) return undefined;
+    return {
+      phase,
+      board: board.id,
+      probes: sameVisit(previous, board.id, phase) ? (previous.probes ?? 0) : 0,
+      ...carried(previous),
+      countedFailures: [...heard, key].slice(-COUNTED_FAILURES),
+      attempts: failure.attempt,
+      // Not the last attempt: the dispatcher runs the phase again.
+      ...(failure.terminal
+        ? { state: 'needs_attention' as const, failure: failure.code, reason: failureLabel(failure.code) }
+        : { state: 'running' as const }),
+    };
+  }
+
+  /**
+   * What the card is doing once a person stopped its phase's run. A stop of a session that doesn't
+   * work the card's phase, or with no run working it (nothing started, or already flagged), changes
+   * nothing.
+   */
+  async #stateAfterRunStop(
+    seat: FactoryCardSeat,
+    previous: FactoryCardRunRecord,
+  ): Promise<FactoryCardRunRecord | undefined> {
+    const item = await this.#context.workItems.get({ orgId: seat.orgId, id: seat.workItemId });
+    const phase = item?.stages.length === 1 ? item.stages[0] : undefined;
+    if (!item || !phase || !RUN_STATES.has(previous.state)) return undefined;
+    const board = (await toBoardSource(this.#context.boards).load(seat)).get(boardForWorkItem(item));
+    if (!board || !sameVisit(previous, board.id, phase) || board.roleForPhase(phase) !== seat.role) return undefined;
+    return {
+      state: 'needs_attention',
+      phase,
+      board: board.id,
+      probes: previous.probes ?? 0,
+      ...attemptsIn(previous, board.id, phase),
+      ...carried(previous),
+      reason: STOPPED_REASON,
     };
   }
 
@@ -441,10 +577,19 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    */
   async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
     const asked =
-      'runEnded' in pending ? pending.runEnded : 'runPaused' in pending ? pending.runPaused : pending.request;
+      'runEnded' in pending
+        ? pending.runEnded
+        : 'runPaused' in pending
+          ? pending.runPaused
+          : 'runFailed' in pending
+            ? pending.runFailed
+            : 'runStopped' in pending
+              ? pending.runStopped
+              : pending.request;
     if (await this.#context.workItems.get({ orgId: asked.orgId, id: asked.workItemId })) return false;
     if ('runEnded' in pending) pending.answer = { outcome: false };
     else if ('runPaused' in pending) pending.answer = { paused: true };
+    else if ('runFailed' in pending || 'runStopped' in pending) pending.answer = { heard: true };
     else pending.answer = { result: await this.#context.transitionService.transition(pending.request) };
     return true;
   }

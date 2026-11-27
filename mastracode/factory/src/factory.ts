@@ -2598,6 +2598,9 @@ export class MastraFactory {
           const runStopMarker = createRunStopMarker({
             auth: routeAuth,
             workItems: () => (storage.isDomainReady('work-items') ? workItemsStorage : undefined),
+            boardEngine: () => boardEngine,
+            runInFlight: async sessionId =>
+              (await this.#prepared?.base.controller.getSession(sessionId))?.stream.isActive() ?? false,
           });
           const boardRunGuard = createBoardRunGuard(() => Object.keys(this.#boardEngineWorkflows ?? {}));
           // The host's built-in MCP endpoint reads workflow runs without passing the guard, so
