@@ -523,8 +523,12 @@ export function describeRestartOccurrenceCases({
           const restarted = restartRun(wf.workflow, run.runId);
           await held.count(2);
 
+          const childRunId = (await storedRun(wf.workflow.id, run.runId))?.context[wf.child.id]?.metadata?.nestedRunId;
+          const childBefore = await storedRun(wf.child.id, childRunId);
           await held.release(0);
           await drainHandlers();
+          // The refused start wrote nothing to the nested run.
+          if (storageVersion === 1) expect(await storedRun(wf.child.id, childRunId)).toEqual(childBefore);
           // Storage v2: the start's descriptor carries no step results, so it can't tell which
           // occurrence dispatched it. The old occurrence's nested run finishes the step and the run;
           // the restart's delivery then finds the step finished. Each step still runs once.

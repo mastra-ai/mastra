@@ -1496,17 +1496,13 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext: withoutAuthToken(requestContext),
         ...(tracingContext ? { tracingContext } : {}),
       };
-      const pruneSnapshot = this.#pruneSnapshotOf(workflow);
-      await runStorage.writeSnapshot(
-        pruneSnapshot ? pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' }) : runningSnapshot,
-        resourceId,
-      );
-
-      if (parentWorkflow) {
-        const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
-        const parentIsForeach =
-          this.#resolveLiveParentWorkflow(parentWorkflow)?.stepGraph[parentWorkflow.executionPath[0]!]?.type ===
+      const parentIsForeach =
+        !!parentWorkflow &&
+        this.#resolveLiveParentWorkflow(parentWorkflow)?.stepGraph[parentWorkflow.executionPath[0]!]?.type ===
           'foreach';
+      /** Records this run on its parent's step; false when another occurrence of that step owns it. */
+      const recordOnParentStep = async (parentWorkflow: NonNullable<ProcessorArgs['parentWorkflow']>) => {
+        const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
         const parentSnap = await parentStorage.loadStep(workflowId);
         const existing = parentSnap?.context?.[workflowId] as any;
         // Every foreach child start carries only its own index, so the write must merge with the
@@ -1557,10 +1553,24 @@ export class WorkflowEventProcessor extends EventProcessor {
               parentRunId: parentWorkflow.runId,
               storedStartedBy: error.storedResult?.metadata?.startedBy,
             });
-            return;
+            return false;
           }
         }
-      }
+        return true;
+      };
+
+      // With step guards a nested run writes its parent's step before its own run, so a start the
+      // parent's step no longer belongs to writes nothing to the nested run, which another start may
+      // be driving. A foreach parent's merge is what records the iteration's run id, so it follows
+      // the nested run's own write: a parent never names an iteration run that was not stored.
+      const parentFirst = !!parentWorkflow && guardsSteps && !parentIsForeach;
+      if (parentFirst && !(await recordOnParentStep(parentWorkflow!))) return;
+      const pruneSnapshot = this.#pruneSnapshotOf(workflow);
+      await runStorage.writeSnapshot(
+        pruneSnapshot ? pruneSnapshot({ snapshot: runningSnapshot, workflowStatus: 'running' }) : runningSnapshot,
+        resourceId,
+      );
+      if (parentWorkflow && !parentFirst) await recordOnParentStep(parentWorkflow);
     }
 
     // Keep the captured cursor until the successor records its own input. A crash
@@ -3865,8 +3875,24 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (nestedDispatch === 'restart') {
-        const snapshot =
+        let snapshot =
           (await this.#runStorage(leafId, nestedRunId).loadFull()) ?? ({ context: {} } as WorkflowRunState);
+        // A nested run whose start never ran (or was refused because a restart took this step over)
+        // is stored pending without its input. Restart it from its first step with the input this
+        // step gives it.
+        if (
+          this.#guardsSteps(workflowsStore) &&
+          snapshot.status === 'pending' &&
+          !Object.prototype.hasOwnProperty.call(snapshot.context ?? {}, 'input')
+        ) {
+          snapshot = {
+            ...snapshot,
+            context: {
+              ...snapshot.context,
+              input: prevResult.status === 'success' ? prevResult.output : undefined,
+            } as WorkflowRunState['context'],
+          };
+        }
 
         // The nested run finished, but the process died before this step recorded
         // its outcome. A finished run cannot be restarted, so hand its stored
