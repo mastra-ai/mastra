@@ -207,7 +207,8 @@ export class MastraProject {
 
   /**
    * The project's datasets and experiments, with the same methods as core's `mastra.datasets`.
-   * Experiments run in this process and upload their results. Needs managed agents set up.
+   * Run experiments from your own code and save them with `createExperiment`, `submitExperimentResult` and
+   * `finalizeExperiment`; `startExperiment` isn't supported. Needs managed agents set up.
    */
   get datasets(): PlatformDatasets {
     this.#datasets ??= new PlatformDatasets(this.#services.client);
