@@ -20,7 +20,9 @@ import {
   calculatePagination,
   isPendingSignalThreadId,
   OBSERVATIONAL_MEMORY_TABLE_SCHEMA,
+  PENDING_SIGNAL_STATE,
   PENDING_SIGNAL_THREAD_PREFIX,
+  pendingSignalStateAtEnqueue,
   pendingSignalThreadId,
   threadIdOfPendingSignalRow,
   RUN_FENCING_TABLE_SCHEMAS,
@@ -87,18 +89,21 @@ export const OM_MIGRATION_COLUMNS: string[] = [
  * Pending-signal columns. They are not part of core's shared table schemas, so
  * `init()` adds them to new and existing tables alike. A pending signal is a
  * message row under the thread id `pendingSignalThreadId(threadId)` with a NULL
- * `resourceId`, so it is not part of any thread until `saveMessages` moves it to
- * its thread.
+ * `resourceId`, so it is not part of any thread until a claim or `saveMessages`
+ * moves it to its thread.
  */
 const SIGNAL_MESSAGE_COLUMNS: Record<string, StorageColumn> = {
   /**
-   * The run that took the signal. It stays after the save moves the row to its
-   * thread, until that run closes. A row under the pending-signal prefix is not
-   * part of any thread: every read by message id must exclude it, and nothing
-   * but the save may move it to a real thread.
+   * The run that took the signal, until that run closes. A row under the
+   * pending-signal prefix is not part of any thread: every read by message id
+   * must exclude it.
    */
   signalClaimedBy: { type: 'text', nullable: true },
+  /** A `PENDING_SIGNAL_STATE` value: a transient signal, or a row a claim moved that no save wrote. */
+  signalState: { type: 'text', nullable: true },
 };
+const TRANSIENT_STATE = `'${PENDING_SIGNAL_STATE.transient}'`;
+const TAKEN_STATE = `'${PENDING_SIGNAL_STATE.taken}'`;
 const SIGNAL_THREAD_COLUMNS: Record<string, StorageColumn> = {
   signalRunId: { type: 'text', nullable: true },
 };
@@ -2098,10 +2103,11 @@ export class MemoryPG extends MemoryStorage {
             .join(', ');
 
           // A pending signal saved under its own thread moves into the thread, where it is a message
-          // that takes the saved createdAt; any other row keeps its createdAt. Claimants are left as
-          // they are until the claiming run closes. A pending signal saved under another thread stays
-          // as it is.
+          // that takes the saved createdAt, as does the first save of a row a claim moved; any other
+          // row keeps its createdAt. Claimants are left as they are until the claiming run closes, and
+          // the save clears the signal state. A pending signal saved under another thread stays as it is.
           const ownPendingThread = `'${PENDING_SIGNAL_THREAD_PREFIX}' || EXCLUDED.thread_id`;
+          const takesSavedCreatedAt = `m.thread_id = ${ownPendingThread} OR m."signalState" = ${TAKEN_STATE}`;
           await t.none(
             `INSERT INTO ${tableName} AS m (id, thread_id, content, "createdAt", "createdAtZ", role, type, "resourceId")
              VALUES ${valuePlaceholders}
@@ -2111,8 +2117,9 @@ export class MemoryPG extends MemoryStorage {
               role = EXCLUDED.role,
               type = EXCLUDED.type,
               "resourceId" = EXCLUDED."resourceId",
-              "createdAt" = CASE WHEN m.thread_id = ${ownPendingThread} THEN EXCLUDED."createdAt" ELSE m."createdAt" END,
-              "createdAtZ" = CASE WHEN m.thread_id = ${ownPendingThread} THEN EXCLUDED."createdAtZ" ELSE m."createdAtZ" END
+              "createdAt" = CASE WHEN ${takesSavedCreatedAt} THEN EXCLUDED."createdAt" ELSE m."createdAt" END,
+              "createdAtZ" = CASE WHEN ${takesSavedCreatedAt} THEN EXCLUDED."createdAtZ" ELSE m."createdAtZ" END,
+              "signalState" = NULL
              WHERE ${notPendingSignalRow('m.thread_id')} OR m.thread_id = ${ownPendingThread}`,
             values,
           );
@@ -2443,8 +2450,8 @@ export class MemoryPG extends MemoryStorage {
     // The row has no resource until the save moves it to its thread.
     const insert = (q: Queryable) =>
       q.none(
-        `INSERT INTO ${messagesTable} (id, thread_id, content, "createdAt", "createdAtZ", role, type)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `INSERT INTO ${messagesTable} (id, thread_id, content, "createdAt", "createdAtZ", role, type, "signalState")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO NOTHING`,
         [
           message.id,
@@ -2454,6 +2461,7 @@ export class MemoryPG extends MemoryStorage {
           createdAt,
           message.role,
           message.type || 'v2',
+          pendingSignalStateAtEnqueue(message),
         ],
       );
 
@@ -2498,16 +2506,21 @@ export class MemoryPG extends MemoryStorage {
           [threadId],
         );
         if (thread?.signalRunId !== runId) return { resourceId: undefined, rows: [] };
-        // Only rows no run took: a row another run took stays with that run.
+        // Only rows no run took: a row another run took stays with that run. Every row but a
+        // transient one moves into the thread with the thread's resource.
+        const transient = `m."signalState" IS NOT DISTINCT FROM ${TRANSIENT_STATE}`;
         await t.none(
           `WITH locked AS (
              SELECT id FROM ${messagesTable}
              WHERE thread_id = $1 AND "signalClaimedBy" IS NULL
              ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            )
-           UPDATE ${messagesTable} m SET "signalClaimedBy" = $2
+           UPDATE ${messagesTable} m SET "signalClaimedBy" = $2,
+             thread_id = CASE WHEN ${transient} THEN m.thread_id ELSE $3 END,
+             "resourceId" = CASE WHEN ${transient} THEN NULL ELSE $4 END,
+             "signalState" = CASE WHEN ${transient} THEN m."signalState" ELSE ${TAKEN_STATE} END
            FROM locked WHERE m.id = locked.id`,
-          [pendingThreadId, runId],
+          [pendingThreadId, runId, threadId, thread.resourceId],
         );
         // Taken rows, and rows the run saved into the thread since.
         const claimed = await t.manyOrNone<MessageRowFromDB>(
@@ -2542,17 +2555,22 @@ export class MemoryPG extends MemoryStorage {
         // settled below, and a claim that comes later finds the signal run cleared.
         await t.none(`SELECT 1 FROM ${threadsTable} WHERE id = $1 FOR UPDATE`, [threadId]);
         // One statement locks the run's rows in the thread and under its pending-signal id, in lock
-        // order. Consumed rows still under the pending-signal id were never saved and are deleted.
+        // order. Rows still under the pending-signal id, or moved by the claim and not saved since,
+        // were never saved: consumed ones are deleted, the others go back to pending.
         await t.none(
           `WITH locked AS (
-             SELECT id, (thread_id = $4 AND id = ANY($3::text[])) AS consumed
+             SELECT id, (thread_id = $4 OR "signalState" = ${TAKEN_STATE}) AND id = ANY($3::text[]) AS consumed,
+               "signalState" IS NOT DISTINCT FROM ${TAKEN_STATE} AS taken
              FROM ${messagesTable}
              WHERE thread_id = ANY($1::text[]) AND "signalClaimedBy" = $2
              ORDER BY ${MESSAGE_LOCK_ORDER} FOR UPDATE
            ), deleted AS (
              DELETE FROM ${messagesTable} m USING locked WHERE m.id = locked.id AND locked.consumed
            )
-           UPDATE ${messagesTable} m SET "signalClaimedBy" = NULL
+           UPDATE ${messagesTable} m SET "signalClaimedBy" = NULL,
+             thread_id = CASE WHEN locked.taken THEN $4 ELSE m.thread_id END,
+             "resourceId" = CASE WHEN locked.taken THEN NULL ELSE m."resourceId" END,
+             "signalState" = CASE WHEN locked.taken THEN NULL ELSE m."signalState" END
            FROM locked WHERE m.id = locked.id AND NOT locked.consumed`,
           [[threadId, pendingSignalThreadId(threadId)], runId, consumedIds, pendingSignalThreadId(threadId)],
         );
