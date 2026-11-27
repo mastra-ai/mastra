@@ -5539,6 +5539,18 @@ export class WorkflowEventProcessor extends EventProcessor {
       return { ok: true };
     } catch (err) {
       if (isWorkflowStepConflictError(err) && (err.reason === 'stale' || err.reason === 'completed')) {
+        if (err.reason === 'stale') {
+          const data = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>> | undefined;
+          this.mastra.getLogger()?.warn('Dropping a workflow delivery the step guards refused as stale', {
+            type: event.type,
+            runId: event.runId,
+            eventId: event.id,
+            workflowId: data?.workflowId,
+            executionPath: data?.executionPath,
+            storedStartedBy: err.storedResult?.metadata?.startedBy,
+            storedStatus: err.storedResult?.status,
+          });
+        }
         this.deliveryAttempts.delete(eventKey);
         return { ok: true };
       }

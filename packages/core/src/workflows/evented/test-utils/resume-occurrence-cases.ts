@@ -179,6 +179,38 @@ export function describeResumeOccurrenceCases({
       return { workflow, calls, held, entered, arm, releaseAll };
     }
 
+    // T1. A duplicate of a step after a resume runs its body again (one save wins under the guard).
+    // Without the guards both copies continued the run, so the step after it ran twice.
+    it('runs the step after a resumed step once when that step is delivered twice', async () => {
+      const wf = linearWorkflow();
+      await withHost({ [wf.workflow.id]: wf.workflow }, async ({ driver, warn }) => {
+        try {
+          const run = await wf.workflow.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+          wf.arm('after', 'next');
+          const from = driver.events.length;
+          const result = run.resume({ step: 'gate', resumeData: { ok: true } });
+          await wf.entered.after.promise;
+          const afterRun = stepRunsSince(driver, from, run.runId, '1')[0]!;
+          await redeliverInBody(driver, afterRun);
+          await wf.entered.next.promise;
+          wf.held.after.resolve();
+          await settle(driver);
+          wf.held.next.resolve();
+          expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+          await settle(driver);
+          expect(wf.calls).toEqual({ gate: 1, after: 2, next: 1 });
+          // The slower copy's completion is refused by the guard and logged.
+          expect(warn).toHaveBeenCalledWith(
+            expect.stringContaining('stale'),
+            expect.objectContaining({ runId: run.runId, executionPath: [1], storedStartedBy: afterRun.id }),
+          );
+        } finally {
+          wf.releaseAll();
+        }
+      });
+    }, 20_000);
+
     // T2. The resumed step's own event delivered twice while it runs: without the guards both
     // copies continued the run, so the step after it ran twice.
     it('runs the step after a resume once when the resumed step is delivered twice', async () => {
