@@ -56,7 +56,7 @@ A read of a page that doesn't exist lists up to three close matches by `ref`.
 
 ## `knowledge_search`
 
-Searches the pages, notes and sequence items the run can read. A sequence is a page that holds dated items, such as the messages of a Slack channel.
+Searches the pages, notes and sequence items the run can read. A sequence is a page that holds ordered items: dated ones, such as the messages of a Slack channel, or ones in a set order, such as the steps of a runbook. A sequence's child pages are items too.
 
 The query is split into words, and quote marks are ignored. Each word matches case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words. A note matches when its own text does.
 
@@ -68,7 +68,7 @@ Keyword results are ranked in this order:
 
 Access checks and `scope` filter results before ranking. `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so this order no longer holds.
 
-Sequence items match by keyword only, never by meaning. An item matches when its body contains at least one of the words; items rank by how many words they contain, then newest first, and join the page and note results by rank. With `in`, `since` or `until`, a search returns only items.
+Sequence items match by keyword only, never by meaning. An item matches when its title, body, a link's title or a text property contains at least one of the words. A child page's item matches on the page's name. Items rank by how many words they contain, then newest first (or by position, in a sequence ordered by position), and join the page and note results by rank. With `in`, `since`, `until`, `types` or `untyped`, a search returns only items.
 
 <PropertiesTable
   content={[
@@ -93,10 +93,17 @@ Sequence items match by keyword only, never by meaning. An item matches when its
     description: 'Only items that happened before this ISO 8601 date-time, with a zone.',
     isOptional: true,
   },
+  {
+    name: 'types',
+    type: 'string[]',
+    description: 'Only items of these types, such as `["deploy"]`. With `untyped`, untyped items as well.',
+    isOptional: true,
+  },
+  { name: 'untyped', type: 'boolean', description: 'Only items without a type.', isOptional: true },
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }`, `{ type: 'note', page, note }` or `{ type: 'item', page, item }`. An item is `{ ref, externalId, occurredAt, editedAt?, deleted?, author?, thread?, body }`, and `page` is its sequence. A page result's `page` can also include body matches: a `snippet` of about 60 tokens around the words that matched, not counting the `…` it puts where the body was cut; the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines; and `matchingLines`, how many lines contain a matched word. Every line of the snippet carries its line number, as in `knowledge_read` (`9│Any reimbursement over $500 needs a manager.`), and a line cut at either end keeps its number and the `…`. When the nearest markdown heading above the snippet isn't in it, the snippet starts with that heading line and its number (`6│## Expenses`), then the excerpt. The matching is the search's own (quote marks removed, case-insensitive), so these fields are included only when the body contains at least one of the words, and left out when only the name or description matched. When any page result has them, `more` says how to read on from `line` with `knowledge_read` (`from`) or see every match (`match`). Snippets are built only for pages the run can read.
+Returns `{ results }`, each `{ type: 'page', page }`, `{ type: 'note', page, note }` or `{ type: 'item', page, item }`. An item is `{ ref, externalId, occurredAt?, position?, editedAt?, deleted?, author?, parent?, type?, title?, page?, body?, links?, properties? }`: fields it doesn't have are left out, `parent` is the `externalId` of the root item it sits under, and `page` is the ref of the child page it stands for. The result's own `page` is its sequence. A page result's `page` can also include body matches: a `snippet` of about 60 tokens around the words that matched, not counting the `…` it puts where the body was cut; the `line` the snippet is centred on, numbered as `knowledge_read` numbers lines; and `matchingLines`, how many lines contain a matched word. Every line of the snippet carries its line number, as in `knowledge_read` (`9│Any reimbursement over $500 needs a manager.`), and a line cut at either end keeps its number and the `…`. When the nearest markdown heading above the snippet isn't in it, the snippet starts with that heading line and its number (`6│## Expenses`), then the excerpt. The matching is the search's own (quote marks removed, case-insensitive), so these fields are included only when the body contains at least one of the words, and left out when only the name or description matched. When any page result has them, `more` says how to read on from `line` with `knowledge_read` (`from`) or see every match (`match`). Snippets are built only for pages the run can read.
 
 These searches also return `more`:
 
@@ -150,7 +157,7 @@ A result stops at `limit` entries or at the read cap (about 1,000 tokens of entr
 
 Reads a page: its body, notes, child pages, and the notes on other pages that mention it. A scope address reads that scope's page, which lists its pages and child scopes. Without `page`, it returns `{ scopes }`: every scope the run holds, including scopes before any pages exist. Each scope is `{ address, name, description?, role?, can, empty? }`. `role` is there when the run has one. `can` says what the run may do there: `write`, `read` or `none`. A scope with no page the run can read yet has `empty: true`, and its `name` is the scope address. A held scope the run can't read shows only its address, not its stored name or description.
 
-A sequence page also returns its latest 20 items, newest first, as `sequence: { items, nextCursor? }`. Pass `sequence` to read more of them instead of the page. An item ref, `<page ref>@<item id>`, reads that one item as `{ page, item }`. A deleted item reads with `deleted: true` and an empty body.
+A sequence page also returns its first 20 items as `sequence: { items, nextCursor? }`: newest first when its items are dated, by position otherwise. Pass `sequence` to read more of them instead of the page. An item ref, `<page ref>@<item id>`, reads that one item as `{ page, item }`. A deleted item reads with `deleted: true` and no content.
 
 <PropertiesTable
   content={[
@@ -222,9 +229,9 @@ A sequence page also returns its latest 20 items, newest first, as `sequence: { 
   },
   {
     name: 'sequence',
-    type: '{ since?: string; until?: string; order?: "desc" | "asc"; thread?: string; cursor?: string; limit?: number }',
+    type: '{ since?: string; until?: string; order?: "desc" | "asc"; parent?: string; types?: string[]; untyped?: boolean; cursor?: string; limit?: number }',
     description:
-      "Read a sequence page's items instead of the page. `since` and `until` are ISO 8601 date-times; `order` defaults to `desc`; `thread` is the root item's `externalId` and returns the root and its replies; `cursor` is the previous read's `nextCursor`, with the same other arguments; `limit` is 1 to 100, default 20. Can't be combined with `outline`, `section`, `match`, `from`, `notes` or `mentionedIn`.",
+      "Read a sequence page's items instead of the page. `since` and `until` are ISO 8601 date-times, refused on a sequence ordered by position; `order` is `desc` or `asc`, defaulting to `desc` (newest first) on a dated sequence and `asc` (first first) on one ordered by position; `parent` is a root item's `externalId` and returns the root and the items under it; `types` and `untyped` keep only items of those types or with none; `cursor` is the previous read's `nextCursor`, with the same other arguments; `limit` is 1 to 100, default 20. Can't be combined with `outline`, `section`, `match`, `from`, `notes` or `mentionedIn`.",
     isOptional: true,
   },
 ]}
