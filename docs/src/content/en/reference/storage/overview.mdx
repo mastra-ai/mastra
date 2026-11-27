@@ -67,10 +67,7 @@ The schema definitions below cover the built-in database-backed tables documente
     type: 'text',
     description:
       'Parent thread reference. Postgres and libSQL store `mastra-pending-signals:<threadId>` while the row is a [pending signal](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), which message reads never return.',
-    constraints: [
-      { type: 'foreignKey', value: 'threads.id' },
-      { type: 'nullable', value: false },
-    ],
+    constraints: [{ type: 'nullable', value: false }],
   },
   {
     name: 'resourceId',
