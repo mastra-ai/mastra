@@ -8,6 +8,7 @@ import {
   Workflow,
   Vector,
   Knowledge,
+  Factory,
   BaseResource,
   A2A,
   A2AV1,
@@ -28,7 +29,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
-import type { KnowledgeInstanceSummary } from './resources';
+import type { FactoryOptions, KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -714,6 +715,16 @@ export class MastraClient extends BaseResource {
    */
   public getKnowledge(knowledgeKey: string) {
     return new Knowledge(this.options, knowledgeKey);
+  }
+
+  /**
+   * Gets a Factory project's board: cards, phases, moves, decisions and run queue
+   * @param factoryProjectId - The Factory project
+   * @param options - `basePath` where the host serves Factory's routes (default `/web/factory`)
+   * @returns Factory resource
+   */
+  public getFactory(factoryProjectId: string, options?: FactoryOptions) {
+    return new Factory(this.options, factoryProjectId, options);
   }
 
   /**

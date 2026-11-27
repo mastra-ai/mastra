@@ -1279,6 +1279,9 @@ importers:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
