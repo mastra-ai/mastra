@@ -795,6 +795,58 @@ describe('cloneThread – Observational Memory', () => {
       ]);
     });
 
+    it('the observations copied are the ones that set the cutoff, even if the source changes during the copy', async () => {
+      withObservationalMemory('thread');
+      await seedThread('ctx-race', 4);
+      const memoryStore = await getMemoryStore(memory);
+      const source = await seedThreadScopedOM(memoryStore, 'ctx-race', {
+        activeObservations: '* observed 0 and 1',
+        lastObservedAt,
+      });
+      const copy = memoryStore.copyThread.bind(memoryStore);
+      vi.spyOn(memoryStore, 'copyThread').mockImplementation(async input => {
+        const copied = await copy(input);
+        // The source observes message 2 while the messages are being copied.
+        await memoryStore.updateActiveObservations({
+          id: source.id,
+          observations: '* observed 0, 1 and 2',
+          tokenCount: 5,
+          lastObservedAt: new Date('2024-01-01T10:02:00Z'),
+        });
+        return copied;
+      });
+
+      const { thread, clonedMessages } = await memory.cloneThread({ sourceThreadId: 'ctx-race' });
+
+      expect(textsOf(clonedMessages)).toEqual(['Message 2', 'Message 3']);
+      const clonedOM = (await memoryStore.getObservationalMemory(thread.id, resourceId))!;
+      expect(clonedOM.activeObservations).toBe('* observed 0 and 1');
+      expect(new Date(clonedOM.lastObservedAt!).toISOString()).toBe(lastObservedAt.toISOString());
+    });
+
+    it('a clone keeps the observations when the source memory is cleared during the copy', async () => {
+      withObservationalMemory('thread');
+      await seedThread('ctx-cleared', 4);
+      const memoryStore = await getMemoryStore(memory);
+      await seedThreadScopedOM(memoryStore, 'ctx-cleared', {
+        activeObservations: '* observed 0 and 1',
+        lastObservedAt,
+      });
+      const copy = memoryStore.copyThread.bind(memoryStore);
+      vi.spyOn(memoryStore, 'copyThread').mockImplementation(async input => {
+        const copied = await copy(input);
+        await memoryStore.clearObservationalMemory('ctx-cleared', resourceId);
+        return copied;
+      });
+
+      const { thread, clonedMessages } = await memory.cloneThread({ sourceThreadId: 'ctx-cleared' });
+
+      expect(textsOf(clonedMessages)).toEqual(['Message 2', 'Message 3']);
+      expect((await memoryStore.getObservationalMemory(thread.id, resourceId))?.activeObservations).toBe(
+        '* observed 0 and 1',
+      );
+    });
+
     it('a clone into another resource copies only the messages after lastObservedAt', async () => {
       withObservationalMemory('thread');
       await seedThread('ctx-cross', 4);
