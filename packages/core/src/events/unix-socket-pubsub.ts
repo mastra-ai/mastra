@@ -25,6 +25,7 @@ type ServerFrame =
 type LocalSubscription = {
   callback: EventCallback;
   group?: string;
+  localOnly?: boolean;
 };
 
 type UnixSocketPubSubOptions = {
@@ -406,6 +407,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     this.#brokerPathCheckIntervalMs = brokerPathCheckIntervalMs;
   }
 
+  override get supportsLocalSubscriptions(): boolean {
+    return true;
+  }
+
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['push'];
   }
@@ -555,7 +560,8 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
     const subscriptions = this.#subscriptions.get(topic) ?? new Map<EventCallback, LocalSubscription>();
     const existing = subscriptions.get(cb);
-    if (existing && existing.group === options?.group) {
+    if (existing && existing.group === options?.group && existing.localOnly === options?.localOnly) {
+      if (existing.localOnly) return;
       await this.#ensureStarted();
       if (!this.#isBroker) {
         await this.#waitForPendingMembershipAcknowledgement(
@@ -572,8 +578,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     const group = options?.group;
     const hadMembership = this.#hasLocalMembership(topic, group);
     const wasConnected = Boolean(this.#clientSocket && !this.#clientSocket.destroyed);
-    subscriptions.set(cb, { callback: cb, group });
+    subscriptions.set(cb, { callback: cb, group, localOnly: options?.localOnly });
     this.#subscriptions.set(topic, subscriptions);
+    if (options?.localOnly) return;
 
     try {
       await this.#ensureStarted();
@@ -599,14 +606,20 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     if (!subscriptions || !subscription) return;
 
     const membershipWillEnd = ![...subscriptions.values()].some(
-      candidate => candidate.callback !== cb && candidate.group === subscription.group,
+      candidate => !candidate.localOnly && candidate.callback !== cb && candidate.group === subscription.group,
     );
-    if (membershipWillEnd && !this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
+    if (
+      !subscription.localOnly &&
+      membershipWillEnd &&
+      !this.#isBroker &&
+      this.#clientSocket &&
+      !this.#clientSocket.destroyed
+    ) {
       this.#leavingSubscriptions.add(subscription);
       try {
         await this.#sendUnsubscribeToBroker(topic, subscription.group);
         const membershipReplaced = [...subscriptions.values()].some(
-          candidate => candidate.callback !== cb && candidate.group === subscription.group,
+          candidate => !candidate.localOnly && candidate.callback !== cb && candidate.group === subscription.group,
         );
         if (membershipReplaced) {
           await this.#sendSubscribeToBroker(topic, subscription.group);
@@ -1053,7 +1066,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   #hasLocalMembership(topic: string, group?: string): boolean {
-    return [...(this.#subscriptions.get(topic)?.values() ?? [])].some(subscription => subscription.group === group);
+    return [...(this.#subscriptions.get(topic)?.values() ?? [])].some(
+      subscription => !subscription.localOnly && subscription.group === group,
+    );
   }
 
   #localGroups(topic: string): string[] {
@@ -1358,7 +1373,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     for (const [topic, subscriptions] of this.#subscriptions) {
       const groups = new Set(
         [...subscriptions.values()]
-          .filter(subscription => !this.#leavingSubscriptions.has(subscription))
+          .filter(subscription => !subscription.localOnly && !this.#leavingSubscriptions.has(subscription))
           .map(subscription => subscription.group),
       );
       for (const group of groups) {
@@ -1733,22 +1748,22 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   }
 
   #deliverLocal(topic: string, event: Event) {
-    this.#deliverLocalFanout(topic, event);
+    this.#deliverLocalFanout(topic, event, true);
     for (const group of this.#localGroups(topic)) {
-      this.#deliverLocalGroup(topic, group, event);
+      this.#deliverLocalGroup(topic, group, event, true);
     }
   }
 
-  #deliverLocalFanout(topic: string, event: Event) {
+  #deliverLocalFanout(topic: string, event: Event, localOnly = false) {
     for (const subscription of this.#subscriptions.get(topic)?.values() ?? []) {
-      if (subscription.group !== undefined) continue;
+      if (subscription.group !== undefined || (!localOnly && subscription.localOnly)) continue;
       this.#invokeLocalCallback(topic, event, subscription.callback, subscription.group, 0);
     }
   }
 
-  #deliverLocalGroup(topic: string, group: string, event: Event) {
+  #deliverLocalGroup(topic: string, group: string, event: Event, localOnly = false) {
     const members = [...(this.#subscriptions.get(topic)?.values() ?? [])].filter(
-      subscription => subscription.group === group,
+      subscription => subscription.group === group && (localOnly || !subscription.localOnly),
     );
     if (members.length === 0) return;
     const key = membershipKey(topic, group);

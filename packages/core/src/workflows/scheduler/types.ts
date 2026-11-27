@@ -144,6 +144,7 @@ export type SchedulerConfig = {
    * Wired up by `SchedulerWorker` from `Mastra.__hasLocalWorkflowExecution()`.
    */
   canExecuteLocally?: () => boolean;
+  localWorkflowRoute?: { pubsub: import('../../events/pubsub').PubSub; topic: string };
   /**
    * Number of consecutive ticks a schedule's target workflow may be missing
    * before the scheduler deletes the row. Defaults to 3 (≈30s with the

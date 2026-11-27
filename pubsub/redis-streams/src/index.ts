@@ -361,6 +361,10 @@ export class PublishRetryBudgetExhaustedError extends Error {
 export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // Redis Streams is a pull transport: consumers issue XREADGROUP to read
   // events. Mastra reads this to know an OrchestrationWorker is required.
+  override get supportsLocalSubscriptions(): boolean {
+    return true;
+  }
+
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
     return ['pull'];
   }
@@ -762,6 +766,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // Register synchronously so an unsubscribe/close racing this subscribe can
     // find and await it. `#doSubscribe` runs synchronously up to its first
     // await, which keeps the localOnly registration guarantee documented there.
+    if (options?.localOnly) {
+      this.#registerLocalCallback(topic, cb);
+      return;
+    }
     const promise = this.#doSubscribe(topic, cb, key, options).finally(() => {
       this.#pendingSubscribes.delete(key);
     });
@@ -769,16 +777,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     return promise;
   }
 
-  async #doSubscribe(topic: string, cb: EventCallback, key: string, options?: SubscribeOptions): Promise<void> {
-    // Register for `localOnly` delivery before wiring up the Redis reader so a
-    // racing publisher in the same process never misses this subscriber.
+  #registerLocalCallback(topic: string, cb: EventCallback) {
     let localBucket = this.#localCallbacks.get(topic);
     if (!localBucket) {
       localBucket = new Map();
       this.#localCallbacks.set(topic, localBucket);
     }
-    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const timers = localBucket.get(cb) ?? new Set<ReturnType<typeof setTimeout>>();
     localBucket.set(cb, timers);
+    return timers;
+  }
+
+  async #doSubscribe(topic: string, cb: EventCallback, key: string, options?: SubscribeOptions): Promise<void> {
+    // Register before wiring up the Redis reader so local publishes are not missed.
+    const timers = this.#registerLocalCallback(topic, cb);
 
     try {
       await this.#ensureWriterConnected();
@@ -818,7 +830,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     } catch (err) {
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
-      if (this.#localCallbacks.get(topic)?.get(cb) === timers) {
+      const localBucket = this.#localCallbacks.get(topic);
+      if (localBucket?.get(cb) === timers) {
         localBucket.delete(cb);
         if (localBucket.size === 0) this.#localCallbacks.delete(topic);
       }

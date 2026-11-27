@@ -198,9 +198,7 @@ describe('Mastra — workflow scheduler integration', () => {
     };
 
     const stepRunPublishes = (publish: { mock: { calls: unknown[][] } }) =>
-      publish.mock.calls.filter(
-        ([topic, event]) => topic === 'workflows' && (event as any)?.type === 'workflow.step.run',
-      );
+      publish.mock.calls.filter(([, event]) => (event as any)?.type === 'workflow.step.run');
 
     it('runs a scheduled workflow started directly (e.g. over HTTP) without any workers', async () => {
       vi.stubEnv('MASTRA_WORKERS', undefined);
@@ -237,7 +235,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
         await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
         expect(publish).toHaveBeenCalledWith(
-          'workflows',
+          expect.stringMatching(/^workflows\.local\./),
           expect.objectContaining({
             type: 'workflow.start',
             runId,
@@ -252,6 +250,42 @@ describe('Mastra — workflow scheduler integration', () => {
         expect(execute.mock.calls[0]![0].inputData).toEqual({ hello: 'world' });
       } finally {
         await mastra.shutdown();
+      }
+    });
+
+    it.each([false, true])('runs a local scheduler fire on the claimant (competing worker: %s)', async competing => {
+      vi.stubEnv('MASTRA_WORKERS', undefined);
+      const pubsub = new EventEmitterPubSub();
+      const makeInstance = (answer: string) => {
+        const storage = new MockStore();
+        const { wf, execute } = buildScheduledDefault(
+          'shared-scheduled-wf',
+          vi.fn(async (_args: any) => ({ hello: answer })),
+        );
+        const mastra = new Mastra({
+          logger: false,
+          ...withoutNotificationDispatch,
+          storage,
+          pubsub,
+          workflows: { wf },
+        });
+        return { storage, wf, execute, mastra };
+      };
+      const sibling = makeInstance('sibling');
+      const owner = makeInstance('owner');
+      try {
+        if (competing) await sibling.mastra.startWorkers('orchestration');
+        await owner.mastra.startWorkers();
+        await waitForScheduler(owner.mastra);
+        const { runId } = await makeDue(owner.storage, owner.wf.id);
+        await owner.mastra.scheduler!.tick();
+
+        await waitUntil(() => owner.execute.mock.calls.length + sibling.execute.mock.calls.length > 0);
+        expect(sibling.execute).not.toHaveBeenCalled();
+        await waitUntil(async () => (await owner.wf.getWorkflowRunById(runId))?.status === 'success');
+      } finally {
+        await Promise.all([sibling.mastra.stopWorkers(), owner.mastra.stopWorkers()]);
+        await pubsub.close();
       }
     });
 
@@ -285,7 +319,7 @@ describe('Mastra — workflow scheduler integration', () => {
         await waitUntil(async () => (await schedulesStore.getSchedule('wf_warm-up-wf'))?.lastRunId === runId);
         await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
         expect(publish).toHaveBeenCalledWith(
-          'workflows',
+          expect.stringMatching(/^workflows\.local\./),
           expect.objectContaining({
             type: 'workflow.start',
             runId,
@@ -335,7 +369,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
         await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
         expect(publish).toHaveBeenCalledWith(
-          'workflows',
+          expect.stringMatching(/^workflows\.local\./),
           expect.objectContaining({
             type: 'workflow.start',
             runId,
@@ -401,9 +435,9 @@ describe('Mastra — workflow scheduler integration', () => {
 
         await waitUntil(async () => (await wf.getWorkflowRunById(runId))?.status === 'success');
         expect(publish).toHaveBeenCalledWith(
-          'workflows',
+          expect.stringMatching(/^workflows\.local\./),
           expect.objectContaining({ type: 'workflow.start', runId }),
-          expect.anything(),
+          { localOnly: true },
         );
         // Promoted workflows are evented, so the processor steps them instead of
         // running them in-process.

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createStep, createWorkflow, WorkflowEventProcessor } from '@mastra/core/workflows/evented';
+import { createClient } from 'redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { RedisStreamsPubSub } from './index';
@@ -18,6 +19,76 @@ describe('localOnly evented workflow redelivery', () => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
   });
+
+  it('executes a run-scoped workflow on its owner without creating an owner stream in Redis', async () => {
+    const prefix = `owner-routing-${randomUUID()}`;
+    const bus = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: prefix, blockMs: 50 });
+    const publish = vi.spyOn(bus, 'publish');
+    const redis = createClient({ url: REDIS_URL });
+    const schema = z.object({ value: z.string() });
+    const makeWorkflow = (value: string) =>
+      createWorkflow({ id: 'owner-route', inputSchema: schema, outputSchema: schema })
+        .then(createStep({ id: 'answer', inputSchema: schema, outputSchema: schema, execute: async () => ({ value }) }))
+        .commit();
+    const workflow = makeWorkflow('owner');
+    const sibling = new Mastra({
+      workflows: { workflow: makeWorkflow('sibling') },
+      pubsub: bus,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    const owner = new Mastra({ workflows: { workflow }, pubsub: bus, storage: new InMemoryStore(), logger: false });
+    await redis.connect();
+    try {
+      await sibling.startWorkers('orchestration');
+      await owner.startWorkers('orchestration');
+      const run = await workflow.createRun();
+      owner.__registerInternalWorkflow(workflow, run.runId);
+      const output = run.stream({ inputData: { value: 'input' } });
+      const events = [];
+      const observer = run.observeStream().getReader();
+      try {
+        for (;;) {
+          const { done, value } = await observer.read();
+          if (done) break;
+          events.push(value);
+        }
+      } finally {
+        observer.releaseLock();
+      }
+      expect(await output.result).toMatchObject({ status: 'success', result: { value: 'owner' } });
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: 'workflow-step-start',
+            runId: run.runId,
+            payload: expect.objectContaining({ stepName: 'answer' }),
+          }),
+          expect.objectContaining({
+            type: 'workflow-step-result',
+            runId: run.runId,
+            payload: expect.objectContaining({ output: { value: 'owner' } }),
+          }),
+        ]),
+      );
+      expect(publish).toHaveBeenCalledWith(
+        expect.stringMatching(/^workflows\.local\./),
+        expect.objectContaining({ type: 'workflow.start', runId: run.runId }),
+        { localOnly: true },
+      );
+      expect(await redis.exists(bus.streamKey('workflows'))).toBe(1);
+      for await (const keys of redis.scanIterator({ MATCH: `${prefix}:workflows.local.*` })) {
+        expect(keys).toEqual([]);
+      }
+    } finally {
+      await Promise.all([sibling.stopWorkers(), owner.stopWorkers()]);
+      await bus.close();
+      for await (const keys of redis.scanIterator({ MATCH: `${prefix}:*` })) {
+        if (keys.length) await redis.del(keys);
+      }
+      await redis.quit();
+    }
+  }, 15_000);
 
   it.each([1, 3])(
     'settles the run after %i injected processing failures',

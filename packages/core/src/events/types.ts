@@ -89,6 +89,8 @@ export interface SubscribeBatchOptions {
 }
 
 export interface SubscribeOptions {
+  /** Register an ungrouped callback for local-only publishes without opening a broker subscription. */
+  localOnly?: boolean;
   /**
    * When set, subscribers with the same group compete for messages.
    * Each message is delivered to exactly one subscriber in the group.

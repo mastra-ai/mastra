@@ -322,7 +322,7 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
     await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
 
     expect(pubsub.calls).toHaveLength(1);
-    expect(pubsub.calls[0]).toMatchObject({ topic: 'workflows', localOnly: true });
+    expect(pubsub.calls[0]).toMatchObject({ topic: expect.stringMatching(/^workflows\.local\./), localOnly: true });
     await mastra.shutdown();
   });
 
@@ -465,13 +465,13 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
       pubsub.calls
         .filter(
           c =>
-            (c.topic === 'workflows' || c.topic === 'workflows-finish') &&
+            (c.topic === 'workflows' || c.topic.startsWith('workflows.local.') || c.topic === 'workflows-finish') &&
             (c.event.runId === 'run-1' || c.event.runId === 'nested-run'),
         )
         .map(c => [c.topic, c.localOnly]),
     ).toEqual([
-      ['workflows', true],
-      ['workflows', true],
+      [expect.stringMatching(/^workflows\.local\./), true],
+      [expect.stringMatching(/^workflows\.local\./), true],
       ['workflows-finish', false],
     ]);
     await mastra.shutdown();

@@ -14,7 +14,7 @@ export class PullTransport implements WorkerTransport {
   #topic: string;
   #logger?: IMastraLogger;
   #drainTimeout: number;
-  #callbacks: Array<{ topic: string; cb: EventCallback }> = [];
+  #callbacks: Array<{ topic: string; cb: EventCallback; localWorkflowRoute?: { pubsub: PubSub; topic: string } }> = [];
   // route() calls that have been dispatched but not yet settled. stop() waits
   // for these (bounded) so an event mid-processing is not abandoned.
   #inFlight = new Set<Promise<void>>();
@@ -41,7 +41,7 @@ export class PullTransport implements WorkerTransport {
     this.#drainTimeout = assertDrainTimeout(drainTimeout ?? waitMs(DEFAULT_DRAIN_TIMEOUT_MS, 50), 'PullTransport');
   }
 
-  async start(router: EventRouter): Promise<void> {
+  async start(router: EventRouter, localWorkflowRoute?: { pubsub: PubSub; topic: string }): Promise<void> {
     if (this.#callbacks.length > 0) {
       this.#logger?.debug('[PullTransport] start() called while already subscribed; ignoring duplicate call');
       return;
@@ -65,14 +65,22 @@ export class PullTransport implements WorkerTransport {
       void inFlight.finally(() => this.#inFlight.delete(inFlight));
     };
     await this.#pubsub.subscribe(this.#topic, cb, { group: this.#group });
-    this.#callbacks.push({ topic: this.#topic, cb });
+    try {
+      if (localWorkflowRoute)
+        await localWorkflowRoute.pubsub.subscribe(localWorkflowRoute.topic, cb, { localOnly: true });
+    } catch (error) {
+      await this.#pubsub.unsubscribe(this.#topic, cb);
+      throw error;
+    }
+    this.#callbacks.push({ topic: this.#topic, cb, localWorkflowRoute });
   }
 
   async stop(options?: WorkerTransportStopOptions): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? this.#drainTimeout, 'PullTransport.stop()');
     // Unsubscribe first so no new events land while we drain; events already
     // handed to the router keep running and may still publish/ack/nack.
-    for (const { topic, cb } of this.#callbacks) {
+    for (const { topic, cb, localWorkflowRoute } of this.#callbacks) {
+      if (localWorkflowRoute) await localWorkflowRoute.pubsub.unsubscribe(localWorkflowRoute.topic, cb);
       await this.#pubsub.unsubscribe(topic, cb);
     }
     this.#callbacks = [];
