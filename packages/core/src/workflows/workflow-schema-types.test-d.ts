@@ -334,6 +334,62 @@ describe('Workflow schema type inference', () => {
     });
   });
 
+  // https://github.com/mastra-ai/mastra/issues/6751
+  describe('function .map() output', () => {
+    const needsName = createStep({
+      id: 'needs-name',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async ({ inputData }) => ({ ok: inputData.name.length > 0 }),
+    });
+
+    const createMapWorkflow = () =>
+      createWorkflow({
+        id: 'map-output-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+      });
+
+    it('becomes the input of the next step', () => {
+      createMapWorkflow()
+        .map(async ({ inputData }) => ({ name: String(inputData.value), extra: true }))
+        .map(async ({ inputData }) => {
+          expectTypeOf(inputData).toEqualTypeOf<{ name: string; extra: boolean }>();
+          return inputData;
+        });
+    });
+
+    it('accepts a next step whose input the mapped value satisfies', () => {
+      const wf = createMapWorkflow()
+        .map(async ({ inputData }) => ({ name: String(inputData.value) }))
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('accepts a synchronous mapper', () => {
+      const wf = createMapWorkflow()
+        .map(({ inputData }) => ({ name: String(inputData.value) }))
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('accepts a mapper that may bail', () => {
+      const wf = createMapWorkflow()
+        .map(async ({ inputData, bail }) => {
+          if (inputData.value < 0) return bail({ ok: false });
+          return { name: String(inputData.value) };
+        })
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('rejects a next step whose input the mapped value does not satisfy', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ wrong: inputData.value }));
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.then(needsName);
+    });
+  });
+
   // Regression: https://github.com/mastra-ai/mastra/issues/15989
   // foreach/dowhile/dountil dropped the TRequestContext generic on the step
   // parameter, causing typed requestContextSchema steps to be rejected even
@@ -831,9 +887,16 @@ describe('declarative builder input chaining', () => {
       .tool(numberTool);
   });
 
-  it('.tool() keeps the `.map()` (any output) escape hatch', () => {
+  it('.tool() rejects a tool after a function `.map()` producing the wrong shape', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .map(async () => ({ anything: 'goes' }))
+      // @ts-expect-error - { anything: string } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() keeps the object-form `.map()` (any output) escape hatch', () => {
     const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
-      .map(async () => ({ anything: 'goes' })) // map output is `any`
+      .map({ anything: { value: 'goes', schema: z.string() } }) // object-form map output is `any`
       .tool(numberTool); // compiles via the `any` escape hatch
     expectTypeOf(wf).not.toBeNever();
   });
