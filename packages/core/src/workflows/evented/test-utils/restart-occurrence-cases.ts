@@ -267,6 +267,57 @@ export function describeRestartOccurrenceCases({
       });
     }, 20_000);
 
+    // R3 for a restart before the first step started. Such a restart has no step to claim and
+    // writes the run whole; delivered again, it wrote it again from what its caller read, which
+    // dropped the results saved since, and the first step ran again.
+    it('keeps the progress of a run restarted before its first step when the restart event is delivered again', async () => {
+      const wf = chain();
+      await withHost({ [wf.workflow.id]: wf.workflow }, wf.releaseAll, async ({ driver }) => {
+        let runId = '';
+        const dropped = deferred();
+        const publish = driver.pubsub.publish.bind(driver.pubsub);
+        // The worker that started the run stops before its first step's event goes out.
+        const dropFirstStep = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+          if (event.type === 'workflow.step.run' && event.runId === runId && !event.data.restart) {
+            dropped.resolve();
+            return;
+          }
+          return publish(topic, event, options);
+        });
+        try {
+          const run = await wf.workflow.createRun();
+          runId = run.runId;
+          const started = run.start({ inputData: { n: 0 } });
+          await dropped.promise;
+          dropFirstStep.mockRestore();
+
+          const restartC = wf.holdAt('c');
+          const from = driver.events.length;
+          const restarted = restartRun(wf.workflow, run.runId);
+          await restartC.entered;
+          const before = (await storedRun(wf.workflow.id, run.runId))?.context;
+          expect(before).toMatchObject({ a: { status: 'success' }, b: { status: 'success' } });
+
+          const trigger = driver.events
+            .slice(from)
+            .find(event => event.type === 'workflow.start' && event.runId === run.runId && event.data.restart)!;
+          expect(trigger.data.restart.isPreFirstStepRestart).toBe(true);
+          await driver.redeliverEvent(trigger);
+          const after = (await storedRun(wf.workflow.id, run.runId))?.context;
+          expect(after?.a).toEqual(before?.a);
+          expect(after?.b).toEqual(before?.b);
+
+          restartC.release();
+          expect(await restarted).toMatchObject({ status: 'success', result: { n: 3 } });
+          await drainHandlers();
+          expect(await started).toMatchObject({ status: 'success' });
+          expect(wf.calls).toEqual({ a: 1, b: 1, c: 1 });
+        } finally {
+          dropFirstStep.mockRestore();
+        }
+      });
+    }, 20_000);
+
     // R4. A branch that saved its result after the restart's caller read the run, but before the
     // restart applied, was overwritten with the running record the caller read, and ran again.
     it('keeps a branch result saved between the restart read and the restart', async () => {

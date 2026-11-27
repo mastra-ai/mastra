@@ -1366,6 +1366,34 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
+    // A restart with no step to take over (before the first step, or past a finished entry) writes
+    // the run whole, so its event is applied once. Delivered again, it goes on only while the entry
+    // it starts is still as it wrote it; the guards then decide.
+    const restartTrigger = guardsSteps && !!restart && !takesOver && !!eventId;
+    const restartApplied = restartTrigger && header?.appliedTriggerEventId === eventId;
+    if (restartApplied) {
+      const entry = workflow.stepGraph[completed ? completed.executionPath[0]! : (executionPath?.[0] ?? 0)];
+      const ids = entry ? getStepIds(entry) : [];
+      const stored = await runStorage.loadSteps(ids);
+      const written = stepResults ?? {};
+      if (
+        header.status !== 'running' ||
+        ids.some(
+          id =>
+            stored[id]?.status !== written[id]?.status ||
+            stored[id]?.metadata?.startedBy !== written[id]?.metadata?.startedBy,
+        )
+      ) {
+        this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: the run already went past it', {
+          workflowId,
+          runId,
+          eventId,
+          storedStatus: header.status,
+        });
+        return;
+      }
+    }
+
     const resolvedFormat = format ?? this.runFormats.get(runId);
     this.runFormats.set(runId, resolvedFormat);
     // The run is starting (or restarting via timeTravel/restart under the
@@ -1403,7 +1431,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
-    if (!alreadyApplied && !takesOver && (shouldPersist || requiresGuardedSnapshot || timeTravel)) {
+    if (!alreadyApplied && !restartApplied && !takesOver && (shouldPersist || requiresGuardedSnapshot || timeTravel)) {
       const runningSnapshot: WorkflowRunState = {
         activePaths: restart ? (executionPath ?? restart.activePaths) : [],
         parentWorkflow: parentWorkflow
@@ -1430,7 +1458,9 @@ export class WorkflowEventProcessor extends EventProcessor {
               appliedTriggerEventId: eventId,
               appliedTriggerTargetStartedBy: (timeTravel?.stepResults ?? stepResults)?.[targetId!]?.metadata?.startedBy,
             }
-          : {}),
+          : restartTrigger
+            ? { appliedTriggerEventId: eventId }
+            : {}),
         value: initialState,
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),

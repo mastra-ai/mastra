@@ -463,8 +463,8 @@ export interface WorkflowRunState {
    */
   guardedOnlySnapshot?: boolean;
   /**
-   * @internal The resume or time travel event the evented start handler last applied to this run,
-   * so a repeated delivery of it does not rewrite the run again.
+   * @internal The resume, time travel or restart event the evented start handler last applied to
+   * this run, so a repeated delivery of it does not rewrite the run again.
    */
   appliedTriggerEventId?: string;
   /**
