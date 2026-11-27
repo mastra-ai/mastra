@@ -107,7 +107,7 @@ const { envVars } = await project.databases.connection(database.id);
 const files = await project.filesystems.create({ environmentId: production.id, name: 'uploads' });
 ```
 
-Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
+Creating Memory instances, Knowledge instances, and databases requires the `admin` role. The `mastra projects`, `mastra agents`, `mastra memory`, `mastra knowledge`, `mastra filesystems`, and `mastra sandboxes` [CLI commands](https://mastra.ai/reference/cli/mastra#mastra-platform-commands) expose the same operations from the terminal.
 
 ### Hosted browser
 
