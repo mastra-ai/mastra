@@ -1923,10 +1923,16 @@ export class WorkflowEventProcessor extends EventProcessor {
     // once and set it running again. A stored suspension sets the run suspended before this event
     // is published, so a row still running here, stored only for the guards, holds no suspension
     // anything could resume from.
+    // Resumed and time-travelled runs reach this only on stores with step guards, whose steps need
+    // the row; a restart keeps its row.
     const runStorage = this.#runStorage(args.workflowId, runId);
     let recoveryOnly = false;
     try {
-      const header = await runStorage.loadHeader();
+      const cleansUp =
+        !restart &&
+        ((!timeTravel && !resumeSteps?.length) ||
+          this.#guardsSteps(await this.mastra.getStorage()?.getStore('workflows')));
+      const header = cleansUp ? await runStorage.loadHeader() : undefined;
       recoveryOnly = !!header?.guardedOnlySnapshot && header.status === 'running';
     } catch (error) {
       this.mastra
@@ -2942,6 +2948,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (nestedWorkflowStep) {
       const continueRedelivery = async () => {
         if (restart || step.type === 'foreach' || !workflowsStore) return false;
+        // Without step guards a resumed or time-travelled delivery keeps the behavior it always had.
+        if ((timeTravel || resumeSteps?.length) && !this.#guardsSteps(workflowsStore)) return false;
         // Redeliveries that cannot execute a child must not make a new authorization decision.
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         if (hasRunEnded(snapshot)) return true;
