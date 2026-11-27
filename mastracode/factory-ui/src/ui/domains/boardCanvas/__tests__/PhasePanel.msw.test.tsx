@@ -9,7 +9,7 @@ import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
-import { boardSkillPath, boardSkillsPath, newSkillPath } from '../../boardConfig/boardConfigPaths';
+import { newSkillPath, settingsSectionPath, skillPath } from '../../settings/settingsSections';
 import type { RuleField } from '../../boardConfig/boardDraft';
 import { PhasePanel } from '../components/phasePanel/PhasePanel';
 
@@ -292,7 +292,7 @@ describe('Given a working phase selected on the canvas', () => {
     expect(phaseOf('plan')?.runner).toEqual({ context: 'work', skill: 'factory-build' });
     expect(screen.getByRole('link', { name: 'Edit factory-build' })).toHaveAttribute(
       'href',
-      boardSkillPath(FACTORY_ID, 'work', 'factory-build'),
+      skillPath(FACTORY_ID, 'factory-build'),
     );
   });
 
@@ -302,9 +302,9 @@ describe('Given a working phase selected on the canvas', () => {
     const building = panel('Building');
     expect(building.getByRole('link', { name: 'All skills' })).toHaveAttribute(
       'href',
-      boardSkillsPath(FACTORY_ID, 'work'),
+      settingsSectionPath(FACTORY_ID, 'skills'),
     );
-    expect(building.getByRole('link', { name: 'New skill' })).toHaveAttribute('href', newSkillPath(FACTORY_ID, 'work'));
+    expect(building.getByRole('link', { name: 'New skill' })).toHaveAttribute('href', newSkillPath(FACTORY_ID));
   });
 
   it('when the user may not edit skills, then the panel links to every skill but offers no new one', () => {
@@ -313,7 +313,7 @@ describe('Given a working phase selected on the canvas', () => {
     const planning = panel('Planning');
     expect(planning.getByRole('link', { name: 'All skills' })).toHaveAttribute(
       'href',
-      boardSkillsPath(FACTORY_ID, 'work'),
+      settingsSectionPath(FACTORY_ID, 'skills'),
     );
     expect(planning.queryByRole('link', { name: 'New skill' })).not.toBeInTheDocument();
     expect(planning.getByRole('link', { name: 'View factory-plan' })).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
@@ -145,7 +145,8 @@ describe('Environment settings', () => {
     expect(memory).toHaveValue(null);
     expect(memory).toHaveAttribute('placeholder', '1024');
     expect(screen.getByRole('spinbutton', { name: 'Idle timeout (minutes)' })).toHaveAttribute('placeholder', '5');
-    expect(screen.getAllByRole('spinbutton')).toHaveLength(3);
+    // Builds has a number field of its own; only the provider settings count here.
+    expect(within(screen.getByRole('region', { name: 'Environment' })).getAllByRole('spinbutton')).toHaveLength(3);
   });
 
   it('saves one setting per field and clears a setting with null', async () => {

@@ -61,3 +61,43 @@ describe('WorkflowTrigger on a workflow with state but no input schema', () => {
     });
   });
 });
+
+describe('WorkflowTrigger on a workflow whose state has an object field that defaults to null', () => {
+  it('shows the run form instead of crashing', async () => {
+    // `z.object({ section: z.object({ status: z.string() }).nullable().default(null) })`, as the server sends it.
+    const workflow = {
+      ...twoStepWorkflow,
+      inputSchema: undefined,
+      stateSchema: stringify({
+        type: 'object',
+        properties: {
+          section: {
+            default: null,
+            anyOf: [
+              { type: 'object', properties: { status: { type: 'string' } }, required: ['status'] },
+              { type: 'null' },
+            ],
+          },
+        },
+        required: ['section'],
+      }),
+    };
+    server.use(
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({})),
+      http.get(`${BASE_URL}/api/workflows/two-step-workflow`, () => HttpResponse.json(workflow)),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={client}>
+          <WorkflowRunProvider workflowId="two-step-workflow">
+            <TriggerPanel />
+          </WorkflowRunProvider>
+        </QueryClientProvider>
+      </MastraReactProvider>,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Run' })).toBeTruthy();
+    expect(screen.getByText(/Status/)).toBeTruthy();
+  });
+});
