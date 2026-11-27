@@ -1332,6 +1332,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
+    // A child resumed directly leaves the parent's step suspended. Its hand-back completes the
+    // step under the stamp kept there, which the guard only accepts on a running record. This is a
+    // write to the parent's run, so it does not depend on whether this run stores its own. It comes
+    // before that write, which marks the resume as applied, so a redelivery cannot skip it.
+    if (guardsSteps && parentWorkflow && resumeSteps?.length && !restart) {
+      const parentIsForeach =
+        this.#resolveLiveParentWorkflow(parentWorkflow)?.stepGraph[parentWorkflow.executionPath[0]!]?.type ===
+        'foreach';
+      const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
+      const existing = parentIsForeach ? undefined : (await parentStorage.loadStep(workflowId))?.context?.[workflowId];
+      if (existing?.status === 'suspended') {
+        await parentStorage.writeStepResult({
+          stepId: workflowId,
+          result: { ...existing, status: 'running' },
+          requestContext: withoutAuthToken(requestContext),
+        });
+      }
+    }
+
     // Time travel rewrites the run's history, so its reset step results are stored even when running
     // snapshots are declined. Otherwise the old results stay stored and replayed steps merge into them.
     if (!alreadyApplied && (shouldPersist || requiresGuardedSnapshot || timeTravel)) {
@@ -1397,24 +1416,6 @@ export class WorkflowEventProcessor extends EventProcessor {
               ...(parentIsForeach ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } } : {}),
             },
           },
-          requestContext: withoutAuthToken(requestContext),
-        });
-      }
-    }
-
-    // A child resumed directly leaves the parent's step suspended. Its hand-back completes the
-    // step under the stamp kept there, which the guard only accepts on a running record. This is a
-    // write to the parent's run, so it does not depend on whether this run stores its own.
-    if (!alreadyApplied && guardsSteps && parentWorkflow && resumeSteps?.length && !restart) {
-      const parentIsForeach =
-        this.#resolveLiveParentWorkflow(parentWorkflow)?.stepGraph[parentWorkflow.executionPath[0]!]?.type ===
-        'foreach';
-      const parentStorage = this.#runStorage(parentWorkflow.workflowId, parentWorkflow.runId);
-      const existing = parentIsForeach ? undefined : (await parentStorage.loadStep(workflowId))?.context?.[workflowId];
-      if (existing?.status === 'suspended') {
-        await parentStorage.writeStepResult({
-          stepId: workflowId,
-          result: { ...existing, status: 'running' },
           requestContext: withoutAuthToken(requestContext),
         });
       }

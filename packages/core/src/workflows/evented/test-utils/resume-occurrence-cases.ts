@@ -674,13 +674,19 @@ export function describeResumeOccurrenceCases({
     // The child's hand-back then completes that step under its stored occurrence, so the record
     // must read as running again or the guard keeps the suspension and the parent never continues.
     // A child that declines running snapshots writes no run of its own on resume; on storage v2 it
-    // always does.
+    // always does. When the worker stops after the child's own write and before the parent's, the
+    // redelivered resume finds itself applied and must still move the parent's step.
     it.each([
-      { name: 'stores running snapshots', declinesRunning: false },
-      { name: 'declines running snapshots', declinesRunning: true },
+      { name: 'stores running snapshots', declinesRunning: false, stopsBeforeParentWrite: false },
+      { name: 'declines running snapshots', declinesRunning: true, stopsBeforeParentWrite: false },
+      {
+        name: 'stores running snapshots and its worker stops before the write to the parent',
+        declinesRunning: false,
+        stopsBeforeParentWrite: true,
+      },
     ])(
       'continues the parent after its nested child is resumed directly when the child $name',
-      async ({ declinesRunning }) => {
+      async ({ declinesRunning, stopsBeforeParentWrite }) => {
         const innerAsk = createStep({
           id: 'inner-ask',
           inputSchema: Num,
@@ -716,10 +722,27 @@ export function describeResumeOccurrenceCases({
           const childRunId = (await storedSteps(parent.id, run.runId))?.[child.id]?.suspendPayload?.__workflow_meta
             ?.runId as string;
           expect(childRunId).toEqual(expect.any(String));
-          const childRun = await child.createRun({ runId: childRunId });
-          expect(await childRun.resume({ step: 'inner-ask', resumeData: { ok: true } })).toMatchObject({
-            status: 'success',
+          // The child's first write to the parent's step fails once, as if its worker stopped there.
+          let stopWorker = stopsBeforeParentWrite;
+          const store = (await storage.getStore('workflows'))!;
+          const method = storageVersion === 1 ? 'updateWorkflowResults' : 'appendWorkflowRunEntries';
+          const write = (store[method] as (args: any) => Promise<any>).bind(store);
+          const stopped = vi.spyOn(store, method).mockImplementation(async (args: any) => {
+            if (stopWorker && args.workflowName === parent.id && (args.stepId === child.id || args.steps?.[child.id])) {
+              stopWorker = false;
+              throw new Error('Worker stopped before writing the parent step');
+            }
+            return write(args);
           });
+          try {
+            const childRun = await child.createRun({ runId: childRunId });
+            expect(await childRun.resume({ step: 'inner-ask', resumeData: { ok: true } })).toMatchObject({
+              status: 'success',
+            });
+          } finally {
+            stopped.mockRestore();
+          }
+          expect(stopWorker).toBe(false);
           await expect
             .poll(async () => (await parent.getWorkflowRunById(run.runId))?.status, { timeout: 10_000 })
             .toBe('success');
