@@ -1,6 +1,8 @@
 # Flags images without alt text, or with alt text that is only a placeholder
 # word or a filename. Covers Markdown images and <img> tags, including tags
-# that span several lines, so it matches against the raw source.
+# that span several lines, so it matches against the raw source. An empty alt
+# is allowed when the tag marks the image as decorative with aria-hidden="true"
+# or role="presentation".
 extends: existence
 message: "Describe the image in its alt text: '%s'."
 level: error
@@ -10,11 +12,11 @@ ignorecase: true
 tokens:
   # No alt text
   - '!\[\]\('
-  - 'alt=""'
-  - '<img\b(?:(?!alt=)[^>])*/?>'
+  - '<[a-z][\w.]*\b(?![^>]*\b(?:aria-hidden\s*=\s*"true"|role\s*=\s*"presentation"))[^>]*\balt\s*=\s*""[^>]*>'
+  - '<img\b(?:(?!\balt\s*=)[^>])*/?>'
   # Placeholder word
   - '!\[(?:image|img|screenshot|diagram|picture|photo|logo)\]\('
-  - 'alt="(?:image|img|screenshot|diagram|picture|photo|logo)"'
+  - 'alt\s*=\s*"(?:image|img|screenshot|diagram|picture|photo|logo)"'
   # Filename
   - '!\[[^\]]*\.(?:png|jpe?g|gif|svg|webp)\]\('
-  - 'alt="[^"]*\.(?:png|jpe?g|gif|svg|webp)"'
+  - 'alt\s*=\s*"[^"]*\.(?:png|jpe?g|gif|svg|webp)"'
