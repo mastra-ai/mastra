@@ -164,6 +164,30 @@ describe.each(['default', 'evented'] as const)('resume by another caller (%s)', 
     },
   );
 
+  it('same process, resume passes nothing: later steps drop the starting call toolsets', async () => {
+    globalRunRegistry.clear();
+    const storage = new InMemoryStore();
+    const log: Log = { offered: [], ran: [] };
+    const agent = createRuntime(engine, storage, log);
+
+    const stream = await agent.stream('Go', {
+      requestContext: caller('alice'),
+      toolsets: { start: { alice_call: tool('alice_call', log) } },
+    });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBeTruthy();
+
+    await drain(await agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! }));
+
+    expect(log.offered[1]).toEqual(['alice_agent', 'alice_default', 'approve']);
+  });
+
   it('same process, resume passes only toolsets: later steps offer the resume toolsets', async () => {
     globalRunRegistry.clear();
     const storage = new InMemoryStore();
@@ -312,5 +336,51 @@ describe('crash recovery, then resume by another caller', () => {
       ...(resumeToolsets ? ['bob_call'] : []),
       'bob_default',
     ]);
+  });
+});
+
+describe.each(['default', 'evented'] as const)('a same-process resume whose tools cannot be built (%s)', engine => {
+  it('fails it, and a later resume without a request context fails too', async () => {
+    globalRunRegistry.clear();
+    const log: Log = { offered: [], ran: [] };
+    const agent = new Agent({
+      id: 'matrix-agent',
+      name: 'matrix-agent',
+      instructions: 'Use your tools.',
+      model: createModel(log),
+      tools: ({ requestContext }) => {
+        const who = requestContext.get('who') as string;
+        if (who === 'unbuildable') throw new Error('tools unavailable');
+        return { approve: tool('approve', log, true) };
+      },
+    });
+    const durable = engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent });
+    const storage = new InMemoryStore();
+    new Mastra({ agents: { matrix: durable as any }, storage, logger: false });
+
+    const stream = await durable.stream('Go', { requestContext: caller('alice') });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const run = await workflows.getWorkflowRunById({
+        runId: stream.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      expect((run?.snapshot as any)?.status).toBe('suspended');
+    });
+
+    await expect(
+      durable.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, requestContext: caller('unbuildable') }),
+    ).rejects.toThrow('tools unavailable');
+
+    const later = durable.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! }).then(drain);
+    await expect(later).rejects.toThrow('tools unavailable');
+    expect(log.ran).toEqual([]);
   });
 });
