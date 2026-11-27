@@ -114,9 +114,9 @@ const fields: Array<{
   {
     name: 'Tree.Input',
     render: () => (
-      <ul>
+      <div>
         <Tree.Input type="file" placeholder="field" onSubmit={() => {}} autoFocus={false} />
-      </ul>
+      </div>
     ),
     getField: () => screen.getByPlaceholderText('field'),
     explicit: false,

@@ -1,9 +1,9 @@
-import type { VirtualTreeRow } from '@mastra/playground-ui/components/VirtualTree';
+import type { TreeRow } from '@mastra/playground-ui/components/Tree';
 import type { WorkspaceTreeEntry, WorkspaceTreeListing } from '../../../../../api/types';
 import { foldersAbove } from './folders-above';
 
-export type BrowserEntryRow = VirtualTreeRow & { kind: 'entry'; entry: WorkspaceTreeEntry };
-type MessageRow = VirtualTreeRow & { kind: 'loading' | 'error' | 'empty'; message?: string };
+export type BrowserEntryRow = TreeRow & { kind: 'entry'; entry: WorkspaceTreeEntry };
+type MessageRow = TreeRow & { kind: 'loading' | 'error' | 'empty'; message?: string };
 export type BrowserRow = BrowserEntryRow | MessageRow;
 
 export interface BrowserFolderListing {

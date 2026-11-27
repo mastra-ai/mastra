@@ -216,11 +216,14 @@ export const TechnicalValues: Story = {
         </Txt>
         <Input className="font-mono" id="review-command" defaultValue="pnpm install && pnpm test" />
       </div>
-      <Tree>
-        <Tree.File id="src/index.ts">
-          <Tree.Label className="font-mono">src/index.ts</Tree.Label>
-        </Tree.File>
-      </Tree>
+      <Tree
+        aria-label="Files"
+        rows={[{ id: 'src/index.ts', level: 0, posInSet: 1, setSize: 1 }]}
+        getRowLabel={row => row.id}
+        onActivate={() => {}}
+        onExpandedChange={() => {}}
+        renderRow={row => <Tree.Label className="font-mono">{row.id}</Tree.Label>}
+      />
       <Txt variant="caption" tone="muted">
         Run{' '}
         <Txt as="span" variant="caption" font="mono" tone="ink">

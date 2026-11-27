@@ -1,17 +1,17 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
 import { joinPath } from '../path';
-import type { VirtualTreeRow } from '@/ds/components/VirtualTree/virtual-tree';
+import type { TreeRow } from '@/ds/components/Tree/tree';
 
 type WorkspaceEntry = WorkspaceFsListResponse['entries'][number];
 
-export type WorkspaceEntryRow = VirtualTreeRow & {
+export type WorkspaceEntryRow = TreeRow & {
   kind: 'entry';
   path: string;
   entry: WorkspaceEntry;
   loading: boolean;
 };
-type InputRow = VirtualTreeRow & { kind: 'input'; parent: string };
-type ErrorRow = VirtualTreeRow & { kind: 'error'; error?: Error };
+type InputRow = TreeRow & { kind: 'input'; parent: string };
+type ErrorRow = TreeRow & { kind: 'error'; error?: Error };
 export type WorkspaceTreeRow = WorkspaceEntryRow | InputRow | ErrorRow;
 
 export interface WorkspaceFolderListing {

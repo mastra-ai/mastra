@@ -1,13 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { FolderGit2 } from 'lucide-react';
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
-import { Tree } from './tree';
-import { IconFileBend } from '@/ds/icons/central/IconFileBend';
+import { Tree, flattenTreeRows } from './tree';
+import type { FlatTreeRow } from './tree';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
+import { IconFolderOpen } from '@/ds/icons/central/IconFolderOpen';
 import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconScript } from '@/ds/icons/central/IconScript';
 import { TrashIcon } from '@/ds/icons/TrashIcon';
@@ -15,305 +15,204 @@ import { TrashIcon } from '@/ds/icons/TrashIcon';
 const meta: Meta<typeof Tree> = {
   title: 'DataDisplay/Tree',
   component: Tree,
-  parameters: {
-    layout: 'centered',
-  },
+  parameters: { layout: 'centered' },
 };
 
 export default meta;
 type Story = StoryObj<typeof Tree>;
 
-export const Default: Story = {
-  render: () => (
-    <div className="w-75">
-      <Tree>
-        <Tree.Folder defaultOpen>
-          <Tree.FolderTrigger>
-            <Tree.Icon className="text-muted-foreground">
-              <IconFolder1 />
-            </Tree.Icon>
-            <Tree.Label>src</Tree.Label>
-          </Tree.FolderTrigger>
-          <Tree.FolderContent>
-            <Tree.File id="src/index.ts">
-              <Tree.Icon className="text-foreground">
-                <IconScript />
-              </Tree.Icon>
-              <Tree.Label>index.ts</Tree.Label>
-            </Tree.File>
-            <Tree.Folder defaultOpen>
-              <Tree.FolderTrigger>
-                <Tree.Icon className="text-muted-foreground">
-                  <IconFolder1 />
-                </Tree.Icon>
-                <Tree.Label>components</Tree.Label>
-              </Tree.FolderTrigger>
-              <Tree.FolderContent>
-                <Tree.File id="src/components/App.tsx">
-                  <Tree.Icon className="text-foreground">
-                    <IconScript />
-                  </Tree.Icon>
-                  <Tree.Label>App.tsx</Tree.Label>
-                </Tree.File>
-              </Tree.FolderContent>
-            </Tree.Folder>
-            <Tree.File id="src/utils.ts">
-              <Tree.Icon className="text-foreground">
-                <IconScript />
-              </Tree.Icon>
-              <Tree.Label>utils.ts</Tree.Label>
-            </Tree.File>
-          </Tree.FolderContent>
-        </Tree.Folder>
-        <Tree.File id="package.json">
-          <Tree.Icon className="text-muted-foreground">
-            <IconFileText />
-          </Tree.Icon>
-          <Tree.Label>package.json</Tree.Label>
-        </Tree.File>
-        <Tree.File id="README.md">
-          <Tree.Icon className="text-foreground">
-            <IconFileText />
-          </Tree.Icon>
-          <Tree.Label>README.md</Tree.Label>
-        </Tree.File>
-        <Tree.File id="LICENSE">
-          <Tree.Icon className="text-muted-foreground">
-            <IconFileBend />
-          </Tree.Icon>
-          <Tree.Label>LICENSE</Tree.Label>
-        </Tree.File>
-      </Tree>
-    </div>
-  ),
-};
+interface Node {
+  name: string;
+  meta?: string;
+  children?: Node[];
+  draft?: 'file' | 'folder';
+}
 
-function WithSelectionExample() {
-  const [selected, setSelected] = useState('src/index.ts');
+type Row = FlatTreeRow<Node>;
 
+const project: Node[] = [
+  {
+    name: 'src',
+    children: [{ name: 'index.ts' }, { name: 'components', children: [{ name: 'App.tsx' }] }, { name: 'utils.ts' }],
+  },
+  { name: 'package.json' },
+  { name: 'README.md' },
+  { name: 'LICENSE' },
+];
+
+const logs = (count: number): Node => ({
+  name: 'logs',
+  children: Array.from({ length: count }, (_, i) => ({ name: `run-${String(i).padStart(5, '0')}.json` })),
+});
+
+function useOpenFolders(initial: string[]) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set(initial));
+  const setFolderOpen = (id: string, expanded: boolean) =>
+    setOpen(current => {
+      const next = new Set(current);
+      if (expanded) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  return [open, setFolderOpen] as const;
+}
+
+function toRows(nodes: Node[], open: ReadonlySet<string>): Row[] {
+  return flattenTreeRows(nodes, {
+    getId: node => node.name,
+    getChildren: node => node.children,
+    isOpen: id => open.has(id),
+  });
+}
+
+function NodeIcon({ row }: { row: Row }) {
+  if (row.expanded === undefined) {
+    return (
+      <Tree.Icon className="text-muted-foreground">
+        {/\.(tsx?|jsx?)$/.test(row.node.name) ? <IconScript /> : <IconFileText />}
+      </Tree.Icon>
+    );
+  }
+  return <Tree.Icon className="text-muted-foreground">{row.expanded ? <IconFolderOpen /> : <IconFolder1 />}</Tree.Icon>;
+}
+
+function FileTree({
+  nodes,
+  initialOpen,
+  className = 'w-75',
+  contentClassName,
+}: {
+  nodes: Node[];
+  initialOpen: string[];
+  className?: string;
+  contentClassName?: string;
+}) {
+  const [open, setFolderOpen] = useOpenFolders(initialOpen);
+  const [selected, setSelected] = useState<string>();
   return (
-    <div className="w-75">
-      <Tree selectedId={selected} onSelect={setSelected}>
-        <Tree.Folder defaultOpen>
-          <Tree.FolderTrigger>
-            <Tree.Icon className="text-muted-foreground">
-              <IconFolder1 />
-            </Tree.Icon>
-            <Tree.Label>src</Tree.Label>
-          </Tree.FolderTrigger>
-          <Tree.FolderContent>
-            <Tree.File id="src/index.ts">
-              <Tree.Icon className="text-foreground">
-                <IconScript />
-              </Tree.Icon>
-              <Tree.Label>index.ts</Tree.Label>
-            </Tree.File>
-            <Tree.File id="src/utils.ts">
-              <Tree.Icon className="text-foreground">
-                <IconScript />
-              </Tree.Icon>
-              <Tree.Label>utils.ts</Tree.Label>
-            </Tree.File>
-          </Tree.FolderContent>
-        </Tree.Folder>
-        <Tree.File id="package.json">
-          <Tree.Icon className="text-muted-foreground">
-            <IconFileText />
-          </Tree.Icon>
-          <Tree.Label>package.json</Tree.Label>
-        </Tree.File>
-      </Tree>
+    <div className={className}>
+      <Tree
+        aria-label="Files"
+        contentClassName={contentClassName}
+        rows={toRows(nodes, open)}
+        getRowLabel={row => row.node.name}
+        selectedId={selected}
+        onActivate={row => (row.expanded === undefined ? setSelected(row.id) : setFolderOpen(row.id, !row.expanded))}
+        onExpandedChange={(row, expanded) => setFolderOpen(row.id, expanded)}
+        renderRow={row => (
+          <>
+            <NodeIcon row={row} />
+            <Tree.Label>{row.node.name}</Tree.Label>
+            {row.node.meta ? <span className="ml-auto text-meta text-muted-foreground">{row.node.meta}</span> : null}
+          </>
+        )}
+      />
     </div>
   );
 }
 
-export const WithSelection: Story = {
-  render: () => <WithSelectionExample />,
-};
-
-export const WithActions: Story = {
-  render: () => (
-    <TooltipProvider>
-      <div className="w-75">
-        <Tree>
-          <Tree.Folder defaultOpen>
-            <Tree.FolderTrigger
-              actions={
-                <span className="opacity-0 group-hover:opacity-100">
-                  <Button size="icon-sm" variant="ghost" tooltip="Add folder">
-                    <IconFolderAddRight />
-                  </Button>
-                </span>
-              }
-            >
-              <Tree.Icon className="text-muted-foreground">
-                <IconFolder1 />
-              </Tree.Icon>
-              <Tree.Label>src</Tree.Label>
-            </Tree.FolderTrigger>
-            <Tree.FolderContent>
-              <Tree.File id="src/index.ts">
-                <Tree.Icon className="text-foreground">
-                  <IconScript />
-                </Tree.Icon>
-                <Tree.Label>index.ts</Tree.Label>
-                <span className="ml-auto shrink-0 opacity-0 group-hover:opacity-100">
-                  <Button size="icon-sm" variant="ghost" tooltip="Delete file" onClick={e => e.stopPropagation()}>
-                    <TrashIcon />
-                  </Button>
-                </span>
-              </Tree.File>
-              <Tree.Folder>
-                <Tree.FolderTrigger
-                  actions={
-                    <span className="opacity-0 group-hover:opacity-100">
-                      <Button size="icon-sm" variant="ghost" tooltip="Add file">
-                        <IconPlusMedium />
-                      </Button>
-                    </span>
-                  }
-                >
-                  <Tree.Icon className="text-muted-foreground">
-                    <IconFolder1 />
-                  </Tree.Icon>
-                  <Tree.Label>components</Tree.Label>
-                </Tree.FolderTrigger>
-                <Tree.FolderContent>
-                  <Tree.File id="src/components/App.tsx">
-                    <Tree.Icon className="text-foreground">
-                      <IconScript />
-                    </Tree.Icon>
-                    <Tree.Label>App.tsx</Tree.Label>
-                  </Tree.File>
-                </Tree.FolderContent>
-              </Tree.Folder>
-            </Tree.FolderContent>
-          </Tree.Folder>
-        </Tree>
-      </div>
-    </TooltipProvider>
-  ),
+export const Default: Story = {
+  render: () => <FileTree nodes={project} initialOpen={['src', 'components']} />,
 };
 
 export const CustomContent: Story = {
   render: () => (
-    <div className="w-75">
-      <Tree>
-        <Tree.Folder defaultOpen>
-          <Tree.FolderTrigger>
-            <Tree.Icon>
-              <FolderGit2 className="text-muted-foreground" />
-            </Tree.Icon>
-            <Tree.Label>packages</Tree.Label>
-            <span className="ml-auto text-meta text-muted-foreground">12 items</span>
-          </Tree.FolderTrigger>
-          <Tree.FolderContent>
-            <Tree.File>
-              <Tree.Icon>
-                <IconScript className="text-muted-foreground" />
-              </Tree.Icon>
-              <Tree.Label>core</Tree.Label>
-              <span className="ml-auto text-meta text-muted-foreground">v2.1.0</span>
-            </Tree.File>
-            <Tree.File>
-              <Tree.Icon>
-                <IconScript className="text-muted-foreground" />
-              </Tree.Icon>
-              <Tree.Label>cli</Tree.Label>
-              <span className="ml-auto text-meta text-muted-foreground">v1.0.3</span>
-            </Tree.File>
-          </Tree.FolderContent>
-        </Tree.Folder>
-      </Tree>
-    </div>
+    <FileTree
+      nodes={[
+        {
+          name: 'packages',
+          meta: '12 items',
+          children: [
+            { name: 'core', meta: 'v2.1.0' },
+            { name: 'cli', meta: 'v1.0.3' },
+          ],
+        },
+      ]}
+      initialOpen={['packages']}
+    />
   ),
 };
 
-interface FileItem {
-  id: string;
-  name: string;
-  type: 'file' | 'folder';
-}
-
-function WithInlineCreationExample() {
-  const [files, setFiles] = useState<FileItem[]>([
-    { id: 'src/index.ts', name: 'index.ts', type: 'file' },
-    { id: 'src/utils.ts', name: 'utils.ts', type: 'file' },
-  ]);
-  const [creating, setCreating] = useState<'file' | 'folder' | null>(null);
-
-  const handleSubmit = useCallback(
-    (name: string) => {
-      const type = creating ?? 'file';
-      setFiles(prev => [...prev, { id: `src/${name}`, name, type }]);
-      setCreating(null);
-    },
-    [creating],
+function WithActionsExample() {
+  const [nodes, setNodes] = useState(project);
+  const [open, setFolderOpen] = useOpenFolders(['src']);
+  const [draft, setDraft] = useState<'file' | 'folder'>();
+  const shown = nodes.map(node =>
+    node.name === 'src' && draft ? { ...node, children: [{ name: '', draft }, ...(node.children ?? [])] } : node,
   );
-
-  const handleCancel = useCallback(() => {
-    setCreating(null);
-  }, []);
+  const create = (name: string) => {
+    setNodes(current =>
+      current.map(node =>
+        node.name === 'src'
+          ? { ...node, children: [...(node.children ?? []), draft === 'folder' ? { name, children: [] } : { name }] }
+          : node,
+      ),
+    );
+    setDraft(undefined);
+  };
+  const startDraft = (type: 'file' | 'folder') => {
+    setFolderOpen('src', true);
+    setDraft(type);
+  };
 
   return (
     <TooltipProvider>
       <div className="w-75">
-        <Tree>
-          <Tree.Folder defaultOpen>
-            <Tree.FolderTrigger
-              actions={
-                <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
-                  <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => setCreating('file')}>
-                    <IconPlusMedium />
-                  </Button>
-                  <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => setCreating('folder')}>
-                    <IconFolderAddRight />
-                  </Button>
+        <Tree
+          aria-label="Files"
+          rows={toRows(shown, open)}
+          getRowLabel={row => row.node.name}
+          onActivate={row => row.expanded !== undefined && setFolderOpen(row.id, !row.expanded)}
+          onExpandedChange={(row, expanded) => setFolderOpen(row.id, expanded)}
+          renderRow={row =>
+            row.node.draft ? (
+              <Tree.Input
+                type={row.node.draft}
+                placeholder={row.node.draft === 'folder' ? 'Folder name' : 'File name'}
+                onSubmit={create}
+                onCancel={() => setDraft(undefined)}
+              />
+            ) : (
+              <>
+                <NodeIcon row={row} />
+                <Tree.Label>{row.node.name}</Tree.Label>
+                <span className="ml-auto flex opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+                  {row.id === 'src' ? (
+                    <>
+                      <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => startDraft('file')}>
+                        <IconPlusMedium />
+                      </Button>
+                      <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => startDraft('folder')}>
+                        <IconFolderAddRight />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button size="icon-sm" variant="ghost" tooltip={`Delete ${row.node.name}`}>
+                      <TrashIcon />
+                    </Button>
+                  )}
                 </span>
-              }
-            >
-              <Tree.Icon className="text-muted-foreground">
-                <IconFolder1 />
-              </Tree.Icon>
-              <Tree.Label>src</Tree.Label>
-            </Tree.FolderTrigger>
-            <Tree.FolderContent>
-              {creating && (
-                <Tree.Input
-                  type={creating}
-                  placeholder={creating === 'folder' ? 'Folder name' : 'File name'}
-                  onSubmit={handleSubmit}
-                  onCancel={handleCancel}
-                />
-              )}
-              {files.map(file =>
-                file.type === 'folder' ? (
-                  <Tree.Folder key={file.id}>
-                    <Tree.FolderTrigger>
-                      <Tree.Icon className="text-muted-foreground">
-                        <IconFolder1 />
-                      </Tree.Icon>
-                      <Tree.Label>{file.name}</Tree.Label>
-                    </Tree.FolderTrigger>
-                    <Tree.FolderContent>{null}</Tree.FolderContent>
-                  </Tree.Folder>
-                ) : (
-                  <Tree.File key={file.id} id={file.id}>
-                    <Tree.Icon className="text-foreground">
-                      <IconScript />
-                    </Tree.Icon>
-                    <Tree.Label>{file.name}</Tree.Label>
-                  </Tree.File>
-                ),
-              )}
-            </Tree.FolderContent>
-          </Tree.Folder>
-        </Tree>
+              </>
+            )
+          }
+        />
       </div>
     </TooltipProvider>
   );
 }
 
-export const WithInlineCreation: Story = {
-  render: () => <WithInlineCreationExample />,
+export const WithActions: Story = {
+  render: () => <WithActionsExample />,
+};
+
+export const TenThousandFiles: Story = {
+  parameters: { layout: 'fullscreen' },
+  render: () => (
+    <FileTree
+      nodes={[project[0] ?? { name: 'src' }, logs(10_000), { name: 'README.md' }]}
+      initialOpen={['src', 'logs']}
+      className="flex h-screen w-80 flex-col border-r border-border"
+      contentClassName="p-2"
+    />
+  ),
 };

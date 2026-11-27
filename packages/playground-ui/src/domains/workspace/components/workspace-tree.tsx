@@ -16,8 +16,8 @@ import type { WorkspaceFolderListing } from './workspace-tree-rows';
 import { AlertDialog } from '@/ds/components/AlertDialog';
 import { Button } from '@/ds/components/Button/Button';
 import { Skeleton } from '@/ds/components/Skeleton/skeleton';
+import { Tree } from '@/ds/components/Tree/tree';
 import { Txt } from '@/ds/components/Txt/Txt';
-import { VirtualTree } from '@/ds/components/VirtualTree/virtual-tree';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 
 const PENDING_LISTING: WorkspaceFolderListing = { isLoading: true };
@@ -54,9 +54,11 @@ export function WorkspaceTree() {
 
   return (
     <>
-      <VirtualTree
+      <Tree
         aria-label="Workspace files"
+        contentClassName="p-2"
         rows={rows}
+        getRowLabel={row => (row.kind === 'entry' ? row.entry.name : '')}
         selectedId={activeFilePath}
         onActivate={row => {
           if (row.kind !== 'entry') return;

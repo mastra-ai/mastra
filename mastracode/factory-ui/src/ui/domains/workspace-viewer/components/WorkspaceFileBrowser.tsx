@@ -3,7 +3,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { VirtualTree } from '@mastra/playground-ui/components/VirtualTree';
+import { Tree } from '@mastra/playground-ui/components/Tree';
 import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -188,9 +188,11 @@ export function WorkspaceFileBrowser({
       ) : content ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
       ) : (
-        <VirtualTree
+        <Tree
           aria-label="Files"
+          contentClassName="p-2"
           rows={rows}
+          getRowLabel={row => (row.kind === 'entry' ? row.entry.name : '')}
           selectedId={selectedFilePath}
           onActivate={activate}
           onExpandedChange={(row, expanded) => {
