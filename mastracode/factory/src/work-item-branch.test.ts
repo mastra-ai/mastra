@@ -32,6 +32,14 @@ describe('workItemBranchSource', () => {
     expect(factoryRuleSourceForWorkItem('detail-finding')).toBe('detailFinding');
     expect(workItemBranchSource(source)).toBe('detail-finding');
   });
+
+  it('keeps Mastra Alerts provenance through storage, rules, and branches', () => {
+    const source = externalSourceForWorkItem('platform-alert', 'rule:rule-1#1', 'https://example.com/alerts/rule-1');
+    expect(source).toMatchObject({ integrationId: 'mastra-alerts', externalId: 'rule:rule-1#1' });
+    expect(workItemSource(source)).toBe('platform-alert');
+    expect(factoryRuleSourceForWorkItem('platform-alert')).toBe('platformAlert');
+    expect(workItemBranchSource(source)).toBe('platform-alert');
+  });
 });
 
 describe('workItemBoardSource', () => {
