@@ -154,7 +154,6 @@ const RUNS_ON_WRAPPER = new Set([
   'subscribeToThread',
   'updateObjectiveOptions',
   'updateThreadPeerAdvertisement',
-  'workflowEngine',
   'wrapToolWithHooks',
   'wrapToolsWithHooks',
 ]);

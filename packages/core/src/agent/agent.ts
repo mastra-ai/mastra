@@ -27,7 +27,6 @@ import { validateScoringPredicate } from '../evals/predicate';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
-import { reachesOtherProcesses } from '../events/reach';
 import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
@@ -2132,7 +2131,7 @@ export class Agent<
   __usesSharedRunLog(): boolean {
     // Unregistered agents never ask the engine: resolving the workflow engine before registration
     // would pin the evented engine's hostless fallback.
-    return !!this.#mastra && this.#engine().usesSharedRunLog(this.workflowEngine, this.logger);
+    return !!this.#mastra && this.#engine().usesSharedRunLog(this.logger);
   }
 
   #runLog(): AgentRunLog {
@@ -10767,7 +10766,7 @@ export class Agent<
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
     const engine = this.#engine();
     const heldController = engine.abortLocalExecution(runId, this.executionRunRegistry, this.#mastra);
-    return aborted || (engine.confirmsLocalAbort(this.workflowEngine, this.logger) && heldController);
+    return aborted || (engine.confirmsLocalAbort(this.logger) && heldController);
   }
 
   /**
@@ -12618,20 +12617,11 @@ export class Agent<
     return this.__getStreamBus() ?? this.#requireDurableExecution('execution');
   }
 
-  /**
-   * Which workflow execution engine the durable agentic loop runs on.
-   * Subclasses override this (EventedAgent → 'evented').
-   * @internal
-   */
-  protected get workflowEngine(): 'default' | 'evented' {
-    return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
-  }
   protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
     const durable = this.durable;
     const config = typeof durable === 'object' ? durable : undefined;
     return this.executionEngine.getWorkflow({
       maxSteps: config?.maxSteps,
-      workflowEngine: this.workflowEngine,
       storesRunsInJournal: config?.storageVersion === 2,
       shouldPersistSnapshot: config?.shouldPersistSnapshot,
       logger: this.logger,
@@ -13327,11 +13317,9 @@ export class Agent<
    * @internal
    */
   protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
-    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step). Behind a broker
-    // another worker may have ended the open step already, so the worker that handles its failure ends it.
-    const evented = this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
+    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     const bus = this.#mastra?.pubsub ?? this.getPubSub();
-    endRunSpansWithError(runId, error, { endStep: !evented || !bus || !reachesOtherProcesses(bus) });
+    endRunSpansWithError(runId, error, { endStep: this.executionEngine.endsStepOnRunError(bus, this.logger) });
     await runOutsideRunFenceScope(() =>
       emitErrorEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
@@ -13394,13 +13382,7 @@ export class Agent<
     abortController: AbortController | undefined,
     pubsub: PubSub = this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
   ): PubSub {
-    return this.executionEngine.fenceRunPubSub(
-      executionFence,
-      abortController,
-      pubsub,
-      this.workflowEngine,
-      this.logger,
-    );
+    return this.executionEngine.fenceRunPubSub(executionFence, abortController, pubsub, this.logger);
   }
 
   /**
@@ -13842,7 +13824,6 @@ export class Agent<
             workflow,
             executionFence,
             recoveryPubsub,
-            this.workflowEngine,
             this.logger,
             resourceId,
             requestContext,
@@ -14211,14 +14192,13 @@ export class Agent<
     const { sharedExecution, usesRunPubSub } = this.executionEngine.prepareExecution(
       pubsub,
       executionFence,
-      this.workflowEngine,
       this.logger,
       this.guardrailLogger,
     );
     if (entry) entry.eventedExecution = sharedExecution;
     try {
       const workflow = this.getWorkflow();
-      await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
+      await this.executionEngine.ensureEngineWorkersStarted(this.logger);
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
@@ -15551,7 +15531,7 @@ export class Agent<
           // Evented engine: make sure the workflow event workers are running
           // before resume — a resume in a fresh process (or after shutdown())
           // would otherwise publish events nobody consumes and hang.
-          await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
+          await this.executionEngine.ensureEngineWorkersStarted(this.logger);
           const run = await workflow.createRun({
             runId,
             resourceId: memoryInfo?.resourceId,

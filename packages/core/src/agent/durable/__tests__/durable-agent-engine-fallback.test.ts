@@ -9,7 +9,7 @@
  * must not inherit that error: before the evented engine was re-enabled they ran
  * the loop in-process regardless of storage, so throwing here would turn a working
  * agent into a hard failure on upgrade. They degrade with a warning instead, the
- * same way a hostless EventedAgent does (see DefaultAgentExecutionEngine.resolveWorkflowEngine).
+ * same way a hostless EventedAgent does (see EventedAgentExecutionEngine.resolveWorkflowEngine).
  *
  * A workflow that opts into the engine directly via `schedule` still gets the
  * error — see workflows/evented/storage-capability-gate.test.ts.
@@ -96,89 +96,77 @@ describe('Durable workflow run cleanup', () => {
 
 describe('Durable workflow subclass dispatch', () => {
   it.each([
-    ['durable-default', DurableAgent, 'default', 'success'],
-    ['durable-evented', DurableAgent, 'evented', 'success'],
-    ['evented-default', EventedAgent, 'default', undefined],
-    ['evented-evented', EventedAgent, 'evented', undefined],
-  ] as const)(
-    'preserves %s subclass super calls and late workflow patches',
-    async (kind, Base, strategy, expectedStatus) => {
-      let constructed = false;
-      class CustomAgent extends Base {
-        executionStatuses: (string | undefined)[] = [];
-        settledRuns: string[] = [];
-        deletedRuns: string[] = [];
-        fencedRuns: string[] = [];
+    ['durable', DurableAgent, 'success'],
+    ['evented', EventedAgent, undefined],
+  ] as const)('preserves %s subclass super calls and late workflow patches', async (kind, Base, expectedStatus) => {
+    class CustomAgent extends Base {
+      executionStatuses: (string | undefined)[] = [];
+      settledRuns: string[] = [];
+      deletedRuns: string[] = [];
+      fencedRuns: string[] = [];
 
-        protected override fenceRunPubSub(
-          fence: ExecutionFence | undefined,
-          abortController: AbortController | undefined,
-          pubsub: PubSub = this.pubsub,
-        ): PubSub {
-          if (fence) this.fencedRuns.push(fence.runId);
-          return super.fenceRunPubSub(fence, abortController, pubsub);
-        }
-
-        protected override async settleExecution(
-          runId: string,
-          fence: ExecutionFence | undefined,
-          outcome: { status?: string; error?: Error },
-        ): Promise<void> {
-          await super.settleExecution(runId, fence, outcome);
-          this.settledRuns.push(runId);
-        }
-
-        protected override async deleteRunSnapshots(runId: string): Promise<void> {
-          await super.deleteRunSnapshots(runId);
-          this.deletedRuns.push(runId);
-        }
-
-        protected override get workflowEngine(): 'default' | 'evented' {
-          if (!constructed) throw new Error('Execution policy read during construction');
-          return strategy;
-        }
-
-        protected override async executeWorkflow(runId: string, input: DurableAgenticWorkflowInput) {
-          const result = await super.executeWorkflow(runId, input);
-          this.executionStatuses.push(result?.status);
-          return result;
-        }
+      protected override fenceRunPubSub(
+        fence: ExecutionFence | undefined,
+        abortController: AbortController | undefined,
+        pubsub: PubSub = this.pubsub,
+      ): PubSub {
+        if (fence) this.fencedRuns.push(fence.runId);
+        return super.fenceRunPubSub(fence, abortController, pubsub);
       }
 
-      const agent = new CustomAgent({
-        agent: new Agent({
-          id: `subclass-${kind}`,
-          name: `subclass-${kind}`,
-          instructions: 'Say hello',
-          model: createTextStreamModel('hello'),
-        }),
-      });
-      constructed = true;
-      const storage = new MockStore();
-      vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
-      const mastra = new Mastra({ storage, agents: { agent }, logger: false });
-      // Registration has already created the workflow. Execution must still call
-      // the current Agent method rather than retain an earlier bound function.
-      const getWorkflow = vi.spyOn(agent, 'getWorkflow');
+      protected override async settleExecution(
+        runId: string,
+        fence: ExecutionFence | undefined,
+        outcome: { status?: string; error?: Error },
+      ): Promise<void> {
+        await super.settleExecution(runId, fence, outcome);
+        this.settledRuns.push(runId);
+      }
+
+      protected override async deleteRunSnapshots(runId: string): Promise<void> {
+        await super.deleteRunSnapshots(runId);
+        this.deletedRuns.push(runId);
+      }
+
+      protected override async executeWorkflow(runId: string, input: DurableAgenticWorkflowInput) {
+        const result = await super.executeWorkflow(runId, input);
+        this.executionStatuses.push(result?.status);
+        return result;
+      }
+    }
+
+    const agent = new CustomAgent({
+      agent: new Agent({
+        id: `subclass-${kind}`,
+        name: `subclass-${kind}`,
+        instructions: 'Say hello',
+        model: createTextStreamModel('hello'),
+      }),
+    });
+    const storage = new MockStore();
+    vi.spyOn(storage.stores.workflows, 'supportsConcurrentUpdates').mockReturnValue(false);
+    const mastra = new Mastra({ storage, agents: { agent }, logger: false });
+    // Registration has already created the workflow. Execution must still call
+    // the current Agent method rather than retain an earlier bound function.
+    const getWorkflow = vi.spyOn(agent, 'getWorkflow');
+    try {
+      const { output, cleanup } = await agent.stream('Hi');
       try {
-        const { output, cleanup } = await agent.stream('Hi');
-        try {
-          await output.consumeStream();
-          expect(await output.text).toBe('hello');
-        } finally {
-          await cleanup();
-        }
-        await expect.poll(() => agent.executionStatuses).toEqual([expectedStatus]);
-        await expect.poll(() => agent.settledRuns).toHaveLength(1);
-        expect(agent.deletedRuns).toEqual(agent.settledRuns);
-        expect(agent.fencedRuns).toContain(agent.settledRuns[0]);
-        expect(getWorkflow).toHaveBeenCalled();
+        await output.consumeStream();
+        expect(await output.text).toBe('hello');
       } finally {
-        getWorkflow.mockRestore();
-        await mastra.shutdown();
+        await cleanup();
       }
-    },
-  );
+      await expect.poll(() => agent.executionStatuses).toEqual([expectedStatus]);
+      await expect.poll(() => agent.settledRuns).toHaveLength(1);
+      expect(agent.deletedRuns).toEqual(agent.settledRuns);
+      expect(agent.fencedRuns).toContain(agent.settledRuns[0]);
+      expect(getWorkflow).toHaveBeenCalled();
+    } finally {
+      getWorkflow.mockRestore();
+      await mastra.shutdown();
+    }
+  });
 });
 
 describe('EventedAgent on storage without atomic concurrent updates', () => {

@@ -40,7 +40,7 @@ export abstract class AgentExecutionEngine {
   abstract get durable(): boolean;
 
   /** Whether run frames are published by workers on Mastra's shared log. Only asked once registered. */
-  abstract usesSharedRunLog(workflowEngine: 'default' | 'evented', logger: IMastraLogger): boolean;
+  abstract usesSharedRunLog(logger: IMastraLogger): boolean;
 
   /**
    * Whether a run's executor can live in another process than the stream that started it. A
@@ -53,7 +53,7 @@ export abstract class AgentExecutionEngine {
   abstract abortLocalExecution(runId: string, registry: ExtendedRunRegistry, mastra: Mastra | undefined): boolean;
 
   /** Whether aborting a run's local controller confirms that its executor stopped. */
-  abstract confirmsLocalAbort(workflowEngine: 'default' | 'evented', logger: IMastraLogger): boolean;
+  abstract confirmsLocalAbort(logger: IMastraLogger): boolean;
 
   /** Owner of a run this process tracks, or undefined. */
   abstract getRunOwner(runId: string, registry: ExtendedRunRegistry): AgentRunOwner | undefined;
