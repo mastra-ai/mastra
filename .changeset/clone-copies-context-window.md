@@ -6,10 +6,15 @@ Changed thread clones of observed threads to copy only the messages still in the
 
 **What stays the same**
 
-- The model sees the same context in the clone as in the source: the same observations and the same unobserved messages.
+- With thread-scoped memory, or resource-scoped memory cloned within the same resource, the model sees the same context in the clone as in the source: the same observations and the same unobserved messages.
 - The source thread keeps every message.
-- Threads without observational memory configured, or whose memory hasn't observed anything yet, still copy every message.
+- Without observational memory configured, or when it hasn't observed anything yet, clones still copy every message.
 - A `messageFilter` or `messageLimit` you pass still decides which messages are copied.
+
+**What changes**
+
+- The clone's message history, `recall()` and semantic search hold only the copied messages.
+- A resource-scoped clone into another resource doesn't carry the unobserved messages of the source resource's other threads.
 
 **Where it applies**
 
@@ -17,11 +22,11 @@ Changed thread clones of observed threads to copy only the messages still in the
 
 **Getting a full copy**
 
-Pass an empty message filter to copy every message, as before:
+Pass `fullThread: true` to copy every message. It can't be combined with `messageFilter` or `messageLimit`.
 
 ```ts
 const { thread } = await memory.cloneThread({
   sourceThreadId: 'thread-123',
-  options: { messageFilter: {} },
+  options: { fullThread: true },
 });
 ```

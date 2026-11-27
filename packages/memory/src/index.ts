@@ -3386,7 +3386,15 @@ Notes:
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
     const sourceResourceId = sourceThread?.resourceId;
 
-    const result = await memoryStore.copyThread(await this.withContextWindowFilter(args, sourceResourceId));
+    // The record the configured engine reads for context. One read sets both the message cutoff
+    // and the observations copied, so a concurrent change can't pair one with another's snapshot.
+    // Copied, because some stores hand back the live record and update it in place.
+    const omEngine = await this.omEngine;
+    const liveContextOM =
+      omEngine && sourceResourceId ? await omEngine.getRecord(args.sourceThreadId, sourceResourceId) : null;
+    const contextOM = liveContextOM ? structuredClone(liveContextOM) : null;
+
+    const result = await memoryStore.copyThread(this.withContextWindowFilter(args, contextOM));
 
     // Copy working memory from source thread to cloned thread.
     // Thread-scoped: always copy since each thread has its own working memory.
@@ -3425,7 +3433,7 @@ Notes:
     // Resource-scoped: only clone when the resourceId changes (same resourceId shares OM naturally).
     if (memoryStore.supportsObservationalMemory && sourceResourceId) {
       try {
-        await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result);
+        await this.cloneObservationalMemory(memoryStore, args.sourceThreadId, sourceResourceId, result, contextOM);
       } catch (error) {
         await this.rollbackCopiedThread(memoryStore, result.thread, 'OM clone', false, priorDestinationResourceWm);
         throw error;
@@ -3706,23 +3714,27 @@ Notes:
 
   /**
    * With observational memory, the context window is the observations plus the messages created
-   * after `lastObservedAt`. `getContext` reads that boundary from the configured engine's record,
-   * so read it the same way. When the caller names no message filter or limit, copy only those
-   * messages: the observations carry the rest.
+   * after `lastObservedAt`, read from the record the configured engine reads (`contextOM`), as
+   * `getContext` does. When the caller names no message filter or limit and doesn't ask for the
+   * full thread, copy only those messages: the observations carry the rest. `fullThread` is
+   * `Memory`'s own option and never reaches the storage copy.
    */
-  private async withContextWindowFilter(
+  private withContextWindowFilter(
     args: StorageCloneThreadInput,
-    sourceResourceId: string | undefined,
-  ): Promise<StorageCloneThreadInput> {
-    if (!sourceResourceId) return args;
-    if (args.options?.messageFilter !== undefined || args.options?.messageLimit !== undefined) return args;
-
-    const omEngine = await this.omEngine;
-    const contextOM = omEngine ? await omEngine.getRecord(args.sourceThreadId, sourceResourceId) : null;
-    if (!contextOM?.lastObservedAt) return args;
+    contextOM: ObservationalMemoryRecord | null,
+  ): StorageCloneThreadInput {
+    const { fullThread, ...options } = args.options ?? {};
+    const callerChoseMessages = options.messageFilter !== undefined || options.messageLimit !== undefined;
+    if (fullThread && callerChoseMessages) {
+      throw new Error(
+        'cloneThread: fullThread copies every message and cannot be combined with messageFilter or messageLimit',
+      );
+    }
+    const storageArgs = args.options ? { ...args, options } : args;
+    if (fullThread || callerChoseMessages || !contextOM?.lastObservedAt) return storageArgs;
 
     const startDate = new Date(new Date(contextOM.lastObservedAt).getTime() + 1);
-    return { ...args, options: { ...args.options, messageFilter: { startDate } } };
+    return { ...storageArgs, options: { ...options, messageFilter: { startDate } } };
   }
 
   /**
@@ -3736,12 +3748,12 @@ Notes:
     sourceThreadId: string,
     sourceResourceId: string,
     result: StorageCopyThreadOutput,
+    contextOM: ObservationalMemoryRecord | null,
   ): Promise<void> {
-    // Prefer the record the configured engine reads for context, so the clone carries the
-    // observations that go with the messages copied. Otherwise look up thread-scoped OM first
-    // (threadId + resourceId), then resource-scoped (null + resourceId).
-    const omEngine = await this.omEngine;
-    let sourceOM = omEngine ? await omEngine.getRecord(sourceThreadId, sourceResourceId) : null;
+    // Copy the record that set the message cutoff, so the clone's observations match its messages
+    // even if the source changes during the copy. Without a configured engine, look up
+    // thread-scoped OM first (threadId + resourceId), then resource-scoped (null + resourceId).
+    let sourceOM = contextOM;
     if (!sourceOM) {
       sourceOM = await memoryStore.getObservationalMemory(sourceThreadId, sourceResourceId);
     }

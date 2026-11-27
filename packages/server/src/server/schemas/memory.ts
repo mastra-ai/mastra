@@ -668,6 +668,7 @@ export const cloneThreadBodySchema = z.object({
   options: z
     .object({
       messageLimit: z.number().optional(),
+      fullThread: z.boolean().optional(),
       messageFilter: z
         .object({
           startDate: z.coerce.date().optional(),
