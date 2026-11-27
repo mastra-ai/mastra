@@ -11,7 +11,7 @@ import { formatFullNumber } from '@/utils/cost';
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
 
 const data: Record<string, unknown>[] = Array.from({ length: 14 }, (_, i) => ({
-  time: new Date(2026, 8, 14 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  time: new Date(2026, 8, 14 + i).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
   tokens: Math.round(40 + 30 * Math.sin(i / 2)),
   storage: Math.round(12 + 6 * Math.cos(i / 3)),
   compute: i % 5 === 0 ? 0 : Math.round(8 + i),

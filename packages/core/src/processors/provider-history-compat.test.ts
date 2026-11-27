@@ -1269,11 +1269,19 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
     expect(prompt[0].content).toBe('Use <system-reminder> tags.');
   });
 
-  it('strips reasoning parts from the prompt on cerebras', async () => {
+  it.each([
+    ['strips reasoning parts from the prompt on cerebras', 'cerebras.chat', 'zai-glm-4.7'],
+    ['strips foreign reasoning parts from the prompt on Anthropic', 'anthropic.messages', 'claude-haiku-4-5-20251001'],
+    [
+      'strips reasoning when a generic provider object has a cerebras-prefixed modelId',
+      'openai-compatible.chat',
+      'cerebras/zai-glm-4.7',
+    ],
+  ] as const)('%s', async (_title, provider, modelId) => {
     const handler = new ProviderHistoryCompat();
     const args = makeRequestArgs(promptWithReasoning(), {
-      provider: 'cerebras.chat',
-      modelId: 'zai-glm-4.7',
+      provider,
+      modelId,
     });
 
     const result = await handler.processLLMRequest(args);
@@ -1321,20 +1329,6 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
 
     // Any rewrite would change the cached prefix; the prompt must go out untouched.
     expect(result).toBeUndefined();
-  });
-
-  it('strips foreign reasoning parts from the prompt on Anthropic', async () => {
-    const handler = new ProviderHistoryCompat();
-    const args = makeRequestArgs(promptWithReasoning(), {
-      provider: 'anthropic.messages',
-      modelId: 'claude-haiku-4-5-20251001',
-    });
-
-    const result = await handler.processLLMRequest(args);
-
-    expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
-    expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
   it('strips foreign provider-executed tool pairs through the built-in rule set', async () => {
@@ -1413,20 +1407,6 @@ describe('ProviderHistoryCompat.processLLMRequest', () => {
       modelId: 'gpt-4o',
     });
     expect(await handler.processLLMRequest(args)).toBeUndefined();
-  });
-
-  it('strips reasoning when a generic provider object has a cerebras-prefixed modelId', async () => {
-    const handler = new ProviderHistoryCompat();
-    const args = makeRequestArgs(promptWithReasoning(), {
-      provider: 'openai-compatible.chat',
-      modelId: 'cerebras/zai-glm-4.7',
-    });
-
-    const result = await handler.processLLMRequest(args);
-
-    expect(result).toEqual({ prompt: expect.any(Array) });
-    const assistant = (result as { prompt: LanguageModelV2Prompt }).prompt.find(m => m.role === 'assistant')!;
-    expect((assistant.content as any[]).map(p => p.type)).toEqual(['text']);
   });
 
   it('runs custom prompt compat rules after built-in prompt rewrites', async () => {

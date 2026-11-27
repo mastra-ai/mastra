@@ -2,7 +2,7 @@
 
 Describe a support issue in Mastra Studio and get a next step grounded in your team's guides, policies, and past cases. The support agent searches Mastra Knowledge, cites the pages it uses, and asks follow-up questions to narrow down the problem.
 
-[![Deploy](https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
+<a class="inline-block mt-3" href="https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent" aria-label="Deploy to Mastra Platform"><img src="https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2" alt="Deploy to Mastra Platform" width="114" height="38" /></a>
 
 ## Why we built this
 
@@ -49,7 +49,7 @@ Teams can share guides while limiting access to each customer's case history. Pi
 
 **Deploy** to Mastra Platform to create a project from this template. Attach a managed Turso, Neon, or PostgreSQL database to your environment. Mastra sets the database connection variables automatically. [Managed databases](https://mastra.ai/docs/mastra-platform/database)
 
-[![Deploy](https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2)](https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent)
+<a class="inline-block mt-3" href="https://projects.mastra.ai/~/projects/create/https:/github.com/mastra-ai/template-knowledge-support-agent" aria-label="Deploy to Mastra Platform"><img src="https://svgbutton.com/v1/button.svg?paddingX=2&paddingY=2" alt="Deploy to Mastra Platform" width="114" height="38" /></a>
 
 Set these environment variables in the platform dashboard.
 

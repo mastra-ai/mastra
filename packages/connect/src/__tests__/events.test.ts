@@ -1467,7 +1467,9 @@ describe('parseServerSentEvents', () => {
   });
 
   it('rejects a frame of endless empty data lines', async () => {
-    const error = await failure(parse([...Array.from({ length: 100_001 }, () => 'data:\n'), '\n']));
+    // Two large chunks, so the count carries across a chunk boundary without 100k stream reads
+    // (one chunk per line took seconds of CPU and timed out on a loaded runner).
+    const error = await failure(parse(['data:\n'.repeat(50_000), 'data:\n'.repeat(50_001), '\n']));
     expect(error.code).toBe('invalid_response');
     expect(error.message).toContain('100000 data lines');
   });

@@ -41,7 +41,7 @@ describe('SettingsNavigation', () => {
         .getAllByRole('link')
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Connections']);
-    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Tools', 'Behavior']);
+    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Tools', 'Skills', 'Behavior']);
     expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Manage Factory', 'Debug']);
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');

@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 75 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 77 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "deepinfra/ByteDance/Seed-1.8"
+  model: "deepinfra/ByteDance/Seed-2.0-code"
 });
 
 // Generate a response
@@ -52,18 +52,6 @@ for await (const chunk of stream) {
     "outputCost": 50
   },
   {
-    "model": "deepinfra/ByteDance/Seed-1.8",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 0.25,
-    "outputCost": 2
-  },
-  {
     "model": "deepinfra/ByteDance/Seed-2.0-code",
     "imageInput": true,
     "audioInput": false,
@@ -74,18 +62,6 @@ for await (const chunk of stream) {
     "maxOutput": 131072,
     "inputCost": 0.5,
     "outputCost": 3
-  },
-  {
-    "model": "deepinfra/ByteDance/Seed-2.0-mini",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 131072,
-    "inputCost": 0.1,
-    "outputCost": 0.4
   },
   {
     "model": "deepinfra/ByteDance/Seed-2.0-pro",
@@ -316,18 +292,6 @@ for await (const chunk of stream) {
     "outputCost": 0.76
   },
   {
-    "model": "deepinfra/ibm-granite/granite-4.2-8b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 117964,
-    "inputCost": 0.06,
-    "outputCost": 0.25
-  },
-  {
     "model": "deepinfra/inclusionAI/Ling-3.0-flash",
     "imageInput": false,
     "audioInput": false,
@@ -341,6 +305,18 @@ for await (const chunk of stream) {
   },
   {
     "model": "deepinfra/inclusionAI/Ling-3.0-flash-VL",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.06,
+    "outputCost": 0.18
+  },
+  {
+    "model": "deepinfra/inclusionAI/LingSante-3.1-air-VL",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
@@ -530,6 +506,18 @@ for await (const chunk of stream) {
     "maxOutput": 262144,
     "inputCost": 0.06,
     "outputCost": 0.16
+  },
+  {
+    "model": "deepinfra/nvidia/NVIDIA-Nemotron-3.5-Super-VL",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 8192,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "deepinfra/openai/gpt-oss-120b",
@@ -784,6 +772,30 @@ for await (const chunk of stream) {
     "outputCost": 4.24
   },
   {
+    "model": "deepinfra/Sao10K/L3-8B-Lunaris-v1-Turbo",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 8192,
+    "maxOutput": 7372,
+    "inputCost": 0.04,
+    "outputCost": 0.05
+  },
+  {
+    "model": "deepinfra/Sao10K/L3.1-70B-Euryale-v2.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 16384,
+    "inputCost": 0.85,
+    "outputCost": 0.85
+  },
+  {
     "model": "deepinfra/tencent/Hy4",
     "imageInput": true,
     "audioInput": false,
@@ -943,7 +955,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    id: "deepinfra/ByteDance/Seed-1.8",
+    id: "deepinfra/ByteDance/Seed-2.0-code",
     apiKey: process.env.DEEPINFRA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -964,7 +976,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "deepinfra/zai-org/GLM-5.3-Flash"
-      : "deepinfra/ByteDance/Seed-1.8";
+      : "deepinfra/ByteDance/Seed-2.0-code";
   }
 });
 ```

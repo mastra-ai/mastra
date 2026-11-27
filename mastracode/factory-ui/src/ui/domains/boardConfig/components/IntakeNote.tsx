@@ -10,7 +10,7 @@ export function IntakeNote({ factoryId }: { factoryId: string }) {
       {/* One element: the notice stacks its children. */}
       <span>
         New issues and pull requests are checked board by board in the{' '}
-        <Link to={boardIntakePath(factoryId, 'work', INTAKE_ORDER_ANCHOR)} className="underline">
+        <Link to={boardIntakePath(factoryId, 'work', { anchor: INTAKE_ORDER_ANCHOR })} className="underline">
           intake order
         </Link>
         . Add rules on the new board to decide what it takes.

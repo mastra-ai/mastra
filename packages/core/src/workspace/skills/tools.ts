@@ -13,7 +13,16 @@
 import { z } from 'zod/v4';
 
 import { createTool } from '../../tools';
+import { getMimeType } from '../filesystem/fs-utils';
 import { extractLines } from '../line-utils';
+import type { MediaToolResult } from '../tools/media';
+import {
+  DEFAULT_MAX_MEDIA_BYTES,
+  DEFAULT_MEDIA_TYPES,
+  contentMediaType,
+  isUtf8Text,
+  mediaToModelOutput,
+} from '../tools/media';
 import { startSkillSpan } from '../tools/tracing';
 import type { Skill, SkillsContext, WorkspaceSkills } from './types';
 
@@ -206,8 +215,9 @@ function createSkillSearchTool(skills: WorkspaceSkills) {
 function createSkillReadTool(skills: WorkspaceSkills) {
   const tool = createTool({
     id: 'skill_read',
+    toModelOutput: mediaToModelOutput,
     description:
-      'Read a file from a skill directory (references, scripts, or assets). The path is relative to the skill root.',
+      'Read a file from a skill directory (references, scripts, or assets). The path is relative to the skill root. PNG, JPEG, WebP, and PDF files up to 10 MiB are returned as native media parts; other binary files return metadata only.',
     inputSchema: z.object({
       skillName: z
         .string()
@@ -259,6 +269,35 @@ function createSkillReadTool(skills: WorkspaceSkills) {
           return `File "${path}" not found in skill "${skillName}".${fileList}`;
         }
 
+        // Detect supported media before decoding: PDFs can be entirely valid UTF-8.
+        // Use the same supported types, size cap, and content check as read_file.
+        const declaredType = getMimeType(path);
+        // Set when the extension says media but the bytes are text, e.g. an HTML error page saved as .pdf.
+        let mislabeledNote: string | undefined;
+        if (DEFAULT_MEDIA_TYPES.includes(declaredType)) {
+          const fullPath = `${resolved.skill.path}/${path}`;
+          // The bytes, not the name, decide the declared type: providers reject a part whose
+          // content disagrees with it, and the stored result then fails every later call in the run.
+          const mediaType = contentMediaType(bytes, declaredType);
+          if (mediaType && DEFAULT_MEDIA_TYPES.includes(mediaType)) {
+            span.end({ success: true }, { bytesTransferred: bytes.length });
+            // The size cap applies to real media only; text under a media name stays readable below.
+            if (bytes.length > DEFAULT_MAX_MEDIA_BYTES) {
+              return `Binary file: ${fullPath} (${bytes.length} bytes)`;
+            }
+            return {
+              __workspaceMedia: true,
+              text: `${fullPath} (${bytes.length} bytes, ${mediaType})`,
+              mediaType,
+              data: bytes.toString('base64'),
+            } satisfies MediaToolResult;
+          }
+          mislabeledNote = `the extension says ${declaredType}, but the content is ${mediaType ?? 'not a valid file of that type'}`;
+          if (!isUtf8Text(bytes)) {
+            span.end({ success: true }, { bytesTransferred: bytes.length });
+            return `Binary file: ${fullPath} (${bytes.length} bytes) — ${mislabeledNote}, so it was not sent as media.`;
+          }
+        }
         // Binary if it contains NUL bytes or is not valid UTF-8 (e.g. PNGs, PDFs — which are
         // often NUL-free). Report the exact byte size and never put mojibake in model context.
         const text = bytes.toString('utf-8');
@@ -282,10 +321,10 @@ function createSkillReadTool(skills: WorkspaceSkills) {
         }
 
         // Header ranged reads so the model sees EOF coming instead of overshooting to find it
-        const output =
-          startLine !== undefined || endLine !== undefined
-            ? `${path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines})\n${result.content}`
-            : result.content;
+        const ranged = startLine !== undefined || endLine !== undefined;
+        let header = ranged ? `${path} (lines ${result.lines.start}-${result.lines.end} of ${result.totalLines})` : '';
+        if (mislabeledNote) header = `${header || path} — ${mislabeledNote}; showing it as text`;
+        const output = header ? `${header}\n${result.content}` : result.content;
 
         span.end({ success: true }, { bytesTransferred: Buffer.byteLength(result.content, 'utf-8') });
         return output;

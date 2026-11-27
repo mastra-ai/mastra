@@ -1,7 +1,7 @@
 import { readConfigurationFile } from '../../configuration/files.js';
 import { createHash } from 'node:crypto';
-// autumn-js 1.5.72 imports fzstd without declaring it. The pinned MIT fzstd
-// dependency supplies that intrinsic SDK runtime dependency on clean installs.
+// fzstd stays a direct dependency so the Autumn SDK's compression import
+// resolves on a clean install. autumn-js 1.6.27 no longer pulls rou3 0.6.
 import { Autumn, HTTPClient } from 'autumn-js';
 import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput, quantitySchema } from '../../contracts/core.js';

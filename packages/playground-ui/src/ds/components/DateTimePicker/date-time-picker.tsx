@@ -15,6 +15,7 @@ import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
@@ -96,6 +97,12 @@ function toTimeFieldValue(timeStr: string | undefined): string {
   return '';
 }
 
+/** The text field's value: English in any locale, since it's read back with `new Date()`, which only parses English. */
+function toTypedText(date: Date | string): string {
+  // oxlint-disable-next-line playground-ui/date-locale -- parsed back, see above
+  return format(date, 'PP p');
+}
+
 /** The day at the `HH:mm` time, or the day as it is when there's no time. */
 function getCompoundDate({ date, timeStr = '' }: { date: Date; timeStr?: string }): Date | null {
   if (!isValid(date)) {
@@ -131,7 +138,7 @@ export const DateTimePickerContent = ({
   const [timeStrValue, setTimeStrValue] = React.useState<string>(() =>
     value ? format(value, 'HH:mm') : toTimeFieldValue(defaultTimeStrValue) || '00:00',
   );
-  const [dateInputValue, setDateInputValue] = React.useState<string>(value ? format(value, 'PP p') : '');
+  const [dateInputValue, setDateInputValue] = React.useState<string>(value ? toTypedText(value) : '');
   const [selected, setSelected] = React.useState<Date | undefined>(value ? new Date(value) : undefined);
 
   const debouncedDateUpdate = useDebouncedCallback((date: Date) => {
@@ -151,13 +158,13 @@ export const DateTimePickerContent = ({
   const updateInputValue = (date: Date | string) => {
     if (isValid(date)) {
       if (maxValue && date > maxValue) {
-        setLocalErrorMsg(`The selected date should be before ${format(maxValue, 'PP p')}`);
+        setLocalErrorMsg(`The selected date should be before ${formatDate(maxValue, 'date-time')}`);
         setDateInputValue('');
       } else if (minValue && date < minValue) {
-        setLocalErrorMsg(`The selected date should be after ${format(minValue, 'PP p')}`);
+        setLocalErrorMsg(`The selected date should be after ${formatDate(minValue, 'date-time')}`);
         setDateInputValue('');
       } else {
-        setDateInputValue(format(date, 'PP p'));
+        setDateInputValue(toTypedText(date));
         setLocalErrorMsg('');
       }
     } else {
@@ -301,7 +308,7 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-foreground">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{formatDate(value, 'date-time')}</span>
         ) : (
           <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}

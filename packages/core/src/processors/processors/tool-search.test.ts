@@ -53,14 +53,6 @@ describe('ToolSearchProcessor', () => {
 
       expect(processor).toBeDefined();
     });
-
-    it('should use default search configuration when not provided', () => {
-      const processor = new ToolSearchProcessor({
-        tools: {},
-      });
-
-      expect(processor).toBeDefined();
-    });
   });
 
   describe('explicit tool names (#28113)', () => {

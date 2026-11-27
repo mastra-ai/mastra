@@ -36,6 +36,11 @@ export { computerPressKeyTool } from './computer-press-key';
 export { computerScrollTool } from './computer-scroll';
 export { computerGetScreenInfoTool } from './computer-get-screen-info';
 export { computerWaitTool } from './computer-wait';
+export {
+  createRecreateSandboxTool,
+  RECREATE_SANDBOX_TOOL_ID,
+  type RecreateSandboxToolOptions,
+} from './recreate-sandbox';
 
 // Helpers
 export { requireWorkspace, requireFilesystem, requireSandbox, emitWorkspaceMetadata } from './helpers';

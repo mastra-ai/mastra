@@ -69,7 +69,7 @@ describe('applying the outcome of a phase', () => {
     const boards = createBoardRegistry();
     const { item, binding } = await planningCard(storage);
     const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-    const engine = new DispatcherBoardEngine({ transitionService });
+    const engine = new DispatcherBoardEngine({ transitionService, workItems: storage, boards });
     const requestMove = vi.spyOn(engine, 'requestMove');
     const session = fakeSession();
     observeSessionPhaseOutcome(session, {
@@ -79,7 +79,7 @@ describe('applying the outcome of a phase', () => {
           factoryProjectId: PROJECT_ID,
           sessionId: 'session-1',
         }),
-      deps: () => ({ storage, boards, boardEngine: engine }),
+      boardEngine: () => engine,
     });
 
     // The run parks on submit_plan: nothing is approved, nothing moves.
@@ -108,7 +108,11 @@ describe('applying the outcome of a phase', () => {
     const { item, binding } = await planningCard(storage);
     await planApproved(storage, item.id);
     const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
-    const deps = { storage, boards, boardEngine: new DispatcherBoardEngine({ transitionService }) };
+    const deps = {
+      storage,
+      boards,
+      boardEngine: new DispatcherBoardEngine({ transitionService, workItems: storage, boards }),
+    };
 
     const [first, second] = await Promise.all([applyPhaseOutcome(deps, binding), applyPhaseOutcome(deps, binding)]);
 

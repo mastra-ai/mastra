@@ -1,5 +1,14 @@
 # @mastra/client-js
 
+## 1.62.1-alpha.3
+
+### Patch Changes
+
+- Fixed `@mastra/client-js` requests that fail to parse a successful response with an empty body (for example a `200`, `204` or `205` with no content). These responses now resolve to `undefined` instead of throwing a JSON parse error, while other success, error and streaming behavior is unchanged. ([#31605](https://github.com/mastra-ai/mastra/pull/31605))
+
+- Updated dependencies [[`d2ac0b7`](https://github.com/mastra-ai/mastra/commit/d2ac0b705c184143ae9af79ffad282fbdd90fc6f), [`c5a632e`](https://github.com/mastra-ai/mastra/commit/c5a632e892d70f330de4bc2bf5a9054b91186405), [`9047217`](https://github.com/mastra-ai/mastra/commit/904721797d4576fdd0afaabee7da8fc7e5a72792), [`0d5613a`](https://github.com/mastra-ai/mastra/commit/0d5613a29c62d540370a72c485efff4059e151f8)]:
+  - @mastra/core@1.87.0-alpha.3
+
 ## 1.62.1-alpha.2
 
 ### Patch Changes

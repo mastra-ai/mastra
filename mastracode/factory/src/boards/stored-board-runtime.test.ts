@@ -13,6 +13,8 @@ import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import type { FactoryBoardEngineFactory } from '../board-engine/engine.js';
+import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { MastraFactory } from '../factory.js';
 import { resolveGithubRules } from '../integrations/github/default-rules.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
@@ -219,7 +221,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     }
 
     /** Boots one replica: a real `MastraFactory` with its API mounted on Hono. */
-    async function boot(newStorage: () => FactoryStorage, orgId: string, options: { boards?: InstalledBoard[] } = {}) {
+    async function boot(
+      newStorage: () => FactoryStorage,
+      orgId: string,
+      options: { boards?: InstalledBoard[]; boardEngine?: FactoryBoardEngineFactory } = {},
+    ) {
       const storage = newStorage();
       // Every session sandbox of this boot shares one home directory, so a file
       // seeded for it is where the session's own workspace filesystem reads.
@@ -697,10 +703,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         return requests.filter(body => body.includes(`<skill name=\\"${skill}\\">`) && body.includes(title));
       }
 
-      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+      /** Shipyard's edited phases and intake route change what Factory runs. */
+      async function runShipyard(boardEngine?: FactoryBoardEngineFactory) {
         const requests = stubModel(shipyardAgent);
         const orgId = `org-${randomUUID()}`;
-        const replica = await boot(database(), orgId);
+        const replica = await boot(database(), orgId, boardEngine ? { boardEngine } : {});
         const projectId = await runnableProject(replica, orgId);
         await configureShipyard(replica, projectId);
         // The plan the auto-approved submission names has to be readable when the plan run submits it.
@@ -784,6 +791,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           { timeout: 20_000 },
         );
         expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
+      }
+
+      it("runs Shipyard's configuration: edited phases and its intake route change what Factory runs", async () => {
+        await runShipyard();
+      }, 120_000);
+
+      it("runs Shipyard's configuration on the workflow board engine", async () => {
+        await runShipyard(createWorkflowBoardEngine);
       }, 120_000);
 
       it("moves a card through a new project's Work, which has no Triage, starting Planning's run from Intake", async () => {

@@ -111,7 +111,12 @@ export function IntakeSection() {
   const linearListing = sourceListing(
     Boolean(
       linear.data?.enabled &&
-      (linear.data.connected || linear.data.workspaces?.length || props.config.linear.sourceIds?.length),
+      (linear.data.connected ||
+        linear.data.workspaces?.length ||
+        props.config.linear.sourceIds?.length ||
+        linear.data.migration?.required ||
+        linear.data.requiresFreshConnect?.length ||
+        linear.data.unidentified?.length),
     ),
     linear.isError || linear.data?.reason === 'unavailable',
   );
