@@ -27023,9 +27023,9 @@
     },
     "packages/playground/src/pages/knowledge/__tests__/index.msw.test.tsx": {
       "tier": "in",
-      "since": "2026-10-30",
-      "last_failure": null,
-      "reason": "new",
+      "since": "2026-11-27",
+      "last_failure": "2026-11-27",
+      "reason": "versioning-fail",
       "pr_failures": {
         "133640431437": {
           "date": "2026-11-16",
