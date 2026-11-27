@@ -1,5 +1,6 @@
 import type { MastraClient } from '@mastra/client-js';
 import { DatasetsManager } from '@mastra/core/datasets';
+import { MastraError } from '@mastra/core/error';
 import { Mastra } from '@mastra/core/mastra';
 import type {
   DatasetRecord,
@@ -17,17 +18,21 @@ import {
   EXPERIMENT_DATES,
   datasetPath,
   isNotFound,
+  notFound,
   paginate,
   readAllPages,
   rejectUnsupported,
   revive,
-  unsupportedMethod,
 } from './http';
 import { PlatformDataset } from './platform-dataset';
 
 type DatasetsPage = { datasets: object[]; pagination: PaginationInfo };
 
 const TENANCY = ['organizationId', 'projectId'] as const;
+
+function invalidComparison(text: string): MastraError {
+  return new MastraError({ id: 'COMPARE_INVALID_INPUT', text, domain: 'STORAGE', category: 'USER' });
+}
 
 function toJsonSchema(schema: unknown): Record<string, unknown> | undefined {
   if (schema === undefined) return undefined;
@@ -205,11 +210,38 @@ export class PlatformDatasets extends DatasetsManager {
     }
   }
 
-  override async compareExperiments(): Promise<never> {
-    throw unsupportedMethod(
-      'compareExperiments',
-      'Compare experiments in Studio, or list their results with dataset.listExperimentResults.',
-    );
+  /**
+   * Compares two to ten experiments of one dataset against a baseline (the first, unless
+   * `baselineId` says otherwise), returning each item's output and scores per experiment, as core
+   * does. Scores come from the project's observability, so they need it enabled. Throws a
+   * `MastraError` with id `EXPERIMENT_NOT_FOUND` when an experiment doesn't exist or belongs to
+   * another dataset.
+   */
+  override async compareExperiments(args: {
+    experimentIds: string[];
+    baselineId?: string;
+    organizationId?: string;
+    projectId?: string;
+  }): ReturnType<DatasetsManager['compareExperiments']> {
+    rejectUnsupported('compareExperiments', args, TENANCY);
+    const experimentIds = [...new Set(args.experimentIds)];
+    if (experimentIds.length < 2) {
+      throw invalidComparison('compareExperiments requires at least 2 distinct experiment IDs.');
+    }
+    const baselineId = args.baselineId ?? experimentIds[0]!;
+    if (!experimentIds.includes(baselineId)) {
+      throw invalidComparison(`baselineId "${baselineId}" must be one of experimentIds.`);
+    }
+
+    // The route lives under the dataset, so find it from the baseline.
+    const baseline = await this.getExperiment({ experimentId: baselineId });
+    if (!baseline?.datasetId) throw notFound('EXPERIMENT_NOT_FOUND', `Experiment not found: ${baselineId}`, undefined);
+    try {
+      return await this.#http.send('POST', datasetPath(baseline.datasetId, 'compare'), { experimentIds, baselineId });
+    } catch (error) {
+      if (isNotFound(error)) throw notFound('EXPERIMENT_NOT_FOUND', 'Experiment not found', error);
+      throw error;
+    }
   }
 
   #dataset(id: string): PlatformDataset {

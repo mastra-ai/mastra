@@ -138,11 +138,17 @@ for (const item of await dataset.listItems({ version })) {
 await dataset.finalizeExperiment({ experimentId });
 ```
 
-The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`. Some core options aren't available and throw a `MastraPlatformError` (status 400, with `body.code` naming the refusal) instead of being ignored:
+Compare two to ten experiments of one dataset with `project.datasets.compareExperiments`. Each item comes back with every experiment's output and scores, the first experiment as the baseline unless `baselineId` names another. Studio's Experiments page compares them too.
+
+```ts
+const { baselineId, items } = await project.datasets.compareExperiments({ experimentIds: [baseline, candidate] });
+```
+
+The project needs managed agents set up (`project.setupAgents()`), since its datasets live in their database, and observability on to store scores. The token needs `datasets:write` and `experiments:write`; comparing only needs `experiments:read`. Some core options aren't available and throw a `MastraPlatformError` (status 400, with `body.code` naming the refusal) instead of being ignored:
 
 - The Platform assigns dataset IDs, so `create` takes no `id`.
 - Experiments created from code have no target, so `createExperiment` takes no `targetType`, `targetId`, or `scorers`. Record what ran in `metadata` or `provenance`.
-- `startExperiment`, `startExperimentAsync`, `runExperimentItem`, and `compareExperiments` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
+- `startExperiment`, `startExperimentAsync`, and `runExperimentItem` aren't supported, and neither are the tenancy options (`organizationId`, `projectId`).
 
 Errors the Platform answers with also throw `MastraPlatformError`, carrying its status and body. As with `mastra.datasets`, `get` throws core's `DATASET_NOT_FOUND` for a missing dataset, and `getItem` and `getExperiment` return `null`.
 

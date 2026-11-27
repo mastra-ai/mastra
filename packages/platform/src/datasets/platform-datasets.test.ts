@@ -21,7 +21,8 @@ type SubmittedResult = { itemId: string; completedAt?: string; traceId?: string;
  * A stand-in for Mastra Platform's datasets API under `/v1/server/projects/:projectId`. The Platform
  * serves datasets with Mastra's own route handlers, so this mounts them on a real Mastra server.
  * Around them it reproduces the Platform's own rules: experiments created from code take no target,
- * and a result's scores (sent to observability, recorded here) need `completedAt`, at most 50.
+ * a result's scores (sent to observability, recorded here) need `completedAt`, at most 50, and a
+ * comparison only takes experiments of the dataset it's asked under.
  */
 async function startPlatform() {
   const storage = new InMemoryStore();
@@ -48,6 +49,16 @@ async function startPlatform() {
       return c.json({ error: 'invalid_dataset_request' }, 400);
     }
     submitted.push(body);
+    return next();
+  });
+  app.post(`${prefix}/datasets/:datasetId/compare`, async (c, next) => {
+    const { experimentIds } = (await c.req.raw.clone().json()) as { experimentIds: string[] };
+    const experiments = await Promise.all(
+      experimentIds.map(experimentId => mastra.datasets.getExperiment({ experimentId })),
+    );
+    if (experiments.some(experiment => experiment?.datasetId !== c.req.param('datasetId'))) {
+      return c.json({ error: 'Experiment not found' }, 404);
+    }
     return next();
   });
   await new MastraServer({ app, mastra, prefix }).init();
@@ -221,6 +232,73 @@ describe('PlatformDatasets', () => {
     await project.datasets.delete({ id: dataset.id });
   });
 
+  it('compares experiments of a dataset item by item, against the baseline', async () => {
+    const dataset = await project.datasets.create({ name: 'passwords' });
+    const [reset, refund] = await dataset.addItems({
+      items: [
+        { input: 'How do I reset my password?', groundTruth: 'Account > Password' },
+        { input: 'Where is my refund?', groundTruth: 'Billing > Refunds' },
+      ],
+    });
+    const run = async (name: string, answers: [string, string]) => {
+      const { experimentId } = await dataset.createExperiment({ name });
+      for (const [item, output] of [
+        [reset!, answers[0]],
+        [refund!, answers[1]],
+      ] as const) {
+        await dataset.submitExperimentResult({ experimentId, itemId: item.id, output });
+      }
+      await dataset.finalizeExperiment({ experimentId });
+      return experimentId;
+    };
+    const terse = await run('terse', ['Account > Password', 'Billing']);
+    const exact = await run('exact', ['Account > Password', 'Billing > Refunds']);
+
+    const comparison = await project.datasets.compareExperiments({ experimentIds: [terse, exact] });
+
+    expect(comparison.baselineId).toBe(terse);
+    const refundRow = comparison.items.find(item => item.itemId === refund!.id);
+    expect(refundRow).toMatchObject({
+      input: 'Where is my refund?',
+      groundTruth: 'Billing > Refunds',
+      results: { [terse]: { output: 'Billing' }, [exact]: { output: 'Billing > Refunds' } },
+    });
+
+    const swapped = await project.datasets.compareExperiments({ experimentIds: [terse, exact], baselineId: exact });
+    expect(swapped.baselineId).toBe(exact);
+
+    await project.datasets.delete({ id: dataset.id });
+  });
+
+  it('refuses to compare fewer than two experiments, or experiments it cannot find', async () => {
+    const dataset = await project.datasets.create({ name: 'compare errors' });
+    const other = await project.datasets.create({ name: 'compare errors, other dataset' });
+    await dataset.addItem({ input: 'a' });
+    await other.addItem({ input: 'b' });
+    const { experimentId } = await dataset.createExperiment({ name: 'one' });
+    const { experimentId: elsewhere } = await other.createExperiment({ name: 'elsewhere' });
+
+    await expectMastraError(
+      project.datasets.compareExperiments({ experimentIds: [experimentId, experimentId] }),
+      'COMPARE_INVALID_INPUT',
+    );
+    await expectMastraError(
+      project.datasets.compareExperiments({ experimentIds: [experimentId, elsewhere], baselineId: 'missing' }),
+      'COMPARE_INVALID_INPUT',
+    );
+    await expectMastraError(
+      project.datasets.compareExperiments({ experimentIds: ['missing', experimentId] }),
+      'EXPERIMENT_NOT_FOUND',
+    );
+    await expectMastraError(
+      project.datasets.compareExperiments({ experimentIds: [experimentId, elsewhere] }),
+      'EXPERIMENT_NOT_FOUND',
+    );
+
+    await project.datasets.delete({ id: dataset.id });
+    await project.datasets.delete({ id: other.id });
+  });
+
   it('refuses options and methods the Platform cannot honor instead of dropping them', async () => {
     await expectRefusal(
       project.datasets.create({ id: 'gold-dev', name: 'gold' }),
@@ -230,7 +308,10 @@ describe('PlatformDatasets', () => {
       project.datasets.list({ filters: { organizationId: 'org_1' } }),
       'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
     );
-    await expectRefusal(project.datasets.compareExperiments(), 'PLATFORM_DATASETS_UNSUPPORTED_METHOD');
+    await expectRefusal(
+      project.datasets.compareExperiments({ experimentIds: ['a', 'b'], projectId: 'proj_other' }),
+      'PLATFORM_DATASETS_UNSUPPORTED_OPTION',
+    );
 
     const dataset = await project.datasets.create({ name: 'refusals' });
     await expectRefusal(
