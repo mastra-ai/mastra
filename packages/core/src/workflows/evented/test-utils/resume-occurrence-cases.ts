@@ -101,14 +101,6 @@ export function describeResumeOccurrenceCases({
       }
     }
 
-    /** Re-delivers a step event with its own id while its first delivery is still inside the step. */
-    async function redeliverInBody(driver: RedeliveryDriver, event: Event) {
-      const key = `workflow-step-run:${event.runId}:${event.id}`;
-      const owner = await driver.pubsub.getLeaseOwner(key);
-      if (owner) await driver.pubsub.releaseLease(key, owner);
-      await driver.redeliverEvent(event);
-    }
-
     /** The step ends published for a step since event index `from`. */
     const stepEndsSince = (driver: RedeliveryDriver, from: number, runId: string, workflowId: string, path: number[]) =>
       driver.events
@@ -259,7 +251,7 @@ export function describeResumeOccurrenceCases({
           const result = run.resume({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.after.promise;
           const afterRun = stepRunsSince(driver, from, run.runId, '1')[0]!;
-          await redeliverInBody(driver, afterRun);
+          await driver.redeliverEvent(afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
@@ -297,7 +289,7 @@ export function describeResumeOccurrenceCases({
           const result = run.resume({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.gate.promise;
           const gateRun = stepRunsSince(driver, from, run.runId, '0')[0]!;
-          await redeliverInBody(driver, gateRun);
+          await driver.redeliverEvent(gateRun);
           await wf.entered.after.promise;
           // The duplicate claimed the running step again; the resume artifacts stay with it.
           expect(claimedByDuplicate).toMatchObject({
@@ -470,7 +462,7 @@ export function describeResumeOccurrenceCases({
           const result = run.timeTravel({ step: 'first', inputData: { n: 10 } });
           await wf.entered.after.promise;
           const afterRun = stepRunsSince(driver, from, run.runId, '1')[0]!;
-          await redeliverInBody(driver, afterRun);
+          await driver.redeliverEvent(afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
@@ -496,7 +488,7 @@ export function describeResumeOccurrenceCases({
           const result = run.timeTravel({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.gate.promise;
           const gateRun = stepRunsSince(driver, from, run.runId, '0')[0]!;
-          await redeliverInBody(driver, gateRun);
+          await driver.redeliverEvent(gateRun);
           await wf.entered.after.promise;
           wf.held.gate.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [0]);
@@ -1182,7 +1174,7 @@ export function describeResumeOccurrenceCases({
                 }
                 return publish(topic, event, options);
               });
-              await redeliverInBody(driver, finishing);
+              await driver.redeliverEvent(finishing);
               held.resolve();
               await settleSecondCompletion(
                 driver,

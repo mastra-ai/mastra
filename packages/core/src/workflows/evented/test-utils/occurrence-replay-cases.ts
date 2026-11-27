@@ -80,10 +80,7 @@ export function describeOccurrenceReplayCases({
             )
             .toBe(persist);
           const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
-          const key = `workflow-step-run:${run.runId}:${original.id}`;
           for (const deliveryAttempt of [2, 3, 4]) {
-            const owner = await driver.pubsub.getLeaseOwner(key);
-            if (owner) await driver.pubsub.releaseLease(key, owner);
             await driver.redeliverEvent(original, { deliveryAttempt });
           }
           expect(driver.events.filter(event => event.type === 'workflow.fail' && event.runId === run.runId)).toEqual(
@@ -213,8 +210,6 @@ export function describeOccurrenceReplayCases({
               ? driver.events.find(event => event.type === 'workflow.step.end' && event.data.workflowId === body.id)!
               : driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
           interrupted.mockRestore();
-          const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(original);
           expect(await result).toMatchObject({ status: 'success', result: { n: 3 } });
           expect(calls).toEqual([1, 2, 3]);
@@ -351,8 +346,6 @@ export function describeOccurrenceReplayCases({
         const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
         await expect.poll(() => executions).toBe(1);
         const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
-        const key = `workflow-step-run:${run.runId}:${original.id}`;
-        await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
         await driver.redeliverEvent(original);
         expect(swallowed).toBe(true);
         release();
@@ -501,8 +494,6 @@ export function describeOccurrenceReplayCases({
             (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.first,
           ).toMatchObject({ status: 'success', output: { n: 1 } });
           interrupted.mockRestore();
-          const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(
             delivery === 'end'
               ? {
@@ -521,16 +512,12 @@ export function describeOccurrenceReplayCases({
             const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
             expect(snapshot?.context.first).toMatchObject({ output: {}, metadata: { __continuationStarted: true } });
             expect(snapshot?.context.second).toMatchObject({ status: 'running', payload: { n: 1 } });
-            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
             const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
             await driver.redeliverEvent(original);
             expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
           }
           releaseSecond();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-          if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
           const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
           await driver.redeliverEvent(original);
           expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
@@ -719,9 +706,6 @@ export function describeOccurrenceReplayCases({
             const terminalEnds = driver.events.filter(event => event.type === 'workflow.end').length;
             const terminalRun = driver.stepRuns({ spec: '2', runId: run.runId })[0]!;
             const terminalEnd = await driver.waitForStepEnd({ spec: '2', runId: run.runId });
-            const leaseKey = `workflow-step-run:${run.runId}:${terminalRun.id}`;
-            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
             await driver.redeliverEvent(terminalRun);
             await driver.redeliverEvent(terminalEnd);
             expect(driver.events.filter(event => event.type === 'workflow.end')).toHaveLength(terminalEnds);
@@ -912,8 +896,6 @@ export function describeOccurrenceReplayCases({
           if (storageVersion === 1) {
             expect(original.data.stepResults.increment?.metadata?.startedBy).not.toBe(original.id);
           }
-          const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(original);
           if (storageVersion === 1) {
             const retry = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
@@ -993,12 +975,7 @@ export function describeOccurrenceReplayCases({
         expect(calls).toEqual([1, 2, 3]);
         await driver.redeliverEvent(completion!);
         expect(await load()).toEqual(before);
-        // Expire the event-processing lease without changing the persisted occurrence.
         const stepRun = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
-        await driver.pubsub.releaseLease(
-          `workflow-step-run:${run.runId}:${stepRun.id}`,
-          (await driver.pubsub.getLeaseOwner(`workflow-step-run:${run.runId}:${stepRun.id}`))!,
-        );
         await driver.redeliverEvent(stepRun);
         expect(calls).toEqual([1, 2, 3]);
         release();

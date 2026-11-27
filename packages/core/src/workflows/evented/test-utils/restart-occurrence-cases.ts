@@ -823,9 +823,6 @@ export function describeRestartOccurrenceCases({
         await restartC.entered;
         const restartDelivery = stepRuns(driver, run.runId, wf.workflow.id, [1]).at(-1)!;
 
-        const key = `workflow-step-run:${oldDelivery.runId}:${oldDelivery.id}`;
-        const owner = await driver.pubsub.getLeaseOwner(key);
-        if (owner) await driver.pubsub.releaseLease(key, owner);
         await driver.redeliverEvent(oldDelivery);
         // On storage v2 the step it ran again saves in its step end.
         await expect

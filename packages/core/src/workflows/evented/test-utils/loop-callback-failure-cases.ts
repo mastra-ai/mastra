@@ -351,9 +351,6 @@ export function describeLoopCallbackFailures({ getStorage }: { getStorage: () =>
                 : driver.events.find(
                     event => event.type === 'workflow.end' && event.data.workflowId === `${loopId}-child`,
                   )!;
-            const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
-            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
             const failures = () => driver.events.filter(event => event.type === 'workflow.fail').length;
             const failuresBefore = failures();
             const eventsBefore = driver.events.length;
