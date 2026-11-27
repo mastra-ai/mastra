@@ -98,4 +98,26 @@ describe('PageLayout variant="form"', () => {
     expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('complementary')).toBeNull();
   });
+
+  it('shows breadcrumbs in the header bar instead of a back link', () => {
+    render(
+      <PageLayout
+        variant="form"
+        breadcrumbs={
+          <nav aria-label="Breadcrumb">
+            <a href="/agents">Agents</a>
+          </nav>
+        }
+        title="New agent"
+      >
+        <section>Basics</section>
+      </PageLayout>,
+    );
+
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    const main = screen.getByRole('main');
+    expect(nav.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.contains(nav)).toBe(false);
+    expect(screen.queryByRole('link', { name: /^Back to/ })).toBeNull();
+  });
 });

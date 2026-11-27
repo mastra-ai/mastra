@@ -14,13 +14,17 @@ RuleTester.it = it;
 const tester = new RuleTester({ languageOptions: { parserOptions: { lang: 'tsx' } } });
 
 const pickVariant =
-  'variant="form" for a create or edit form (title and back link, no breadcrumbs), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
+  'variant="form" for a create or edit form (title with a back link, or breadcrumbs in a multi-step create flow), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
 
 tester.run('page-layout-props', plugin.rules['page-layout-props'], {
   valid: [
     {
       name: 'allows the page variants',
       code: '<><PageLayout variant="page" body="fixed" breadcrumbs={crumbs}>{panels}</PageLayout><PageLayout variant="settings" breadcrumbs={crumbs} title="General">{body}</PageLayout><PageLayout variant="form" backHref="/" backLabel="Agents" title="New">{body}</PageLayout></>;',
+    },
+    {
+      name: 'allows breadcrumbs on a multi-step create form',
+      code: '<PageLayout variant="form" breadcrumbs={crumbs} title="New agent">{body}</PageLayout>;',
     },
     { name: 'allows a variant forwarded from a wrapper', code: '<PageLayout variant={variant}>{body}</PageLayout>;' },
     { name: 'allows props spread from a wrapper', code: '<PageLayout {...props}>{body}</PageLayout>;' },
@@ -53,7 +57,7 @@ tester.run('page-layout-props', plugin.rules['page-layout-props'], {
       errors: [
         {
           message:
-            'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title and back link, no breadcrumbs) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
+            'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title with a back link, or breadcrumbs in a multi-step create flow) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
         },
       ],
     },
@@ -63,9 +67,23 @@ tester.run('page-layout-props', plugin.rules['page-layout-props'], {
       errors: [{ message: `PageLayout has no container variant. Use ${pickVariant}` }],
     },
     {
-      name: 'sends breadcrumbs on a form to its back link',
+      name: 'flags header actions on a form',
       code: '<PageLayout variant="form" breadcrumbs={crumbs} headerActions={actions} title="New">{body}</PageLayout>;',
-      errors: 2,
+      errors: 1,
+    },
+    {
+      name: 'flags a back link next to breadcrumbs on a form',
+      code: '<PageLayout variant="form" breadcrumbs={crumbs} backHref="/agents" backLabel="Agents" title="New">{body}</PageLayout>;',
+      errors: [
+        {
+          message:
+            'A form shows one way back. Keep breadcrumbs for a multi-step create flow, or drop them and keep the back link (backHref, backLabel).',
+        },
+        {
+          message:
+            'A form shows one way back. Keep breadcrumbs for a multi-step create flow, or drop them and keep the back link (backHref, backLabel).',
+        },
+      ],
     },
     {
       name: 'flags body on a form',

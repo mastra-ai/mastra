@@ -7,6 +7,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 export interface FormFrameProps {
+  breadcrumbs?: ReactNode;
   backHref?: string;
   backLabel?: string;
   title: ReactNode;
@@ -18,6 +19,7 @@ export interface FormFrameProps {
 
 /** The frame behind `<PageLayout variant="form">`. */
 export function FormFrame({
+  breadcrumbs,
   backHref,
   backLabel,
   title,
@@ -29,7 +31,7 @@ export function FormFrame({
   const hasAside = Boolean(aside);
 
   return (
-    <PageFrame>
+    <PageFrame breadcrumbs={breadcrumbs}>
       <div className="@container grid min-h-full">
         <div
           data-slot="form-layout"
@@ -41,7 +43,7 @@ export function FormFrame({
           )}
         >
           <PageHeader className="@4xl:col-start-1">
-            {backHref !== undefined && backLabel !== undefined && (
+            {!breadcrumbs && backHref !== undefined && backLabel !== undefined && (
               <PageHeader.Eyebrow>
                 <Link href={backHref} aria-label={`Back to ${backLabel}`}>
                   <Icon size="xs">

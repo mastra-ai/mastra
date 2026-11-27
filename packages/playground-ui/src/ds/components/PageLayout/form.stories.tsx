@@ -2,11 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
+import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button/Button';
 import { Input } from '../Input/input';
 import { Kbd } from '../Kbd/kbd';
 import { Switch } from '../Switch/switch';
 import { Txt } from '../Txt/Txt';
+import { FormFrame } from './form-frame';
+import type { FormFrameProps } from './form-frame';
 import { PageLayout } from './index';
 import type { PageLayoutFormProps } from './index';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
@@ -53,14 +56,31 @@ function AlertSections() {
   );
 }
 
+type FormStoryArgs = FormFrameProps & { variant: 'form' };
+
+function toFormProps({ breadcrumbs, backHref, backLabel, ...rest }: FormStoryArgs): PageLayoutFormProps {
+  return breadcrumbs ? { ...rest, breadcrumbs } : { ...rest, backHref, backLabel };
+}
+
 const meta = {
   title: 'Layout/PageLayout/Form',
-  component: PageLayout,
+  component: FormFrame,
+  render: args => <PageLayout {...toFormProps(args)} />,
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
     controls: {
-      include: ['variant', 'backHref', 'backLabel', 'title', 'isLoading', 'LinkComponent', 'aside', 'children'],
+      include: [
+        'variant',
+        'breadcrumbs',
+        'backHref',
+        'backLabel',
+        'title',
+        'isLoading',
+        'LinkComponent',
+        'aside',
+        'children',
+      ],
     },
     docs: {
       description: {
@@ -93,10 +113,11 @@ const meta = {
     variant: { control: false },
     title: { control: 'text' },
     aside: { control: false },
+    breadcrumbs: { control: false },
     children: { control: false },
     LinkComponent: { control: false },
   },
-} satisfies Meta<PageLayoutFormProps>;
+} satisfies Meta<FormStoryArgs>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -188,6 +209,57 @@ export const WithAside: Story = {
   },
 };
 
+/** Onboarding: a multi-step create flow whose way back is the breadcrumb bar instead of a back link. */
+export const OnboardingForm: Story = {
+  args: {
+    backHref: undefined,
+    backLabel: undefined,
+    breadcrumbs: (
+      <Breadcrumb label="Breadcrumb">
+        <Crumb as="a" href="#agents">
+          Agents
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          New agent
+        </Crumb>
+      </Breadcrumb>
+    ),
+    title: 'New agent',
+    children: (
+      <>
+        <SettingsGroup>
+          <SettingsTitle>Instructions</SettingsTitle>
+          <SettingsContainer>
+            <SettingsRow label="Name">
+              <Input defaultValue="Kit" />
+            </SettingsRow>
+            <SettingsRow label="Model">
+              <Input defaultValue="GPT-5 mini" />
+            </SettingsRow>
+          </SettingsContainer>
+        </SettingsGroup>
+        <div className="flex items-center gap-2">
+          <Button variant="primary">Next</Button>
+          <Button variant="ghost">Back</Button>
+        </div>
+      </>
+    ),
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pass `breadcrumbs` instead of a back link for a multi-step create flow such as onboarding, so the page keeps the same way back as the rest of the app.',
+      },
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('navigation', { name: 'Breadcrumb' })).toBeInTheDocument();
+    await expect(canvas.queryByRole('link', { name: /^Back to/ })).toBeNull();
+  },
+};
+
 export const PhoneWidth: Story = {
   args: { backHref: '#factory', backLabel: 'Factory', title: 'New Factory' },
   parameters: {
@@ -201,7 +273,7 @@ export const PhoneWidth: Story = {
   render: args => (
     <div className="flex h-200 w-80 bg-sidebar p-2">
       <MainCard>
-        <PageLayout {...args}>
+        <PageLayout {...toFormProps(args)}>
           <div className="flex items-center gap-3">
             <Txt as="span" className="truncate">
               acme-platform/payments-billing-reliability-service-monorepo

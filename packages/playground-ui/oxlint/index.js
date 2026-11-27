@@ -451,7 +451,7 @@ function placeholderText(context) {
 
 // How to pick a PageLayout variant, shared by every message that sends someone to one.
 const PICK_PAGE_VARIANT =
-  'variant="form" for a create or edit form (title and back link, no breadcrumbs), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
+  'variant="form" for a create or edit form (title with a back link, or breadcrumbs in a multi-step create flow), variant="settings" for a settings page (breadcrumbs, title, sections), variant="page" for anything else, adding body="fixed" when its panels scroll on their own (chat, board, editor, graph).';
 
 const PAGE_WIDTH_MESSAGE = `Let PageLayout set the page width instead of building a centred max-w-* column. Use ${PICK_PAGE_VARIANT}`;
 
@@ -571,14 +571,14 @@ const REMOVED_PAGE_LAYOUT_VARIANTS = {
   container: `PageLayout has no container variant. Use ${PICK_PAGE_VARIANT}`,
   fit: 'PageLayout has no fit variant. Use variant="page" body="fixed": the page stays put and its panels scroll on their own.',
   narrow:
-    'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title and back link, no breadcrumbs) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
+    'PageLayout has no narrow variant. Use variant="form" for a create or edit form (title with a back link, or breadcrumbs in a multi-step create flow) or variant="settings" for a settings page (breadcrumbs, title, sections). A list or dashboard takes variant="page".',
 };
 // Props a variant does not take. TypeScript rejects these too, but its union error does not say what to do instead.
 const PROPS_OFF_VARIANT = [
   [
     'form',
-    'breadcrumbs|headerActions|actionRow|header',
-    'A form has no breadcrumbs, header actions or header: its way out is the back link (backHref, backLabel) and its title is `title`. If this is not a create or edit form, use variant="settings" or variant="page".',
+    'headerActions|actionRow|header',
+    'A form has no header actions or header: its way out is the back link (backHref, backLabel) or, in a multi-step create flow, breadcrumbs, and its title is `title`. If this is not a create or edit form, use variant="settings" or variant="page".',
   ],
   ['form', 'body', 'Only variant="page" takes body. A form is a 640px column that scrolls with the page.'],
   ['settings', 'body', 'Only variant="page" takes body. A settings page is a 640px column that scrolls with the page.'],
@@ -596,6 +596,11 @@ const pageLayoutProps = selectorRule(() => [
     selector: `${PAGE_LAYOUT}:has(> JSXAttribute[name.name='variant'][value.value='${variant}']) > JSXAttribute[name.name=/^(${props})$/]`,
     message,
   })),
+  {
+    selector: `${PAGE_LAYOUT}:has(> JSXAttribute[name.name='variant'][value.value='form']):has(> JSXAttribute[name.name='breadcrumbs']) > JSXAttribute[name.name=/^(backHref|backLabel)$/]`,
+    message:
+      'A form shows one way back. Keep breadcrumbs for a multi-step create flow, or drop them and keep the back link (backHref, backLabel).',
+  },
   { selector: `${PAGE_LAYOUT} > JSXAttribute[name.name='mask']`, message: 'PageLayout has no mask. Drop the prop.' },
 ]);
 
