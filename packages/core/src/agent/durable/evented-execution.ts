@@ -17,6 +17,14 @@ import {
   getExecutionClaimScope,
 } from './execution-fence';
 import { runInRunFenceScope } from './run-fence-scope';
+import { getRunRegistryEntry } from './run-registry';
+import {
+  carrySegmentSpans,
+  claimSegmentEnd,
+  endFailedSegmentSpans,
+  segmentEndedBySuspension,
+  segmentSpanData,
+} from './segment-spans';
 import { closeStoredSignalRun } from './stored-signal-drain';
 import { emitErrorEvent } from './stream-adapter';
 

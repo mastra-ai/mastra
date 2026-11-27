@@ -15241,6 +15241,7 @@ export class Agent<
         generation: executionFence.generation,
         ownershipLost: () => executionFence.isLost(),
         stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+        signalsStore: registryEntry.pendingSignalsStore,
       },
     );
 
@@ -15309,22 +15310,7 @@ export class Agent<
       trackedEntry.workflowExecution = workflowExecution;
     }
 
-    // 4b. Register both stream and generate runs so signals can find them and
-    // queued messages start when the run releases its thread.
-    // Uses the Mastra-level pubsub, not the internal durable workflow stream bus.
-    await agentThreadStreamRuntime.registerRun(
-      this as unknown as Agent<any, any, any, any>,
-      output,
-      options as AgentExecutionOptions<TOutput>,
-      this.getPubSub(),
-      {
-        continuation: methodType === 'stream' && !closeOnSuspend ? 'across-suspension' : undefined,
-        generation: executionFence.generation,
-        ownershipLost: () => executionFence.isLost(),
-        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
-        signalsStore: registryEntry.pendingSignalsStore,
-      },
-    );
+    await threadRegistration;
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.

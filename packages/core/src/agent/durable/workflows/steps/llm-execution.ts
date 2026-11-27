@@ -84,7 +84,7 @@ import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener, publishSignalAvailable, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
-import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
 import { CONSUMED_SIGNAL_IDS_KEY, durableRunSignalsStore, storedSignalDrain } from '../../stored-signal-drain';
 import {
