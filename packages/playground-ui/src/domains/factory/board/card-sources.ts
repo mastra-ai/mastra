@@ -22,15 +22,25 @@ export type CardSource =
   | 'slack-thread'
   | 'manual';
 
+/** How the board presents one place a card can come from. */
 export interface CardSourcePresentation {
+  /** Read out before the card's title, and shown in its meta when the card has no key. */
   label: string;
+  /** Names where the card's upstream link goes: `Open in GitHub`. */
   linkLabel: string;
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  /** The mark's tone. Marks drawn in their own brand colors leave it empty. */
   iconClassName: string;
 }
 
+/**
+ * Every place a card can come from, keyed by the server's own source vocabulary. Factory re-types
+ * this table against its server source union, so a source missing here fails Factory's typecheck
+ * until it has a label, a link label and a mark, rather than showing as a card filed by hand.
+ */
 export const CARD_SOURCES: Record<CardSource, CardSourcePresentation> = {
   'github-issue': { label: 'Issue', linkLabel: 'Open in GitHub', Icon: GithubIcon, iconClassName: 'text-foreground' },
+  // GitHub keeps issue vs PR distinct: card meta shows #N for both.
   'github-pr': {
     label: 'PR Review',
     linkLabel: 'Open in GitHub',
@@ -73,6 +83,7 @@ export const CARD_SOURCES: Record<CardSource, CardSourcePresentation> = {
     Icon: IncidentIoIcon,
     iconClassName: 'text-badge-red-indicator',
   },
+  // Vanta links to the vulnerability in the scanner that reported it, not to Vanta itself.
   'vanta-vulnerability': { label: 'Vanta', linkLabel: 'Open vulnerability', Icon: VantaIcon, iconClassName: '' },
   'detail-finding': {
     label: 'Detail',
