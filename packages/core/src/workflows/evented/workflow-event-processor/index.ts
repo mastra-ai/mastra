@@ -1257,21 +1257,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         restart = { ...restart!, activePaths: executionPath, activeStepsPath: successorActiveStepsPath };
       }
     }
-    const resolvedFormat = format ?? this.runFormats.get(runId);
-    this.runFormats.set(runId, resolvedFormat);
-    // The run is starting (or restarting via timeTravel/restart under the
-    // same runId): any topic cleanup pending from a previous terminal end
-    // must not fire while the run is writing to its topic again.
-    this.cancelRunTopicCleanup(runId);
-    // Create abort controller for this workflow run
-    this.startedRuns.add(runId);
-    this.getOrCreateAbortController(runId, requestContext, parentWorkflow);
-
-    // Track parent-child relationship if this is a nested workflow
-    if (parentWorkflow?.runId) {
-      this.parentChildRelationships.set(runId, parentWorkflow.runId);
-      coverNestedRun(parentWorkflow.runId, runId);
-    }
     // Preserve resourceId from an existing snapshot if present (resume /
     // timeTravel / restart keep their original attribution); otherwise fall
     // back to the resourceId carried on the event, which is how schedule-fired
@@ -1330,6 +1315,22 @@ export class WorkflowEventProcessor extends EventProcessor {
         });
         return;
       }
+    }
+
+    const resolvedFormat = format ?? this.runFormats.get(runId);
+    this.runFormats.set(runId, resolvedFormat);
+    // The run is starting (or restarting via timeTravel/restart under the
+    // same runId): any topic cleanup pending from a previous terminal end
+    // must not fire while the run is writing to its topic again.
+    this.cancelRunTopicCleanup(runId);
+    // Create abort controller for this workflow run
+    this.startedRuns.add(runId);
+    this.getOrCreateAbortController(runId, requestContext, parentWorkflow);
+
+    // Track parent-child relationship if this is a nested workflow
+    if (parentWorkflow?.runId) {
+      this.parentChildRelationships.set(runId, parentWorkflow.runId);
+      coverNestedRun(parentWorkflow.runId, runId);
     }
 
     // A child resumed directly leaves the parent's step suspended. Its hand-back completes the
