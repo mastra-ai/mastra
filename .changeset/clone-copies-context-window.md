@@ -13,7 +13,7 @@ Changed thread clones of observed threads to copy only the messages still in the
 
 **What changes**
 
-- The clone's message history, `recall()` and semantic search hold only the copied messages.
+- The clone's stored message history holds only the copied messages, and thread-scoped semantic recall searches only those. Semantic recall with resource scope, the default, searches every thread of the resource, so in a clone within the same resource it can still return the source's earlier messages.
 - A resource-scoped clone into another resource doesn't carry the unobserved messages of the source resource's other threads.
 
 **Where it applies**

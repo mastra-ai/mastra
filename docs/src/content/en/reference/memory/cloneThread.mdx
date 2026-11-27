@@ -289,7 +289,7 @@ When OM is configured on the `Memory` instance, the source thread has observatio
 
 With thread-scoped OM, or resource-scoped OM cloned within the same resource, the clone starts with the same context as the source. A resource-scoped clone into another resource doesn't carry the unobserved messages of the source resource's other threads.
 
-The clone's message history, `recall()` and semantic search hold only the copied messages. Without OM configured, or when OM hasn't observed anything yet, every message is still copied. To copy every message from a thread with observations, pass `fullThread: true`:
+The clone's stored message history holds only the copied messages, and thread-scoped semantic recall searches only those. Semantic recall with resource scope, the default, searches every thread of the resource. In a clone within the same resource it can still return the source's earlier messages. Without OM configured, or when OM hasn't observed anything yet, every message is still copied. To copy every message from a thread with observations, pass `fullThread: true`:
 
 ```typescript
 const { thread } = await memory.cloneThread({
