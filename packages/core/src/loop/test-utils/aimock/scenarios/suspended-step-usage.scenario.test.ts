@@ -237,6 +237,38 @@ describeForAllEngines('AIMock loop scenario: token usage when a tool call suspen
     });
   }
 
+  // Technical: exporters that send one model call per MODEL_INFERENCE span (OpenTelemetry, Datadog,
+  // PostHog) show a call with no response, then a call with no prompt, and count its tokens twice
+  // when the part that resumes the run opens a second span for the suspended call.
+  for (const kind of ['suspend', 'approval'] as const) {
+    it(`[${kind}] each model call is one inference span with its prompt, response and tokens`, async () => {
+      const { observability, ended } = capture();
+      const { agent, toolCallId } = await setup(kind, { observability });
+      const first: RunHandle = await agent.stream('go');
+      await drain(first);
+
+      const resumed = await drain(await resume(agent, kind, first.runId, toolCallId));
+      expect(await resumed.text).toBe('done');
+      await expect.poll(() => ended(SpanType.MODEL_GENERATION).length).toBe(2);
+
+      const modelCalls = ended(SpanType.MODEL_INFERENCE).map(span => ({
+        hasPrompt: Array.isArray(span.input),
+        toolCalls: (span.output?.toolCalls ?? []).map((call: { toolName: string }) => call.toolName),
+        text: span.output?.text,
+        usage: spanTokens(span.attributes?.usage),
+      }));
+      expect(modelCalls).toEqual([
+        {
+          hasPrompt: true,
+          toolCalls: [kind === 'suspend' ? 'ask' : 'approve'],
+          text: '',
+          usage: spanTokens(SUSPENDED),
+        },
+        { hasPrompt: true, toolCalls: [], text: 'done', usage: spanTokens(RESUMED) },
+      ]);
+    });
+  }
+
   // Technical: a hidden generation reports its usage on the AGENT_RUN of its part instead.
   it('each part of the run records its own tokens when the agent hides its model spans', async () => {
     const { observability, ended } = capture();
