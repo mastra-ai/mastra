@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { relativeTime } from '../relativeTime';
+import { relativeTime } from './relative-time';
 
 // Fixed reference point so every case is deterministic: Jul 6 2026, 12:00 UTC.
 const NOW = new Date('2026-07-06T12:00:00.000Z');

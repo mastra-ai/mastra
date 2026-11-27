@@ -1,9 +1,8 @@
 import { isAuditAction } from '@internal/factory-contract';
 import type { AuditAction } from '@internal/factory-contract';
-import { CardActivity } from '@mastra/playground-ui/domains/factory';
+import { CardActivity, relativeTime } from '@mastra/playground-ui/domains/factory';
 import type { CardActivityEntry } from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { BoardInfo } from '../boardFlow';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';

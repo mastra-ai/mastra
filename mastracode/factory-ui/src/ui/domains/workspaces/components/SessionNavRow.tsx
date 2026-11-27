@@ -14,13 +14,12 @@ import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatu
 import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionExternalLink } from '../services/sessionRows';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
-import { sessionBeltLabel } from '@mastra/playground-ui/domains/factory';
+import { sessionBeltLabel, relativeTime } from '@mastra/playground-ui/domains/factory';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
-import { relativeTime } from '../../../../lib/date/relativeTime';
 import { changeRequestStatusLabel } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';

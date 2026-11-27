@@ -3,3 +3,5 @@
 ---
 
 Factory boards can now run under any host's routes. Wrap the board in `BoardNavigationProvider` with your app's link component and URL builders; `BoardEmptyStateActions` and `ConfigureBoardButton` read their links from it.
+
+`RunQueueIndicator` shows the board's run queue with links to each queued card, and `relativeTime` formats compact timestamps ("5m", "3h", "Jun 29") for dense board rows.

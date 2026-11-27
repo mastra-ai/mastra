@@ -1,7 +1,9 @@
-import { BoardListRow as SharedBoardListRow, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
+import {
+  BoardListRow as SharedBoardListRow,
+  useBoardNavigation,
+  relativeTime,
+} from '@mastra/playground-ui/domains/factory';
 import type { ComponentProps } from 'react';
-
-import { relativeTime } from '../../../../lib/date/relativeTime';
 
 type SharedProps = ComponentProps<typeof SharedBoardListRow>;
 

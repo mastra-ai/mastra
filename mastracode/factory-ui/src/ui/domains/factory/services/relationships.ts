@@ -3,7 +3,7 @@ import type { PullRequestFacts, WorkItem, WorkItemBoardSource as WorkItemSource 
 import { githubNumberForItem, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
 import { CARD_SOURCES } from '../cardSources';
 import { CHANGE_REQUEST_TERMS } from '../changeRequestState';
-import { relativeTime } from '../../../../lib/date/relativeTime';
+import { relativeTime } from '@mastra/playground-ui/domains/factory';
 import { rememberedBoardPath } from './boardViews';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */

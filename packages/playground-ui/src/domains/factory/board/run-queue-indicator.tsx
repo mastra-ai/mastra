@@ -1,9 +1,9 @@
+import type { RunQueueResponse } from '@mastra/client-js';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
-import { RunQueueMenu, useBoardNavigation } from '@mastra/playground-ui/domains/factory';
-import type { RunQueueMenuRun } from '@mastra/playground-ui/domains/factory';
-
-import { relativeTime } from '../../../../lib/date/relativeTime';
-import type { RunQueueResponse } from '@internal/factory-contract';
+import { useBoardNavigation } from './board-navigation';
+import { relativeTime } from './relative-time';
+import { RunQueueMenu } from './run-queue-menu';
+import type { RunQueueMenuRun } from './run-queue-menu';
 
 type QueuedRun = RunQueueResponse['queued'][number];
 
@@ -23,6 +23,7 @@ function slotLines(slots: RunQueueResponse['slots']): string[] {
   ];
 }
 
+/** The board's run queue, linked to each queued card through the host's board navigation. */
 export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; queue: RunQueueResponse | undefined }) {
   const catalog = useBoardCatalog(factoryId);
   const { LinkComponent, boardCardHref } = useBoardNavigation();
