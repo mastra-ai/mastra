@@ -279,6 +279,34 @@ describe('stored scorers in durable experiments', () => {
     ]);
   });
 
+  it('scores with a code scorer whose id matches a built-in object property alongside a pinned scorer', async () => {
+    const { storage, api } = await setup();
+    const versionId = await createJudge(api, 'helpfulness');
+    api.addScorer(
+      createScorer({ id: 'toString', description: 'Code scorer' }).generateScore(() => 1),
+      'to-string',
+    );
+    const dataset = await seedDataset(api);
+
+    const summary = await dataset.startExperiment({
+      targetType: 'workflow',
+      targetId: 'upper',
+      scorers: ['helpfulness', 'toString'],
+    });
+
+    expect(summary).toMatchObject({ status: 'completed', succeededCount: 2, failedCount: 0 });
+    expect((await dataset.getExperiment({ experimentId: summary.experimentId }))?.scorerVersions).toEqual({
+      helpfulness: versionId,
+    });
+    const scores = await scoresFor(storage, summary.experimentId);
+    expect(scores.sort((a, b) => a.scorerId.localeCompare(b.scorerId))).toEqual([
+      { scorerId: 'helpfulness', score: 0.6, versionId },
+      { scorerId: 'helpfulness', score: 0.6, versionId },
+      { scorerId: 'toString', score: 1, versionId: undefined },
+      { scorerId: 'toString', score: 1, versionId: undefined },
+    ]);
+  });
+
   it('pins and scores with the version of a stored workflow step scorer', async () => {
     const { storage, api } = await setup();
     const versionId = await createJudge(api, 'helpfulness');

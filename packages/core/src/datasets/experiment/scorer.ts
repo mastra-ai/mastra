@@ -117,7 +117,8 @@ export function createScorerResolver(mastra: Mastra, scorerVersions?: ScorerVers
     const cached = resolutionCache.get(scorerId);
     if (cached) return cached;
 
-    const pinnedVersionId = scorerVersions?.[scorerId];
+    const pinnedVersionId =
+      scorerVersions && Object.hasOwn(scorerVersions, scorerId) ? scorerVersions[scorerId] : undefined;
     const resolution = pinnedVersionId
       ? loadPinnedScorer(mastra, scorerId, pinnedVersionId)
       : (async () => {
