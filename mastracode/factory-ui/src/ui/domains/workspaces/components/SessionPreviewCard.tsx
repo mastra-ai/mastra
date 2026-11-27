@@ -1,4 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
+import type { SessionRowStatus } from '@internal/factory-contract';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -7,13 +7,13 @@ import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { RefObject } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
 import { toMinute } from '../../factory/stageStays';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
-import { isPullRequestSource } from '../../factory/services/workItems';
+import { isPullRequestSource } from '@internal/factory-contract';
 import { useSessionTrail } from '../hooks/useSessionTrail';
 import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';

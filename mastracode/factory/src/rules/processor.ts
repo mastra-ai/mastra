@@ -1,7 +1,16 @@
+import { workItemSource } from '@internal/factory-contract';
+import type {
+  FactoryCommitDecision,
+  FactoryRuleDecision,
+  FactoryRuleJsonValue,
+  FactoryRuleStage,
+  FactoryToolResultRuleContext,
+} from '@internal/factory-contract';
 import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
 import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
+
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type {
   ComputeStateSignalArgs,
@@ -10,7 +19,6 @@ import type {
   ProcessInputStepArgs,
   Processor,
 } from '@mastra/core/processors';
-
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import {
   boardFlow,
@@ -28,14 +36,6 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, Card } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates, getFactoryToolsRole } from './binding-context.js';
-import { workItemSource } from './types.js';
-import type {
-  FactoryCommitDecision,
-  FactoryRuleDecision,
-  FactoryRuleJsonValue,
-  FactoryRuleStage,
-  FactoryToolResultRuleContext,
-} from './types.js';
 import {
   assertFactoryDecisionTarget,
   normalizeFactoryRuleJsonValue,

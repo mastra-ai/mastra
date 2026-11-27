@@ -1,3 +1,4 @@
+import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from '@internal/factory-contract';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -6,8 +7,8 @@ import { registerApiRoute } from '@mastra/core/server';
 import { createSignal } from '@mastra/core/signals';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { Context } from 'hono';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
@@ -31,7 +32,6 @@ import type {
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { answerParkedCall } from '../tools/approval-tools.js';
-import { SLACK_SESSION_BRANCH_PREFIX, USER_SESSION_BRANCH_PREFIX } from '../work-item-branch.js';
 import { createSessionOwnerProfileResolver, withOwnerProfile } from './project-sessions.js';
 import type {
   ProjectSessionsReader,

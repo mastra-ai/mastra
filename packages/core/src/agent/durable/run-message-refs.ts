@@ -35,8 +35,9 @@ export function releaseRunMessageRefs(runId: string | undefined): void {
 /**
  * A `SaveQueueManager` `onSaved` callback that records the rows a run saved,
  * so its persisted transcript references them instead of repeating them. Only
- * runs that store refs hold an entry (the transcript store creates it), so saves
- * for other runs, or landing after the run released its entry, are not kept.
+ * runs that store refs hold an entry (created before the run saves its input,
+ * else by the transcript store), so saves for other runs, or landing after the
+ * run released its entry, are not kept.
  */
 export function recordRunSavedMessages(runId: string): (rows: MastraDBMessage[]) => void {
   return rows => {

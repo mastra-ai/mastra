@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import type { BoardPhasesSnapshot } from '../../../hooks/useWorkItems';
+import type { BoardPhasesSnapshot } from '@mastra/react/hooks/factory';
 import { shownBoardPhases } from './boardPhases';
 import type { ShownPhase } from './boardPhases';
-import type { WorkItem } from './services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 const stages = [{ id: 'intake' }, { id: 'planning' }, { id: 'done' }];
 

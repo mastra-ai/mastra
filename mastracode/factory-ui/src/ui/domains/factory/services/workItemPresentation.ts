@@ -1,5 +1,5 @@
-import type { WorkItem } from './workItems';
-import { isPullRequestSource } from './workItems';
+import type { WorkItem } from '@internal/factory-contract';
+import { isPullRequestSource } from '@internal/factory-contract';
 
 /**
  * The plain external link a session header shows for a card. Pull and merge

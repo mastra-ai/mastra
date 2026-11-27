@@ -1,5 +1,214 @@
 # @mastra/core
 
+## 1.87.0-alpha.5
+
+### Minor Changes
+
+- Importer flushes now read an item's link targets in batches instead of one storage call per link: one read before the target pages are rendered, and one after to check that another importer has not taken a target over meanwhile. Pages with many links cost fewer database round trips. PostgreSQL and LibSQL read the nodes with one query. ([#31748](https://github.com/mastra-ai/mastra/pull/31748))
+
+  Knowledge importer storage gets a new optional `getNodes(bindingId, sourceIds)` method. Adapters that leave it out keep compiling and working: the importer then reads one `getNode` per link, as before.
+
+  ```ts
+  class MyImportersStorage extends KnowledgeImportersStorage {
+    // ...existing methods, getNode included...
+
+    // Optional: return the binding's nodes for these source IDs in one round trip.
+    async getNodes(bindingId: string, sourceIds: string[]) {
+      return db.importerNodes.findMany({ where: { bindingId, sourceId: { in: sourceIds } } });
+    }
+  }
+  ```
+
+- Importer flushes and link refreshes now read a page's parents in one storage call instead of one per level, so deep pages cost fewer database round trips. PostgreSQL and LibSQL answer it with one recursive query. ([#31747](https://github.com/mastra-ai/mastra/pull/31747))
+
+  Knowledge storage adapters get a new `getPageParents({ parentId, read })` method. It returns the parent and its ancestors, nearest first, up to the scope page. The base class implements it with one `getPage` per level, so adapters that do not override it keep working unchanged.
+
+  ```ts
+  const knowledge = await storage.getStore('knowledge');
+  if (page.parentId) {
+    // Nearest first: [parent, grandparent, ..., scope page]. Deleted parents are included, and the
+    // list ends early at a parent that is missing or outside `read`.
+    const parents = await knowledge!.getPageParents({ parentId: page.parentId, read: 'all' });
+    const breadcrumb = parents.reverse().map(parent => parent.name);
+  }
+  ```
+
+- Experiments now pin the version of every stored scorer they use (scorers created in Studio or through the editor). Each item is scored by the version that was current when the experiment was created, even if someone edits the scorer while the experiment is running. ([#31550](https://github.com/mastra-ai/mastra/pull/31550))
+
+  The pinned versions are saved on the experiment as `scorerVersions` (scorer id → version id), and each score row saved to the scores store records the `versionId` that produced it in its `scorer` field. Code scorers are not pinned. Experiments created before this change keep using each scorer's current version.
+
+  ```ts
+  const { experimentId } = await dataset.createExperiment({
+    targetType: 'agent',
+    targetId: 'support-agent',
+    scorers: ['helpfulness'],
+  });
+  const experiment = await dataset.getExperiment({ experimentId });
+  experiment?.scorerVersions; // { helpfulness: '<version id>' }
+  ```
+
+### Patch Changes
+
+- Fixed Evented Agent Controller runs that execute on a separate worker. The worker rebuilds the controller context and configured tools so Factory sessions can complete their turns. ([#31638](https://github.com/mastra-ai/mastra/pull/31638))
+
+- Agents now see every Knowledge scope they hold before anything has been written there. Calling `knowledge_read` or `knowledge_list` without a target lists each held scope with the agent's `role` there and what it `can` do (`write`, `read` or `none`), and marks scopes with no page the agent can read yet as `empty`. Before, a scope such as the run's own `resource:`/`thread:` scope only appeared after something had written to it, so on its first turn an agent concluded it had nowhere to read or write. A held scope the agent cannot read shows only its address. ([#31308](https://github.com/mastra-ai/mastra/pull/31308))
+
+## 1.87.0-alpha.4
+
+### Minor Changes
+
+- Added end-to-end support for preserving OpenAI Responses compaction state across tool loops and memory reloads. Mastra now persists opaque compaction items and replays them on later requests in the same memory thread. With `store: false`, replay uses encrypted compaction content. With stored Responses, items with an OpenAI item ID replay as an `item_reference`. ([#31529](https://github.com/mastra-ai/mastra/pull/31529))
+
+  Built-in `openai/*` Responses models, Netlify OpenAI models, custom URL models configured with `api: 'responses'`, `shape: 'responses'` overrides, and OpenAI WebSocket models now use `@ai-sdk/openai` 4.x instead of 3.x. This enables `contextManagement` and Language Model V4 behavior. When reasoning effort is enabled and `reasoningSummary` isn't set, 4.x defaults to detailed reasoning summaries, which can increase output tokens. Set `providerOptions.openai.reasoningSummary` explicitly to control this behavior.
+
+  ```ts
+  await agent.stream('Summarize the conversation', {
+    memory: { thread: 'thread-1', resource: 'user-1' },
+    providerOptions: {
+      openai: {
+        store: false,
+        contextManagement: [{ type: 'compaction', compactThreshold: 10_000 }],
+      },
+    },
+  });
+  ```
+
+  When the selected history contains a compaction checkpoint, Mastra keeps the complete conversation in Memory while sending OpenAI only the latest checkpoint, system instructions, and messages after that checkpoint. Memory's history controls still determine which stored messages are selected before compaction is applied.
+
+  Fixes #20465.
+
+- Added `createRecreateSandboxTool()` so agents can recover from a sandbox that stopped responding. The tool destroys the sandbox's environment and leaves the workspace usable: the next command starts a fresh one. Anything not saved elsewhere is lost. ([#31668](https://github.com/mastra-ai/mastra/pull/31668))
+
+  ```ts
+  import { createRecreateSandboxTool } from '@mastra/core/workspace';
+
+  const agent = new Agent({
+    // ...
+    workspace,
+    tools: { recreate_sandbox: createRecreateSandboxTool() },
+  });
+  ```
+
+  Sandboxes built on `MastraSandbox` get `_reset()`, which the tool calls. It does not wait on a start that is hung on the dead environment, and treats an environment that is already gone as released. Pass `reset` to the tool to run your own recovery instead.
+
+### Patch Changes
+
+- Fixed channel runs crashing on a replica with `render.wrapStream is not a function` after a run was restored from a durable snapshot. The channel render context holds live adapters and driver callbacks that JSON cannot carry, so a restored copy was a method-less husk. It is no longer written into the durable request-context snapshot, and every reader that needs a live context now rebuilds it from the run's thread when it finds a husk instead of using it. ([#31678](https://github.com/mastra-ai/mastra/pull/31678))
+
+  A restored run also keeps the reply behaviour of the thread it was started on: how the thread displays the agent's text (posted, hidden, or replaced by tool output) is read back from the thread, so a hidden-text conversation resumed on a replica no longer tells the model to answer in text nobody sees, and a new conversation still gets the link back to its thread.
+
+  Approval cards such a run posts are still answered only by the person whose message triggered the tool, unless the adapter sets `toolApprovers: 'anyone'`: the requester is read back from the thread when the restored run no longer remembers it, instead of leaving any channel member able to approve or deny.
+
+- Fixed durable and evented agents copying the run's input message, including any file or image parts, into every saved workflow snapshot. When the agent has a fixed memory, snapshots after the run starts now store a reference to the input message the agent saved to memory before the run started, so large attachments no longer make every checkpoint larger. Fixes #31237. ([#31405](https://github.com/mastra-ai/mastra/pull/31405))
+
+- `ModelRouterEmbeddingModel` now accepts namespaced model IDs and routes DeepInfra embeddings to their default endpoint. IDs with more than one slash, such as `deepinfra/BAAI/bge-base-en-v1.5`, previously failed with "Invalid model string format"; the router now splits the provider from the model at the first slash and keeps the rest of the ID intact. DeepInfra has no URL in the provider registry, so embeddings now fall back to `https://api.deepinfra.com/v1/openai` unless an explicit `url` is passed. ([#31673](https://github.com/mastra-ai/mastra/pull/31673))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('deepinfra/BAAI/bge-base-en-v1.5');
+  await embedMany({ model: embedder, values: ['Hello world'] });
+  ```
+
+  Fixes #31618.
+
+- Fixed agents running Observational Memory twice when the observational memory processor is placed inside a processor workflow, including stored Editor processor graphs with a branch or parallel step. Memory now uses the processor you placed and does not add its own. An OM step inside an error processor workflow does not replace Memory's OM error processor, so context-overflow recovery keeps working. Fixes [#31401](https://github.com/mastra-ai/mastra/issues/31401). ([#31419](https://github.com/mastra-ai/mastra/pull/31419))
+
+  Steps created from a processor now keep that processor's id in a new optional `processorId` field, also after `cloneStep` or an Editor graph renames the step. Upgrade `@mastra/core` together with `@mastra/memory` to get the fix for Editor graphs and cloned steps.
+
+- Preserve Unicode joiners (ZWNJ/ZWJ) in buffered channel replies. ([#31679](https://github.com/mastra-ai/mastra/pull/31679))
+
+  Static (non-streaming) replies and the buffered fallback posted after a failed stream previously stripped U+200C (ZWNJ) and U+200D (ZWJ) from the whole message, corrupting compound emoji (🏄🏼‍♂️, 👨‍👩‍👧) and scripts such as Persian. Zero-width space (U+200B) and the byte-order mark (U+FEFF) are still removed everywhere, and whitespace/joiners are still trimmed at the edges, so internal joiners now survive and invisible-only messages are still suppressed.
+
+- Added `resultType: 'title_generation'` to the trace span of the model call that generates a thread title, so observability exporters can tell it apart from the conversation. ([#31476](https://github.com/mastra-ai/mastra/pull/31476))
+
+- Fixed `messageHistory` token budgets letting the start of the conversation history move forward on every run without ever trimming. When the newest messages weighed between the trim target and `maxTokens`, memory loaded a fixed page of messages and never recorded a cut, so the history start changed each turn and prompt caching broke. Memory now loads enough history for the token limit to trim it and remember where it cut, so the history start stays put between trims. Fixes [#31469](https://github.com/mastra-ai/mastra/issues/31469). ([#31541](https://github.com/mastra-ai/mastra/pull/31541))
+
+- The built-in `web_fetch` tool now works on Cloudflare Workers. Previously every request failed with "The options.lookup option is not implemented". When Node's request API isn't available, the tool now uses `fetch` instead. It still checks every URL and redirect target for `localhost` and private or reserved IP addresses, and keeps the 5-redirect limit, the 100,000-character truncation, and the 15-second timeout. On Workers it can't check the address a hostname resolves to, so a public hostname that points to a private address isn't blocked. ([#31632](https://github.com/mastra-ai/mastra/pull/31632))
+
+## 1.87.0-alpha.3
+
+### Minor Changes
+
+- Added `AgentChannels.subscribeThread()` so bots can subscribe to chat threads they started themselves (for example, a scheduled digest post). The method creates the Mastra thread mapping and subscribes it, so replies without an @mention reach the agent. ([#27460](https://github.com/mastra-ai/mastra/pull/27460))
+
+  ```ts
+  const sent = await channel.post('Daily digest ready');
+  await agent.channels.subscribeThread({ thread: sent.thread, resourceId: 'digest-bot' });
+  ```
+
+  Subscribing to a thread with no Mastra mapping now logs a warning instead of silently doing nothing.
+
+- Added native PNG, JPEG, WebP, and PDF media output to skill_read for assets up to 10 MiB. As with read_file, the media type comes from the file's contents rather than its extension, so an asset saved under the wrong extension is sent as what it contains, or as text. Text reads and metadata-only binary fallbacks are preserved. Fixes https://github.com/mastra-ai/mastra/issues/25219. ([#28280](https://github.com/mastra-ai/mastra/pull/28280))
+
+  With a skill that includes `assets/logo.png`, the same request now gives the model the image instead of a binary-file placeholder:
+
+  ```typescript
+  await agent.generate('Use the design-system skill and read assets/logo.png.');
+  ```
+
+### Patch Changes
+
+- Fixed `lsp_inspect` for files that exist only in a remote sandbox. The tool now reads inspected files and definition previews through the workspace filesystem, including mounted filesystems. When the workspace filesystem can't read the inspected file, the tool returns a `Could not read file` error instead of reading a host file at the same path, which on a remote sandbox is unrelated content. The host filesystem is used only when the workspace has no filesystem, so a definition outside a contained `LocalFilesystem` (for example a globally installed library) now has `preview: null`. ([#26668](https://github.com/mastra-ai/mastra/pull/26668))
+
+- Fixed web search failing with a 422 error on Mastra gateway models. Every request to the gateway's chat endpoint now has a provider's native web search tool swapped for the gateway's own web search, whether the model is reached through the built-in gateway, a custom gateway, or directly from `MastraGateway`. ([#31641](https://github.com/mastra-ai/mastra/pull/31641))
+
+## 1.87.0-alpha.2
+
+### Minor Changes
+
+- `runKnowledgeImport` takes a new `maxFlushBytes` option: the largest flush request, in bytes of the request encoded as JSON. The runner sends its buffered items before one more item, or a saved cursor, would take the request over it. An item or a saved state too big for a request on its own ends the run with the new `flush_too_large` error code, before anything more is sent. No request is sent over the limit. With the option set, each item is copied when the importer hands it over, so changing it afterwards changes nothing that is sent. ([#31566](https://github.com/mastra-ai/mastra/pull/31566))
+
+  ```ts
+  await runKnowledgeImport({ importers, host, bindingId, maxFlushBytes: 8 * 1024 * 1024 });
+  ```
+
+  A host can also send its limit with a started run, as `maxFlushBytes` on the start result. The runner then keeps under the lower of the two, so an app doesn't have to hard-code its host's limit.
+
+  Without either limit nothing changes: a flush holds up to `bufferSize` items whatever their size. Set it when the host limits request size, so a batch of large items is sent in parts instead of failing the run at the same items each time.
+
+## 1.87.0-alpha.1
+
+### Minor Changes
+
+- Added `createChannelAttachFileTool()` to `@mastra/core/channels`: an `attach_file` tool that uploads a file from the run's workspace into its chat thread, including on runs that did not start there when `channels` is passed. Files over 50 MB are refused, and a Slack app missing `files:write` gets an error naming the scope. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+- Added two channel adapter options, `replyMode` and `threadLink`. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+  `replyMode: 'tool'` has the agent post only through a `reply_in_thread` tool, which Mastra installs. Reply text and tool calls stay out of the thread, the typing status names the agent's current step, the reply streams into the thread as it is written when the adapter sets `streaming: true`, the prompt tells the agent to open long work with one line and finish with the outcome, and the agent is reminded to post after five quiet minutes. Pass `{ instructions, reminderAfterMs }` instead of `'tool'` to add your own prompt lines or change the reminder. Reply mode has only been tested with Slack.
+
+  `threadLink` ends the first reply in a new thread with a link to your web UI. The link is kept out of saved memory.
+
+  ```ts
+  channels: {
+    adapters: {
+      slack: {
+        adapter: createSlackAdapter(),
+        replyMode: 'tool',
+        threadLink: ({ threadId }) => `https://app.example.com/threads/${threadId}`,
+      },
+    },
+  },
+  ```
+
+  `ChannelThreadLinkProcessor` is also exported for hosts that add processors themselves. `AgentChannels` marks runs that create a thread; hosts that decide this themselves can call `markNewChannelThread(requestContext)`.
+
+- Added `resolveChannelRenderContext(requestContext, channels)`, which finds the chat thread a run posts into: the one the message came in on, or, for runs started elsewhere (web UI, schedule, signal wake), the chat thread the run's memory thread is linked to. Reply mode uses the same lookup, so tools of your own can post to the same thread. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+- Added `ChannelToolAnnouncementProcessor` to `@mastra/core/channels`. It posts into a run's chat thread when a tool call succeeds and the host's `announce` function returns markdown, such as a link to a pull request the agent just opened. Pass `channels` so runs that did not start in the channel announce too. ([#31573](https://github.com/mastra-ai/mastra/pull/31573))
+
+### Patch Changes
+
+- Fixed durable agent resumes approved from another server running with the original caller's request context and user. The resumed run now uses the context of the caller who resumed it. ([#31560](https://github.com/mastra-ai/mastra/pull/31560))
+
+- Fixed experiments ignoring stored scorers (scorers created in Studio or through the editor) when they were selected for the whole experiment (including workflow step scorers) or set on the dataset. Previously these scorers only ran if something in the same process had already loaded them, so durable experiments running on a worker usually finished without scores. Stored scorers are now loaded on demand at every level. ([#31549](https://github.com/mastra-ai/mastra/pull/31549))
+
+  Starting or creating an experiment with a scorer id that does not exist now fails immediately with `EXPERIMENT_SCORER_NOT_FOUND`, before the experiment is created, instead of failing later during the run.
+
+  If a scorer disappears after the experiment has started (for example, a stored scorer is deleted mid-run) or a dataset's scorer id can't be found, only the items that use it fail, with `EXPERIMENT_ITEM_SCORER_NOT_FOUND` recorded on the result. Other items keep running and the experiment completes.
+
+  A scorer lookup that fails for another reason, such as storage being unavailable, now surfaces that error instead of being reported as an unknown scorer id.
+
+- Fixed an issue where a temporary Redis pause could cancel an evented agent run even though its workflow storage was still available. ([#31523](https://github.com/mastra-ai/mastra/pull/31523))
+
 ## 1.87.0-alpha.0
 
 ### Minor Changes

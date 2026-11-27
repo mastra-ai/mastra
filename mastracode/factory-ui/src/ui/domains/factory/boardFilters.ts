@@ -1,4 +1,4 @@
-import { BOARD_PERSON_FIELDS } from '@mastra/factory/work-items/card-people';
+import { BOARD_PERSON_FIELDS } from '@internal/factory-contract';
 import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */

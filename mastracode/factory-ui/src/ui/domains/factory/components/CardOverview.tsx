@@ -1,3 +1,7 @@
+import {
+  CardOverview as SharedCardOverview,
+  OverviewSkeleton as SharedOverviewSkeleton,
+} from '@mastra/playground-ui/domains/factory';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
@@ -13,9 +17,8 @@ import { ownChangeRequest, sessionChangeRequests } from '../sessionChangeRequest
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedWorkItemIndex } from '../services/relationships';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { toMinute } from '../stageStays';
-import { SourceDescriptionLines } from './BoardCardDetails';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';
 import { ChangeRequestBadge } from './ChangeRequestBadge';
@@ -25,17 +28,10 @@ import { MovesGraph } from './MovesGraph';
 import { RelatedCards } from './RelatedCards';
 import { SectionLoadError } from './SectionLoadError';
 
-export const overviewSectionClass = 'flex flex-col gap-3 p-1.5 pb-3';
+export { overviewSectionClass } from '@mastra/playground-ui/domains/factory';
 
 export function OverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
-  return (
-    <>
-      <section role="status" aria-label="Loading overview" className={overviewSectionClass}>
-        <SourceDescriptionLines />
-      </section>
-      {workspace ? <WorkspaceSectionSkeleton /> : null}
-    </>
-  );
+  return <SharedOverviewSkeleton workspace={workspace ? <WorkspaceSectionSkeleton /> : null} />;
 }
 
 export function CardOverview({
@@ -78,12 +74,14 @@ export function CardOverview({
   const showsPhases = related.length > 0 || moved;
 
   return (
-    <>
-      <section aria-label="Card" className={`${overviewSectionClass} empty:hidden`}>
-        {!workspace && ownRequest ? (
+    <SharedCardOverview
+      reference={
+        !workspace && ownRequest ? (
           <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
-        ) : null}
-        <CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />
+        ) : null
+      }
+      source={<CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
+      description={
         <CardDescription
           item={item}
           projectRepositoryId={cardProjectRepositoryId(
@@ -94,38 +92,40 @@ export function CardOverview({
           factoryId={factoryId}
           repositoryFailed={repositoryFailed}
         />
-      </section>
-      {workspace?.({
+      }
+      workspace={workspace?.({
         repository: repository && { slug: repository.slug, provider },
         changeRequest: ownRequest && {
           badge: <ChangeRequestBadge request={ownRequest} sessionRepository={repository?.slug} />,
           status: ownRequest.status,
         },
       })}
-      {pullRequestsFailed || requests.length > 0 || showsPhases ? (
-        <section aria-label="Card activity" className={overviewSectionClass}>
-          <ChangeRequestList requests={requests} repository={repository?.slug} complete={!pullRequestsFailed} />
-          {pullRequestsFailed ? (
-            <SectionLoadError>
-              {requests.length > 0
-                ? `Couldn't load the session's ${requestsNoun}, so this list may be out of date.`
-                : `Couldn't load ${requestsNoun}.`}
-            </SectionLoadError>
-          ) : null}
-          <RelatedCards
-            related={related}
-            boards={boards}
-            factoryId={factoryId}
-            repository={repository?.slug}
-            subscriptions={subscriptions}
-          />
-          {boardsFailed && showsPhases ? (
-            <SectionLoadError>Couldn't load the board, so phases aren't shown.</SectionLoadError>
-          ) : moved ? (
-            <MovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
-          ) : null}
-        </section>
-      ) : null}
-    </>
+      activity={
+        pullRequestsFailed || requests.length > 0 || showsPhases ? (
+          <>
+            <ChangeRequestList requests={requests} repository={repository?.slug} complete={!pullRequestsFailed} />
+            {pullRequestsFailed ? (
+              <SectionLoadError>
+                {requests.length > 0
+                  ? `Couldn't load the session's ${requestsNoun}, so this list may be out of date.`
+                  : `Couldn't load ${requestsNoun}.`}
+              </SectionLoadError>
+            ) : null}
+            <RelatedCards
+              related={related}
+              boards={boards}
+              factoryId={factoryId}
+              repository={repository?.slug}
+              subscriptions={subscriptions}
+            />
+            {boardsFailed && showsPhases ? (
+              <SectionLoadError>Couldn't load the board, so phases aren't shown.</SectionLoadError>
+            ) : moved ? (
+              <MovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
+            ) : null}
+          </>
+        ) : null
+      }
+    />
   );
 }

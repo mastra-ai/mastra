@@ -288,6 +288,23 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       });
     });
 
+    it('renders a link to a page an earlier op in the same flush moved, at its new path', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'p2' }), upsert({ sourceId: 'b', parent: 'p1' })]);
+      expect(
+        await run([upsert({ sourceId: 'b', parent: 'p2' }), upsert({ sourceId: 'a', links: [{ sourceId: 'b' }] })]),
+      ).toMatchObject({ outcome: 'succeeded', counts: { created: 1, moved: 1 } });
+      expect((await page('notion/a'))?.body).toBe('body of a\n\nLinks:\n- [[docs:acme#notion/p2/b]]');
+    });
+
+    it('leaves a link unresolved when an earlier op in the same flush removed its target', async () => {
+      const { run, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'b', parent: 'p1' })]);
+      await run([{ op: 'remove', sourceId: 'b' }, upsert({ sourceId: 'a', links: [{ sourceId: 'b' }] })]);
+      expect(await page('notion/p1/b')).toBeNull();
+      expect((await page('notion/a'))?.body).toBe('body of a');
+    });
+
     it("keeps a source's own Links: text byte for byte when links are rewritten or resolved", async () => {
       const { run, page } = setup();
       const own = 'Links:\n- [[docs:acme#notion/p1/b]]\n\nImportant paragraph';

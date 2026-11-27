@@ -5,7 +5,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { sessionUnavailableError, userSessionQueryOptions } from '../../../../hooks/useWorkspaces';
 import { PanelHeading } from '../../workspace-viewer/components/PanelHeading';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { CappedRows } from './CappedRows';
 import { RelatedCardLink } from './RelatedCardLink';
 

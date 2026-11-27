@@ -98,24 +98,14 @@ describe('instructionsResolveEmptyDueToDrafts', () => {
       });
     });
 
-    it('returns the unknown block IDs when no published block or inline content exists', () => {
-      const blocks = [createRefInstructionBlock('unknown-a'), createRefInstructionBlock('draft-b')];
+    it.each([
+      ['returns the unknown block IDs when no published block or inline content exists', 'draft-b', 'unpublished'],
+      ['returns unknown when another reference is known published', 'published-b', 'published'],
+    ] as const)('%s', (_title, input, value) => {
+      const blocks = [createRefInstructionBlock('unknown-a'), createRefInstructionBlock(input)];
       const statuses = new Map<string, 'published' | 'unpublished' | 'unknown'>([
         ['unknown-a', 'unknown'],
-        ['draft-b', 'unpublished'],
-      ]);
-
-      expect(instructionsResolveEmptyDueToDrafts(blocks, statuses)).toEqual({
-        type: 'unknown',
-        ids: ['unknown-a'],
-      });
-    });
-
-    it('returns unknown when another reference is known published', () => {
-      const blocks = [createRefInstructionBlock('unknown-a'), createRefInstructionBlock('published-b')];
-      const statuses = new Map<string, 'published' | 'unpublished' | 'unknown'>([
-        ['unknown-a', 'unknown'],
-        ['published-b', 'published'],
+        [input, value],
       ]);
 
       expect(instructionsResolveEmptyDueToDrafts(blocks, statuses)).toEqual({

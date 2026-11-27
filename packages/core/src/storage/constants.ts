@@ -658,6 +658,8 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   targetId: { type: 'text', nullable: true },
   // Run-level scorer IDs pinned at create time for caller-driven experiments.
   scorerIds: { type: 'jsonb', nullable: true },
+  // Stored-scorer versions pinned at create time: { [scorerId]: versionId }.
+  scorerVersions: { type: 'jsonb', nullable: true },
   status: { type: 'text', nullable: false },
   totalItems: { type: 'integer', nullable: false },
   succeededCount: { type: 'integer', nullable: false },

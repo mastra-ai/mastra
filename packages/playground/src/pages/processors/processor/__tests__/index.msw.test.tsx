@@ -21,27 +21,18 @@ const renderProcessorWithCachedWorkflow = () => {
 
 describe('Processor page', () => {
   describe('when a cached workflow processor fails to refetch', () => {
-    it('shows the expired session instead of redirecting to the workflow', async () => {
+    it.each([
+      ['shows the expired session instead of redirecting to the workflow', 'Unauthorized', 401, 'Session Expired'],
+      ['shows the permission error instead of redirecting to the workflow', 'Forbidden', 403, 'Permission Denied'],
+    ] as const)('%s', async (_title, error, status, input) => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/processors/${workflowProcessor.id}`, () =>
-          HttpResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+          HttpResponse.json({ error }, { status }),
         ),
       );
       renderProcessorWithCachedWorkflow();
 
-      expect(await screen.findByText('Session Expired')).not.toBeNull();
-      expect(screen.queryByText('Workflow graph')).toBeNull();
-    });
-
-    it('shows the permission error instead of redirecting to the workflow', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/processors/${workflowProcessor.id}`, () =>
-          HttpResponse.json({ error: 'Forbidden' }, { status: 403 }),
-        ),
-      );
-      renderProcessorWithCachedWorkflow();
-
-      expect(await screen.findByText('Permission Denied')).not.toBeNull();
+      expect(await screen.findByText(input)).not.toBeNull();
       expect(screen.queryByText('Workflow graph')).toBeNull();
     });
   });

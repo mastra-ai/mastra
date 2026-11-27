@@ -245,6 +245,7 @@ describe('factory-environment-build workflow', () => {
       await runner.awaitEnvironmentBuild(project, { sessionId: 's-1', threadId: 't-1' });
 
       expect(first.refuse).toMatch(/the environment is being built\./);
+      expect(first.refuse).toMatch(/Recreating the sandbox won't help/);
       expect(second).toEqual(first);
       expect(starts).toHaveBeenCalledTimes(1);
       expect(notifySession).not.toHaveBeenCalled();
@@ -279,6 +280,7 @@ describe('factory-environment-build workflow', () => {
 
       const next = await runner.awaitEnvironmentBuild(project, { sessionId: 's-2', threadId: 't-2' });
       expect(next.refuse).toMatch(/^The environment build failed: boom\. Fix it on the environment settings page/);
+      expect(next.refuse).toMatch(/Recreating the sandbox won't help/);
       expect(starts).toHaveBeenCalledTimes(1);
     });
   });

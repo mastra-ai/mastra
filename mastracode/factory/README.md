@@ -394,7 +394,7 @@ Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `so
 
 The board engine decides how a card moves across its board. A person's move, the chat move tool, a new card's placement, a run start, an agent's move or review verdict, and a tool-result rule are all requested from the engine; none of them call the transition service directly. The default `DispatcherBoardEngine` commits each move through the transition service, with every board check, and the decision dispatcher runs the work the move queues. Provider events and rule decisions are queued as decisions first; the dispatcher requests their moves from the same engine when it runs them. A card filed without a transition (re-filed by a reconcile pass, or moved to another board when an intake route changes) is requested as a placement, which runs no phase rules.
 
-Pick the engine with the `boardEngine` option. It receives the transition service and returns the engine:
+Pick the engine with the `boardEngine` option. It receives the transition service, work item storage and the board registry, and returns the engine:
 
 ```typescript
 import { MastraFactory, createDispatcherBoardEngine } from '@mastra/factory';
@@ -405,7 +405,74 @@ const factory = new MastraFactory({
 });
 ```
 
-A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), and `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move.
+A custom engine implements `requestMove(request)`, which answers with the board's verdict (`accepted` or `rejected`), `requestPlacement(placement)`, which answers `moved`, `unchanged` or `skipped`, and `runEnded(binding, engine)`, which Factory calls when a run of a session bound to a card ends `complete`. `runEnded` decides whether the run's phase ended: the default engine moves the card by the outcome its session reported (or its exit tool's success) and answers `true`, or answers `false` when the card holds no outcome. It can be called twice for one run end and must move the card once. `engine` is the engine Factory holds; the default engine requests the run's move through it, so an engine that wraps the default one sees that move in its own `requestMove`. One move can be requested more than once under the same `ingress.identity`, possibly concurrently: an agent's tool result asks right away, and the dispatcher replays the queued decision later. A custom engine must answer every repeat with its first verdict for that identity, except a `stale` refusal. Wrapping `createDispatcherBoardEngine(context)` keeps today's behavior, including this guarantee, while observing every move, as long as the wrapper forwards `runEnded` with the engine it was given:
+
+```typescript
+const factory = new MastraFactory({
+  storage,
+  boardEngine: context => {
+    const inner = createDispatcherBoardEngine(context);
+    return {
+      requestMove: request => {
+        audit(request);
+        return inner.requestMove(request);
+      },
+      requestPlacement: placement => inner.requestPlacement(placement),
+      runEnded: (binding, engine) => inner.runEnded(binding, engine),
+    };
+  },
+});
+```
+
+`createWorkflowBoardEngine` runs each card on a `factory-board` workflow run of its own, with run id `factory-board:<card id>`. The run starts on the first move asked of the card, applies each one in turn, and suspends between them until the card's next input. A run end reaches it as the move its outcome makes, requested through the engine Factory holds. Each move still commits through the transition service, so board checks, hooks and phase starts behave as with the default engine. `MastraFactory` registers the workflow with the host's Mastra, which stores the runs:
+
+```typescript
+import { MastraFactory, createWorkflowBoardEngine } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  boardEngine: createWorkflowBoardEngine,
+});
+```
+
+A card's run takes its card from its run id, and a resume carries only an input id. The move itself and its answer stay in the process that asked for it, so the run stores nothing but its id and the card's state, and a run started or resumed through Mastra's workflow API, which the engine didn't ask for, moves nothing. The process that asks for a move applies it, so this engine runs workflows on the default engine only. A move must not wait on another move of the same card, since that card's inputs are applied one at a time. A Factory host answers 404 for Mastra's workflow routes on an engine's workflows (`/api/workflows/factory-board` and everything under it): the runs belong to no one organization, and the engine drives them in process. The host's built-in MCP endpoint, which reads workflow runs too, leaves those workflows out.
+
+The card's run also records what the card is doing, and `describe` reads it back:
+
+```typescript
+const doing = await boardEngine.describe?.({ workItemId });
+// { state: 'probing', phase: 'execute', probes: 1, lastOutcome: 'advance' }
+```
+
+| State               | The card                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| `resting`           | Sits in a resting phase until someone moves it.                                    |
+| `awaiting_start`    | Sits in a working phase whose run waits for a person to start it.                  |
+| `running`           | Has its phase's run queued or going.                                               |
+| `probing`           | Had a run end without an outcome; the phase runs once more.                        |
+| `awaiting_approval` | Has a session waiting on a person's answer: a submitted plan, or a held tool call. |
+| `needs_attention`   | Had a run end without an outcome and none follows. `reason` says why.              |
+| `terminal`          | Sits in a terminal phase.                                                          |
+
+`phase` is the phase the state was recorded in, `probes` counts the runs that ended there without an outcome, and `lastOutcome` is the last outcome a run ended a phase with. The record holds nothing else: no actor, organization or card content. `describe` answers nothing for a card no input was asked of yet. A run end told more than once counts once, and the count starts over when the card changes phase. Only an end the dispatcher follows up counts: with another run the card is `probing`, and when it gives the phase up, after its second run or because an earlier failure spent its attempts, the card is `needs_attention`. A person's chat turn with the card's session ends a run too, and changes nothing unless it reported an outcome. Only a phase that names how it ends, with a goal or an exit tool, is run once more; a run that ends without an outcome in any other working phase leaves the card `awaiting_start`. A person starting a waiting run isn't an input yet, so the card says `awaiting_start` until that run pauses or ends.
+
+An engine that keeps such a record may implement two optional members: `describe(card)`, and `runPaused(binding, 'approval')`, which Factory calls when a session's run stops for a person's answer. The default engine implements neither.
+
+On a workflow board, a person's move wins over a run. When someone drags a card whose phase's run is going into another phase that runs work, the engine stops the card's runs the way Stop does, waits up to two minutes for them to end, and then commits the move. When a run is still going after that, another Factory process holds it, or it runs in a private session of someone else, the move is refused with `card_busy` and the run is left as it is: a person stops only the runs of sessions they may drive. Moves the board would refuse anyway, moves to a resting or terminal phase, and moves to another board stop nothing. The default engine still refuses such a move with `card_busy`.
+
+Deleting a card ends its run. Factory tells the engine through the optional `cardDeleted(card)`; the workflow engine answers the inputs asked before the delete, then deletes the card's `factory-board` run.
+
+A custom engine reaches the card's runs through `context.runs` (`inFlight`, and `stop(card, { userId })` for the person who moves the card), which Factory fills in.
+
+A board move can be answered before it settles. An engine that has the optional `submitMove(request)` takes the move on after its first checks and settles it later. The workflow engine checks that the mover is a person, the card's revision matches and the board allows the move; a move that fails one of these is answered at once, with the same `409` or `422` as before. For a move it takes on, `POST /work-items/:id/transition` answers `202` with an `inputId`:
+
+```json
+{ "inputId": "0c0f6c3e-6f0b-4b5e-9a0f-3d0e3f3b0a51" }
+```
+
+The move's answer follows on the project's feed stream (`GET /feed-events`) as a `move` event that names the same `inputId`, either `{ "inputId", "status": "accepted" }` or `{ "inputId", "status": "rejected", "code", "reason" }`. The board shows the card as moving until that event arrives, and shows the reason when the move was refused. The default engine has no `submitMove`, so the route still answers `200` with the result.
+
+A custom engine that runs on workflows of its own lists them under `workflows`, and `MastraFactory` registers them the same way.
 
 ### Board tool-result rules
 
@@ -1420,9 +1487,17 @@ Both integrations expose incidents and incident follow-ups as separate Intake so
 
 ### Linear workspace connections
 
-For Platform-managed Linear connections, **Settings → Work Intake** connects and repairs workspaces in place. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. To add another workspace, choose **Add workspace** on the Linear card. During reconnection, choose the named workspace in Linear. Factory checks that workspace's connection when authorization returns.
+`PlatformLinearIntegration` reads Linear through Mastra Connect. It uses every active `linear` connection linked to the Factory's Platform project (`MASTRA_PROJECT_ID`) and sends Linear's GraphQL requests through each connection's proxy, so Factory never holds a Linear token. `MastraFactory` installs it automatically when Platform credentials are present; an explicit integration with id `linear` takes precedence. Linear's webhooks reach Factory through each connection's platform event log, read by the shared Platform Connect event poller, and a reconcile runs hourly. Set `MASTRACODE_LINEAR_ISSUE_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 
-Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources and polling from healthy workspaces remain available when another workspace's source request fails.
+Workspaces connected before Linear moved to Mastra Connect hold their tokens on the platform. Before upgrading, grant the Factory's Platform credential the `integrations:write` permission: moving a workspace and linking its new connection to the project both need it. Factory moves them onto Mastra Connect on its own: at boot, and whenever the hourly check finds one left, on one replica at a time. The move covers the whole organization and can't be undone. Factory deployments in the organization that haven't been upgraded keep serving moved workspaces through the platform's older Linear routes, so deployments can be upgraded in any order. Until a workspace has moved, Platform Linear reports it as `migration_required`; there is no fallback to the old platform routes. A failed move is retried with backoff and never blocks boot. **Settings → Work Intake** shows a move in progress, a stalled move and its reason, and any skipped workspaces; organization admins can retry it there with **Retry now**, or with a request made as an organization admin:
+
+```bash
+curl -X POST "$FACTORY_URL/web/integrations/platform/linear/migrate"
+```
+
+On a Platform server, **Settings → Work Intake** connects Linear in a Mastra Connect window. To add another workspace, choose **Add workspace** on the Linear card. A disconnected workspace with saved sources shows **Reconnect** on the Linear card; healthy ones need no action. A disconnected workspace without saved sources has nothing paused, so it has no Reconnect; authorize it again with **Connect**. Reconnecting always starts a fresh connection, because workspaces moved onto Mastra Connect can't be reauthorized in place. Choose the named workspace in Linear: if the window connects a different one, the paused row says so. When two connections serve the same workspace, Factory uses the newest.
+
+Work Intake keeps disconnected workspaces' saved sources and routing. Their issues remain paused until access is restored. A request failure shows a retry action and does not mark the workspace disconnected. Sources from healthy workspaces remain available when another workspace's source request fails. While a workspace is out of reach, the reconcile doesn't treat its issues as deleted.
 
 ### Linear event rules
 
@@ -1455,7 +1530,7 @@ const overrides = { linear: { issueClosed: { onEvent: null } } };
 const linear = new PlatformLinearIntegration({ rules: { issueClosed: null } });
 ```
 
-Linear event handlers are configured exclusively on the integration. Fetched issues, platform polling, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
+Linear event handlers are configured exclusively on the integration. Fetched issues, Linear events, and issue reconciliation use that instance's handlers. Defaults create intake items for observed open issues and close linked non-terminal Work items as Done or Canceled; closed unlinked issues do not create new items. Custom handlers receive the existing typed Linear context and return one decision or `undefined`. Treat issue titles, descriptions, and other external content as untrusted data.
 
 `MastraFactory({ configVersion })` is the deployment-owned label recorded on transition audit events and passed to Linear rule handlers. Update it when handler behavior changes; it is neither ingress identity nor replay state.
 
@@ -1554,7 +1629,7 @@ The tools take their scope as an argument rather than reading the request, so th
 
 ### Mastra Connect and your own tools in sessions
 
-With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. **Settings → Tools** lists what sessions get, read from the same Platform list. Expand a connection to see its tools, resolved the way a session you start would resolve them: tools that ask for approval are marked, and tools Factory leaves out are listed with the reason. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
+With Platform credentials and `MASTRA_PROJECT_ID`, every Factory session gets the [Mastra Connect](https://mastra.ai/docs/mastra-platform/connect) tools of each connection attached to the Platform project. Attach and remove connections in Mastra Platform, on the project's **Connect** page. The organization's other connections reach sessions only once they're attached, and a new project has none. At startup, the Platform Jira, incident.io, GitLab and Vanta integrations attach the organization's connections for their provider that the project has never had, once each: a connection removed from the project stays removed across restarts. Removed ones are listed under `detached` in the integration's diagnostics and in `GET /web/integrations/platform/:provider/connections`, and an org admin can attach them again with `POST /web/integrations/platform/:provider/link-connections`. If the Factory can't read which connections the project has had, it attaches nothing at that startup. While a Vanta connection is removed from the project, the Vanta sync waits, since a connection it can't read would make every vulnerability in it look resolved. **Settings → Tools** lists what sessions get, read from the same Platform list. Expand a connection to see its tools, resolved the way a session you start would resolve them: tools that ask for approval are marked, and tools Factory leaves out are listed with the reason. Platform deploys get both variables automatically. Anywhere else, including locally, set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_SECRET_KEY` or `MASTRA_PLATFORM_ACCESS_TOKEN`. Attach Linear, and a Slack thread, a web chat or a work item can ask about its issues.
 
 Sessions run these tools without asking while automatic approval is on, so only attach accounts whose actions sessions may take. When a person turns approval off, the tools follow the `mcp` permission category, except in Slack with `adapterOptions.toolDisplay: 'text'`, where every tool call is approved automatically. Tools with `delete` or `archive` anywhere in their name, in any case, are left out. That check goes by name only, so it can't catch every destructive action, such as a SQL tool running a `DROP`. GitHub and GitLab Connect tools are left out too: Factory's own source-control tools enforce repository scope and self-review, and Connect's would skip both. Every user and organization on the Factory shares the project's connections, and a connection attached for another app on the same project reaches Factory sessions too. `GET /web/integrations/platform/connect-tools` and `GET /web/integrations/platform/connect-tools/tools` back the settings page.
 

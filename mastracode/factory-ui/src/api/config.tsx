@@ -1,3 +1,5 @@
+import { MastraClient } from '@mastra/client-js';
+import { MastraReactProvider } from '@mastra/react';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 
@@ -18,13 +20,21 @@ import type { ApiClient } from './client';
 export interface ApiConfig {
   baseUrl: string;
   client: ApiClient;
+  /** Same transport as `client`, for the shared `@mastra/react` hooks and route loaders. */
+  mastra: MastraClient;
+  fetchImpl?: typeof fetch;
 }
 
 const ApiConfigContext = createContext<ApiConfig | undefined>(undefined);
 
 /** One app's API config, built once at the entry point. */
 export function createApiConfig({ baseUrl, fetchImpl }: { baseUrl: string; fetchImpl?: typeof fetch }): ApiConfig {
-  return { baseUrl, client: createApiClient({ baseUrl, fetchImpl }) };
+  return {
+    baseUrl,
+    client: createApiClient({ baseUrl, fetchImpl }),
+    mastra: new MastraClient({ baseUrl, fetch: fetchImpl, credentials: 'include' }),
+    fetchImpl,
+  };
 }
 
 export interface ApiConfigProviderProps {
@@ -33,7 +43,13 @@ export interface ApiConfigProviderProps {
 }
 
 export function ApiConfigProvider({ config, children }: ApiConfigProviderProps) {
-  return <ApiConfigContext.Provider value={config}>{children}</ApiConfigContext.Provider>;
+  return (
+    <ApiConfigContext.Provider value={config}>
+      <MastraReactProvider baseUrl={config.baseUrl} customFetch={config.fetchImpl}>
+        {children}
+      </MastraReactProvider>
+    </ApiConfigContext.Provider>
+  );
 }
 
 export function useApiConfig(): ApiConfig {

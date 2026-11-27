@@ -14,11 +14,6 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 
 describe('Cache TTL Expiry Behavior', () => {
   describe('InMemoryServerCache TTL', () => {
-    it('should support configurable TTL', () => {
-      const cache = new InMemoryServerCache({ ttlMs: 100 });
-      expect(cache).toBeInstanceOf(InMemoryServerCache);
-    });
-
     it('should expire cached items after TTL', async () => {
       // Use very short TTL for testing
       const cache = new InMemoryServerCache({ ttlMs: 50 });

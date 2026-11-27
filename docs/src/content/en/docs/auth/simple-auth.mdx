@@ -65,8 +65,8 @@ export const mastra = new Mastra({
 | `headers` | `string \| string[]` | No | Additional headers to check for tokens |
 | `name` | `string` | No | Provider name for logging |
 | `authorizeUser` | `(user, request) => boolean \| Promise<boolean>` | No | Custom authorization function |
-| `protected` | `(RegExp \| string)[]` | No | Paths that require authentication |
-| `public` | `(RegExp \| string)[]` | No | Paths that bypass authentication |
+| `protected` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | No | Paths that require authentication |
+| `public` | `(RegExp \| string \| [string, Methods \| Methods[]])[]` | No | Paths that bypass authentication |
 
 ### Default headers
 

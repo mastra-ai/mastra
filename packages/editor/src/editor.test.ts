@@ -608,20 +608,6 @@ describe('Stored Agents via MastraEditor', () => {
       );
     });
 
-    it('should pass defaultOptions to created agent', async () => {
-      const storage = new InMemoryStore();
-      const agentsStore = await storage.getStore('agents');
-      await agentsStore?.create({ agent: sampleStoredAgent });
-
-      const editor = new MastraEditor();
-      const mastra = new Mastra({ storage, editor });
-
-      const agent = await editor.agent.getById('stored-agent-1');
-
-      expect(agent).toBeInstanceOf(Agent);
-      // The agent should have defaultOptions set
-    });
-
     it('should resolve memory config when editor is available', async () => {
       const storage = new InMemoryStore();
       const agentsStore = await storage.getStore('agents');

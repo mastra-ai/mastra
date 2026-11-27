@@ -1,5 +1,5 @@
-import { combineUpdates } from '../boards/board-events.js';
-import type { BoardEventFacts } from '../boards/board-events.js';
+import { combineUpdates } from '@internal/factory-contract';
+import type { BoardEventFacts } from '@internal/factory-contract';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 
 /** Statuses of an update still waiting to act, or given way to a newer one: their changes carry forward. */

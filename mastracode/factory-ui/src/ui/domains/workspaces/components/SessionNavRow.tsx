@@ -1,5 +1,4 @@
-import type { SessionRowStatus } from '@mastra/factory/session/session-row-status';
-import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus, SessionRowStatus } from '@internal/factory-contract';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
@@ -25,7 +24,7 @@ import { relativeTime } from '../../../../lib/date/relativeTime';
 import { changeRequestStatusLabel } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
-import { isPullRequestSource } from '../../factory/services/workItems';
+import { isPullRequestSource } from '@internal/factory-contract';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 

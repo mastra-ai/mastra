@@ -883,6 +883,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
 > & {
   execute: ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>;
   providesSkillDiscovery?: Processor['providesSkillDiscovery'];
+  /** The wrapped processor's own id; survives step id rewrites such as the Editor's graph step ids. */
+  processorId: TProcessorId;
 } {
   type ProcessorLoadedToolsProvider = {
     getLoadedToolsForRequestContext?: (args: { requestContext: RequestContext }) => unknown | Promise<unknown>;
@@ -953,6 +955,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
   // when it already implements StandardSchemaWithJSON.
   const step = {
     id: `processor:${processor.id}`,
+    processorId: processor.id,
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
@@ -1903,7 +1906,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
     unknown,
     unknown,
     DefaultEngineType
-  > & { providesSkillDiscovery?: Processor['providesSkillDiscovery'] };
+  > & { providesSkillDiscovery?: Processor['providesSkillDiscovery']; processorId: TProcessorId };
 
   const toolProvider = processor as ProcessorLoadedToolsProvider;
   if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
@@ -1931,6 +1934,7 @@ export function cloneStep<TStepId extends string>(
     scorers: step.scorers,
     component: step.component,
     metadata: step.metadata,
+    processorId: step.processorId,
   };
 }
 

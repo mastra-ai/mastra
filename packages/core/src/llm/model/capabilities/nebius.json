@@ -61,13 +61,25 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": [
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -79,22 +91,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "nvidia/Nemotron-3_5-Lightning": [
+    "thinkingmachines/Inkling-2-Small": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nvidia/Nemotron-3.5-Super-VL": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "nvidia/Nemotron-3-Ultra-550b-a55b": [
+    "reflection/beam": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "MiniMaxAI/MiniMax-M3.1-Flash": [
@@ -115,36 +127,6 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "reflection/beam": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "effort",
@@ -157,10 +139,28 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "thinkingmachines/Inkling-2-Small": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nvidia/Nemotron-3_5-Lightning": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3.5-Super-VL": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "nvidia/Nemotron-3-Ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ]
   }

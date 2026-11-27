@@ -74,26 +74,23 @@ function mixedToolMessage(toolName: string) {
 // ─── includes ─────────────────────────────────────────────────────────────────
 
 describe('checks.includes', () => {
-  test('should score 1 when output contains the expected text (case-insensitive)', async () => {
-    const scorer = checks.includes('sunny');
+  test.each([
+    [
+      'should score 1 when output contains the expected text (case-insensitive)',
+      'sunny',
+      'It is Sunny and warm today.',
+      1,
+    ],
+    ['should score 0 when output does not contain the expected text', 'rainy', 'It is sunny and warm.', 0],
+  ] as const)('%s', async (_title, input, content, expected) => {
+    const scorer = checks.includes(input);
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'What is the weather?', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'It is Sunny and warm today.', role: 'assistant', id: 'o1' })],
+      output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when output does not contain the expected text', async () => {
-    const scorer = checks.includes('rainy');
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'What is the weather?', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'It is sunny and warm.', role: 'assistant', id: 'o1' })],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('should respect ignoreCase: false', async () => {
@@ -115,26 +112,18 @@ describe('checks.includes', () => {
 // ─── excludes ─────────────────────────────────────────────────────────────────
 
 describe('checks.excludes', () => {
-  test('should score 1 when output does not contain the unwanted text', async () => {
+  test.each([
+    ['should score 1 when output does not contain the unwanted text', 'Hi there! How can I help?', 1],
+    ['should score 0 when output contains the unwanted text', 'An error occurred while processing.', 0],
+  ] as const)('%s', async (_title, content, expected) => {
     const scorer = checks.excludes('error');
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Hello', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'Hi there! How can I help?', role: 'assistant', id: 'o1' })],
+      output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when output contains the unwanted text', async () => {
-    const scorer = checks.excludes('error');
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Hello', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'An error occurred while processing.', role: 'assistant', id: 'o1' })],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('named export matches namespace', () => {
@@ -145,26 +134,18 @@ describe('checks.excludes', () => {
 // ─── equals ───────────────────────────────────────────────────────────────────
 
 describe('checks.equals', () => {
-  test('should score 1 when output exactly matches (case-insensitive)', async () => {
+  test.each([
+    ['should score 1 when output exactly matches (case-insensitive)', 'hello, world!', 1],
+    ['should score 0 when output does not exactly match', 'Hello, world! How are you?', 0],
+  ] as const)('%s', async (_title, content, expected) => {
     const scorer = checks.equals('Hello, world!');
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Greet me', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'hello, world!', role: 'assistant', id: 'o1' })],
+      output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when output does not exactly match', async () => {
-    const scorer = checks.equals('Hello, world!');
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Greet me', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'Hello, world! How are you?', role: 'assistant', id: 'o1' })],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('should respect ignoreCase: false', async () => {
@@ -186,26 +167,18 @@ describe('checks.equals', () => {
 // ─── matches ──────────────────────────────────────────────────────────────────
 
 describe('checks.matches', () => {
-  test('should score 1 when output matches the regex pattern', async () => {
+  test.each([
+    ['should score 1 when output matches the regex pattern', 'The temperature is 72°F today.', 1],
+    ['should score 0 when output does not match the regex', 'It is warm outside.', 0],
+  ] as const)('%s', async (_title, content, expected) => {
     const scorer = checks.matches(/\d+°[FC]/);
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Temp?', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'The temperature is 72°F today.', role: 'assistant', id: 'o1' })],
+      output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when output does not match the regex', async () => {
-    const scorer = checks.matches(/\d+°[FC]/);
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Temp?', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'It is warm outside.', role: 'assistant', id: 'o1' })],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('exact mode anchors the pattern', async () => {
@@ -290,26 +263,18 @@ describe('checks.similarity', () => {
     expect(result.score).toBeLessThan(0.3);
   });
 
-  test('should score 1 when similarity meets threshold', async () => {
-    const scorer = checks.similarity('hello world', { threshold: 0.8 });
+  test.each([
+    ['should score 1 when similarity meets threshold', 0.8, 'hello world', 1],
+    ['should score 0 when similarity is below threshold', 0.9, 'xyz12345', 0],
+  ] as const)('%s', async (_title, threshold, content, expected) => {
+    const scorer = checks.similarity('hello world', { threshold });
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Say hi', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'hello world', role: 'assistant', id: 'o1' })],
+      output: [createTestMessage({ content, role: 'assistant', id: 'o1' })],
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when similarity is below threshold', async () => {
-    const scorer = checks.similarity('hello world', { threshold: 0.9 });
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Say hi', role: 'user', id: 'i1' })],
-      output: [createTestMessage({ content: 'xyz12345', role: 'assistant', id: 'o1' })],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('named export matches namespace', () => {
@@ -372,8 +337,11 @@ describe('checks.calledTool', () => {
     expect(result.score).toBe(0);
   });
 
-  test('should respect times option', async () => {
-    const scorer = checks.calledTool('search', { times: 2 });
+  test.each([
+    ['should respect times option', 2, 1],
+    ['should score 0 when tool called fewer than required times', 3, 0],
+  ] as const)('%s', async (_title, times, expected) => {
+    const scorer = checks.calledTool('search', { times });
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Search', role: 'user', id: 'i1' })],
       output: [
@@ -390,28 +358,7 @@ describe('checks.calledTool', () => {
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when tool called fewer than required times', async () => {
-    const scorer = checks.calledTool('search', { times: 3 });
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Search', role: 'user', id: 'i1' })],
-      output: [
-        createTestMessage({
-          content: 'Searching...',
-          role: 'assistant',
-          id: 'o1',
-          toolInvocations: [
-            createToolInvocation({ toolCallId: 'c1', toolName: 'search', args: {}, result: {}, state: 'result' }),
-            createToolInvocation({ toolCallId: 'c2', toolName: 'search', args: {}, result: {}, state: 'result' }),
-          ],
-        }),
-      ],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('should score 1 when the tool was called but threw', async () => {
@@ -621,8 +568,11 @@ describe('checks.toolOrder', () => {
 // ─── maxToolCalls ─────────────────────────────────────────────────────────────
 
 describe('checks.maxToolCalls', () => {
-  test('should score 1 when tool calls are within limit', async () => {
-    const scorer = checks.maxToolCalls(3);
+  test.each([
+    ['should score 1 when tool calls are within limit', 3, 1],
+    ['should score 0 when tool calls exceed limit', 1, 0],
+  ] as const)('%s', async (_title, input, expected) => {
+    const scorer = checks.maxToolCalls(input);
     const run = createAgentTestRun({
       inputMessages: [createTestMessage({ content: 'Do something', role: 'user', id: 'i1' })],
       output: [
@@ -639,28 +589,7 @@ describe('checks.maxToolCalls', () => {
     });
 
     const result = await scorer.run(run);
-    expect(result.score).toBe(1);
-  });
-
-  test('should score 0 when tool calls exceed limit', async () => {
-    const scorer = checks.maxToolCalls(1);
-    const run = createAgentTestRun({
-      inputMessages: [createTestMessage({ content: 'Do something', role: 'user', id: 'i1' })],
-      output: [
-        createTestMessage({
-          content: 'Done.',
-          role: 'assistant',
-          id: 'o1',
-          toolInvocations: [
-            createToolInvocation({ toolCallId: 'c1', toolName: 'a', args: {}, result: {}, state: 'result' }),
-            createToolInvocation({ toolCallId: 'c2', toolName: 'b', args: {}, result: {}, state: 'result' }),
-          ],
-        }),
-      ],
-    });
-
-    const result = await scorer.run(run);
-    expect(result.score).toBe(0);
+    expect(result.score).toBe(expected);
   });
 
   test('should score 0 when a hidden thrown call pushes the run over the limit', async () => {

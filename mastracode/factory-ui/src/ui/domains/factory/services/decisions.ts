@@ -1,46 +1,10 @@
-import type { RunQueueResponse } from '@mastra/factory/routes/contracts';
-import type { FactoryDispatchFailureCode } from '@mastra/factory/storage/domains/work-items/base';
-
-export type { RunQueueResponse };
-
-/** `dismissed` is human rejection; `superseded` means newer Factory state made a proposal obsolete. */
-export type FactoryDecisionStatus =
-  | 'pending'
-  | 'proposed'
-  | 'dismissed'
-  | 'superseded'
-  | 'leased'
-  | 'retry'
-  | 'succeeded'
-  | 'failed';
-
-/** What a person can do to a queued effect from the board or the Rules page. */
-export type FactoryDecisionAction = 'approve' | 'dismiss' | 'retry';
-
-export interface FactoryDecisionSummary {
-  id: string;
-  evaluationId: string;
-  workItemId: string | null;
-  type: string;
-  /** Session slot a proposed run fills, so the card can name what it starts. */
-  role: string | null;
-  /** Where a linked card is synced from; `null` for effects that are not `upsertLinkedWorkItem`. */
-  source: 'github-issue' | 'github-pr' | 'gitlab-issue' | 'gitlab-pr' | 'linear-issue' | 'manual' | null;
-  status: FactoryDecisionStatus;
-  attempts: number;
-  failureOccurrence: number;
-  failureCode: FactoryDispatchFailureCode | null;
-  canRetry: boolean;
-  lastError: string | null;
-  createdAt: string;
-  updatedAt: string;
-  completedAt: string | null;
-}
-
-export interface FactoryDecisionPage {
-  decisions: FactoryDecisionSummary[];
-  nextCursor?: string;
-}
+import type {
+  FactoryDecisionAction,
+  FactoryDecisionPage,
+  FactoryDecisionStatus,
+  FactoryDecisionSummary,
+  RunQueueResponse,
+} from '@internal/factory-contract';
 
 async function throwRequestError(response: Response): Promise<never> {
   let message = `Request failed (${response.status})`;

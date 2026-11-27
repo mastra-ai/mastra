@@ -223,13 +223,13 @@ export class EnvironmentBuildRunner {
     this.#waiting.set(project.id, waiting);
     if (reason !== undefined) {
       return {
-        refuse: `The environment build failed: ${reason}. Fix it on the environment settings page, or start a build there; you'll be told when one finishes.`,
+        refuse: `The environment build failed: ${reason}. Fix it on the environment settings page, or start a build there; you'll be told when one finishes. Recreating the sandbox won't help: a new one waits for the same build.`,
       };
     }
     return {
       refuse: rebuild
-        ? "The sandbox can't start yet: the environment is being rebuilt with its latest saved change. You'll be told when it finishes, usually within 15 minutes."
-        : "The sandbox can't start yet: the environment is being built. You'll be told when it finishes, usually within 15 minutes.",
+        ? "The sandbox can't start yet: the environment is being rebuilt with its latest saved change. You'll be told when it finishes, usually within 15 minutes. Recreating the sandbox won't help: a new one waits for the same build."
+        : "The sandbox can't start yet: the environment is being built. You'll be told when it finishes, usually within 15 minutes. Recreating the sandbox won't help: a new one waits for the same build.",
     };
   };
 

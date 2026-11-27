@@ -8,7 +8,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import type { BoardPhasesRequest } from '../../api/types';
-import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
+import type { BoardSnapshot, WorkItem } from '@internal/factory-contract';
 import {
   useBoardPhasesQuery,
   useDeleteWorkItemMutation,
@@ -17,8 +17,8 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-} from '../useWorkItems';
-import type { BoardPhasesSnapshot } from '../useWorkItems';
+} from '@mastra/react/hooks/factory';
+import type { BoardPhasesSnapshot } from '@mastra/react/hooks/factory';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems });
 

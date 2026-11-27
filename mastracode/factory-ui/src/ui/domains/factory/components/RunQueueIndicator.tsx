@@ -4,7 +4,7 @@ import type { RunQueueMenuRun } from '@mastra/playground-ui/domains/factory';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { HrefLink } from '../../../ui/HrefLink';
-import type { RunQueueResponse } from '../services/decisions';
+import type { RunQueueResponse } from '@internal/factory-contract';
 import { factoryAttentionTargetPath } from '../services/attention';
 
 type QueuedRun = RunQueueResponse['queued'][number];

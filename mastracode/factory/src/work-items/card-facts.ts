@@ -1,13 +1,15 @@
+import {
+  externallyAuthoredWorkItem,
+  factoryParticipantId,
+  isHumanActorId,
+  metadataLabels,
+  providerPeople,
+  workItemBoardSource,
+} from '@internal/factory-contract';
+import type { BoardRelations, ProviderPerson, ProviderPersonRole, SourceFacts } from '@internal/factory-contract';
 import { hasPullRequest } from '../boards/semantics.js';
-import { externallyAuthoredWorkItem } from '../rules/types.js';
-import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { workItemBoardSource } from '../work-item-branch.js';
-import { metadataLabels } from './card-labels.js';
-import { factoryParticipantId, providerPeople } from './card-people.js';
-import type { BoardRelations, ProviderPerson, ProviderPersonRole } from './card-people.js';
 import { cardSearch } from './card-search.js';
-import type { SourceFacts } from './card-source-filters.js';
 import type { SearchableCard } from './search-terms.js';
 
 /** What a board view's search and filters read of a card. */

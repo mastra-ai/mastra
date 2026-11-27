@@ -3,6 +3,9 @@ export type DatePreset =
   | 'date'
   | 'date-time'
   | 'date-time-seconds'
+  | 'date-year'
+  | 'date-long'
+  | 'day-time'
   | 'day-time-seconds'
   | 'time'
   | 'time-seconds'
@@ -29,10 +32,12 @@ const PRESET_OPTIONS = {
     minute: '2-digit',
     second: '2-digit',
   },
+  'day-time': { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' },
   'day-time-seconds': { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' },
   calendar: { year: 'numeric', month: 'numeric', day: 'numeric', calendar: 'gregory', numberingSystem: 'latn' },
   dayMonth: { month: 'short', day: 'numeric' },
-  dayMonthYear: { month: 'short', day: 'numeric', year: 'numeric' },
+  'date-year': { month: 'short', day: 'numeric', year: 'numeric' },
+  'date-long': { month: 'long', day: 'numeric', year: 'numeric' },
   precise: {
     month: 'short',
     day: 'numeric',
@@ -50,6 +55,7 @@ const PRESET_OPTIONS = {
     minute: '2-digit',
     second: '2-digit',
     fractionalSecondDigits: 3,
+    // oxlint-disable-next-line playground-ui/date-locale -- log lines keep one clock and width, so they line up
     hourCycle: 'h23',
   },
 } satisfies Record<string, Intl.DateTimeFormatOptions>;
@@ -60,11 +66,32 @@ export type FractionDigits = 1 | 2 | 3;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
+type Clock = { twelveHour: boolean; hour: 'numeric' | '2-digit' };
+
+const clocks = new Map<string, Clock>();
+
+const NINE_AM_UTC = Date.UTC(2000, 0, 1, 9);
+
+/** How a locale writes clock times. `numeric` hours drop the zero from en-GB's `09:05`, so ask `timeStyle`. */
+function clockOf(locale?: string): Clock {
+  const cacheKey = locale ?? '';
+  let clock = clocks.get(cacheKey);
+  if (!clock) {
+    const short = new Intl.DateTimeFormat(locale, { timeStyle: 'short', timeZone: 'UTC' });
+    const hour = short.formatToParts(NINE_AM_UTC).find(part => part.type === 'hour')?.value;
+    const twelveHour = short.resolvedOptions().hour12 ?? false;
+    clock = { twelveHour, hour: hour?.length === 2 ? '2-digit' : 'numeric' };
+    clocks.set(cacheKey, clock);
+  }
+  return clock;
+}
+
 function getFormatter(key: FormatterKey, locale?: string, timeZone?: string, fractionDigits?: FractionDigits) {
   const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}|${fractionDigits ?? ''}`;
   let formatter = formatters.get(cacheKey);
   if (!formatter) {
     const options: Intl.DateTimeFormatOptions = { ...PRESET_OPTIONS[key], timeZone };
+    if (options.hour === 'numeric') options.hour = clockOf(locale).hour;
     if (fractionDigits) options.fractionalSecondDigits = fractionDigits;
     formatter = new Intl.DateTimeFormat(locale, options);
     formatters.set(cacheKey, formatter);
@@ -86,8 +113,7 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
   const date = toDate(value);
   if (!date) return undefined;
   const reference = new Date(now ?? Date.now());
-  const key =
-    calendarDate(date, timeZone).year === calendarDate(reference, timeZone).year ? 'dayMonth' : 'dayMonthYear';
+  const key = calendarDate(date, timeZone).year === calendarDate(reference, timeZone).year ? 'dayMonth' : 'date-year';
   return getFormatter(key, locale, timeZone).format(date);
 }
 
@@ -117,6 +143,9 @@ function getRelativeFormatter(locale?: string) {
  * - `date`: date only; omits the year when it matches `now` in the requested timezone
  * - `date-time`: date, year and time to minutes, including historical dates
  * - `date-time-seconds`: date, year and time to seconds
+ * - `date-year`: date and year, without a time
+ * - `date-long`: date and year with the month spelled out, without a time
+ * - `day-time`: month, day and time to minutes, without the year
  * - `day-time-seconds`: month, day and time to seconds, without the year
  * - `time`: time to minutes, without a date
  * - `time-seconds`: time to seconds, without a date
@@ -169,12 +198,24 @@ export function formatMoment(value: DateInput, options: FormatOptions = {}) {
   return `${formatShortDate(date, options)} at ${clock}`;
 }
 
+/**
+ * Clock time for chart labels and ranges, kept short: `2 PM` and `2:05 PM` on a 12-hour clock,
+ * `14:00` and `14:05` on a 24-hour one, where a bare `14` wouldn't read as a time.
+ */
+export function formatClock(value: DateInput, { locale }: Pick<FormatOptions, 'locale'> = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  const { twelveHour, hour } = clockOf(locale);
+  const onTheHour = date.getMinutes() === 0;
+  return date.toLocaleTimeString(locale, twelveHour && onTheHour ? { hour } : { hour, minute: '2-digit' });
+}
+
 /** Locale-aware compact date range, e.g. `Sep 2 – 5, 2026`. */
 export function formatDateRange(start: DateInput, end: DateInput, options: Omit<FormatOptions, 'now'> = {}) {
   const from = toDate(start);
   const to = toDate(end);
   if (!from || !to) return undefined;
-  return getFormatter('dayMonthYear', options.locale, options.timeZone)
+  return getFormatter('date-year', options.locale, options.timeZone)
     .formatRange(from, to)
     .replace(/\u2009/g, ' ');
 }

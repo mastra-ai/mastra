@@ -7,7 +7,7 @@ import type { StepExecutionStrategy } from '../types';
 import { MastraWorker } from '../worker';
 import type { WorkerDeps, WorkerStopOptions } from '../worker';
 
-const DEFAULT_GROUP = 'mastra-orchestration';
+export const ORCHESTRATION_GROUP = 'mastra-orchestration';
 const DEFAULT_LEASE_RENEW_INTERVAL_MS = 10_000;
 
 export interface OrchestrationWorkerConfig {
@@ -87,7 +87,7 @@ export class OrchestrationWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('OrchestrationWorker: call init() before start()');
 
-    const group = this.#config.group ?? DEFAULT_GROUP;
+    const group = this.#config.group ?? ORCHESTRATION_GROUP;
     this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
 
     await this.#transport.start({

@@ -4,13 +4,14 @@ import {
   factoryDecisionStatusQueryOptions,
   useFactoryDecisionAction,
   useFactoryDecisionStatus,
-} from '../../../../hooks/useFactoryDecisions';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../services/decisions';
+} from '@mastra/react/hooks/factory';
+import type { Factory } from '@mastra/client-js';
+import type { FactoryDecisionStatus, FactoryDecisionSummary } from '@internal/factory-contract';
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 
-export function boardDecisionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
-  return factoryDecisionStatusQueryOptions(baseUrl, factoryProjectId, BOARD_STATUSES);
+export function boardDecisionsQueryOptions(factory: Factory | undefined) {
+  return factoryDecisionStatusQueryOptions(factory, BOARD_STATUSES);
 }
 
 /** Per card: the run proposed on it, and the effect already in flight or failed behind it. */

@@ -490,9 +490,12 @@ describeIfAstGrep('workspace_ast_edit', () => {
       expect(result).not.toContain('No changes');
     });
 
-    it('should handle TSX files with JSX syntax', async () => {
+    it.each([
+      ['should handle TSX files with JSX syntax', 'test.tsx'],
+      ['should handle JSX files with JSX syntax', 'test.jsx'],
+    ] as const)('%s', async (_title, input) => {
       const code = `const App = () => <div>hello</div>;`;
-      await fs.writeFile(path.join(tempDir, 'test.tsx'), code);
+      await fs.writeFile(path.join(tempDir, input), code);
 
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
@@ -501,7 +504,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
 
       const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
         {
-          path: 'test.tsx',
+          path: input,
           transform: 'rename',
           targetName: 'App',
           newName: 'MyApp',
@@ -510,31 +513,7 @@ describeIfAstGrep('workspace_ast_edit', () => {
       );
 
       expect(result).not.toContain('No changes');
-      const content = await fs.readFile(path.join(tempDir, 'test.tsx'), 'utf-8');
-      expect(content).toContain('MyApp');
-    });
-
-    it('should handle JSX files with JSX syntax', async () => {
-      const code = `const App = () => <div>hello</div>;`;
-      await fs.writeFile(path.join(tempDir, 'test.jsx'), code);
-
-      const workspace = new Workspace({
-        filesystem: new LocalFilesystem({ basePath: tempDir }),
-      });
-      const tools = await createWorkspaceTools(workspace);
-
-      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.AST_EDIT].execute(
-        {
-          path: 'test.jsx',
-          transform: 'rename',
-          targetName: 'App',
-          newName: 'MyApp',
-        },
-        { workspace },
-      );
-
-      expect(result).not.toContain('No changes');
-      const content = await fs.readFile(path.join(tempDir, 'test.jsx'), 'utf-8');
+      const content = await fs.readFile(path.join(tempDir, input), 'utf-8');
       expect(content).toContain('MyApp');
     });
 

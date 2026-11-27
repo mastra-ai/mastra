@@ -1,4 +1,4 @@
-import { boardSource, matchesSourceFilters } from '@mastra/factory/work-items/card-source-filters';
+import { boardSource, matchesSourceFilters } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 import { boardFilterFields } from './components/boardFilterFields';
 import {
@@ -10,7 +10,7 @@ import {
 } from './boardFilters';
 import { BOARD_SOURCE_OPTIONS } from './boardSourceFilters';
 import { CARD_SOURCES } from './cardSources';
-import type { WorkItemSource } from './services/workItems';
+import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 
 function isCardSource(key: string): key is WorkItemSource {
   return key in CARD_SOURCES;

@@ -1406,6 +1406,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-token-plan-intl',
+          label: 'Tencent Token Plan (International)',
+        },
+        {
+          type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
         },

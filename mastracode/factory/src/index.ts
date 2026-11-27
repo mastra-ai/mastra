@@ -29,7 +29,16 @@ export { BoardWriteError } from './boards/board-writes.js';
 export { boardDefinitionOf } from './boards/stored-board.js';
 export { workSeedWithTriage } from './boards/work-seeds.js';
 export type { StoredBoardInput, StoredBoardScope, StoredPhaseInput } from './storage/domains/boards/base.js';
-export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
+export { primarySource } from '@internal/factory-contract';
+export type {
+  FactoryTransitionResult,
+  RuleCondition,
+  RuleGroup,
+  RuleOperator,
+  WorkItemProvider,
+  WorkItemRow,
+  WorkItemSourceRow,
+} from '@internal/factory-contract';
 export { MastraFactory } from './factory.js';
 export type {
   FactoryTools,
@@ -40,13 +49,16 @@ export type {
   FactorySandboxStart,
 } from './factory.js';
 export { DispatcherBoardEngine, createDispatcherBoardEngine } from './board-engine/engine.js';
+export { WorkflowBoardEngine, createWorkflowBoardEngine } from './board-engine/workflow-engine.js';
+export { FACTORY_BOARD_WORKFLOW_ID, FACTORY_CARD_STEP_STATES, boardRunId } from './board-engine/board-workflow.js';
+export type { FactoryCardRunState } from './board-engine/board-workflow.js';
 export type {
   FactoryBoardEngine,
   FactoryBoardEngineContext,
   FactoryBoardEngineFactory,
+  FactorySubmittedMove,
 } from './board-engine/engine.js';
 export type { FactoryTransitionRequest } from './rules/transition-service.js';
-export type { FactoryTransitionResult } from './rules/types.js';
 export type { FactoryMetricsOptions, MetricGroup } from './metrics/index.js';
 export { LocalFactorySandbox, type LocalFactorySandboxOptions } from './sandbox/local-factory-sandbox.js';
 // The option type for `MastraFactoryConfig.github.rules`, so callers can
@@ -64,12 +76,6 @@ export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';
 export type { CreateWorkItemInput, Card, BoardItemRow } from './storage/domains/work-items/base.js';
-export { primarySource } from './storage/domains/work-items/work-item-schema.js';
-export type {
-  WorkItemRow,
-  WorkItemSourceRow,
-  WorkItemProvider,
-} from './storage/domains/work-items/work-item-schema.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';
 export { createFactorySecretEncryption, createPlaintextFactorySecretEncryption } from './secret-encryption.js';

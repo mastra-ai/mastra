@@ -6,10 +6,10 @@
  * decision rows, no cards, no audit events, and no provider writes.
  */
 
-import type { z } from 'zod';
+import { DEFAULT_ROUTE_EVENTS, isUpdateEvent } from '@internal/factory-contract';
 
-import { DEFAULT_ROUTE_EVENTS, isUpdateEvent } from '../boards/board-events.js';
-import type { BoardEventFacts } from '../boards/board-events.js';
+import type { BoardEventFacts, FactoryCommitDecision, RuleFacts } from '@internal/factory-contract';
+import type { z } from 'zod';
 import { cardRuleFacts } from '../boards/card-facts.js';
 import { dryRunIntake, intakeSample } from '../boards/intake-dry-run.js';
 import { lookupIntakeItem } from '../boards/intake-lookup.js';
@@ -24,8 +24,6 @@ import {
 } from '../boards/intake-routing.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { boardForWorkItem } from '../boards/semantics.js';
-import type { RuleFacts } from '../rules/rule-group.js';
-import type { FactoryCommitDecision } from '../rules/types.js';
 import {
   eventRouteIngress,
   FOLDABLE_UPDATE_STATUSES,

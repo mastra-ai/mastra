@@ -1,6 +1,7 @@
+import type { FactoryRuleActor } from '@internal/factory-contract';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
 
+import { describe, expect, it, vi } from 'vitest';
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import { createBoardRegistry } from '../boards/index.js';
 import { createPolicyTestRegistry } from '../boards/test-utils.js';
@@ -8,7 +9,6 @@ import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleActor } from './types.js';
 
 const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn() }));
 vi.mock('../routes/tenant-credentials.js', async importOriginal => {
@@ -475,7 +475,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
       makeSourceControl() as never,
     );
 
@@ -508,7 +508,7 @@ describe('FactoryStartCoordinator', () => {
       const coordinator = new FactoryStartCoordinator(
         makeController().controller as never,
         storage,
-        new DispatcherBoardEngine({ transitionService }),
+        new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
         sourceControl as never,
       );
       const prepared = await coordinator.prepare({
@@ -656,6 +656,8 @@ describe('FactoryStartCoordinator', () => {
         controller as never,
         storage,
         new DispatcherBoardEngine({
+          workItems: storage,
+          boards: createBoardRegistry(),
           transitionService: new FactoryTransitionService({
             storage,
             configVersion: 'rules-v1',
@@ -764,7 +766,7 @@ describe('FactoryStartCoordinator', () => {
     const coordinator = new FactoryStartCoordinator(
       controller as never,
       storage,
-      new DispatcherBoardEngine({ transitionService }),
+      new DispatcherBoardEngine({ transitionService, workItems: storage, boards: createBoardRegistry() }),
       makeSourceControl() as never,
     );
 

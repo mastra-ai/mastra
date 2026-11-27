@@ -1,8 +1,8 @@
+import { FACTORY_INCIDENTIO_EVENTS } from '@internal/factory-contract';
+import type { FactoryIncidentioEventName, FactoryIncidentioRuleContext, FactoryRuleItemContext } from '@internal/factory-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
-import { FACTORY_INCIDENTIO_EVENTS } from '../../rules/types.js';
-import type { FactoryIncidentioEventName, FactoryIncidentioRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioRuleOverrides } from './default-rules.js';

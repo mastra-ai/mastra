@@ -99,6 +99,7 @@ import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
 import { assertDrainTimeout } from '../worker/drain-timeout';
+import { ORCHESTRATION_GROUP } from '../worker/workers/orchestration-worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { normalizeWorkflowBuilderDefinition } from '../workflows/builder';
 import type { WorkflowBuilderDefinitionInput } from '../workflows/builder';
@@ -8244,11 +8245,12 @@ export class Mastra<
       };
       const cb: EventCallback = (event, ack, nack) => {
         // On a push transport shared with other processes (e.g. Mastra Code
-        // sessions on a UnixSocketPubSub), every subscriber receives every
-        // event, including events for internal workflows registered on a
-        // different process. Skip
-        // events whose workflow exists in neither the internal nor the
-        // public registry so only the owning process handles them.
+        // sessions on a UnixSocketPubSub), each event broadcast on
+        // `workflows` goes to one process in the orchestration group, the
+        // same as the OrchestrationWorker's pull group. Events for internal
+        // workflows stay local (the pubsub proxy publishes them
+        // `localOnly`), but skip any that still arrive for a workflow this
+        // process registers in neither the internal nor the public registry.
         // Without this guard the WEP would publish workflow.fail,
         // propagating through workflows-finish and erroneously
         // terminating the correct process's run.
@@ -8310,7 +8312,7 @@ export class Mastra<
           .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         track(inFlight);
       };
-      await this.#pubsub.subscribe('workflows', cb);
+      await this.#pubsub.subscribe('workflows', cb, { group: ORCHESTRATION_GROUP });
       this.#pushSubscription = { topic: 'workflows', cb };
     }
   }

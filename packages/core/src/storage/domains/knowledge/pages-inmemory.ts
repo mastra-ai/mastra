@@ -436,6 +436,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return page && this.#pageReadable(page, input.read) ? clone(page) : null;
   }
 
+  async getPageParents(input: { parentId: string; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const parents: KnowledgePage[] = [];
+    let page = this.#pages.get(input.parentId);
+    while (page && this.#pageReadable(page, input.read) && parents.length <= MAX_KNOWLEDGE_PAGE_DEPTH) {
+      parents.push(clone(page));
+      page = page.isScope || !page.parentId ? undefined : this.#pages.get(page.parentId);
+    }
+    return parents;
+  }
+
   async getPages(input: Parameters<Store['getPages']>[0]) {
     return [...new Set(input.ids)]
       .map(id => this.#pages.get(id))

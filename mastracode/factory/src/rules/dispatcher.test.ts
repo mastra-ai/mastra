@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryCommitDecision } from '@internal/factory-contract';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -7,9 +8,10 @@ import { createSignal } from '@mastra/core/signals';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
+import { createDispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -56,7 +58,6 @@ import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import type { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryTransitionRequest } from './transition-service.js';
-import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -3252,6 +3253,7 @@ describe('FactoryDecisionDispatcher', () => {
       controller: controller as never,
       transitionService: new FactoryTransitionService({ storage, configVersion: 'rules-v1' }),
       boardEngine: {
+        runEnded: async () => false,
         requestMove: async input => {
           inputs.push(input);
           return {
@@ -5006,6 +5008,24 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   describe('a run whose session reported its phase outcome', () => {
+    /** A host engine wrapping the default one, the way the README shows, seeing every move by `requestMove`. */
+    function outcomeEngine(
+      transitionService: FactoryTransitionService,
+      storage: WorkItemsStorage,
+      requestMove: FactoryBoardEngine['requestMove'],
+    ): FactoryBoardEngine {
+      const inner = createDispatcherBoardEngine({
+        transitionService,
+        workItems: storage,
+        boards: autoStartingBoards(),
+      });
+      return {
+        requestMove,
+        requestPlacement: placement => inner.requestPlacement(placement),
+        runEnded: (binding, engine) => inner.runEnded(binding, engine),
+      };
+    }
+
     /** What `factory_report_outcome` leaves on the card while the run is still going. */
     async function reported(storage: WorkItemsStorage, id: string, outcome: string, to: string, reason: string) {
       await storage.update({
@@ -5049,7 +5069,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
-        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        boardEngine: outcomeEngine(transitionService, storage, requestMove),
         storage,
         ownerId: 'worker-1',
       });
@@ -5098,7 +5118,7 @@ describe('FactoryDecisionDispatcher', () => {
         controller: controller as never,
         boards: autoStartingBoards(),
         transitionService,
-        boardEngine: { requestMove, requestPlacement: vi.fn() },
+        boardEngine: outcomeEngine(transitionService, storage, requestMove),
         storage,
         ownerId: 'worker-1',
       });
@@ -5112,6 +5132,159 @@ describe('FactoryDecisionDispatcher', () => {
       expect(decision?.lastError).toContain('A person closes cards on this board.');
       expect(session.sendSignal).toHaveBeenCalledTimes(1);
       expect(requestMove).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves the end of the run's phase to the board engine", async () => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: 'working-phase-engine-run-end',
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      // No outcome on the card: only the engine knows the phase ended (a workflow engine reads its own state).
+      const runEnded = vi.fn<FactoryBoardEngine['runEnded']>(async () => true);
+      const requestMove = vi.fn<FactoryBoardEngine['requestMove']>(request => transitionService.transition(request));
+      const { controller } = createSession(undefined, {
+        signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+        emitAgentEndDuringSignal: true,
+        agentEndReason: 'complete',
+      });
+      const boardEngine: FactoryBoardEngine = { requestMove, requestPlacement: vi.fn(), runEnded };
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        boardEngine,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      expect(runEnded).toHaveBeenCalledWith(
+        expect.objectContaining({ id: binding.id, workItemId: item.id }),
+        boardEngine,
+      );
+      // The engine said the phase ended, so the unchanged card is not a run that did no work.
+      const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decision).toMatchObject({ status: 'succeeded' });
+      expect(requestMove).not.toHaveBeenCalled();
+    });
+    it('tells the board engine a run ends unanswered only when the phase is run again', async () => {
+      const tellings = async (boards: ReturnType<typeof autoStartingBoards>, key: string) => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const { item, transitionService } = await queueDecision(storage, {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'factory-build',
+          arguments: 'Continue building',
+          idempotencyKey: key,
+        });
+        await bindWorkRun(storage, item.id);
+        const runEnded = vi.fn<FactoryBoardEngine['runEnded']>(async () => false);
+        const { controller } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+          emitAgentEndDuringSignal: true,
+          agentEndReason: 'complete',
+        });
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          boards,
+          transitionService,
+          boardEngine: { requestMove: vi.fn(), requestPlacement: vi.fn(), runEnded },
+          storage,
+          ownerId: 'worker-1',
+        });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+        const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        const told = () => runEnded.mock.calls.map(([binding]) => binding.runsAgain ?? 'unmarked');
+        const first = { decision, told: told() };
+        await dispatcher.runOnce(new Date('2030-01-01T00:10:00Z'));
+        const [last] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        return { ...first, last: { decision: last, told: told().slice(first.told.length) } };
+      };
+
+      // Building names how it ends: an unchanged card is a run to do again, and only then is it marked.
+      const building = await tellings(autoStartingBoards(), 'run-end-marked');
+      expect(building.decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
+      expect(building.told).toEqual(['unmarked', true]);
+      // Its second run is its last: the engine hears that no third follows.
+      expect(building.last.decision).toMatchObject({ status: 'failed', failureCode: 'run_incomplete' });
+      expect(building.last.told).toEqual(['unmarked', false]);
+
+      // A phase that doesn't name how it ends is never run again.
+      const open = await tellings(
+        autoStartingBoards(
+          createLifecycleTestRegistry({ execute: { runner: { skill: 'factory-build', context: 'work' } } }),
+        ),
+        'run-end-unmarked',
+      );
+      expect(open.decision).toMatchObject({ status: 'succeeded' });
+      expect(open.told).toEqual(['unmarked']);
+      expect(open.last.told).toEqual([]);
+    });
+  });
+
+  describe("stopping the runs on a card for a person's move", () => {
+    async function seated() {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: `stop-${crypto.randomUUID()}`,
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, { streamActive: true });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+      const card = { orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item.id };
+      const stopAsked = () => storage.runBindingStopRequested({ orgId: 'org-1', bindingId: binding.id });
+      return { dispatcher, session, card, stopAsked };
+    }
+
+    it('records the stop on the seat and aborts its session, for a person who may drive it', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      const asked: string[] = [];
+
+      const stopped = await dispatcher.stopRunsOnCard(card, async sessionId => {
+        asked.push(sessionId);
+        return true;
+      });
+
+      expect(stopped).toBe(true);
+      expect(asked).toEqual(['session-1']);
+      expect(session.abort).toHaveBeenCalledTimes(1);
+      await expect(stopAsked()).resolves.toBe(true);
+    });
+
+    it('stops nothing, and records no stop, when the person may not drive the session', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+
+      await expect(dispatcher.stopRunsOnCard(card, async () => false)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
+    });
+
+    it("leaves a session alone that is busy with another thread than the card's seat", async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      await session.thread.switch({ threadId: 'another-thread' });
+
+      await expect(dispatcher.stopRunsOnCard(card)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
     });
   });
 
@@ -9245,6 +9418,7 @@ describe('custom-board deferred targets', () => {
     });
     const placements: FactoryCardPlacement[] = [];
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9278,6 +9452,7 @@ describe('custom-board deferred targets', () => {
     });
     let calls = 0;
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9309,6 +9484,7 @@ describe('custom-board deferred targets', () => {
     });
     let calls = 0;
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9342,6 +9518,7 @@ describe('custom-board deferred targets', () => {
       skipRules: true,
     });
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },
@@ -9381,6 +9558,7 @@ describe('custom-board deferred targets', () => {
     });
     const placements: FactoryCardPlacement[] = [];
     const engine: FactoryBoardEngine = {
+      runEnded: async () => false,
       requestMove: async () => {
         throw new Error('A skipRules placement is not a transition.');
       },

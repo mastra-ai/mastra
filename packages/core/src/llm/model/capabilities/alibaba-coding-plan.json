@@ -2,17 +2,17 @@
   "attachment": ["kimi-k2.5", "qwen3.5-plus", "qwen3.6-plus", "qwen3.7-plus"],
   "temperature": ["MiniMax-M2.5", "glm-4.7", "glm-5", "kimi-k2.5", "qwen3.5-plus", "qwen3.6-plus", "qwen3.7-plus"],
   "reasoning": {
+    "qwen3.5-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-4.7": [
       {
         "type": "toggle"
       }
     ],
     "kimi-k2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.5-plus": [
       {
         "type": "toggle"
       }

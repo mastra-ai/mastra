@@ -7,11 +7,15 @@ import { workBoardCatalog } from '../../../e2e/ui/board-catalog';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { SessionRowsRequest, SessionRowWire } from '../../api/types';
-import type { WorkItem } from '../../ui/domains/factory/services/workItems';
-import { useFactoryDecisionAction } from '../useFactoryDecisions';
+import type { WorkItem } from '@internal/factory-contract';
+import {
+  useFactoryDecisionAction,
+  useDeleteWorkItemMutation,
+  useTransitionWorkItemMutation,
+  useUpdateWorkItemMutation,
+} from '@mastra/react/hooks/factory';
 import { useSessionRowsQuery } from '../useSessionRows';
 import { removeCachedSession, updateCachedSessionTitle } from '../useWorkspaces';
-import { useDeleteWorkItemMutation, useTransitionWorkItemMutation, useUpdateWorkItemMutation } from '../useWorkItems';
 
 const PROJECT_ID = 'fp-1';
 const CARD_ID = 'fix-login';

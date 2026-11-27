@@ -38,6 +38,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
   EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
@@ -673,24 +674,17 @@ describe('vNext Workflow Handlers', () => {
       ).rejects.toThrow(new HTTPException(400, { message: 'Run ID is required' }));
     });
 
-    it('should throw error when workflow is not found', async () => {
+    it.each([
+      ['should throw error when workflow is not found', 'non-existent', 'test-run', 'Workflow not found'],
+      ['should throw error when workflow run is not found', 'test-workflow', 'non-existent', 'Workflow run not found'],
+    ] as const)('%s', async (_title, workflowId, runId, message) => {
       await expect(
         GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
           ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'non-existent',
-          runId: 'test-run',
+          workflowId,
+          runId,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
-    });
-
-    it('should throw error when workflow run is not found', async () => {
-      await expect(
-        GET_WORKFLOW_RUN_BY_ID_ROUTE.handler({
-          ...createTestServerContext({ mastra: mockMastra }),
-          workflowId: 'test-workflow',
-          runId: 'non-existent',
-        }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toThrow(new HTTPException(404, { message }));
     });
 
     it('should get workflow run successfully', async () => {
@@ -1148,6 +1142,84 @@ describe('vNext Workflow Handlers', () => {
         process.off('unhandledRejection', onUnhandled);
         createRunSpy.mockRestore();
       }
+    });
+  });
+
+  describe('TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE', () => {
+    it('returns the completed time-travel result and persists it without rerunning earlier steps (#25423)', async () => {
+      const schema = z.object({ value: z.number() });
+      let firstStepExecutions = 0;
+      const secondStepInputs: number[] = [];
+      const firstStep = createStep({
+        id: 'double',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          firstStepExecutions++;
+          return { value: inputData.value * 2 };
+        },
+      });
+      const secondStep = createStep({
+        id: 'increment',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => {
+          secondStepInputs.push(inputData.value);
+          return { value: inputData.value + 1 };
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'async-time-travel',
+        inputSchema: schema,
+        outputSchema: schema,
+      })
+        .then(firstStep)
+        .then(secondStep)
+        .commit();
+      const storage = new MockStore();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'async-time-travel': workflow },
+        storage,
+      });
+      const run = await workflow.createRun();
+      const initialResult = await run.start({ inputData: { value: 3 } });
+      expect(initialResult).toMatchObject({ status: 'success', result: { value: 7 } });
+      expect(firstStepExecutions).toBe(1);
+      expect(secondStepInputs).toEqual([6]);
+
+      const result = await TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'async-time-travel',
+        runId: run.runId,
+        step: 'increment',
+        inputData: { value: 20 },
+      });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: { value: 21 },
+        steps: {
+          double: { status: 'success' },
+          increment: { status: 'success', payload: { value: 20 }, output: { value: 21 } },
+        },
+      });
+      expect(firstStepExecutions).toBe(1);
+      expect(secondStepInputs).toEqual([6, 20]);
+
+      const workflowsStore = await storage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: workflow.id,
+        runId: run.runId,
+      });
+      expect(snapshot).toMatchObject({
+        status: 'success',
+        result: { value: 21 },
+        context: {
+          double: { status: 'success' },
+          increment: { status: 'success', payload: { value: 20 }, output: { value: 21 } },
+        },
+      });
     });
   });
 

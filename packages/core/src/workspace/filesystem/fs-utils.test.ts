@@ -86,20 +86,13 @@ describe('isEnoentError', () => {
     expect(isEnoentError(new Error('oops'))).toBe(false);
   });
 
-  it('returns false for null', () => {
-    expect(isEnoentError(null)).toBe(false);
-  });
-
-  it('returns false for undefined', () => {
-    expect(isEnoentError(undefined)).toBe(false);
-  });
-
-  it('returns false for a plain string', () => {
-    expect(isEnoentError('ENOENT')).toBe(false);
-  });
-
-  it('returns false for a number', () => {
-    expect(isEnoentError(42)).toBe(false);
+  it.each([
+    ['returns false for null', null],
+    ['returns false for undefined', undefined],
+    ['returns false for a plain string', 'ENOENT'],
+    ['returns false for a number', 42],
+  ] as const)('%s', (_title, input) => {
+    expect(isEnoentError(input)).toBe(false);
   });
 });
 

@@ -15,59 +15,21 @@ describe('DeepSeekSchemaCompatLayer', () => {
   createSuite(layer);
 
   describe('shouldApply', () => {
-    it('should apply for deepseek models', () => {
+    it.each([
+      ['should apply for deepseek models', 'deepseek', 'deepseek-chat', true],
+      ['should apply for deepseek-coder model', 'deepseek', 'deepseek-coder', true],
+      ['should NOT apply for deepseek-r1 model', 'deepseek', 'deepseek-r1', false],
+      ['should NOT apply for deepseek-r1-distill model', 'deepseek', 'deepseek-r1-distill-llama-70b', false],
+      ['should not apply for non-DeepSeek models', 'openai', 'gpt-4o', false],
+    ] as const)('%s', (_title, provider, modelId, expected) => {
       const modelInfo: ModelInformation = {
-        provider: 'deepseek',
-        modelId: 'deepseek-chat',
+        provider,
+        modelId,
         supportsStructuredOutputs: false,
       };
 
       const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should apply for deepseek-coder model', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'deepseek',
-        modelId: 'deepseek-coder',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(true);
-    });
-
-    it('should NOT apply for deepseek-r1 model', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'deepseek',
-        modelId: 'deepseek-r1',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
-    });
-
-    it('should NOT apply for deepseek-r1-distill model', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'deepseek',
-        modelId: 'deepseek-r1-distill-llama-70b',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
-    });
-
-    it('should not apply for non-DeepSeek models', () => {
-      const modelInfo: ModelInformation = {
-        provider: 'openai',
-        modelId: 'gpt-4o',
-        supportsStructuredOutputs: false,
-      };
-
-      const layer = new DeepSeekSchemaCompatLayer(modelInfo);
-      expect(layer.shouldApply()).toBe(false);
+      expect(layer.shouldApply()).toBe(expected);
     });
   });
 

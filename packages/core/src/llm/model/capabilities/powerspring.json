@@ -19,7 +19,19 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "gpt-oss-20b": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -31,31 +43,19 @@
         "values": ["low", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemma-4-31b": [
+    "gemma-4-26b-a4b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "gemma-4-26b-a4b": [
+    "gemma-4-31b": [
       {
         "type": "effort",
         "values": ["none", "high"]

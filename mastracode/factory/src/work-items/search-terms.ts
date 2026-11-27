@@ -1,5 +1,5 @@
+import { searchWords } from '@internal/factory-contract';
 import { normalizedUrl, sourceKeyFromReference } from './card-reference.js';
-import { searchWords } from './search-words.js';
 
 /**
  * What a card offers a search, lowercased. Built once per card version by the caller, so a search

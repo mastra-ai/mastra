@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.62.1-alpha.0",
+  "version": "1.63.0-alpha.5",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -57,6 +57,7 @@
   "devDependencies": {
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
+    "@internal/factory-contract": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",

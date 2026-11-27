@@ -1,8 +1,7 @@
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { LucideIcon } from 'lucide-react';
-import { factoryParticipantId } from '@mastra/factory/work-items/card-people';
-import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import { factoryParticipantId, PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
 
 import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';

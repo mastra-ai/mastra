@@ -1,9 +1,9 @@
-import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
+import { cardRuleGroupSchema } from '@internal/factory-contract';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '@mastra/factory/rules/validation';
 import { phaseRunFieldsValid } from '@mastra/playground-ui/domains/factory';
 
 import type { StoredBoardInfo, StoredPhaseInfo } from '../../../api/types';
-import { rawRuleProblem, ruleProblem } from '../settings/services/rules';
+import { ruleProblem } from '../settings/services/rules';
 
 export type CardRule = NonNullable<StoredPhaseInfo['autoStartWhen']>;
 export type PhaseKind = StoredPhaseInfo['kind'];
@@ -48,37 +48,27 @@ export function nextPhasesOf(phase: StoredPhaseInfo, phases: readonly StoredPhas
   return phase.kind === 'terminal' ? [] : phases.filter(other => other.key !== phase.key).map(other => other.key);
 }
 
-/** Rules typed as JSON, by `phaseKey.field`, for the phases whose rule editor shows JSON. */
-export type RawRules = Partial<Record<string, string>>;
-
-export const rawRuleKey = (phaseKey: string, field: RuleField) => `${phaseKey}.${field}`;
-
-/** A board the server would take: named, with named phases, nothing over its limit and no rule it would refuse. */
-export function draftHasProblem(draft: BoardDraft, rawRules: RawRules = {}): boolean {
-  return draft.name.trim() === '' || draft.phases.some(phase => phaseHasProblem(phase, rawRules));
+/** Why the server would refuse a phase's "only when" rule, if it would. */
+export function cardRuleProblem(rule: CardRule | null | undefined): string | undefined {
+  return ruleProblem(cardRuleGroupSchema, rule);
 }
 
 /**
- * Whether the server would refuse this phase as drafted: a rule it can't read, typed JSON that doesn't parse, text
- * over its limit, a goal run count out of range, or an outcome without a usable key or label.
+ * Whether the server would refuse this phase as drafted: a rule it can't read, text over its limit, a goal run count
+ * out of range, or an outcome without a usable key or label.
  */
-export function phaseHasProblem(phase: StoredPhaseInfo, rawRules: RawRules = {}): boolean {
+export function phaseHasProblem(phase: StoredPhaseInfo): boolean {
   const goal = phase.runner?.goal;
-  // A rule only counts while its switch is on; the JSON typed for it, when there is some, is what would be saved.
-  const ruleRefused = (field: RuleField, active: boolean, rule: CardRule | null | undefined) => {
-    if (!active) return false;
-    const text = rawRules[rawRuleKey(phase.key, field)];
-    const problem =
-      text === undefined ? ruleProblem(cardRuleGroupSchema, rule) : rawRuleProblem(cardRuleGroupSchema, text);
-    return problem !== undefined;
-  };
+  // A rule only counts while its switch is on.
+  const ruleRefused = (active: boolean, rule: CardRule | null | undefined) =>
+    active && cardRuleProblem(rule) !== undefined;
   return (
     phase.name.trim() === '' ||
     !phaseRunFieldsValid(phase.runner?.instructions ?? '', goal) ||
     (phase.outcomes?.length ?? 0) > MAX_OUTCOMES ||
     outcomeProblems(phase.outcomes ?? []).some(problem => problem.key || problem.label) ||
-    ruleRefused('autoStartWhen', phase.autoStart === true, phase.autoStartWhen) ||
-    ruleRefused('autoApproveWhen', phase.exitTool?.autoApprove === true, phase.exitTool?.autoApproveWhen)
+    ruleRefused(phase.autoStart === true, phase.autoStartWhen) ||
+    ruleRefused(phase.exitTool?.autoApprove === true, phase.exitTool?.autoApproveWhen)
   );
 }
 

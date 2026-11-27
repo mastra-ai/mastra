@@ -1,3 +1,5 @@
+import { focusRing } from '@/ds/primitives/transitions';
+
 export const BOARD_LAYOUTS = ['board', 'list'] as const;
 export type BoardLayout = (typeof BOARD_LAYOUTS)[number];
 
@@ -36,3 +38,6 @@ export const BOARD_LIST_GROUP_HEADER_SURFACE_CLASS = 'bg-fill-subtle dark:bg-car
 
 export const BOARD_SCROLL_SURFACE_CLASS =
   '[container-type:inline-size] m-px min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] lg:overscroll-x-auto';
+
+/** A small inline link to a related card or an upstream issue; sits above the card's stretched link. */
+export const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;

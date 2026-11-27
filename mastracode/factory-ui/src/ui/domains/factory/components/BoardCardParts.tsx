@@ -1,4 +1,4 @@
-import { cardChangeRequest } from '@mastra/factory/work-items/change-requests';
+import { cardChangeRequest, isPullRequestSource } from '@internal/factory-contract';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { ReactNode } from 'react';
@@ -8,8 +8,7 @@ import type { CardAction } from '../cardPrimaryAction';
 import { CARD_SOURCES } from '../cardSources';
 import { changeRequestStatus } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { isPullRequestSource } from '../services/workItems';
-import type { WorkItem, WorkItemSource } from '../services/workItems';
+import type { WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
 import { MetadataLabels as SharedMetadataLabels } from '@mastra/playground-ui/domains/factory';

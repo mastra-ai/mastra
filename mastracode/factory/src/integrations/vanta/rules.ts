@@ -1,11 +1,10 @@
-import { closeReason } from '../../boards/board-events.js';
-import type { BoardEventFacts } from '../../boards/board-events.js';
+import { closeReason } from '@internal/factory-contract';
+import type { BoardEventFacts, FactoryRuleDecision, FactoryVantaRuleContext } from '@internal/factory-contract';
 import { boardForWorkItem, rulePhaseField, withBoardClosure, withIntakeTarget } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { routeEventDecision } from '../../rules/event-rules.js';
-import type { FactoryVantaRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';

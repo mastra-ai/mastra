@@ -17,6 +17,7 @@ import {
   withKind,
   withNextPhases,
 } from '../boardDraft';
+import type { CardRule } from '../boardDraft';
 
 const phases: StoredPhaseInfo[] = ['intake', 'triage', 'planning', 'done'].map(key => ({
   key,
@@ -142,14 +143,18 @@ describe('withKind', () => {
 
 describe('phaseHasProblem', () => {
   const phase: StoredPhaseInfo = { key: 'triage', name: 'Triage', kind: 'working', autoStart: true };
+  const colour: CardRule = {
+    operator: 'AND',
+    conditions: [{ field: 'item.colour', operator: 'equals', value: 'red' }],
+  };
 
-  it('counts JSON typed for a rule that the server could not read', () => {
-    expect(phaseHasProblem(phase, { 'triage.autoStartWhen': '{"all": [' })).toBe(true);
-    expect(phaseHasProblem(phase, { 'triage.autoStartWhen': '' })).toBe(false);
+  it('counts a drafted rule the server could not read', () => {
+    expect(phaseHasProblem({ ...phase, autoStartWhen: colour })).toBe(true);
+    expect(phaseHasProblem({ ...phase, autoStartWhen: null })).toBe(false);
   });
 
   it("ignores a rule whose switch is off, and a goal's run count the server accepts", () => {
-    expect(phaseHasProblem({ ...phase, autoStart: false }, { 'triage.autoStartWhen': '{' })).toBe(false);
+    expect(phaseHasProblem({ ...phase, autoStart: false, autoStartWhen: colour })).toBe(false);
     expect(phaseHasProblem({ ...phase, runner: { goal: { objective: 'Fix it', maxRuns: 50 } } })).toBe(false);
     expect(phaseHasProblem({ ...phase, runner: { goal: { objective: 'Fix it', maxRuns: 51 } } })).toBe(true);
   });

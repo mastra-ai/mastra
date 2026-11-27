@@ -1,11 +1,10 @@
-import type { WorkItemSourceRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import type { WorkItemSourceRow, WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 
 import { describe, expect, it } from 'vitest';
 
 import { newProjectWorkBoardInfo as work, releaseBoard, workBoardInfo } from '../../../../e2e/ui/board-catalog';
 import { cardStages, stageDescription } from './cardStageBar';
 import type { CardStages } from './cardStageBar';
-import type { WorkItem, WorkItemSource } from './services/workItems';
 
 function card(source: WorkItemSource, stages: string[], board = 'work'): WorkItem {
   return {

@@ -169,13 +169,16 @@ describe('MastraMemory config serialization', () => {
     }
   });
 
-  it('should serialize top-level activateAfterIdle for observational memory', () => {
+  it.each([
+    ['should serialize top-level activateAfterIdle for observational memory', '5m'],
+    ['should serialize auto activateAfterIdle for observational memory', 'auto'],
+  ] as const)('%s', (_title, activateAfterIdle) => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
         observationalMemory: {
           scope: 'thread',
-          activateAfterIdle: '5m',
+          activateAfterIdle,
           model: 'test-model',
         },
       },
@@ -183,29 +186,7 @@ describe('MastraMemory config serialization', () => {
 
     expect(memory.getConfig().observationalMemory).toEqual({
       scope: 'thread',
-      activateAfterIdle: '5m',
-      model: 'test-model',
-      shareTokenBudget: undefined,
-      temporalMarkers: undefined,
-      retrieval: undefined,
-    });
-  });
-
-  it('should serialize auto activateAfterIdle for observational memory', () => {
-    const memory = new MockMemory({
-      storage: new InMemoryStore(),
-      options: {
-        observationalMemory: {
-          scope: 'thread',
-          activateAfterIdle: 'auto',
-          model: 'test-model',
-        },
-      },
-    });
-
-    expect(memory.getConfig().observationalMemory).toEqual({
-      scope: 'thread',
-      activateAfterIdle: 'auto',
+      activateAfterIdle,
       model: 'test-model',
       shareTokenBudget: undefined,
       temporalMarkers: undefined,

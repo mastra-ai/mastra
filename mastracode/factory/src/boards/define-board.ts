@@ -1,14 +1,14 @@
-import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
-import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
+  cardRuleGroupSchema,
+  evaluateRuleGroup,
   FACTORY_GITHUB_EVENTS,
   FACTORY_GITLAB_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
   FACTORY_LINEAR_EVENTS,
-} from '../rules/types.js';
+} from '@internal/factory-contract';
 import type {
+  BoardPhaseKind,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryGitLabEventName,
@@ -21,7 +21,10 @@ import type {
   FactoryLinearRuleContext,
   FactoryRuleHandler,
   FactoryToolResultRuleContext,
-} from '../rules/types.js';
+  RuleFacts,
+  RuleGroup,
+} from '@internal/factory-contract';
+import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
 import {
   IDENTIFIER_RE,
   isBoardIdentifier,
@@ -66,14 +69,6 @@ const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[
   jira: FACTORY_JIRA_EVENTS,
   incidentio: FACTORY_INCIDENTIO_EVENTS,
 };
-
-/**
- * What a phase means to the runtime.
- * - `resting`: nobody is seated; a card waits for a person or an event.
- * - `working`: an agent in the phase's context carries the card; a person's move in arms autonomy.
- * - `terminal`: the card is finished; sessions stop and held resources are released.
- */
-export type BoardPhaseKind = 'resting' | 'working' | 'terminal';
 
 /** The agent Factory runs every phase with. */
 export const FACTORY_AGENT_ID = CODE_AGENT_ID;

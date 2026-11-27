@@ -1,3 +1,4 @@
+import '@/test/english-locale';
 import { describe, expect, it } from 'vitest';
 import { chartYTickCount, edgeDateLabels, labelWidth, niceYTicks, pickTimeTicks } from './chart-axes';
 

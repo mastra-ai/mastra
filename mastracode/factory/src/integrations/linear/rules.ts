@@ -1,5 +1,5 @@
-import { closeReason } from '../../boards/board-events.js';
-import type { BoardEventFacts } from '../../boards/board-events.js';
+import { closeReason } from '@internal/factory-contract';
+import type { BoardEventFacts, FactoryLinearRuleContext, FactoryRuleDecision } from '@internal/factory-contract';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -14,7 +14,6 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { recordIntakeEvent } from '../../metrics/intake.js';
 import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
-import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -128,9 +127,14 @@ export class LinearRules {
       // The identifier finds the card filed under it; after Linear renamed the
       // identifier, the stable issue id finds it, preferring a live card over
       // finished ones, as the issue detail route does.
+      // A card under the identifier that knows another issue id is another workspace's issue.
       const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
+      const byIdentifier = itemsBySourceKey.get(`linear:${issue.identifier}`);
+      const knownIssueId = byIdentifier?.workItem.metadata?.linearIssueId;
       const relatedItem =
-        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
+        (typeof knownIssueId === 'string' && knownIssueId.length > 0 && knownIssueId !== issue.id
+          ? undefined
+          : byIdentifier) ??
         byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ??
         byIssueId[0];
       statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));

@@ -16,16 +16,17 @@ function group(id: string, range: string, content = '- Fact'): ObservationGroup 
 }
 
 describe('renderObservationGroupsForReflection', () => {
-  it('preserves each tag identity when group bodies are identical', () => {
-    const observations = `<observation-group id="g1" range="1:2">
+  it.each([
+    [
+      'preserves each tag identity when group bodies are identical',
+      `<observation-group id="g1" range="1:2">
 - Same fact
 </observation-group>
 
 <observation-group id="g2" range="3:4">
 - Same fact
-</observation-group>`;
-
-    expect(renderObservationGroupsForReflection(observations)).toBe(`## Group \`g1\`
+</observation-group>`,
+      `## Group \`g1\`
 _range: \`1:2\`_
 
 - Same fact
@@ -33,26 +34,30 @@ _range: \`1:2\`_
 ## Group \`g2\`
 _range: \`3:4\`_
 
-- Same fact`);
-  });
-
-  it('unwraps invalid tags without shifting valid tag identities', () => {
-    const observations = `before
+- Same fact`,
+    ],
+    [
+      'unwraps invalid tags without shifting valid tag identities',
+      `before
 <observation-group range="0:0">
 - Same fact
 </observation-group>
 <observation-group id="g1" range="1:2">
 - Same fact
 </observation-group>
-after`;
-
-    expect(renderObservationGroupsForReflection(observations)).toBe(`before
+after`,
+      `before
 - Same fact
 ## Group \`g1\`
 _range: \`1:2\`_
 
 - Same fact
-after`);
+after`,
+    ],
+  ] as const)('%s', (_title, observationsValue, expected) => {
+    const observations = observationsValue;
+
+    expect(renderObservationGroupsForReflection(observations)).toBe(expected);
   });
 
   it('returns null when there are no valid groups', () => {

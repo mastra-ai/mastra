@@ -106,6 +106,31 @@ export function createExperimentsTests({
         expect(fetched?.scorerIds).toEqual(['accuracy', 'fluency']);
       });
 
+      it('createExperiment round-trips pinned scorer versions', async () => {
+        const scorerVersions = { accuracy: 'version-a', fluency: 'version-f' };
+        const pinned = await experimentsStorage.createExperiment({
+          name: 'scorer-versions-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          scorerVersions,
+          totalItems: 1,
+        });
+        const unpinned = await experimentsStorage.createExperiment({
+          name: 'unpinned-exp',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+
+        expect(pinned.scorerVersions).toEqual(scorerVersions);
+        expect((await experimentsStorage.getExperimentById({ id: pinned.id }))?.scorerVersions).toEqual(scorerVersions);
+        expect((await experimentsStorage.getExperimentById({ id: unpinned.id }))?.scorerVersions ?? null).toBeNull();
+      });
+
       it('persists provenance, runner attestation, and grouping identity', async () => {
         const exp = await experimentsStorage.createExperiment({
           name: 'provenance-exp',

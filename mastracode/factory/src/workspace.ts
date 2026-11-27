@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from '@internal/factory-contract';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { createMastraCodeWorkspaceTools } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
@@ -78,7 +79,6 @@ import type { SkillOverridesStorage } from './storage/domains/skill-overrides/ba
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { instrumentMethods, timed, timedPhase } from './timing.js';
-import { mergeRequestNumberFromBranch, pullRequestNumberFromBranch } from './work-item-branch.js';
 
 const WORKSPACE_ID_PREFIX = 'mfw';
 // GitHub installation tokens live 60 minutes and minted access is cached for

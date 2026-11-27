@@ -1,7 +1,7 @@
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useSessionWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
 import { boardOf } from '../boardFlow';
 
 export function useSessionCard() {

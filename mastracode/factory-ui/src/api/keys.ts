@@ -1,3 +1,4 @@
+import { factoryKeys } from '@mastra/react/hooks/factory';
 import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } from './types';
 
 /**
@@ -23,17 +24,6 @@ export interface AvailableModelsFilter {
   sessionId?: string;
   resourceId?: string;
   threadId?: string;
-}
-
-/**
- * Whether a `boardPhasesView` key is of a view that searches and filters nothing: the one view
- * every card of its board is in.
- */
-export function isUnnarrowedBoardView(boardPhasesViewKey: readonly unknown[]): boolean {
-  const view = boardPhasesViewKey.at(-2);
-  if (typeof view !== 'object' || view === null || !('q' in view) || !('filters' in view)) return false;
-  const { q, filters } = view;
-  return q === '' && typeof filters === 'object' && filters !== null && Object.keys(filters).length === 0;
 }
 
 export const queryKeys = {
@@ -99,10 +89,16 @@ export const queryKeys = {
   // Under the routes' key: a rule or order change refreshes the counts.
   intakeDryRun: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  // Under the routes' key: a rule change re-tests the item.
+  intakeTest: (factoryProjectId: string | undefined, subject: string) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'test', subject] as const,
   intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
   // Under the routes' key: a rule change refreshes its skips.
   intakeSkipped: (factoryProjectId: string | undefined) =>
     [...queryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  // Under the routes' key: a rule change refreshes which cards would move.
+  intakeReroute: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'reroute'] as const,
   intakeNotRouted: (factoryProjectId: string | undefined) =>
     ['intake', 'not-routed', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
@@ -119,30 +115,22 @@ export const queryKeys = {
       workItemId ?? null,
       cardUpdatedAt ?? null,
     ] as const,
-  workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  workItems: factoryKeys.workItems,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
-  sessionWorkItems: (factoryProjectId: string | undefined, sessionId: string | undefined) =>
-    [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
-  workItem: (factoryProjectId: string | undefined, workItemId: string | undefined) =>
-    [...queryKeys.workItems(factoryProjectId), 'card', workItemId ?? null] as const,
-  workItemsWithSessions: (factoryProjectId: string | undefined) =>
-    [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  sessionWorkItems: factoryKeys.sessionWorkItems,
+  workItem: factoryKeys.workItem,
+  workItemsWithSessions: factoryKeys.workItemsWithSessions,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
     [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
   /** Every view of one board the tab holds. */
-  boardPhases: (factoryProjectId: string | undefined, board: string) =>
-    [...queryKeys.workItems(factoryProjectId), 'phases', board] as const,
+  boardPhases: factoryKeys.boardPhases,
   /** One view of a board; `windows` is how deep each of its phases is listed. */
-  boardPhasesView: (factoryProjectId: string | undefined, { board, windows, ...view }: BoardPhasesRequest) =>
-    [...queryKeys.boardPhases(factoryProjectId, board), view, windows] as const,
+  boardPhasesView: factoryKeys.boardPhasesView,
   // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
-  boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
-  workItemStarters: (factoryProjectId: string | undefined) =>
-    [...queryKeys.boardFacts(factoryProjectId), 'starters'] as const,
-  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
-    [...queryKeys.boardFacts(factoryProjectId), 'activity', depth] as const,
-  workItemFilterOptions: (factoryProjectId: string | undefined) =>
-    [...queryKeys.boardFacts(factoryProjectId), 'filter-options'] as const,
+  boardFacts: factoryKeys.boardFacts,
+  workItemStarters: factoryKeys.workItemStarters,
+  workItemActivity: factoryKeys.workItemActivity,
+  workItemFilterOptions: factoryKeys.workItemFilterOptions,
   // Apart from a session page's read of the same route, so the feed refreshes only the sidebar's.
   sidebarPullRequestSubscriptionsAll: () => ['sidebar-pull-request-subscriptions'] as const,
   sidebarPullRequestSubscriptions: (provider: string, sessionId: string, threadId: string) =>
@@ -158,19 +146,16 @@ export const queryKeys = {
   knowledgeSearch: (factoryProjectId: string | undefined, query: string) =>
     ['factory', 'knowledge-search', factoryProjectId ?? null, query] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
-  factoryDecisionsRoot: (githubProjectId: string | undefined) =>
-    ['factory', 'decisions', githubProjectId ?? null] as const,
-  factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
-    ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  factoryDecisionsRoot: factoryKeys.decisionsRoot,
+  factoryDecisions: factoryKeys.decisions,
   /** Under the decision lists, so whatever refreshes them refreshes the queue too. */
-  factoryRunQueue: (githubProjectId: string | undefined) =>
-    [...queryKeys.factoryDecisionsRoot(githubProjectId), 'run-queue'] as const,
+  factoryRunQueue: factoryKeys.runQueue,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
-  sessionRowsRoot: (factoryId: string | undefined) => ['factory', 'session-rows', factoryId ?? null] as const,
+  sessionRowsRoot: factoryKeys.sessionRowsRoot,
   sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
     [...queryKeys.sessionRowsRoot(factoryId), request] as const,
   sessionActivity: (factoryId: string | undefined) => ['factory', 'session-activity', factoryId ?? null] as const,
@@ -255,10 +240,3 @@ export const queryKeys = {
       ...(limit === undefined ? [] : [limit]),
     ] as const,
 } as const;
-
-/** Every mutation that writes a card of this Factory's board. */
-export const cardWriteMutationKey = (factoryProjectId: string | undefined) =>
-  ['factory', 'write-work-item', factoryProjectId] as const;
-
-export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
-  [...cardWriteMutationKey(factoryProjectId), 'transition'] as const;

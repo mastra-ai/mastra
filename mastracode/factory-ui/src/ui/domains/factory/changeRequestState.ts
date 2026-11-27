@@ -1,4 +1,4 @@
-import type { CardChangeRequest, PullRequestStatus } from '@mastra/factory/work-items/change-requests';
+import type { CardChangeRequest, PullRequestStatus } from '@internal/factory-contract';
 
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
 

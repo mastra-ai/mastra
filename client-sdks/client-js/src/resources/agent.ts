@@ -1001,6 +1001,10 @@ export class Agent extends BaseResource {
           } catch (error) {
             agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
+            // Surface the failure to the caller instead of swallowing it, so a
+            // rejected continuation rejects processDataStream with the original
+            // error rather than reconnecting or resolving as if it succeeded.
+            throw error;
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
           }

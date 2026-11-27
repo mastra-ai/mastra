@@ -59,6 +59,7 @@ interface ExperimentRow {
   targetType: string | null;
   targetId: string | null;
   scorerIds: string | null;
+  scorerVersions: string | null;
   name: string | null;
   description: string | null;
   metadata: string | null;
@@ -290,6 +291,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         'variantId',
         'trialIndex',
         'scorerIds',
+        'scorerVersions',
       ],
     });
     await this.operations.alterTable({
@@ -318,6 +320,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       targetType: (row.targetType as Experiment['targetType']) ?? null,
       targetId: row.targetId ?? null,
       scorerIds: parseJSON<string[]>(row.scorerIds) ?? null,
+      scorerVersions: parseJSON<Record<string, string>>(row.scorerVersions) ?? null,
       name: row.name ?? undefined,
       description: row.description ?? undefined,
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
@@ -381,6 +384,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           targetType: input.targetType ?? null,
           targetId: input.targetId ?? null,
           scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          scorerVersions: input.scorerVersions ? JSON.stringify(input.scorerVersions) : null,
           name: input.name ?? null,
           description: input.description ?? null,
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
@@ -412,6 +416,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         targetType: input.targetType ?? null,
         targetId: input.targetId ?? null,
         scorerIds: input.scorerIds ?? null,
+        scorerVersions: input.scorerVersions ?? null,
         name: input.name,
         description: input.description,
         metadata: input.metadata,

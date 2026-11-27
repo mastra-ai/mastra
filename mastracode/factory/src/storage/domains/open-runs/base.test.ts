@@ -75,11 +75,14 @@ describe('OpenRunsStorage', () => {
     const { openRuns } = await createFactoryStorageForTests();
     await openRuns.open(LOST);
     await expect(openRuns.get('kickoff-1')).resolves.toEqual({ run: LOST });
+    await expect(openRuns.listRunning('thread-1')).resolves.toEqual([LOST]);
 
     await expect(openRuns.end('kickoff-1', { reason: 'error', endedAt: 10 })).resolves.toBe(true);
     await expect(openRuns.end('kickoff-1', { reason: 'complete', endedAt: 11 })).resolves.toBe(false);
     // Ended, but on the ledger until its end is on the audit log.
     await expect(openRuns.listByThread('thread-1')).resolves.toEqual([LOST]);
+    // A run that ended is no longer the one running on its thread.
+    await expect(openRuns.listRunning('thread-1')).resolves.toEqual([]);
 
     await openRuns.close(LOST, 12);
     await expect(openRuns.listByThread('thread-1')).resolves.toEqual([]);

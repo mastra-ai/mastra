@@ -11,9 +11,20 @@ import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 
+/**
+ * Serializes a JSON column value for D1.
+ *
+ * The column stores a JSON document for every value, not just objects: a bare
+ * string or number written as-is was read back as a different type (`'42'`
+ * became the number `42`). `rowToTask` parses any string it reads, so encoding
+ * every defined value keeps that round-trip lossless.
+ *
+ * `undefined`/`null` map to a SQL `NULL` so a cleared column stays cleared
+ * instead of becoming the JSON string `'undefined'`. See mastra-ai/mastra#31613.
+ */
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+  if (v === undefined || v === null) return null;
+  return JSON.stringify(v);
 }
 
 function rowToTask(row: Record<string, any>): BackgroundTask {

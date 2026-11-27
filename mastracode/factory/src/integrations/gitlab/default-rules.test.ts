@@ -1,5 +1,5 @@
+import type { FactoryGitLabRuleContext } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
-import type { FactoryGitLabRuleContext } from '../../rules/types.js';
 import { defaultGitLabRules } from './default-rules.js';
 
 describe('GitLab issue re-triage', () => {

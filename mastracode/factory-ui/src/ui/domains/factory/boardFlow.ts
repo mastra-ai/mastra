@@ -1,4 +1,4 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { boardIdOf, DEFAULT_BOARD_ID } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo } from '../../../api/types';
 
@@ -36,11 +36,6 @@ export function withLegacyFlow<T extends BoardInfo>(board: T): T {
 }
 
 type BoardPhaseInfo = InstalledBoardInfo['phases'][number];
-
-/** A card's board; rows filed before boards existed belong to the default board. */
-export function boardIdOf(item: { board?: string | null }): string {
-  return item.board ?? DEFAULT_BOARD_ID;
-}
 
 /** The catalog entry for a card's board, once the catalog has loaded. */
 export function boardOf<T extends { id: string }>(

@@ -7,7 +7,7 @@ description: "Browse Alibaba model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/alibaba.svg" alt="Alibaba logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Alibaba
 
-Access 34 Alibaba models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
+Access 38 Alibaba models through Mastra's model router. Authentication is handled automatically using the `DASHSCOPE_API_KEY` environment variable.
 
 Learn more in the [Alibaba documentation](https://www.alibabacloud.com/help/en/model-studio/models).
 
@@ -116,6 +116,54 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1048576,
     "inputCost": 4,
     "outputCost": 20
+  },
+  {
+    "model": "alibaba/mindlab/macaron-v1-tall",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
+    "outputCost": 2.6
+  },
+  {
+    "model": "alibaba/mindlab/macaron-v1.1-coding-venti",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.19,
+    "outputCost": 3.74
+  },
+  {
+    "model": "alibaba/mindlab/macaron-v1.1-venti",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.19,
+    "outputCost": 3.74
+  },
+  {
+    "model": "alibaba/mindlab/macaron-v1.1-venti-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "alibaba/qwen-flash",

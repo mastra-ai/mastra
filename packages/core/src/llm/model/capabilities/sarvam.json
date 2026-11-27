@@ -10,13 +10,13 @@
     "sarvam-105b-conversations"
   ],
   "reasoning": {
-    "gemma4": [
+    "glm5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "deepseekv4.1-flash-1017-interactive": [
+    "gemma4": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -37,10 +37,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm5.3-flash": [
+    "deepseekv4.1-flash-1017-interactive": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseekv4.1-flash-1017": [

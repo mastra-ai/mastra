@@ -290,28 +290,18 @@ describe('license', () => {
       expect(isDevEnvironment()).toBe(true);
     });
 
-    it('should return true when NODE_ENV is development', () => {
-      process.env['NODE_ENV'] = 'development';
-      expect(isDevEnvironment()).toBe(true);
-    });
-
-    it('should return true when NODE_ENV is test', () => {
-      process.env['NODE_ENV'] = 'test';
-      expect(isDevEnvironment()).toBe(true);
+    it.each([
+      ['should return true when NODE_ENV is development', 'development', true],
+      ['should return true when NODE_ENV is test', 'test', true],
+      ['should return false when NODE_ENV is production', 'production', false],
+      ['should return false when NODE_ENV is prod', 'prod', false],
+    ] as const)('%s', (_title, value, expected) => {
+      process.env['NODE_ENV'] = value;
+      expect(isDevEnvironment()).toBe(expected);
     });
 
     it('should return true when NODE_ENV is not set', () => {
       expect(isDevEnvironment()).toBe(true);
-    });
-
-    it('should return false when NODE_ENV is production', () => {
-      process.env['NODE_ENV'] = 'production';
-      expect(isDevEnvironment()).toBe(false);
-    });
-
-    it('should return false when NODE_ENV is prod', () => {
-      process.env['NODE_ENV'] = 'prod';
-      expect(isDevEnvironment()).toBe(false);
     });
   });
 

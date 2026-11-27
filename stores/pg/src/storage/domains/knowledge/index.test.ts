@@ -1,6 +1,7 @@
 import {
   createKnowledgeImporterHostTests,
   createKnowledgeHostedImporterHostTests,
+  createKnowledgeHeldScopeTests,
   createKnowledgeHostWriteTests,
   createKnowledgeImporterExportDDLTests,
   createKnowledgeImportersStorageTests,
@@ -116,6 +117,7 @@ beforeAll(async () => {
 
 createKnowledgePageStoreTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
 createKnowledgeHostWriteTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
+createKnowledgeHeldScopeTests(() => new KnowledgePG({ pool, schemaName: 'knowledge_contract_test' }));
 
 beforeAll(async () => {
   await pool.query('CREATE SCHEMA IF NOT EXISTS knowledge_snippet_test');

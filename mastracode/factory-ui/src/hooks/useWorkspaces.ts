@@ -1,4 +1,4 @@
-import { isPersonSessionBranch } from '@mastra/factory/work-item-branch';
+import { isPersonSessionBranch } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient, UseQueryResult } from '@tanstack/react-query';
@@ -8,7 +8,7 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { SessionRowsResponse, SessionRowWire } from '../api/types';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
-import { stripCachedSessionRefs } from './useWorkItems';
+import { stripCachedSessionRefs } from '@mastra/react/hooks/factory';
 import {
   createUserSession,
   deleteUserSession,

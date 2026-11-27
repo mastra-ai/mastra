@@ -1326,6 +1326,28 @@ const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   processor_run: ['processorId'],
 };
 
+const BOXED_PRIMITIVE_TAGS = new Set(['[object Number]', '[object String]', '[object Boolean]', '[object BigInt]']);
+
+/**
+ * `JSON.stringify` with object keys sorted at every depth. Arrays keep their order.
+ * Boxed primitives such as `new Number(1)` stay as they are, because `JSON.stringify`
+ * unboxes them only after the replacer runs.
+ */
+function stableStringify(value: unknown): string | undefined {
+  return JSON.stringify(value, (_key, val) =>
+    val &&
+    typeof val === 'object' &&
+    !Array.isArray(val) &&
+    !BOXED_PRIMITIVE_TAGS.has(Object.prototype.toString.call(val))
+      ? Object.fromEntries(
+          Object.keys(val)
+            .sort()
+            .map(key => [key, val[key]]),
+        )
+      : val,
+  );
+}
+
 /**
  * Check if an actual TrajectoryStep matches an ExpectedStep.
  * Matches by name, optionally by stepType, and auto-compares any variant-specific
@@ -1343,7 +1365,7 @@ function expectedStepMatches(actual: TrajectoryStep, expected: ExpectedStep): bo
       const actualVal = (actual as any)[field];
       if (actualVal === undefined) return false;
       try {
-        if (JSON.stringify(actualVal) !== JSON.stringify(expectedVal)) return false;
+        if (stableStringify(actualVal) !== stableStringify(expectedVal)) return false;
       } catch {
         return false;
       }
@@ -1511,7 +1533,7 @@ export function checkTrajectoryEfficiency(
         const prevArgs = (prev as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         const currArgs = (curr as TrajectoryStep & { toolArgs?: Record<string, unknown> }).toolArgs;
         try {
-          if (JSON.stringify(prevArgs) === JSON.stringify(currArgs)) {
+          if (stableStringify(prevArgs) === stableStringify(currArgs)) {
             redundantCalls.push({ name: curr.name, index: i });
           }
         } catch {

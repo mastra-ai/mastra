@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   SettingsContainer,
@@ -19,6 +20,7 @@ import {
 import { Form } from '@/ds/components/Form';
 import { Input } from '@/ds/components/Input';
 import { Switch } from '@/ds/components/Switch';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 afterEach(cleanup);
 
@@ -207,6 +209,26 @@ describe('Settings', () => {
       screen.getByRole('heading', { name: 'General' });
       expect(screen.getByText('General').closest('[aria-describedby]')).toBeTruthy();
       expect(screen.getByText('Stored in this browser.')).toBeTruthy();
+    });
+
+    it('opens the tooltip when the title is focused from the keyboard', async () => {
+      render(
+        <TooltipProvider delay={0}>
+          <SettingsGroup>
+            <SettingsTitle info="Stored in this browser.">General</SettingsTitle>
+          </SettingsGroup>
+        </TooltipProvider>,
+      );
+
+      await userEvent.setup().tab();
+
+      expect(document.activeElement?.textContent).toBe('General');
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Stored in this browser.');
+      // The info icon sits inside the same trigger, hidden from assistive tech: the heading's name stays the title.
+      const icon = document.activeElement?.querySelector('[data-slot="icon"]');
+      expect(icon?.getAttribute('aria-hidden')).toBe('true');
+      expect(icon?.querySelector('svg')).toBeTruthy();
+      screen.getByRole('heading', { name: 'General' });
     });
   });
 

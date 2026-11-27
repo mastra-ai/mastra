@@ -1,10 +1,10 @@
+import { FACTORY_LINEAR_EVENTS } from '@internal/factory-contract';
+import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleItemContext } from '@internal/factory-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { boardRegistryOf, createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { FACTORY_LINEAR_EVENTS } from '../../rules/types.js';
-import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, demoteCardsToLegacyForTests } from '../../storage/test-utils.js';
 import { resolveLinearRules } from './default-rules.js';
 import type { LinearRuleOverrides } from './default-rules.js';
@@ -216,6 +216,38 @@ describe('LinearRules', () => {
 
     expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ workItemId: card.id, decisions: [] }));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  it("never evaluates an issue against another issue's card that shares its identifier", async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: Another workspace's issue`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-in-another-workspace' },
+      },
+    });
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, stateType: 'completed' }],
+    });
+
+    // Closed with no card of its own: nothing is evaluated, least of all the other issue's card.
+    expect(evaluate).not.toHaveBeenCalled();
   });
 
   // A card finished while claims were enforced, the issue moved teams and reopened, and a second

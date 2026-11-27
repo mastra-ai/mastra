@@ -1,4 +1,4 @@
-import { NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
+import { NEEDS_APPROVAL_LABEL } from '@internal/factory-contract';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { Card } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';

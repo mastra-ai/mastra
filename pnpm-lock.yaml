@@ -1279,6 +1279,9 @@ importers:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../packages/_vendored/ai_v5
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -1337,6 +1340,9 @@ importers:
         specifier: ^3.7.0
         version: 3.7.0
     devDependencies:
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2498,6 +2504,9 @@ importers:
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.47.0(vitest@5.1.0)
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -2586,6 +2595,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@internal/factory-contract':
+        specifier: workspace:*
+        version: link:../../packages/_internals/factory-contract
       '@playwright/test':
         specifier: ^1.64.1
         version: 1.64.1
@@ -3877,6 +3889,36 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/_internals/factory-contract:
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../../core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      tsdown:
+        specifier: 0.23.1
+        version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      typescript-classic:
+        specifier: npm:typescript@^6.0.3
+        version: typescript@6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(sass@1.108.2)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.7
 
   packages/_internals/find-workspaces:
     dependencies:
@@ -8203,7 +8245,7 @@ importers:
     dependencies:
       mssql:
         specifier: ^12.7.14
-        version: 12.8.0(supports-color@10.2.2)
+        version: 12.7.16(supports-color@10.2.2)
     devDependencies:
       '@internal/core':
         specifier: workspace:*
@@ -28056,8 +28098,8 @@ packages:
   msgpackr@2.1.4:
     resolution: {integrity: sha512-TvP18sX5U3MXoHHSUZen/FagaNTEJObyb8OlnJcNbqN6Ux/oCwYJrHhCOzi31bItyW/Efz1IDnRDKQ23j4ZuvA==}
 
-  mssql@12.8.0:
-    resolution: {integrity: sha512-ykINnAFFlKbMhHADMllX80bvHjcY0Fik1Cc+OJ7Wc/l5ddxW7Sb76Aj9fK6ASO/UqrEKN6YB9yVp+zonAi3INg==}
+  mssql@12.7.16:
+    resolution: {integrity: sha512-cnPgo8DLDt6bs17HWXK19tBmcxFtIrGwnsRyqWNzZ+JepzzSWxkErVDCXHpdhqqR/YfOGLhDeCxSTzq74e/5YA==}
     engines: {node: '>=18.19.0'}
     hasBin: true
 
@@ -53020,7 +53062,7 @@ snapshots:
     optionalDependencies:
       msgpackr-extract: 3.0.6
 
-  mssql@12.8.0(supports-color@10.2.2):
+  mssql@12.7.16(supports-color@10.2.2):
     dependencies:
       '@tediousjs/connection-string': 1.1.3
       commander: 11.1.0
