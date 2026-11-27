@@ -42,6 +42,16 @@ const embedder = new ModelRouterEmbeddingModel('openai/text-embedding-3-small')
 const embedder = new ModelRouterEmbeddingModel('google/gemini-embedding-001')
 ```
 
+### DeepInfra
+
+DeepInfra serves OpenAI-compatible embedding models. Pass the full namespaced model ID and the router uses DeepInfra's default endpoint:
+
+```typescript
+const embedder = new ModelRouterEmbeddingModel('deepinfra/BAAI/bge-base-en-v1.5')
+```
+
+Set `DEEPINFRA_API_KEY` to authenticate. Any embedding model DeepInfra serves works as long as you pass the full namespaced ID (for example `deepinfra/<org>/<model>`). To target a compatible or proxy endpoint instead, pass an explicit `url` as shown in [Custom Providers](#custom-providers).
+
 ### VoyageAI
 
 VoyageAI provides specialized embedding models optimized for retrieval tasks. These models are available as standalone packages:
@@ -147,12 +157,14 @@ The model router automatically detects API keys from environment variables:
 
 - **OpenAI**: `OPENAI_API_KEY`
 - **Google**: `GOOGLE_API_KEY` (falls back to `GOOGLE_GENERATIVE_AI_API_KEY`)
+- **DeepInfra**: `DEEPINFRA_API_KEY`
 - **VoyageAI**: `VOYAGE_API_KEY`
 
 ```bash
 # .env
 OPENAI_API_KEY=sk-...
 GOOGLE_API_KEY=...
+DEEPINFRA_API_KEY=...
 VOYAGE_API_KEY=pa-...
 ```
 
