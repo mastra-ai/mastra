@@ -11,6 +11,7 @@ import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-st
 import {
   createTextStreamModel,
   createBlockingFirstTextStreamModel,
+  createFakeThreadRun,
   nextTick,
   RetainedAsyncCallbackPubSub,
   ControlledLeasePubSub,
@@ -1226,5 +1227,66 @@ describe('Agent signals: idle and active behaviors', () => {
       }
       await first.text;
     });
+  });
+
+  it('waits out a queued idle run still being admitted, then ends it at shutdown', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'shutdown-idle-drain-resource';
+    const threadId = 'shutdown-idle-drain-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    let finishActiveRun!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const drainedRunKeepsRunning = new Promise<void>(() => {});
+    // Registering the drained run inside `stream` mirrors a real agent: the drain hands the lease over before the run it
+    // starts exists as a record, so shutdown has to wait for that admission instead of reading records too early.
+    const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
+      const runId = options.runId as string;
+      await runtime.registerRun(
+        agent,
+        createFakeThreadRun(runId, drainedRunKeepsRunning),
+        { memory: { resource: resourceId, thread: threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const agent = { id: 'shutdown-idle-drain-agent', stream } as unknown as Agent<any, any, any, any>;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('shutdown-idle-drain-active', activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const queued = runtime.queueMessage(agent, 'drained idle message', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+    // Hold the handoff: the queued run is admitted — lease in flight, run not yet registered — exactly when shutdown runs.
+    const handoff = Promise.withResolvers<void>();
+    let handoffStarted = false;
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(stream).not.toHaveBeenCalled();
+
+    let shutdownDone = false;
+    const shutdown = runtime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+      shutdownDone = true;
+    });
+    // Shutdown waits for the in-flight admission instead of returning with the queued run still on its way in.
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    handoff.resolve();
+    await shutdown;
+    expect(shutdownDone).toBe(true);
+    // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
+    expect(pubsub.owners.get(key)).toBeUndefined();
   });
 });

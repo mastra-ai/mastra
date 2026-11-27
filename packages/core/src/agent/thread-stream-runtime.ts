@@ -677,6 +677,11 @@ type PendingThreadAdmission = {
   runId: string;
   /** The agent whose run holds the reservation. */
   agentId: string;
+  /**
+   * The Mastra instance that owns this reservation, taken from the agent's `getMastraInstance` at
+   * admission time. Shutdown uses it to wait only for its own admissions before handing runs back.
+   */
+  owner: unknown;
   outcome: Promise<ThreadAdmissionOutcome>;
 };
 
@@ -1441,6 +1446,16 @@ export class AgentThreadStreamRuntime {
     const resolved = this.#getPubSub(pubsub);
     const state = this.#statesByPubSub.get(resolved);
     if (!state) return;
+    // Admissions and hand-backs share one grace: an admission can hold the whole budget by hanging,
+    // so the hand-backs take what is left rather than a second full grace after it.
+    const deadline = Date.now() + abortGraceMs;
+    const remainingGrace = () => Math.max(0, deadline - Date.now());
+    // A reservation this owner is still admitting has no run record yet: `sendSignal` tracks the
+    // wake before `agent.stream` registers the run. Reading records first would miss that run, leave
+    // its lease and renewal running, and free the thread for nobody. Wait for this owner's
+    // admissions to settle first, capped so a stuck admission can't outlast shutdown. Another
+    // process's admission on the same thread is its own to hand back, so it is left alone.
+    await this.#awaitOwnedThreadAdmissions(state, owner, remainingGrace());
     const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
     const records = [...state.threadRunsById.values()].filter(
       record => record.agent.getMastraInstance?.() === owner && !state.shutdownStreams.has(record.streamId),
@@ -1487,7 +1502,7 @@ export class AgentThreadStreamRuntime {
               current => current === leaseOwner,
               () => false,
             ),
-            abortGraceMs,
+            remainingGrace(),
             false,
           ),
         executing
@@ -1497,7 +1512,7 @@ export class AgentThreadStreamRuntime {
                 preparedRun && record.broadcastFinished,
                 ...stepOwners.map(owner => new Promise<void>(resolve => whenRunStepsSettle(owner, resolve))),
               ]).then(() => true),
-              abortGraceMs,
+              remainingGrace(),
               false,
             )
           : true,
@@ -1527,6 +1542,27 @@ export class AgentThreadStreamRuntime {
     };
 
     await Promise.all(records.map(handBack));
+  }
+
+  /**
+   * Wait until every thread admission `owner` is still carrying settles, up to `ms`.
+   *
+   * `sendSignal` reserves a thread and tracks the admission before the run it admits exists as a
+   * record, so a shutdown that reads records first can miss a run already on its way in, leaving its
+   * lease and renewal behind. Only admissions of exactly this owner are awaited: another Mastra
+   * instance's reservation on the same thread is that instance's to hand back.
+   */
+  async #awaitOwnedThreadAdmissions(state: AgentThreadRuntimeState, owner: unknown, ms: number): Promise<void> {
+    const owned: Promise<ThreadAdmissionOutcome>[] = [];
+    for (const admission of state.pendingThreadAdmissions.values()) {
+      if (admission.owner === owner) owned.push(admission.outcome);
+    }
+    if (owned.length === 0) return;
+    await this.#withinGrace(
+      Promise.allSettled(owned).then(() => undefined),
+      ms,
+      undefined,
+    );
   }
 
   /** `promise`'s value, or `fallback` once `ms` pass first. */
@@ -2158,10 +2194,15 @@ export class AgentThreadStreamRuntime {
     state: AgentThreadRuntimeState,
     key: string,
     runId: string,
-    agentId: string,
+    agent: Agent<any, any, any, any>,
     outcome: Promise<ThreadAdmissionOutcome>,
   ): void {
-    const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome };
+    const pendingAdmission: PendingThreadAdmission = {
+      runId,
+      agentId: agent.id,
+      owner: agent.getMastraInstance?.(),
+      outcome,
+    };
     state.pendingThreadAdmissions.set(key, pendingAdmission);
     const clearPendingAdmission = () => {
       if (state.pendingThreadAdmissions.get(key) === pendingAdmission) {
@@ -3437,7 +3478,7 @@ export class AgentThreadStreamRuntime {
         settleThreadAdmission = resolve;
         failThreadAdmission = reject;
       });
-      this.#trackPendingThreadAdmission(state, key, runId, owner.agent.id, threadAdmission);
+      this.#trackPendingThreadAdmission(state, key, runId, owner.agent, threadAdmission);
       let lease: { acquired: boolean; owner?: string };
       try {
         lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
@@ -5780,7 +5821,7 @@ export class AgentThreadStreamRuntime {
           state,
           key,
           reservedRunId,
-          previousRun.agent.id,
+          previousRun.agent,
           ownership.then(lease => this.#threadAdmissionOutcome(reservedRunId, lease)),
         );
         const owns = await ownership;
@@ -5964,7 +6005,7 @@ export class AgentThreadStreamRuntime {
         state,
         key,
         pending.runId,
-        pending.agent.id,
+        pending.agent,
         ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
       );
       const owns = await ownership;
@@ -6114,7 +6155,7 @@ export class AgentThreadStreamRuntime {
         state,
         key,
         pendingIdle.runId,
-        pendingIdle.agent.id,
+        pendingIdle.agent,
         ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
       );
       owns = await ownership;
@@ -8708,7 +8749,7 @@ export class AgentThreadStreamRuntime {
         state,
         reservedKey,
         reservedRunId,
-        agent.id,
+        agent,
         accepted.then(admission => {
           if (admission.action === 'wake') return { action: 'local' as const, runId: admission.runId };
           if (admission.action === 'deliver') return { action: 'remote' as const, runId: admission.runId };
