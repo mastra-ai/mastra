@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 
+import type { FactoryBoardEngine } from '../board-engine/engine.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteAuth } from './route.js';
 import { SESSION_PATH } from './session-access.js';
@@ -8,13 +9,18 @@ import { SESSION_PATH } from './session-access.js';
  * Records a session abort request on the session's Factory run bindings before the abort runs, so
  * the dispatcher settles the run as stopped instead of retrying it. Only explicit client requests
  * pass through here; a process going away aborts without one, and that run still retries.
+ *
+ * Once the abort succeeded, a board engine that keeps what a card is doing hears that a person
+ * stopped the run of each card the session was bound to.
  */
 export function createRunStopMarker({
   auth,
   workItems,
+  boardEngine = () => undefined,
 }: {
   auth: Pick<RouteAuth, 'enabled' | 'ensureUser' | 'tenant'>;
-  workItems: () => Pick<WorkItemsStorage, 'requestRunBindingStop'> | undefined;
+  workItems: () => Pick<WorkItemsStorage, 'requestRunBindingStop' | 'listRunBindingsForSession'> | undefined;
+  boardEngine?: () => Pick<FactoryBoardEngine, 'runStopped'> | undefined;
 }): MiddlewareHandler {
   const callerOrgId = async (c: Parameters<MiddlewareHandler>[0]): Promise<string | undefined> => {
     if (!auth.enabled()) return 'local';
@@ -27,10 +33,20 @@ export function createRunStopMarker({
     const aborts = match !== null && c.req.path.slice(match.index + match[0].length) === '/abort';
     const storage = aborts ? workItems() : undefined;
     if (!match || !storage) return next();
+    const sessionId = decodeURIComponent(match[1]!);
+    const engine = boardEngine();
+    let stopped: Parameters<NonNullable<FactoryBoardEngine['runStopped']>>[0][] = [];
     try {
       const orgId = await callerOrgId(c);
-      if (orgId)
-        await storage.requestRunBindingStop({ orgId, sessionId: decodeURIComponent(match[1]!), at: new Date() });
+      if (orgId) {
+        await storage.requestRunBindingStop({ orgId, sessionId, at: new Date() });
+        // The seats the stop is for, read before the abort can end them.
+        if (engine?.runStopped) {
+          stopped = (await storage.listRunBindingsForSession({ orgId, sessionId }))
+            .filter(binding => binding.status === 'active')
+            .map(({ orgId, factoryProjectId, workItemId, role }) => ({ orgId, factoryProjectId, workItemId, role }));
+        }
+      }
     } catch (error) {
       // Stop still stops; only the retry decision loses its signal.
       console.warn('[Factory] Could not record a stop request', {
@@ -38,6 +54,16 @@ export function createRunStopMarker({
         error: error instanceof Error ? error.message : String(error),
       });
     }
-    return next();
+    await next();
+    if (c.res.status >= 300) return;
+    for (const seat of stopped) {
+      // The abort is answered without waiting on the card's run.
+      void engine?.runStopped?.(seat).catch((error: unknown) =>
+        console.warn("[Factory] Could not tell a card's board run that its run was stopped", {
+          workItemId: seat.workItemId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
   };
 }

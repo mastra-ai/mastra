@@ -12,6 +12,7 @@ import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
+import { ABORT_AGENT_CONTROLLER_SESSION_ROUTE } from '@mastra/server/handlers/agent-controller';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,6 +21,7 @@ import { createWorkflowBoardEngine } from '../board-engine/workflow-engine.js';
 import { defineBoard } from '../boards/index.js';
 import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
+import { createRunStopMarker } from '../routes/run-stop-marker.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
@@ -403,6 +405,32 @@ const delivery = defineBoard({
       nextPhases: ['delivered'],
     },
     delivered: { name: 'Delivered', kind: 'terminal' },
+  },
+});
+
+/** Delivery, with a phase a person files a card in to cancel it. */
+const cancellableDelivery = defineBoard({
+  id: 'cancellable-delivery',
+  name: 'Cancellable delivery',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
+    planning: {
+      name: 'Planning',
+      kind: 'working',
+      runner: { context: 'builder', skill: 'plan-feature' },
+      autoStart: true,
+      nextPhases: ['building', 'cancelled'],
+    },
+    building: {
+      name: 'Building',
+      kind: 'working',
+      runner: { context: 'builder', skill: 'build-feature' },
+      autoStart: true,
+      nextPhases: ['delivered', 'cancelled'],
+    },
+    delivered: { name: 'Delivered', kind: 'terminal' },
+    cancelled: { name: 'Cancelled', kind: 'terminal' },
   },
 });
 
@@ -792,6 +820,152 @@ describe.each([
         expect((await workItems.listRunBindings(ORG, project.id, feature.id))[0]?.stopRequestedAt ?? null).toBeNull();
       } finally {
         for (const end of release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  /** Planning's model calls never answer: each ends only when its run is aborted. */
+  function blockingPlanner() {
+    const state = { planning: 0, aborted: 0, release: new Set<() => void>() };
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (!url.endsWith('/responses')) throw new Error(`Unexpected external request: ${url}`);
+      state.planning += 1;
+      const signal = input instanceof Request ? input.signal : init?.signal;
+      return new Promise<Response>((_resolve, reject) => {
+        const abort = () => {
+          state.aborted += 1;
+          reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
+        };
+        if (signal?.aborted) abort();
+        else signal?.addEventListener('abort', abort, { once: true });
+        state.release.add(() => reject(new Error('The test ended.')));
+      });
+    });
+    return state;
+  }
+
+  it.runIf(engineName === 'workflow')(
+    'leaves a card a person stopped in its phase, needing attention, until someone starts it again',
+    async () => {
+      const model = blockingPlanner();
+      let engine!: FactoryBoardEngine;
+      const runtime = await startFactory(delivery, 'planning', deliverySkills, {
+        boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+      });
+      try {
+        const { project, card, read, send, workItems, mastra } = runtime;
+        const feature = await card('the stopped feature', []);
+        await vi.waitFor(() => expect(model.planning).toBe(1), { timeout: 15_000 });
+        await vi.waitFor(async () =>
+          expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
+            state: 'running',
+            phase: 'planning',
+          }),
+        );
+
+        // The session's Stop, as Factory's host serves it: the stop is marked, then the session aborts.
+        const host = new Hono();
+        host.use(
+          '*',
+          createRunStopMarker({
+            auth: { enabled: () => true, ensureUser: async () => undefined, tenant: () => ({ orgId: ORG }) },
+            workItems: () => workItems,
+            boardEngine: () => engine,
+          }),
+        );
+        host.post(`/api${ABORT_AGENT_CONTROLLER_SESSION_ROUTE.path}`, async c => {
+          const controller = mastra.getAgentController(c.req.param('controllerId') ?? '');
+          (await controller?.getSession(c.req.param('sessionId') ?? ''))?.abort();
+          return c.json({ ok: true });
+        });
+        const [seat] = (await workItems.listRunBindings(ORG, project.id, feature.id)).filter(
+          binding => binding.status === 'active',
+        );
+        const stop = await host.request(`/api/agent-controller/code/sessions/${seat!.sessionId}/abort`, {
+          method: 'POST',
+        });
+        expect(stop.status).toBe(200);
+        expect(model.aborted).toBe(1);
+        await vi.waitFor(async () =>
+          expect(await engine.describe!({ workItemId: feature.id })).toEqual({
+            state: 'needs_attention',
+            phase: 'planning',
+            probes: 0,
+            reason: 'Stopped by a person.',
+          }),
+        );
+        expect((await read(feature)).stages).toEqual(['planning']);
+        // The stopped run isn't run again.
+        await new Promise(resolve => setTimeout(resolve, 1_500));
+        expect(model.planning).toBe(1);
+        const recorded = JSON.stringify(
+          await mastra.getWorkflow('factory-board').getWorkflowRunById(`factory-board:${feature.id}`),
+        );
+        expect(recorded).not.toContain('phase-user');
+        expect(recorded).not.toContain(ORG);
+
+        // Start, from the card: the phase is entered again, and its run starts.
+        const start = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
+          board: 'delivery',
+          stage: 'planning',
+          reenter: true,
+          expectedRevision: (await read(feature)).revision,
+          requestId: randomUUID(),
+          cause: 'card_action',
+        });
+        expect([200, 202], await start.text()).toContain(start.status);
+        await vi.waitFor(() => expect(model.planning).toBe(2), { timeout: 15_000 });
+        expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
+          state: 'running',
+          phase: 'planning',
+        });
+      } finally {
+        for (const end of model.release) end();
+        await runtime.close();
+      }
+    },
+    60_000,
+  );
+
+  it.runIf(engineName === 'workflow')(
+    "stops the phase's run when a person cancels its card, and commits the cancel",
+    async () => {
+      const model = blockingPlanner();
+      let engine!: FactoryBoardEngine;
+      const runtime = await startFactory(cancellableDelivery, 'planning', deliverySkills, {
+        boardEngine: context => (engine = createWorkflowBoardEngine(context)),
+      });
+      try {
+        const { project, card, read, send } = runtime;
+        const feature = await card('the cancelled feature', []);
+        await vi.waitFor(() => expect(model.planning).toBe(1), { timeout: 15_000 });
+
+        const cancel = await send('POST', `/web/factory/projects/${project.id}/work-items/${feature.id}/transition`, {
+          board: 'cancellable-delivery',
+          stage: 'cancelled',
+          expectedRevision: (await read(feature)).revision,
+          requestId: randomUUID(),
+          cause: 'A person cancelled the card',
+        });
+        expect([200, 202], await cancel.text()).toContain(cancel.status);
+        await vi.waitFor(async () => expect((await read(feature)).stages).toEqual(['cancelled']), { timeout: 15_000 });
+        expect(model.aborted).toBe(1);
+        expect(await engine.describe!({ workItemId: feature.id })).toMatchObject({
+          state: 'terminal',
+          phase: 'cancelled',
+        });
+        // Planning's run isn't run again; the session only hears that the card was moved.
+        await new Promise(resolve => setTimeout(resolve, 1_500));
+        expect(
+          (await runtime.decisionsFor(feature))
+            .filter(record => record.decision.type === 'invokeSkill')
+            .map(record => record.status),
+        ).toEqual(['superseded']);
+      } finally {
+        for (const end of model.release) end();
         await runtime.close();
       }
     },

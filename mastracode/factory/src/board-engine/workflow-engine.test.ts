@@ -654,6 +654,41 @@ describe('the workflow board engine', () => {
     });
   });
 
+  it('leaves a stopped card in its phase needing attention, and a card no run works as it was', async () => {
+    const { storage, engine, mastra, item, binding } = await setup();
+    const seat = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    // Nothing recorded working the phase yet: a Stop of the session flags nothing.
+    await engine.runStopped(seat);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toBeUndefined();
+
+    await engine.runFailed(seat, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    // A session working another role's phase doesn't stop this one.
+    await engine.runStopped({ ...seat, role: 'review' });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toMatchObject({ state: 'running' });
+
+    await engine.runStopped(seat);
+    await engine.runStopped(seat);
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'needs_attention',
+      phase: 'planning',
+      probes: 0,
+      attempts: 1,
+      reason: 'Stopped by a person.',
+    });
+    expect((await storage.get({ orgId: ORG, id: item.id }))!.stages).toEqual(['planning']);
+    const stored = JSON.stringify(await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id)));
+    expect(stored).not.toContain('user-1');
+    expect(stored).not.toContain(ORG);
+
+    // Start enters the phase again, with a go-ahead: its run is queued, and the card is running.
+    await engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true });
+    await expect(engine.describe({ workItemId: item.id })).resolves.toEqual({
+      state: 'running',
+      phase: 'planning',
+      probes: 0,
+    });
+  });
+
   it('counts a run end once, however many times it is told', async () => {
     const { engine, item, binding } = await setup();
 

@@ -1,6 +1,6 @@
 import { ABORT_AGENT_CONTROLLER_SESSION_ROUTE } from '@mastra/server/handlers/agent-controller';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -30,9 +30,13 @@ async function bindSession(workItems: WorkItemsStorage, orgId: string) {
   return binding;
 }
 
-async function setup() {
+async function setupWithBinding() {
   const { workItems } = await createFactoryStorageForTests();
-  const binding = await bindSession(workItems, ORG_ID);
+  return { workItems, binding: await bindSession(workItems, ORG_ID) };
+}
+
+async function setup() {
+  const { workItems, binding } = await setupWithBinding();
   const aborted: string[] = [];
   const app = new Hono();
   app.use('*', createRunStopMarker({ auth: signedInToOrg1, workItems: () => workItems }));
@@ -95,6 +99,7 @@ describe('createRunStopMarker', () => {
           requestRunBindingStop: async () => {
             throw new Error('storage down');
           },
+          listRunBindingsForSession: async () => [],
         }),
       }),
     );
@@ -107,5 +112,33 @@ describe('createRunStopMarker', () => {
 
     expect(response.status).toBe(200);
     expect(aborted).toEqual(['session-1']);
+  });
+
+  it('tells the board engine of the stop once the abort succeeded, for each card the session works', async () => {
+    const { workItems, binding } = await setupWithBinding();
+    const heard: unknown[] = [];
+    const app = new Hono();
+    app.use(
+      '*',
+      createRunStopMarker({
+        auth: signedInToOrg1,
+        workItems: () => workItems,
+        boardEngine: () => ({ runStopped: async seat => void heard.push(seat) }),
+      }),
+    );
+    let fails = false;
+    app.post(ABORT_ROUTE, c => (fails ? c.json({ error: 'no such session' }, 404) : c.json({ success: true })));
+
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+    await vi.waitFor(() =>
+      expect(heard).toEqual([
+        { orgId: ORG_ID, factoryProjectId: 'project-1', workItemId: binding.workItemId, role: 'work' },
+      ]),
+    );
+
+    fails = true;
+    await app.request('/api/agent-controller/code/sessions/session-1/abort', { method: 'POST' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(heard).toHaveLength(1);
   });
 });
