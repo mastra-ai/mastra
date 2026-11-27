@@ -163,4 +163,39 @@ describe('WorkflowsValkey resourceId keying', () => {
     const r1Any = await store.listWorkflowRuns({ resourceId: 'r1' });
     expect(r1Any.runs.filter(r => r.workflowName === workflowName)).toHaveLength(2);
   });
+
+  it('creates a snapshot when results arrive for a run that does not exist yet', async () => {
+    const runId = randomUUID();
+    await store.updateWorkflowResults({
+      workflowName,
+      runId,
+      stepId: 's1',
+      result: { status: 'success', output: 1 } as any,
+      requestContext: {},
+    });
+
+    const loaded = await store.loadWorkflowSnapshot({ workflowName, runId });
+    expect(loaded?.context.s1).toBeDefined();
+    expect(await runKeys(runId)).toEqual([canonicalKey(runId)]);
+  });
+
+  it('treats glob metacharacters in the workflow name literally', async () => {
+    const globName = 'wf[1]*?\\^-x';
+    const runId = randomUUID();
+    await store.persistWorkflowSnapshot({ workflowName: globName, runId, resourceId: 'r1', snapshot: snapshot(runId) });
+
+    expect((await store.loadWorkflowSnapshot({ workflowName: globName, runId }))?.status).toBe('suspended');
+    expect((await store.getWorkflowRunById({ workflowName: globName, runId }))?.resourceId).toBe('r1');
+    expect((await store.listWorkflowRuns({ workflowName: globName })).total).toBe(1);
+    // A sibling workflow whose name merely starts with the same characters must not leak in.
+    await store.persistWorkflowSnapshot({
+      workflowName: `${globName}-extra`,
+      runId: randomUUID(),
+      snapshot: snapshot(runId),
+    });
+    expect((await store.listWorkflowRuns({ workflowName: globName })).total).toBe(1);
+
+    await store.deleteWorkflowRunById({ workflowName: globName, runId });
+    expect(await store.loadWorkflowSnapshot({ workflowName: globName, runId })).toBeNull();
+  });
 });
