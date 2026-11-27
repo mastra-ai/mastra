@@ -4,11 +4,8 @@ import { Icon } from './Icon';
 import type { IconSize } from './Icon';
 import {
   AgentIcon,
-  AgentCoinIcon,
-  AgentNetworkCoinIcon,
   AiIcon,
   ApiIcon,
-  BranchIcon,
   ByteDanceIcon,
   CohereBrandIcon,
   FireworksIcon,
@@ -22,28 +19,16 @@ import {
   CheckIcon,
   CircleDotIcon,
   ClaudeIcon,
-  ChevronIcon,
   CommitIcon,
   CrossIcon,
-  DbIcon,
-  DebugIcon,
   DeepSeekIcon,
-  DeploymentIcon,
-  DividerIcon,
   DocsIcon,
-  EnvIcon,
-  FiltersIcon,
   FolderIcon,
   GeminiIcon,
-  GithubCoinIcon,
   GithubIcon,
   GoogleIcon,
-  HomeIcon,
-  InfoIcon,
   JudgeIcon,
-  LatencyIcon,
   LogsIcon,
-  McpCoinIcon,
   McpServerIcon,
   MetaIcon,
   MicrosoftIcon,
@@ -56,18 +41,13 @@ import {
   OpenRouterIcon,
   PromptIcon,
   QwenIcon,
-  RepoIcon,
   SakanaIcon,
   SettingsIcon,
   SlashIcon,
   TencentIcon,
-  ToolCoinIcon,
   ToolsIcon,
   TraceIcon,
-  TsIcon,
   TypesafeIcon,
-  VariablesIcon,
-  WorkflowCoinIcon,
   WorkflowIcon,
   XaiIcon,
   ZaiIcon,
@@ -116,46 +96,26 @@ export const CentralIcons: Story = {
 
 const icons = [
   { name: 'AgentIcon', component: AgentIcon },
-  { name: 'AgentCoinIcon', component: AgentCoinIcon },
-  { name: 'AgentNetworkCoinIcon', component: AgentNetworkCoinIcon },
   { name: 'AiIcon', component: AiIcon },
   { name: 'ApiIcon', component: ApiIcon },
-  { name: 'BranchIcon', component: BranchIcon },
   { name: 'CheckIcon', component: CheckIcon },
   { name: 'CircleDotIcon', component: CircleDotIcon },
-  { name: 'ChevronIcon', component: ChevronIcon },
   { name: 'CommitIcon', component: CommitIcon },
   { name: 'CrossIcon', component: CrossIcon },
-  { name: 'DbIcon', component: DbIcon },
-  { name: 'DebugIcon', component: DebugIcon },
-  { name: 'DeploymentIcon', component: DeploymentIcon },
-  { name: 'DividerIcon', component: DividerIcon },
   { name: 'DocsIcon', component: DocsIcon },
-  { name: 'EnvIcon', component: EnvIcon },
-  { name: 'FiltersIcon', component: FiltersIcon },
   { name: 'FolderIcon', component: FolderIcon },
-  { name: 'GithubCoinIcon', component: GithubCoinIcon },
   { name: 'GithubIcon', component: GithubIcon },
   { name: 'GoogleIcon', component: GoogleIcon },
-  { name: 'HomeIcon', component: HomeIcon },
-  { name: 'InfoIcon', component: InfoIcon },
   { name: 'JudgeIcon', component: JudgeIcon },
-  { name: 'LatencyIcon', component: LatencyIcon },
   { name: 'LogsIcon', component: LogsIcon },
-  { name: 'McpCoinIcon', component: McpCoinIcon },
   { name: 'McpServerIcon', component: McpServerIcon },
   { name: 'MemoryIcon', component: MemoryIcon },
   { name: 'OpenAIIcon', component: OpenAIIcon },
   { name: 'PromptIcon', component: PromptIcon },
-  { name: 'RepoIcon', component: RepoIcon },
   { name: 'SettingsIcon', component: SettingsIcon },
   { name: 'SlashIcon', component: SlashIcon },
-  { name: 'ToolCoinIcon', component: ToolCoinIcon },
   { name: 'ToolsIcon', component: ToolsIcon },
   { name: 'TraceIcon', component: TraceIcon },
-  { name: 'TsIcon', component: TsIcon },
-  { name: 'VariablesIcon', component: VariablesIcon },
-  { name: 'WorkflowCoinIcon', component: WorkflowCoinIcon },
   { name: 'WorkflowIcon', component: WorkflowIcon },
 ];
 
@@ -247,18 +207,6 @@ export const AgentIcons: Story = {
         </Icon>
         <span className="text-caption text-muted-foreground">Agent</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <AgentCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">AgentCoin</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <AgentNetworkCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">AgentNetworkCoin</span>
-      </div>
     </div>
   ),
 };
@@ -271,12 +219,6 @@ export const WorkflowIcons: Story = {
           <WorkflowIcon />
         </Icon>
         <span className="text-caption text-muted-foreground">Workflow</span>
-      </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <WorkflowCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">WorkflowCoin</span>
       </div>
     </div>
   ),
@@ -291,19 +233,12 @@ export const ToolIcons: Story = {
         </Icon>
         <span className="text-caption text-muted-foreground">Tools</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-card p-3">
-        <Icon size="lg" className="text-foreground">
-          <ToolCoinIcon />
-        </Icon>
-        <span className="text-caption text-muted-foreground">ToolCoin</span>
-      </div>
     </div>
   ),
 };
 
 const brandIcons = [
   { name: 'Github', component: GithubIcon },
-  { name: 'GithubCoin', component: GithubCoinIcon },
   { name: 'Google', component: GoogleIcon },
   { name: 'OpenAI', component: OpenAIIcon },
   { name: 'Claude', component: ClaudeIcon },

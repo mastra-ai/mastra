@@ -91,7 +91,6 @@ export { IconCloudUpload } from './IconCloudUpload';
 export { IconCodeBrackets } from './IconCodeBrackets';
 export { IconCodeTree } from './IconCodeTree';
 export { IconCoins } from './IconCoins';
-export { IconColorPalette } from './IconColorPalette';
 export { IconColumns3 } from './IconColumns3';
 export { IconCompassRound } from './IconCompassRound';
 export { IconComponents } from './IconComponents';
