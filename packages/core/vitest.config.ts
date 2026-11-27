@@ -42,7 +42,6 @@ export default defineConfig({
         plugins: [countDurableAgents],
         test: {
           name: 'unit:packages/core',
-          execArgv: ['--expose-gc'],
           environment: 'node',
           include: ['src/**/*.test.ts'],
           exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
