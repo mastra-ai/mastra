@@ -2620,9 +2620,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
     const leaf = step as LeafEntry;
 
-    // Nothing serializes two deliveries of this occurrence except the event-id fence in
-    // #handleDelivery, which keeps same-id deliveries apart and only on a pubsub with a lease
-    // provider (Google Cloud Pub/Sub has none). Deliveries it doesn't fence that read the same saved
+    // Nothing serializes two deliveries of this occurrence. Deliveries that read the same saved
     // result can both continue the run from it. The extra chain can run the next step a second time
     // and ends at the first step whose check finds that step finished and the run past it.
     const store = await this.#finishedCheckStore(workflow);
@@ -4476,10 +4474,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       // engine does (#29389). Waiting here rather than in a detached timer
       // keeps this delivery unacked until the retry is published, so a worker
       // that dies mid-delay gets the event redelivered instead of dropping the
-      // retry. The step fence lease keeps renewing during the wait, so a broker
-      // redelivery after an ack deadline is dropped as a duplicate rather than
-      // starting a second retry. A run canceled meanwhile drops the retry at
-      // dispatch.
+      // retry. A broker redelivery during the wait gets a `completed` conflict on
+      // the saved failed attempt, waits again and publishes a second retry; on
+      // stores with step guards the retry's start guard keeps one of the two.
+      // A run canceled meanwhile drops the retry at dispatch.
       const retryDelay = workflow.retryConfig.delay ?? 0;
       if (retryDelay > 0) {
         await new Promise(resolve => setTimeout(resolve, retryDelay));

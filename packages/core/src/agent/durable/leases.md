@@ -9,14 +9,13 @@ They protect different things and react differently when lost, so they are not i
 | Run ownership         | One execution drives a durable run; stale writes are rejected | Workflows store, or the agent's pubsub as fallback | `runId` (storage), `mastra:durable-agent-execution:v1:[agentId,runId]` (pubsub) | Execution id                                        | 15s / 5s (thread lease TTL)                     | Execution aborts; its writes and publishes are rejected or dropped |
 | Thread lease          | One active run per memory thread                              | Agent's pubsub                                     | `resourceId` + NUL + `threadId`                                                 | Run id, or a qualified `mastra:thread-lease:` token | 15s / 5s (env-configurable)                     | Renewal stops; the current run still finishes                      |
 | Thread claim lease    | One process owns a claimed thread                             | Agent's pubsub                                     | `thread-claim:` + thread key                                                    | Process source id                                   | Same as thread lease                            | Claim unsubscribes and calls `onOwnershipLost`                     |
-| Evented step fence    | A redelivered `workflow.step.run` does not run a step twice   | `mastra.pubsub`                                    | `workflow-step-run:${runId}:${eventId}`                                         | Random per delivery                                 | 30s / 10s                                       | Nothing; best effort                                               |
 | Background task lease | One worker runs a background tool call                        | The task row in storage                            | Task id                                                                         | Worker id                                           | `leaseDurationMs` (default 30s) / a third of it | The worker aborts its local run once another worker reclaims it    |
 
 ## Pubsub leases: `LeaseProvider`
 
 Every pubsub-backed lease uses the `LeaseProvider` interface in `src/events/pubsub.ts`: `acquireLease`, `renewLease`, `releaseLease`, `transferLease`, and `getLeaseOwner`. `transferLease` hands a lease from one owner to another atomically, so no third party can acquire it in between.
 
-`EventEmitterPubSub` (in-process map), `UnixSocketPubSub`, `@mastra/redis-streams`, and `@mastra/valkey-streams` implement it. `CachingPubSub` exposes its inner pubsub's provider through `getLeaseProvider()`. A pubsub without lease support (for example `@mastra/google-cloud-pubsub`) resolves to `NoopLeaseProvider`, where every acquire succeeds: single-process behavior, no cross-process exclusion. Each caller resolves its provider itself (`resolveLeaseProvider` in `execution-fence.ts`, `#resolveLeaseProvider` in `thread-stream-runtime.ts`, `#getLeaseProvider` in the evented workflow processor).
+`EventEmitterPubSub` (in-process map), `UnixSocketPubSub`, `@mastra/redis-streams`, and `@mastra/valkey-streams` implement it. `CachingPubSub` exposes its inner pubsub's provider through `getLeaseProvider()`. A pubsub without lease support (for example `@mastra/google-cloud-pubsub`) resolves to `NoopLeaseProvider`, where every acquire succeeds: single-process behavior, no cross-process exclusion. Each caller resolves its provider itself (`resolveLeaseProvider` in `execution-fence.ts`, `#resolveLeaseProvider` in `thread-stream-runtime.ts`).
 
 Pubsub leases expire on the backend's clock (Redis `PEXPIRE`, or `Date.now()` in-process).
 
@@ -102,19 +101,6 @@ File: `../thread-stream-runtime.ts`.
 - Renewed on the thread lease interval. If a renewal fails and reacquiring fails, the claim unsubscribes and calls `onOwnershipLost`.
 - Without a lease-capable pubsub, exclusivity relies on peer discovery alone, and yielding is a silent release.
 
-## Evented step fence
-
-File: `../../workflows/evented/workflow-event-processor/index.ts`.
-
-A broker redelivers a `workflow.step.run` event whose ack deadline passed while the step is still running (#24589). Redeliveries keep the event id; new executions (loop iterations, retries, foreach items) get new events.
-
-- Key: `workflow-step-run:${runId}:${eventId}`. Owner: a random id per `handle()` call. TTL 30s (`STEP_FENCE_TTL_MS`), renewed every 10s.
-- A delivery that cannot acquire the lease is a duplicate and is acked and dropped.
-- Best effort: if acquiring throws, the step runs anyway; renewal errors are logged.
-- On success the lease is kept until it expires, so a late duplicate is still dropped. On failure it is released, so the broker's retry can run the step.
-
-This deduplicates deliveries. It does not fence writes and is independent of run ownership.
-
 ## Background task lease
 
 File: `../../background-tasks/manager.ts`.
@@ -129,4 +115,4 @@ A background tool call must run on one worker, and another worker must be able t
 
 ## Duplication
 
-Each lease has its own renewal loop and constants: run ownership and the thread leases share `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15s/5s by default), the evented step fence uses 30s/10s, and background tasks are configurable. The two storage leases use unrelated contracts and different clocks. A shared renewing-lease helper (acquire, renew at a third of the TTL, mark lost at a local deadline, release, with a per-caller policy for errors) could replace the pubsub loops, and background tasks could move to the store's clock.
+Each lease has its own renewal loop and constants: run ownership and the thread leases share `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15s/5s by default), and background tasks are configurable. The two storage leases use unrelated contracts and different clocks. A shared renewing-lease helper (acquire, renew at a third of the TTL, mark lost at a local deadline, release, with a per-caller policy for errors) could replace the pubsub loops, and background tasks could move to the store's clock.

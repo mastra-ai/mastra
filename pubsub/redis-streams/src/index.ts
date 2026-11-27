@@ -372,8 +372,6 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   /**
    * True while the reclaim loop runs (`reclaimIntervalMs > 0`): a message a dead
    * consumer held goes to a sibling once it has been idle for `reclaimIdleMs`.
-   * Keep `reclaimIdleMs` at 30 s or more, the evented step fence a dead worker
-   * leaves behind; a message reclaimed sooner is dropped as a duplicate.
    */
   override get redeliversUnacked(): boolean {
     return this.#reclaimIntervalMs > 0;
