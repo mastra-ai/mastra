@@ -34,6 +34,7 @@ export function warnUnsupportedEventedSetup(mastra: Mastra, workflowsStore?: Wor
   if (!missing) return;
 
   warnedHosts.add(mastra);
+  // Becomes an error under COR-1599.
   mastra
     .getLogger()
     ?.warn(
