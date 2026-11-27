@@ -1079,6 +1079,53 @@ export function describeOccurrenceReplayCases({
         });
       }, 20_000);
 
+      // Two copies of a step run at once and both bail. The first ends the run; the second must not
+      // replace the saved result or end the run again.
+      it('keeps the first bail when an overlapping copy of the step bails too', async () => {
+        const held = [gate(), gate()];
+        let calls = 0;
+        const workflow = createWorkflow({
+          id: `overlap-bail-${randomUUID()}`,
+          inputSchema: schema,
+          outputSchema: schema,
+        })
+          .then(
+            createStep({
+              id: 'bails',
+              inputSchema: schema,
+              outputSchema: schema,
+              execute: async ({ bail }) => {
+                const call = ++calls;
+                await held[call - 1]!.promise;
+                return bail({ n: call });
+              },
+            }),
+          )
+          .commit();
+        await withWorkflow(workflow, async driver => {
+          try {
+            const run = await workflow.createRun();
+            const result = run.start({ inputData: { n: 0 } });
+            await expect.poll(() => calls).toBe(1);
+            const copy = driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
+            await expect.poll(() => calls).toBe(2);
+            held[0]!.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 1 } });
+            held[1]!.resolve();
+            await copy;
+            await drainHandlers();
+            const stored = await (await storage.getStore('workflows'))!.loadWorkflowSnapshot({
+              workflowName: workflow.id,
+              runId: run.runId,
+            });
+            expect(stored?.context.bails).toMatchObject({ output: { n: 1 } });
+            expect(driver.events.filter(e => e.type === 'workflow.end' && e.runId === run.runId)).toHaveLength(1);
+          } finally {
+            held.forEach(h => h.resolve());
+          }
+        });
+      }, 20_000);
+
       // The copy of the block's dispatch publishes every branch again. Each branch's start guard
       // refuses the second start: one branch is still in its body, the other already finished.
       // Storage v2 reads the expected occurrence from the stored branch, so the finished branch is

@@ -4396,12 +4396,19 @@ export class WorkflowEventProcessor extends EventProcessor {
       // A bail skips workflow.step.end (publishing it would advance the graph), so nothing else
       // persists this leaf: write its completed result and state, or the stored run keeps the
       // leaf 'running' and the finish prune, which reloads from storage, never sees its output.
-      await this.#runStorage(workflowId, runId).writeStepResult({
-        stepId: leafId,
-        result: stepResult,
-        requestContext: withoutAuthToken(requestContext),
-        state: updatedState,
-      });
+      try {
+        await this.#runStorage(workflowId, runId).writeStepResult({
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(requestContext),
+          state: updatedState,
+          ...(guardStart ? { completionGuard: { eventId: args.eventId! } } : {}),
+        });
+      } catch (error) {
+        // Another copy of this step already saved its result and ends the run.
+        if (isWorkflowStepConflictError(error) && error.reason === 'completed') return;
+        throw error;
+      }
 
       // A bail ends this run, so it doesn't pause it.
       await this.endWorkflow(
