@@ -21,6 +21,7 @@ const ACTION_LABELS: Partial<Record<AuditAction | typeof ASSIGNED_ACTION, string
   'factory.work_item.stage_moved': 'Moved the item',
   'factory.work_item.transition_rejected': 'A move was rejected',
   'factory.work_item.deleted': 'Removed the item',
+  'factory.work_item.needs_attention': 'Needed attention',
   'factory.run.started': 'Started a run',
   'factory.run.ended': 'Run ended',
   'factory.run.approved': 'Started a suggested run',
@@ -70,6 +71,17 @@ function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | 
   );
 }
 
+/** "Needed attention: <reason>", the reason being one of the board run's fixed strings. */
+function NeededAttention({ event }: { event: AuditEvent }) {
+  const reason = metadataString(event, 'reason');
+  const text = reason ? `Needed attention: ${reason}` : 'Needed attention';
+  return (
+    <span className="min-w-0 truncate" title={text}>
+      {text}
+    </span>
+  );
+}
+
 function eventActor(event: AuditEvent, actors: Record<string, AuditActorProfile>): AuditActorProfile | undefined {
   if (event.actorType === 'agent') {
     return { id: event.actorId, name: metadataString(event, 'agentName') ?? 'Factory agent' };
@@ -101,6 +113,8 @@ function activityEntry(
           <time dateTime={event.occurredAt}>Created at: {timestampFormatter.format(new Date(event.occurredAt))}</time>
         ) : event.action === 'factory.work_item.transition_rejected' ? (
           <RejectedMove event={event} board={board} />
+        ) : event.action === 'factory.work_item.needs_attention' ? (
+          <NeededAttention event={event} />
         ) : (
           actionLabel(event.action)
         )}

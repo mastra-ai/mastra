@@ -3,7 +3,15 @@
  * WorkOS dashboard under Audit Logs → Events before the mirror accepts them.
  */
 export const AUDIT_ACTIONS = {
-  work_item: ['created', 'updated', 'deleted', 'stage_moved', 'transition_rejected', 'labels_reconciled'],
+  work_item: [
+    'created',
+    'updated',
+    'deleted',
+    'stage_moved',
+    'transition_rejected',
+    'labels_reconciled',
+    'needs_attention',
+  ],
   run: ['started', 'ended', 'approved', 'dismissed', 'retry', 'queued', 'rejected'],
   git: ['commit', 'push', 'pr_opened'],
   agent: ['commit', 'push', 'pr_opened', 'signaled'],

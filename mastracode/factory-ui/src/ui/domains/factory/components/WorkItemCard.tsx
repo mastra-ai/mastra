@@ -15,6 +15,7 @@ import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
 import { cardControls } from '../cardControls';
+import { useCardRunState } from '../hooks/useCardRunState';
 import { useBoardRepository } from '../hooks/useBoardRepository';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -97,6 +98,8 @@ export function WorkItemCard({
   const repository = useBoardRepository(item.githubProjectId);
   const boardId = itemBoard(item);
   const definition = catalog.data?.find(board => board.id === boardId);
+  // Only a card whose automation failed asks its board run why: one read per such card, not per card.
+  const { data: runState } = useCardRunState(factoryId, item.id, decision?.status === 'failed');
   const {
     moves,
     proposedRunLabel,
@@ -115,6 +118,7 @@ export function WorkItemCard({
     retryingDecisionId,
     sessionStatus,
     sessionHolds,
+    ...(runState?.state === 'needs_attention' && runState.reason ? { attentionReason: runState.reason } : {}),
     onApproveProposal,
     onRetryDecision,
     onMove,

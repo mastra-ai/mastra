@@ -87,6 +87,8 @@ type PendingInput =
     }
   | {
       runStopped: FactoryCardSeat;
+      /** Who stopped it: for the audit trail only, never the run's record. */
+      by?: { userId: string };
       answer?: { heard: true } | { error: unknown };
     }
   | {
@@ -101,6 +103,21 @@ type PendingInput =
 type CardAddress = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId'>;
 
 type CardRef = Pick<FactoryTransitionRequest, 'workItemId'>;
+
+/** The card an input is for. */
+function addressOf(pending: PendingInput): CardAddress {
+  return 'runEnded' in pending
+    ? pending.runEnded
+    : 'runPaused' in pending
+      ? pending.runPaused
+      : 'runFailed' in pending
+        ? pending.runFailed
+        : 'runStopped' in pending
+          ? pending.runStopped
+          : 'deadline' in pending
+            ? pending.deadline
+            : pending.request;
+}
 
 /** The record a board run's stored snapshot holds for its card. */
 function recordOf(snapshot: unknown): FactoryCardRunRecord | undefined {
@@ -153,6 +170,8 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
   readonly #queues = new Map<string, Promise<unknown>>();
   /** Moves asked in this process, keyed by the input id their resume carries. */
   readonly #pending = new Map<string, PendingInput>();
+  /** Inputs that left their card needing attention, with the record they left. */
+  readonly #flagged = new WeakMap<PendingInput, FactoryCardRunRecord>();
   readonly #context: FactoryBoardEngineContext;
 
   readonly #interruptWaitMs: number;
@@ -170,8 +189,13 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     };
     this.workflow = createFactoryBoardWorkflow({
       apply: async (inputId, workItemId, state) => {
-        const next = await this.#apply(inputId, workItemId, state);
-        return next && this.#withDeadline(state, next);
+        const applied = await this.#apply(inputId, workItemId, state);
+        const next = applied && this.#withDeadline(state, applied);
+        const pending = this.#pending.get(inputId);
+        if (pending && next?.state === 'needs_attention' && state.state !== 'needs_attention') {
+          this.#flagged.set(pending, next);
+        }
+        return next;
       },
     });
   }
@@ -414,8 +438,11 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * Tells the card's run that a person stopped its phase's run: the card stays where it is and
    * needs attention until someone starts the phase again. Who stopped it isn't the run's to keep.
    */
-  async runStopped(seat: FactoryCardSeat): Promise<void> {
-    const pending = { runStopped: seat } satisfies PendingInput as Extract<PendingInput, { runStopped: unknown }>;
+  async runStopped(seat: FactoryCardSeat, by?: { userId: string }): Promise<void> {
+    const pending = { runStopped: seat, ...(by ? { by } : {}) } satisfies PendingInput as Extract<
+      PendingInput,
+      { runStopped: unknown }
+    >;
     await this.#ask(seat, pending);
     if (pending.answer && 'error' in pending.answer) throw pending.answer.error;
   }
@@ -637,6 +664,42 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
     } finally {
       this.#pending.delete(inputId);
     }
+    const flagged = this.#flagged.get(pending);
+    if (flagged) await this.#auditNeedsAttention(inputId, pending, flagged);
+  }
+
+  /** Records on the card's audit trail that it came to need attention, and why: once per entry. */
+  async #auditNeedsAttention(inputId: string, pending: PendingInput, record: FactoryCardRunRecord): Promise<void> {
+    const audit = this.#context.audit;
+    if (!audit) return;
+    const card = addressOf(pending);
+    const by = 'runStopped' in pending ? pending.by : undefined;
+    try {
+      const item = await this.#context.workItems.get({ orgId: card.orgId, id: card.workItemId });
+      await audit.record({
+        orgId: card.orgId,
+        factoryProjectId: card.factoryProjectId,
+        ...(by
+          ? { actorId: by.userId, actorType: 'human' as const }
+          : { actorId: 'factory', actorType: 'system' as const }),
+        action: 'factory.work_item.needs_attention',
+        // The input that flagged the card: told twice, or by two processes, it is recorded once.
+        idempotencyKey: `factory-needs-attention:${card.workItemId}:${inputId}`,
+        targets: [{ type: 'work_item', id: card.workItemId, ...(item ? { name: item.title } : {}) }],
+        metadata: {
+          ...(record.phase ? { phase: record.phase } : {}),
+          ...(record.reason ? { reason: record.reason } : {}),
+          ...(record.failure ? { failure: record.failure } : {}),
+          probes: record.probes,
+          ...(record.attempts !== undefined ? { attempts: record.attempts } : {}),
+        },
+      });
+    } catch (error) {
+      console.warn('[Factory] Could not record that a card needs attention', {
+        workItemId: card.workItemId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   #queued(card: CardRef, work: () => Promise<void>): Promise<void> {
@@ -773,18 +836,7 @@ export class WorkflowBoardEngine implements FactoryBoardEngine {
    * the card's session can end a run after the card was deleted.
    */
   async #answeredWithoutCard(pending: PendingInput): Promise<boolean> {
-    const asked =
-      'runEnded' in pending
-        ? pending.runEnded
-        : 'runPaused' in pending
-          ? pending.runPaused
-          : 'runFailed' in pending
-            ? pending.runFailed
-            : 'runStopped' in pending
-              ? pending.runStopped
-              : 'deadline' in pending
-                ? pending.deadline
-                : pending.request;
+    const asked = addressOf(pending);
     if (await this.#context.workItems.get({ orgId: asked.orgId, id: asked.workItemId })) return false;
     if ('runEnded' in pending) pending.answer = { outcome: false };
     else if ('runPaused' in pending) pending.answer = { paused: true };

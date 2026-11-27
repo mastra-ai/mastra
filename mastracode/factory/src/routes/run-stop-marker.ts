@@ -11,9 +11,9 @@ import { SESSION_PATH } from './session-access.js';
  * pass through here; a process going away aborts without one, and that run still retries.
  *
  * Once the abort succeeded, a board engine that keeps what a card is doing hears that a person
- * stopped the run of each card the session was bound to, when a run was going on the session. A
- * Stop with none going (a run waiting out its retry, or queued) stops nothing: the next attempt
- * clears the stop request and runs.
+ * stopped the run of each card the session was bound to, and who did for the card's audit trail,
+ * when a run was going on the session. A Stop with none going (a run waiting out its retry, or
+ * queued) stops nothing: the next attempt clears the stop request and runs.
  */
 export function createRunStopMarker({
   auth,
@@ -41,8 +41,11 @@ export function createRunStopMarker({
     const sessionId = decodeURIComponent(match[1]!);
     const engine = boardEngine();
     let stopped: Parameters<NonNullable<FactoryBoardEngine['runStopped']>>[0][] = [];
+    let by: { userId: string } | undefined;
     try {
       const orgId = await callerOrgId(c);
+      const userId = auth.enabled() ? auth.tenant(c)?.userId : undefined;
+      if (userId) by = { userId };
       if (orgId) {
         await storage.requestRunBindingStop({ orgId, sessionId, at: new Date() });
         // The seats the stop is for, read before the abort can end them.
@@ -63,7 +66,7 @@ export function createRunStopMarker({
     if (c.res.status >= 300) return;
     for (const seat of stopped) {
       // The abort is answered without waiting on the card's run.
-      void engine?.runStopped?.(seat).catch((error: unknown) =>
+      void engine?.runStopped?.(seat, by).catch((error: unknown) =>
         console.warn("[Factory] Could not tell a card's board run that its run was stopped", {
           workItemId: seat.workItemId,
           error: error instanceof Error ? error.message : String(error),

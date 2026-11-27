@@ -14,6 +14,8 @@ import { FactoryRuleRejectedError } from '../rules/dispatch-errors.js';
 import { observeSessionPhaseOutcome } from '../rules/phase-outcome-move.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryTransitionRequest } from '../rules/transition-service.js';
+import type { RecordAuditEventInput } from '../storage/domains/audit/base.js';
+import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { boardRunId } from './board-workflow.js';
@@ -33,6 +35,7 @@ function replica(
   runs?: FactoryCardRuns,
   interruptWaitMs?: number,
   deadlines?: WorkflowBoardEngineOptions['deadlines'],
+  audit?: AuditRecorder,
 ) {
   const boards = createBoardRegistry();
   const transitionService = new FactoryTransitionService({
@@ -45,7 +48,13 @@ function replica(
     await before?.();
     return transitionService.transition(request);
   };
-  const context = { transitionService: { transition }, workItems: storage, boards, ...(runs ? { runs } : {}) };
+  const context = {
+    transitionService: { transition },
+    workItems: storage,
+    boards,
+    ...(runs ? { runs } : {}),
+    ...(audit ? { audit } : {}),
+  };
   const engine = deadlines
     ? createWorkflowBoardEngine({ deadlines })(context)
     : new WorkflowBoardEngine(context, { interruptWaitMs });
@@ -67,7 +76,14 @@ async function setup({
   const dir = mkdtempSync(join(tmpdir(), 'factory-board-runs-'));
   onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
   const runsUrl = `file:${join(dir, 'runs.db')}`;
-  const { engine, mastra } = replica(storage, runsUrl, undefined, runs, undefined, deadlines);
+  const audited: RecordAuditEventInput[] = [];
+  const audit: AuditRecorder = {
+    record: async input => {
+      audited.push(input);
+      return null;
+    },
+  };
+  const { engine, mastra } = replica(storage, runsUrl, undefined, runs, undefined, deadlines, audit);
   const prepared = await storage.prepareRunStart({
     orgId: ORG,
     userId: 'user-1',
@@ -89,7 +105,15 @@ async function setup({
   });
   await storage.update({ orgId: ORG, id: prepared.item.id, userId: 'user-1', patch: { stages: ['planning'] } });
   // Told as the dispatcher tells it: a run that ended without an outcome is run once more.
-  return { storage, engine, mastra, runsUrl, ...prepared, binding: { ...prepared.binding, runsAgain: true } };
+  return {
+    storage,
+    engine,
+    mastra,
+    runsUrl,
+    audited,
+    ...prepared,
+    binding: { ...prepared.binding, runsAgain: true },
+  };
 }
 
 function personMove(storage: WorkItemsStorage, id: string, stage: string, identity: string) {
@@ -1009,6 +1033,54 @@ describe('the workflow board engine', () => {
       phase: 'planning',
       probes: 0,
     });
+  });
+
+  it("records on the card's audit trail when it comes to need attention, once for each time it does", async () => {
+    const { storage, engine, mastra, item, binding, audited } = await setup();
+    const seat = { orgId: ORG, factoryProjectId: PROJECT_ID, workItemId: item.id, role: binding.role };
+    await engine.runFailed(seat, { code: 'run_failed', attempt: 1, terminal: false, decisionId: 'decision-1' });
+    expect(audited).toEqual([]);
+
+    await engine.runFailed(seat, { code: 'run_failed', attempt: 2, terminal: true, decisionId: 'decision-1' });
+    expect(audited).toEqual([
+      {
+        orgId: ORG,
+        factoryProjectId: PROJECT_ID,
+        actorId: 'factory',
+        actorType: 'system',
+        action: 'factory.work_item.needs_attention',
+        idempotencyKey: expect.stringMatching(new RegExp(`^factory-needs-attention:${item.id}:`)),
+        targets: [{ type: 'work_item', id: item.id, name: 'Factory item' }],
+        metadata: {
+          phase: 'planning',
+          reason: 'Agent run ended in error',
+          failure: 'run_failed',
+          probes: 0,
+          attempts: 2,
+        },
+      },
+    ]);
+
+    // Told again, or told of another failure or a Stop while it already needs attention: nothing more.
+    await engine.runFailed(seat, { code: 'run_failed', attempt: 2, terminal: true, decisionId: 'decision-1' });
+    await engine.runFailed(seat, { code: 'run_overdue', attempt: 1, terminal: true, decisionId: 'decision-2' });
+    await engine.runStopped(seat, { userId: 'user-1' });
+    expect(audited).toHaveLength(1);
+
+    // Started again and stopped by a person: a second entry, under that person.
+    await engine.requestMove({ ...(await personMove(storage, item.id, 'planning', 'start-1')()), reenter: true });
+    await engine.runStopped(seat, { userId: 'user-1' });
+    expect(audited).toHaveLength(2);
+    expect(audited[1]).toMatchObject({
+      actorId: 'user-1',
+      actorType: 'human',
+      metadata: { phase: 'planning', reason: 'Stopped by a person.', probes: 0 },
+    });
+    expect(audited[1]!.idempotencyKey).not.toBe(audited[0]!.idempotencyKey);
+    // Who stopped it is the trail's to keep, not the run's.
+    const stored = JSON.stringify(await mastra.getWorkflow('factory-board').getWorkflowRunById(boardRunId(item.id)));
+    expect(stored).not.toContain('user-1');
+    expect(stored).not.toContain(ORG);
   });
 
   it('counts a run end once, however many times it is told', async () => {
