@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "mssql": "^12.7.14"
+    "mssql": "^12.8.0"
   },
   "devDependencies": {
     "@internal/core": "workspace:*",
