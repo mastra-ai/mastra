@@ -12,6 +12,14 @@ export function isReconnectableMCPError(error: unknown): boolean {
     return false;
   }
 
+  // Structured transport metadata wins over the message. Current MCP SDKs put
+  // the response status on `SdkHttpError.status` (`data.status`, `statusCode`)
+  // and a JSON-RPC error carries a numeric `code`, while the message text is
+  // written by the server and can omit the status or quote a misleading one.
+  const { httpStatus, code } = getMCPDiscoveryErrorDetails(error);
+  if (typeof code === 'number') return false;
+  if (httpStatus !== undefined) return REJECTED_BEFORE_DISPATCH_STATUSES.has(httpStatus);
+
   const errorMessage = error.message.toLowerCase();
 
   return (
