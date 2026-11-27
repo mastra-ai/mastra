@@ -4,7 +4,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useRunQueue } from '../../../../hooks/useFactoryDecisions';
+import { useRunQueue } from '@mastra/react/hooks/factory';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { currentItemStage } from '../boardStages';
 import { cardControls } from '../cardControls';

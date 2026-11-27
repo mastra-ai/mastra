@@ -1,7 +1,7 @@
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';
-import { parseMoveAnswer } from './submittedMoves';
-import type { MoveAnswer } from './submittedMoves';
+import { parseMoveAnswer } from '@mastra/react/hooks/factory';
+import type { MoveAnswer } from '@mastra/react/hooks/factory';
 
 /** The server pings every 25 s, so a stream this quiet has nobody on the other end and never ends on its own. */
 const FEED_SILENCE_LIMIT_MS = 60_000;

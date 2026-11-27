@@ -37,7 +37,7 @@ function noCounts(): ActivityCounts {
 }
 
 /** The period a read fetches for `period`: Today reads the week's answer, so narrowing fetches nothing. */
-export function activityDepth(period: ActivityPeriod): ActivityPeriod {
+export function activityDepth(period: ActivityPeriod): 'week' | 'month' {
   return period === 'month' ? 'month' : 'week';
 }
 

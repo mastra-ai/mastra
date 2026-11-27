@@ -9,7 +9,16 @@ import { intakeRoutesQueryOptions } from '../hooks/useIntakeRoutes';
 import { defaultModelQueryOptions } from '../hooks/use-default-model';
 import { providersQueryOptions } from '../hooks/use-providers';
 import { factoriesQueryOptions } from '../hooks/useFactories';
-import { factoryDecisionHistoryQueryOptions, runQueueQueryOptions } from '../hooks/useFactoryDecisions';
+import {
+  factoryDecisionHistoryQueryOptions,
+  runQueueQueryOptions,
+  boardPhasesQueryOptions,
+  sessionWorkItemsQueryOptions,
+  workItemActivityQueryOptions,
+  workItemFilterOptionsQueryOptions,
+  workItemQueryOptions,
+  workItemStartersQueryOptions,
+} from '@mastra/react/hooks/factory';
 import { factoryProjectQueryOptions } from '../hooks/useFactoryDefaultModel';
 import { gitLabStatusQueryOptions } from '../hooks/useGitLabData';
 import { githubStatusQueryOptions } from '../hooks/useGithubStatus';
@@ -21,14 +30,6 @@ import { activePlatformConnectionQueryOptions } from '../hooks/usePlatformConnec
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { serverStatusQueryOptions } from '../hooks/useServerStatus';
 import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
-import {
-  boardPhasesQueryOptions,
-  sessionWorkItemsQueryOptions,
-  workItemActivityQueryOptions,
-  workItemFilterOptionsQueryOptions,
-  workItemQueryOptions,
-  workItemStartersQueryOptions,
-} from '../hooks/useWorkItems';
 import { threadMessagesQueryOptions } from '../hooks/useAgentControllerThreadMessages';
 import { userSessionQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
@@ -39,7 +40,7 @@ import { BOARD_SORT_QUERY, DEFAULT_BOARD_SORT, isBoardSort } from './domains/fac
 import { boardDecisionsQueryOptions } from './domains/factory/hooks/useBoardDecisions';
 import { BOARD_SEARCH_QUERY } from './domains/factory/hooks/useBoardView';
 import { linkedSessionRepository } from './domains/factory/hooks/useSessionRepository';
-import { DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
+import { activityDepth, DEFAULT_ACTIVITY_PERIOD } from './domains/factory/periodActivity';
 import { ruleDecisionGroup } from './domains/factory/ruleDecisionGroups';
 import { pullRequestSubscriptionsQuery } from './domains/factory/services/githubSubscriptions';
 import { isSettingsPath } from './domains/settings/hooks/useSettingsOpen';
@@ -152,13 +153,13 @@ export const prefetchBoard: Prefetch = (services, { params, request }) => {
       windows: {},
       item: searchParams.get('item') ?? undefined,
     });
-    void queryClient.query(boardPhasesQueryOptions(api.baseUrl, factoryId, view)).catch(noop);
+    void queryClient.query(boardPhasesQueryOptions(api.mastra.getFactory(factoryId), view)).catch(noop);
   }
-  void queryClient.query(workItemFilterOptionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(workItemFilterOptionsQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
-    void queryClient.query(runQueueQueryOptions(api.baseUrl, factoryId)).catch(noop);
+    void queryClient.query(runQueueQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
     void queryClient.query(intakeConfigQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(intakeBindingsQueryOptions(api.baseUrl)).catch(noop);
     void queryClient.query(githubStatusQueryOptions(api.baseUrl)).catch(noop);
@@ -200,8 +201,10 @@ export const prefetchDraft: Prefetch = (services, args) => {
   const { factoryId } = args.params;
   if (!factoryId) return;
   const { queryClient, api } = services;
-  void queryClient.query(workItemStartersQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(workItemActivityQueryOptions(api.baseUrl, factoryId, DEFAULT_ACTIVITY_PERIOD)).catch(noop);
+  void queryClient.query(workItemStartersQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
+  void queryClient
+    .query(workItemActivityQueryOptions(api.mastra.getFactory(factoryId), activityDepth(DEFAULT_ACTIVITY_PERIOD)))
+    .catch(noop);
 };
 
 /** A card's draft offers the card's own actions under the composer. */
@@ -210,9 +213,9 @@ export const prefetchCardDraft: Prefetch = (services, args) => {
   const { factoryId, workItemId } = args.params;
   if (!factoryId || !workItemId) return;
   const { queryClient, api } = services;
-  void queryClient.query(workItemQueryOptions(api.baseUrl, factoryId, workItemId)).catch(noop);
+  void queryClient.query(workItemQueryOptions(api.mastra.getFactory(factoryId), workItemId)).catch(noop);
   void queryClient.query(boardCatalogQueryOptions(api.client, factoryId)).catch(noop);
-  void queryClient.query(boardDecisionsQueryOptions(api.baseUrl, factoryId)).catch(noop);
+  void queryClient.query(boardDecisionsQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
 };
 
 // The loader fills in what is missing; the page's own queries refresh what is cached.
@@ -234,7 +237,7 @@ export const prefetchSessionFrame: Prefetch = (services, { params, request }) =>
     ? [
         queryClient
           .query({
-            ...sessionWorkItemsQueryOptions(api.baseUrl, factoryId, params.sessionId),
+            ...sessionWorkItemsQueryOptions(api.mastra.getFactory(factoryId), params.sessionId),
             ...CACHED_UNLESS_INVALIDATED,
           })
           .catch(noop),
@@ -311,6 +314,6 @@ export const prefetchRuleDecisions: Prefetch = ({ queryClient, api }, { params, 
   if (!factoryId) return;
   const group = ruleDecisionGroup(new URL(request.url).searchParams.get('group'));
   void queryClient
-    .infiniteQuery(factoryDecisionHistoryQueryOptions(api.baseUrl, factoryId, group.key, group.statuses))
+    .infiniteQuery(factoryDecisionHistoryQueryOptions(api.mastra.getFactory(factoryId), group.key, group.statuses))
     .catch(noop);
 };

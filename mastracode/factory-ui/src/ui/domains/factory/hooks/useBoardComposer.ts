@@ -4,7 +4,7 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-} from '../../../../hooks/useWorkItems';
+} from '@mastra/react/hooks/factory';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { itemBoard } from '../boardStages';
 import type { WorkItem } from '@internal/factory-contract';

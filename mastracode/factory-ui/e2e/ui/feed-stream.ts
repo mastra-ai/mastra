@@ -1,6 +1,6 @@
 import { http } from 'msw';
 
-import type { MoveAnswer } from '../../src/ui/domains/factory/services/submittedMoves';
+import type { MoveAnswer } from '@mastra/react/hooks/factory';
 import { TEST_BASE_URL } from './render';
 
 /**

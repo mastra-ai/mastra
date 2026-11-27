@@ -8,7 +8,7 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type { SessionRowsResponse, SessionRowWire } from '../api/types';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
-import { stripCachedSessionRefs } from './useWorkItems';
+import { stripCachedSessionRefs } from '@mastra/react/hooks/factory';
 import {
   createUserSession,
   deleteUserSession,
