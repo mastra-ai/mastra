@@ -19,13 +19,14 @@ const latestVersion: AgentVersionResponse = {
   createdAt: '2026-11-02T10:00:00.000Z',
 };
 
+// Saved on another model than the agent runs on now, so a run that ignores the pinned version's model is visible.
 const publishedVersion: AgentVersionResponse = {
   id: publishedAgentVersionId,
   agentId: agentIdWithVersions,
   versionNumber: 1,
   name: 'Agent One',
   instructions: 'Published instructions.',
-  model: { provider: 'openai', name: 'gpt-4o-mini' },
+  model: { provider: 'anthropic', name: 'claude-haiku-4-5' },
   changeMessage: 'Initial version',
   createdAt: '2026-11-01T10:00:00.000Z',
 };

@@ -392,6 +392,53 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(targetField().value).toBe('Agent Two'));
       expect(screen.queryByRole('combobox', { name: /^Agent version/ })).toBeNull();
     });
+
+    // The server applies a pinned version's own config, model included, so the dialog must show that model.
+    describe('when the pinned version was saved on another model', () => {
+      const providerField = () => screen.getByRole('combobox', { name: 'Model provider' });
+      const modelField = () => screen.getByRole('combobox', { name: 'Model' });
+
+      async function pinPublishedVersion() {
+        await pickAgentOne();
+        await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+        await chooseAgentVersion(agentVersionField(), 'v1');
+        await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+      }
+
+      it("shows the version's model in place of the agent's own", async () => {
+        setupHandlers();
+        renderDialog();
+        await pinPublishedVersion();
+
+        await waitFor(() => expect(providerField().textContent).toContain('Anthropic'));
+        expect(modelField().textContent).toContain('claude-haiku-4-5');
+      });
+
+      it('sends the version only, since its own model is what runs', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await pinPublishedVersion();
+        await waitFor(() => expect(modelField().textContent).toContain('claude-haiku-4-5'));
+
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("goes back to the agent's own model when Latest is picked back", async () => {
+        setupHandlers();
+        renderDialog();
+        await pinPublishedVersion();
+        await waitFor(() => expect(modelField().textContent).toContain('claude-haiku-4-5'));
+
+        await chooseAgentVersion(agentVersionField(), 'Latest');
+
+        await waitFor(() => expect(modelField().textContent).toContain('gpt-4o-mini'));
+        expect(providerField().textContent).toContain('OpenAI');
+      });
+    });
   });
 
   describe('Advanced', () => {
@@ -579,6 +626,30 @@ describe('ExperimentTriggerDialog', () => {
         await waitFor(() => expect(triggerCalls).toHaveLength(1));
         expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      // A pinned version brings its own model, but an explicit pick still wins: it is what the run will use.
+      describe('when a version saved on another model is pinned', () => {
+        async function pinPublishedVersion() {
+          await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+          await chooseAgentVersion(agentVersionField(), 'v1');
+          await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+        }
+
+        it('keeps the picked model, and sends it alongside the version', async () => {
+          const { triggerCalls } = setupHandlers();
+          renderDialog();
+          await openModelOverride();
+          await pinPublishedVersion();
+          await waitFor(() => expect(modelField().textContent).toContain('claude-haiku-4-5'));
+
+          await pickModel('OpenAI', 'gpt-4o');
+          fireEvent.click(runButton());
+
+          await waitFor(() => expect(triggerCalls).toHaveLength(1));
+          expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+          expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'openai', modelId: 'gpt-4o' });
+        });
       });
     });
 

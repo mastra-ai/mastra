@@ -12,6 +12,7 @@ import {
 } from '@/domains/datasets/components/__tests__/fixtures/agent-versions';
 import { emptyDatasetItems } from '@/domains/datasets/components/__tests__/fixtures/dataset-items';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { modelProviders } from '@/domains/datasets/components/__tests__/fixtures/model-providers';
 import {
   agent,
   noProcessors,
@@ -59,6 +60,7 @@ beforeEach(() => {
       HttpResponse.json(params.agentId === agentIdWithVersions ? agentVersionsResponse : emptyAgentVersionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': agent('agent-1', 'Agent One') })),
+    http.get(`${TEST_BASE_URL}/api/agents/providers`, () => HttpResponse.json(modelProviders)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
@@ -132,10 +134,15 @@ describe('RerunExperimentButton', () => {
 
     const versionField = await screen.findByRole<HTMLInputElement>('combobox', { name: /^Agent version/ });
     await waitFor(() => expect(versionField.value).toBe('v1'));
+    // The version's own model is what the run uses, so it is what the picker shows.
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('claude-haiku-4-5'),
+    );
     fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+    expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
   });
 
   it('falls back to the scorers that actually produced scores when none are pinned on the experiment', async () => {
