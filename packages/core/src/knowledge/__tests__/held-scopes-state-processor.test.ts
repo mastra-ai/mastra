@@ -158,6 +158,8 @@ describe('HeldScopesStateProcessor', () => {
     const cleared = (await processorWithNone.computeStateSignal(args(base))) as any;
     expect(cleared).toMatchObject({ mode: 'snapshot', contents: '\n  Your session holds no Knowledge scopes.\n' });
     expect(await processorWithNone.computeStateSignal(args())).toBeUndefined();
+    const leftWindow = { lastSnapshot: base.lastSnapshot, contextWindow: { hasSnapshot: false } };
+    expect(await processorWithNone.computeStateSignal(args(leftWindow))).toBeUndefined();
   });
 
   it('sends a full snapshot again once the earlier one has left the context window', async () => {

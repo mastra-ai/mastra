@@ -324,6 +324,23 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(prompt).toContain('- resource:user-1 (owner)');
   });
 
+  it('sends no held-scopes list when the knowledge option turns on no tools', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-none' }), scopes, tools: false });
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-none',
+      name: 'held-none',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+      tools: { ...knowledge.createTools() },
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    expect(JSON.stringify(prompts[0])).not.toContain('<knowledge-scopes>');
+  });
+
   it('lets a knowledge-scopes processor inside a processor workflow replace the built-in one', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-wf' }), scopes, tools: true });
     const replacement = {
