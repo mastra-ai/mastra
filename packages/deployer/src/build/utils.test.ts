@@ -398,6 +398,10 @@ describe('normalizeStudioBase', () => {
   });
 
   describe('basic normalization', () => {
+    it('should add leading slash when missing', () => {
+      expect(normalizeStudioBase('admin')).toBe('/admin');
+    });
+
     it('should preserve leading slash', () => {
       expect(normalizeStudioBase('/admin')).toBe('/admin');
     });
