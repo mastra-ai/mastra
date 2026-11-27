@@ -101,6 +101,13 @@ The schema definitions below cover the built-in database-backed tables documente
       'Postgres and libSQL only. ID of the run that took the pending signal, kept until that run ends. See the [PostgreSQL](/integrations/databases/postgresql#pending-signals) and [libSQL](/integrations/databases/libsql#pending-signals) pages for the migration.',
     constraints: [{ type: 'nullable', value: true }],
   },
+  {
+    name: 'signalState',
+    type: 'text',
+    description:
+      'Postgres and libSQL only. `transient` for a transient pending signal, `taken` for a signal a run took that no save has written yet, otherwise null.',
+    constraints: [{ type: 'nullable', value: true }],
+  },
 ]}
     />
 
