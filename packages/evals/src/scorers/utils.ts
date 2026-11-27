@@ -1326,13 +1326,9 @@ const COMPARABLE_FIELDS_BY_TYPE: Record<string, string[]> = {
   processor_run: ['processorId'],
 };
 
-/**
- * `JSON.stringify` with object keys sorted at every depth, so values that differ
- * only in key order serialize the same. Arrays keep their order.
- */
 function stableStringify(value: unknown): string | undefined {
   return JSON.stringify(value, (_key, val) =>
-    val && typeof val === 'object' && !Array.isArray(val)
+    Object.prototype.toString.call(val) === '[object Object]'
       ? Object.fromEntries(
           Object.keys(val)
             .sort()
