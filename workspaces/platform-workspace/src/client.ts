@@ -171,6 +171,11 @@ export class PlatformClient {
     return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
   }
 
+  /** Calls a project route the proxy serves for every provider, such as `/browsers`. */
+  async requestProject(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this.requestAtPath('', path, options);
+  }
+
   private async requestAtPath(providerPath: string, path: string, options: PlatformRequestOptions): Promise<Response> {
     const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {

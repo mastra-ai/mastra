@@ -113,26 +113,30 @@ Creating Memory instances, Knowledge instances, and databases requires the `admi
 
 ### Hosted browser
 
-Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.
+`createBrowser` starts a hosted browser session in one of the project's environments and returns a `PlatformBrowser`, a Stagehand browser connected to it. Hand it to an agent as its `browser`.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
-import { PlatformBrowser } from '@mastra/platform';
+import { MastraPlatform } from '@mastra/platform';
 
-const agent = new Agent({
-  name: 'browser-agent',
-  model: 'openai/gpt-4o-mini',
-  browser: new PlatformBrowser({ cdpUrl: process.env.MASTRA_BROWSER_CDP_URL! }),
-});
+const platform = new MastraPlatform({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+const browser = await platform.createBrowser({ environmentId: 'env_123', session: { idleTimeoutSeconds: 600 } });
+
+const agent = new Agent({ id: 'browser-agent', name: 'Browser agent', model: 'openai/gpt-4o-mini', browser });
+
+// Save browser.sessionId to reconnect later; getBrowser throws once the session has ended.
+const again = await platform.getBrowser(browser.sessionId!);
 ```
 
-Alternatively, provide a Mastra Platform project ID and access token to provision a new Browserbase-backed session on demand. Browserbase credentials stay on the Platform server.
+A session ends after `idleTimeoutSeconds` (default 300) with nothing connected, or when you end it. `platform.browsers` manages the sessions themselves:
 
 ```ts
-const browser = new PlatformBrowser({ projectId: 'your-project-id' });
+const sessions = await platform.browsers.list('env_123');
+const { url } = await platform.browsers.liveView(sessions[0].id);
+await platform.browsers.end(sessions[0].id);
 ```
 
-`PlatformBrowser` uses `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID` when the corresponding options are omitted for on-demand provisioning. It POSTs `{ projectId }` to `https://platform.mastra.ai/v1/browsers/sessions` (overridable with `apiUrl` or `MASTRA_BROWSER_API_URL`) and connects to the returned CDP URL with shared browser scope. A project access token must be authorized for that project. Supplying `cdpUrl` skips provisioning and does not require a Platform token or project ID.
+`new PlatformBrowser({ environmentId })` also works on its own with `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID`. It starts a session the first time it is used, and another if that one ends. To use a browser you already have, pass its CDP URL instead: `new PlatformBrowser({ cdpUrl })` calls nothing on the Platform. Treat CDP and live view URLs as secrets: anyone holding one can drive the browser until it expires.
 
 ### Knowledge transport contract
 

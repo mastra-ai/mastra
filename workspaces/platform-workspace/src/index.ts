@@ -4,6 +4,7 @@ export {
   type PlatformAccessToken,
   type PlatformClientOptions,
   type PlatformProxyError,
+  type PlatformRequestOptions,
   type SandboxProvider,
 } from './client.js';
 export { PlatformFilesystem, type PlatformFilesystemOptions } from './filesystem.js';

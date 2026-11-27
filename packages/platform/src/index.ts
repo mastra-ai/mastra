@@ -38,8 +38,18 @@ export type {
 } from './agents/platform-agent';
 export { ConnectClient, MastraConnectError } from '@mastra/connect';
 export * from './memory/index';
-export { PlatformBrowser } from './browser/index';
-export type { PlatformBrowserOptions } from './browser/index';
+export { PlatformBrowser, PlatformBrowserSessions } from './browser/index';
+export type {
+  CreatePlatformBrowserSessionInput,
+  PlatformBrowserActivity,
+  PlatformBrowserCapabilities,
+  PlatformBrowserOptions,
+  PlatformBrowserRecording,
+  PlatformBrowserSession,
+  PlatformBrowserSessionStatus,
+  PlatformBrowserUrl,
+  PlatformBrowserUsage,
+} from './browser/index';
 export { PlatformKnowledge } from './knowledge/index';
 export type { PlatformKnowledgeImporterClass, PlatformKnowledgeOptions } from './knowledge/index';
 export * from '@mastra/platform-workspace';

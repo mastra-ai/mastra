@@ -1,70 +1,75 @@
+import { PlatformApiError, PlatformClient } from '@mastra/platform-workspace';
 import { StagehandBrowser } from '@mastra/stagehand';
 import type { StagehandBrowserConfig } from '@mastra/stagehand';
+import { PlatformBrowserSessions } from './sessions';
+import type { CreatePlatformBrowserSessionInput } from './sessions';
+
+export * from './sessions';
 
 export interface PlatformBrowserOptions extends Omit<
   StagehandBrowserConfig,
   'cdpUrl' | 'scope' | 'env' | 'apiKey' | 'projectId'
 > {
-  /** Existing Platform-provisioned CDP URL. When supplied, no API request or access token is needed. */
+  /** CDP URL of a browser that is already running. Skips the Platform: no access token or project needed. */
   cdpUrl?: string;
+  /** A running Platform browser session to connect to, instead of starting one. */
+  sessionId?: string;
+  /** Environment to start the session in. Falls back to `MASTRA_ENVIRONMENT_ID`. */
+  environmentId?: string;
+  /** Settings for the session this browser starts. */
+  session?: Omit<CreatePlatformBrowserSessionInput, 'environmentId'>;
   /** Platform access token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`. */
   accessToken?: string;
   /** Mastra Platform project ID. Falls back to `MASTRA_PROJECT_ID`. */
   projectId?: string;
-  /** Browser provisioning API URL. Falls back to `MASTRA_BROWSER_API_URL`. */
-  apiUrl?: string;
   fetch?: typeof fetch;
 }
 
-const DEFAULT_API_URL = 'https://platform.mastra.ai';
-
-function trimTrailingSlashes(url: string): string {
-  let end = url.length;
-  while (end > 0 && url[end - 1] === '/') end--;
-  return url.slice(0, end);
-}
-
-/** A Stagehand browser connected to a Platform-provisioned Browserbase session. */
+/**
+ * A Stagehand browser running on Mastra Platform. It starts a hosted browser session the first time
+ * it is used, or connects to `sessionId`. Each connection gets a fresh CDP URL, so the browser can
+ * reconnect after the URL expires.
+ */
 export class PlatformBrowser extends StagehandBrowser {
+  readonly #state: { sessionId?: string };
+
   constructor(options: PlatformBrowserOptions = {}) {
     const {
       cdpUrl,
-      accessToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY,
-      projectId = process.env.MASTRA_PROJECT_ID,
-      apiUrl = process.env.MASTRA_BROWSER_API_URL ?? DEFAULT_API_URL,
-      fetch: fetchImpl = fetch,
+      sessionId,
+      environmentId = process.env.MASTRA_ENVIRONMENT_ID,
+      session,
+      accessToken,
+      projectId,
+      fetch,
       ...stagehandOptions
     } = options;
-    if (!cdpUrl && !accessToken) throw new Error('PlatformBrowser: accessToken is required');
-    if (!cdpUrl && !projectId) throw new Error('PlatformBrowser: projectId is required');
+    const state: { sessionId?: string } = { sessionId };
 
-    super({
-      ...stagehandOptions,
-      scope: 'shared',
-      cdpUrl:
-        cdpUrl ||
-        (async () => {
-          const response = await fetchImpl(`${trimTrailingSlashes(apiUrl)}/v1/browsers/sessions`, {
-            method: 'POST',
-            headers: {
-              authorization: `Bearer ${accessToken}`,
-              'content-type': 'application/json',
-            },
-            body: JSON.stringify({ projectId }),
-            signal: AbortSignal.timeout(30_000),
-          });
-          if (!response.ok) throw new Error(`PlatformBrowser: browser provisioning failed (${response.status})`);
-          const result: unknown = await response.json();
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            !('connectUrl' in result) ||
-            typeof result.connectUrl !== 'string'
-          ) {
-            throw new Error('PlatformBrowser: browser provisioning returned no connectUrl');
-          }
-          return result.connectUrl;
-        }),
-    });
+    let connect: () => Promise<string>;
+    if (!cdpUrl) {
+      if (!sessionId && !environmentId) throw new Error('PlatformBrowser: environmentId is required');
+      const sessions = new PlatformBrowserSessions(new PlatformClient({ accessToken, projectId, fetch }));
+      const start = async () => (await sessions.create({ ...session, environmentId: environmentId! })).id;
+      connect = async () => {
+        state.sessionId ??= await start();
+        try {
+          return (await sessions.cdpUrl(state.sessionId)).url;
+        } catch (error) {
+          // A session this browser started has ended (idle timeout, max duration): start another.
+          if (sessionId || !(error instanceof PlatformApiError && error.status === 409)) throw error;
+          state.sessionId = await start();
+          return (await sessions.cdpUrl(state.sessionId)).url;
+        }
+      };
+    }
+
+    super({ ...stagehandOptions, scope: 'shared', cdpUrl: cdpUrl || connect! });
+    this.#state = state;
+  }
+
+  /** The Platform browser session, once one is started or when `sessionId` was given. */
+  get sessionId(): string | undefined {
+    return this.#state.sessionId;
   }
 }
