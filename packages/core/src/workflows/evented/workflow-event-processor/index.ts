@@ -1343,9 +1343,21 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
       if (!claim) return;
       stepResults = claim.stepResults;
+      // The header records the restart event, so a delivery of it again does not move the run back
+      // to where this one found it. Its claims still settle a race with a first delivery that has not
+      // finished; with nothing to claim, nothing is left to settle.
+      const applied = header.appliedTriggerEventId === eventId;
+      if (applied && claim.outcome === 'nothing to claim') {
+        this.mastra.getLogger()?.debug('Ignoring a repeated workflow trigger: it was already applied', {
+          workflowId,
+          runId,
+          eventId,
+        });
+        return;
+      }
       // When every claimed step had saved its result, the header is left as it is: the finished-step
       // check reads from it whether the run already went past those steps.
-      if (claim.tookOver) {
+      if (!applied && claim.outcome !== 'all saved') {
         const updated = await runStorage.updateHeader({
           status: 'running',
           activePaths: executionPath ?? restart.activePaths,
@@ -1353,6 +1365,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           suspendedPaths: {},
           waitingPaths: {},
           resumeLabels: {},
+          appliedTriggerEventId: eventId,
           expectedStatus: ['running', 'waiting'],
         });
         if (!updated) {
@@ -2689,10 +2702,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Claims the steps a restart restarts that carry the occurrence the caller read, except foreach
    * steps, whose items are not guarded. A claimed step is marked running under the restart's event,
-   * which its next delivery expects. A step that saved its result before the claim keeps it, and
-   * the finished-step check decides its delivery. Returns the step results the restart publishes,
-   * with `tookOver` false when every claimed step had saved its result, or `undefined` when another
-   * restart or the run took every claimed step first.
+   * which its next delivery expects. A step whose record that occurrence left as anything but
+   * running (a saved result, a suspension, a failed attempt) is not claimed and stays as stored:
+   * the finished-step check decides its delivery, which continues from a saved result and runs a
+   * suspended step or a failed attempt again.
+   *
+   * Returns the step results the restart publishes, with `outcome`: `'nothing to claim'` when no
+   * step carries an occurrence, `'all saved'` when no claimed step was running any more, or
+   * `'claimed'`. Returns `undefined` when another restart or the run took every claimed step first.
    */
   async #takeOverRestartTargets({
     workflow,
@@ -2705,16 +2722,18 @@ export class WorkflowEventProcessor extends EventProcessor {
   }: Pick<ProcessorArgs, 'workflow' | 'workflowId' | 'runId' | 'stepResults' | 'requestContext'> & {
     restart: RestartExecutionParams;
     eventId: string;
-  }): Promise<{ stepResults: ProcessorArgs['stepResults']; tookOver: boolean } | undefined> {
+  }): Promise<
+    { stepResults: ProcessorArgs['stepResults']; outcome: 'nothing to claim' | 'all saved' | 'claimed' } | undefined
+  > {
     const targets = Object.entries(restart.activeStepsPath ?? {}).flatMap(([stepId, path]) =>
       workflow.stepGraph[path[0]!]?.type !== 'foreach' && stepResults?.[stepId]?.metadata?.startedBy ? [stepId] : [],
     );
-    if (!targets.length) return { stepResults, tookOver: true };
+    if (!targets.length) return { stepResults, outcome: 'nothing to claim' };
 
     const runStorage = this.#runStorage(workflowId, runId);
     const stored = await runStorage.loadSteps(targets);
     const claimed = { ...stepResults };
-    let tookOver = false;
+    let claimedAny = false;
     const refused: { stepId: string; reason: string; storedStartedBy?: string }[] = [];
     for (const stepId of targets) {
       // The stored record whole, so what a restart or a resume reads from it survives.
@@ -2731,7 +2750,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           startGuard: { eventId, expectedStartedBy: stepResults![stepId]!.metadata!.startedBy, takeover: true },
         });
         claimed[stepId] = result;
-        tookOver = true;
+        claimedAny = true;
       } catch (error) {
         if (!isWorkflowStepConflictError(error)) throw error;
         if (error.reason !== 'completed') {
@@ -2748,7 +2767,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
       return undefined;
     }
-    return { stepResults: claimed, tookOver };
+    return { stepResults: claimed, outcome: claimedAny ? 'claimed' : 'all saved' };
   }
 
   /**
