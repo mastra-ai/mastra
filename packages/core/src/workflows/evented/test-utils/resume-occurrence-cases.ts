@@ -662,6 +662,82 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // A run that declines running snapshots is stored for the guards only while it runs, and that
+    // row is removed when it suspends without storing the suspension. A suspension it does store
+    // must survive, including when the caller resumes the run as soon as it hears of the
+    // suspension, before the suspend handler finished.
+    it.each(['as delivered', 'the caller resumes before the suspend handler finishes'] as const)(
+      'resumes a run that declines running snapshots each time it suspends again (%s)',
+      async order => {
+        const forced = order !== 'as delivered';
+        const rounds: number[] = [];
+        // In the forced order the first resumed attempt waits inside the step, with the run running,
+        // until the first suspension's handler finished.
+        const resumedEntered = deferred();
+        const suspendHandled = deferred();
+        const ask = createStep({
+          id: 'ask',
+          inputSchema: Num,
+          outputSchema: Num,
+          resumeSchema: z.object({ round: z.number() }),
+          execute: async ({ inputData, resumeData, suspend }) => {
+            if (resumeData) rounds.push(resumeData.round);
+            if (forced && resumeData?.round === 1) {
+              resumedEntered.resolve();
+              await suspendHandled.promise;
+            }
+            if ((resumeData?.round ?? 0) < 2) return suspend({});
+            return { n: inputData.n + 1 };
+          },
+        });
+        const workflow = createWorkflow({
+          id: `declining-resuspend-${randomUUID()}`,
+          inputSchema: Num,
+          outputSchema: Num,
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+        })
+          .then(ask)
+          .commit();
+        await withHost({ [workflow.id]: workflow }, async ({ driver }) => {
+          // The first suspension's finish notice reaches the caller, and its handler goes on only
+          // once the caller's resume is inside the step.
+          const publish = driver.pubsub.publish.bind(driver.pubsub);
+          let holdFinish = forced;
+          const interceptor = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+            await publish(topic, event, options);
+            if (holdFinish && topic === 'workflows-finish' && event.type === 'workflow.suspend') {
+              holdFinish = false;
+              await resumedEntered.promise;
+            }
+          });
+          try {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+            const firstResume = run.resume({ step: 'ask', resumeData: { round: 1 } });
+            if (forced) {
+              await resumedEntered.promise;
+              const suspension = driver.events.find(
+                event => event.type === 'workflow.suspend' && event.runId === run.runId,
+              )!;
+              await settleDeliveries([suspension]);
+              suspendHandled.resolve();
+            }
+            expect(await firstResume).toMatchObject({ status: 'suspended' });
+            expect(await run.resume({ step: 'ask', resumeData: { round: 2 } })).toMatchObject({
+              status: 'success',
+              result: { n: 1 },
+            });
+            expect(rounds).toEqual([1, 2]);
+          } finally {
+            suspendHandled.resolve();
+            resumedEntered.resolve();
+            interceptor.mockRestore();
+          }
+        });
+      },
+      20_000,
+    );
+
     it('resumes a resumed step again after it suspends again', async () => {
       const rounds: number[] = [];
       const ask = createStep({

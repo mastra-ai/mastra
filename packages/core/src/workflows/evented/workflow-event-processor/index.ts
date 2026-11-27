@@ -1919,6 +1919,21 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
+    // Decide before the suspension is announced: a caller that hears of it can resume the run at
+    // once and set it running again. A stored suspension sets the run suspended before this event
+    // is published, so a row still running here, stored only for the guards, holds no suspension
+    // anything could resume from.
+    const runStorage = this.#runStorage(args.workflowId, runId);
+    let recoveryOnly = false;
+    try {
+      const header = await runStorage.loadHeader();
+      recoveryOnly = !!header?.guardedOnlySnapshot && header.status === 'running';
+    } catch (error) {
+      this.mastra
+        .getLogger()
+        ?.warn('Failed to clean up workflow snapshot', { workflowId: args.workflowId, runId, error });
+    }
+
     // TODO: if there are still active paths don't end the workflow yet
     // handle nested workflow
     if (parentWorkflow) {
@@ -1987,17 +2002,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       data: { ...args, workflow: undefined, state: finalState },
     });
 
-    try {
-      const runStorage = this.#runStorage(args.workflowId, runId);
-      const header = await runStorage.loadHeader();
-      // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
-      if (header?.guardedOnlySnapshot && header.status === 'running') {
+    // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
+    if (recoveryOnly) {
+      try {
         await runStorage.delete();
+      } catch (error) {
+        this.mastra
+          .getLogger()
+          ?.warn('Failed to clean up workflow snapshot', { workflowId: args.workflowId, runId, error });
       }
-    } catch (error) {
-      this.mastra
-        .getLogger()
-        ?.warn('Failed to clean up workflow snapshot', { workflowId: args.workflowId, runId, error });
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
