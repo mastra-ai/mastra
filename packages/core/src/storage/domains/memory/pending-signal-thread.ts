@@ -1,3 +1,5 @@
+import type { MastraDBMessage } from '../../../agent/message-list/state/types';
+import { isTransientSignalMessage } from '../../../agent/signals';
 import { MastraError } from '../../../error';
 
 /**
@@ -6,12 +8,29 @@ import { MastraError } from '../../../error';
  * A pending signal is a row of the messages table whose `thread_id` is
  * `pendingSignalThreadId(threadId)` and whose `resourceId` is null. Such a row is not part of
  * any thread: reads by thread or by resource never match it, and every read by message id must
- * exclude it. Only `saveMessages` of the row under its real thread id moves it to that thread,
- * where it becomes a message. The id is persisted, so the prefix cannot change without a
- * migration.
+ * exclude it. A claim moves the row to its real thread id, where it becomes a message, unless
+ * the signal is transient. The id is persisted, so the prefix cannot change without a migration.
  * @experimental
  */
 export const PENDING_SIGNAL_THREAD_PREFIX = 'mastra-pending-signals:';
+
+/**
+ * Values of a message row's signal state column. Null on every other row.
+ * - `transient`: set when a transient signal is enqueued. A claim leaves the row under the
+ *   pending-signal id, so the signal is never a message of the thread.
+ * - `taken`: set by the claim that moved the row into its thread. The next save of the row
+ *   clears it, so a close can tell a row no save wrote from a saved message.
+ * @experimental
+ */
+export const PENDING_SIGNAL_STATE = { transient: 'transient', taken: 'taken' } as const;
+
+/**
+ * The signal state a store writes when it enqueues `message`.
+ * @experimental
+ */
+export function pendingSignalStateAtEnqueue(message: MastraDBMessage): typeof PENDING_SIGNAL_STATE.transient | null {
+  return isTransientSignalMessage(message) ? PENDING_SIGNAL_STATE.transient : null;
+}
 
 /**
  * The thread id that holds the pending signals of `threadId`.

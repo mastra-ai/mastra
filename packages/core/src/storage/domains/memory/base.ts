@@ -311,34 +311,40 @@ export abstract class MemoryStorage extends StorageDomain {
   //
   // A pending signal is the signal's message row stored under the thread id
   // `pendingSignalThreadId(T)` (see `pending-signal-thread.ts`) with no
-  // `resourceId`, plus a claimant run id. Row states for a thread T:
+  // `resourceId`, plus a claimant run id and a signal state
+  // (`PENDING_SIGNAL_STATE`). Row states for a thread T:
   // - pending: under the pending-signal id of T, no claimant. Not part of any
-  //   thread, so no message read returns it.
-  // - taken: under the pending-signal id of T, claimant is the run that took
-  //   it. Not visible as a message.
-  // - saved: under T, a normal message. The claimant is kept until the
-  //   claimant's run closes.
-  // Normal messages have no claimant. The thread row records the thread's
-  // signal run, the only run allowed to insert for a run or claim. A pending
-  // signal sent to T belongs to T whatever resource its message named.
+  //   thread, so no message read returns it. A transient signal has the state
+  //   `transient` from its enqueue on.
+  // - taken: the claim moved the row to T, with T's current `resourceId`, the
+  //   claimant set to the run that took it and the state `taken`. It is a
+  //   message of T at its send `createdAt`. A taken transient signal stays
+  //   under the pending-signal id instead and is never a message.
+  // - saved: under T, state null, a normal message. The claimant is kept until
+  //   the claimant's run closes.
+  // Normal messages have no claimant and no state. The thread row records the
+  // thread's signal run, the only run allowed to insert for a run or claim. A
+  // pending signal sent to T belongs to T whatever resource its message named.
   //
   // Rules for the existing methods:
-  // - `saveMessages` on an existing id: a pending or taken row saved under its
-  //   own thread T moves to T, takes the saved message's `createdAt` and
-  //   `resourceId`, and keeps its claimant. A row already in a thread is saved
-  //   as before and keeps its claimant. A pending or taken row saved under
-  //   another thread is left unchanged; the rest of the batch is saved as usual.
-  // - Reads by thread or by resource never match a pending or taken row.
-  //   Reads by message id (`listMessagesById`, include targets, the rows
-  //   `updateMessages` reads) skip rows under a pending-signal id.
-  // - `updateMessages` treats a pending or taken row as a missing id.
-  // - `copyThread` and `cloneThread` copy only T's rows. The copy has no
-  //   signal run, and its rows have no claimant.
-  // - `updateThreadResourceId` moves T's rows; pending and taken rows carry
-  //   no resource and need nothing.
-  // - `deleteThread` deletes T's pending and taken rows and the signal run.
-  // - `deleteMessages` of a pending or taken row acts on T as for any of T's
-  //   messages.
+  // - `saveMessages` on an existing id: a row in state `taken`, or a pending
+  //   row saved under its own thread T, is written as saved under the message's
+  //   thread with the saved message's `createdAt` and `resourceId`, state null,
+  //   and its claimant kept. Any other row already in a thread is saved as
+  //   before and keeps its claimant. A pending row saved under another thread
+  //   is left unchanged; the rest of the batch is saved as usual.
+  // - Reads by thread or by resource never match a pending row or a taken
+  //   transient row. Reads by message id (`listMessagesById`, include targets,
+  //   the rows `updateMessages` reads) skip rows under a pending-signal id.
+  //   Taken rows under T are read as T's messages.
+  // - `updateMessages` treats a row under a pending-signal id as a missing id.
+  // - `copyThread` and `cloneThread` copy only T's rows, taken rows included.
+  //   The copy has no signal run, and its rows have no claimant and no state.
+  // - `updateThreadResourceId` moves T's rows, taken rows included; rows under
+  //   the pending-signal id carry no resource and need nothing.
+  // - `deleteThread` deletes T's rows under both ids and the signal run.
+  // - `deleteMessages` of a row under the pending-signal id acts on T as for
+  //   any of T's messages.
   // - `saveThread`, `copyThread` and `cloneThread` (target id),
   //   `saveMessages`, `updateMessages` (a `threadId` in an update) and
   //   `listMessages` reject a thread id that starts with the pending-signal
@@ -393,8 +399,8 @@ export abstract class MemoryStorage extends StorageDomain {
    *
    * Then, when a row with the message's id exists in any thread and state,
    * nothing is written. Otherwise the row is inserted as pending with the
-   * message's `createdAt` and without its `resourceId`. Both cases answer
-   * `accepted`.
+   * message's `createdAt`, without its `resourceId`, and with the state
+   * `pendingSignalStateAtEnqueue(message)`. Both cases answer `accepted`.
    * @experimental
    */
   async enqueuePendingSignal(_args: {
@@ -405,10 +411,11 @@ export abstract class MemoryStorage extends StorageDomain {
   }
 
   /**
-   * When the thread's signal run is `runId`: mark the thread's pending rows as
-   * taken by `runId`, then return every taken or saved row of the thread whose
-   * claimant is `runId`, except the ids in `consumedIds`. Rows another run
-   * took stay with that run.
+   * When the thread's signal run is `runId`: take the thread's pending rows
+   * for `runId` (each becomes a taken message of the thread, a transient one
+   * stays under the pending-signal id), then return every taken or saved row
+   * of the thread whose claimant is `runId`, except the ids in `consumedIds`.
+   * Rows another run took stay with that run.
    * Otherwise, including for a missing thread, return nothing and change
    * nothing. Does not change any `createdAt`.
    * @experimental
@@ -423,8 +430,9 @@ export abstract class MemoryStorage extends StorageDomain {
 
   /**
    * For each row of the thread whose claimant is `runId`:
-   * - taken, id in `consumedIds`: delete the row;
-   * - taken, id not in `consumedIds`: pending again, no claimant;
+   * - taken, id in `consumedIds`: delete the row, which no save wrote;
+   * - taken, id not in `consumedIds`: pending again under the pending-signal
+   *   id, without claimant and `resourceId`, with its send `createdAt`;
    * - saved: no claimant.
    * Then clear the thread's signal run if it is still `runId`. Runs whatever
    * the thread's signal run is, leaves rows of other claimants and unclaimed
