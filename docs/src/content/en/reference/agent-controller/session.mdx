@@ -418,7 +418,7 @@ Rename the active stored thread.
 await session.thread.rename({ title: 'Fix login failure' })
 ```
 
-### `session.thread.clone({ sourceThreadId?, title?, resourceId?, requestContext? })`
+### `session.thread.clone({ sourceThreadId?, title?, resourceId?, metadata?, options?, requestContext? })`
 
 Clone an owned thread and its messages, then bind the session to the clone. Pass `requestContext` when memory is a function that reads the signed-in user.
 
@@ -426,6 +426,16 @@ Clone an owned thread and its messages, then bind the session to the clone. Pass
 const clone = await session.thread.clone({
   sourceThreadId: 'thread-7',
   title: 'Alternative approach',
+})
+```
+
+Pass `metadata` to set the clone's metadata. Pass `options` to choose which messages to copy: it takes the same `messageFilter` and `messageLimit` as `memory.cloneThread()`. The clone keeps the source thread's observational and working memory, so a filter that keeps no messages clones the memory without the conversation.
+
+```typescript
+const clone = await session.thread.clone({
+  sourceThreadId: 'thread-7',
+  metadata: { clonedFrom: 'thread-7' },
+  options: { messageFilter: { startDate: new Date() } },
 })
 ```
 
