@@ -8,12 +8,18 @@
  * workflows and the other entry types.
  */
 import { randomUUID } from 'node:crypto';
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../../../agent/agent';
+import { DurableStepIds } from '../../../agent/durable/constants';
+import { createEventedAgent } from '../../../agent/durable/create-evented-agent';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import type { MastraStorage } from '../../../storage';
+import { createTool } from '../../../tools';
 import type { WorkflowOptions } from '../..';
 import { createStep, createWorkflow as createEventedWorkflow } from '..';
 import { RedeliveryDriver } from './redelivery-driver';
@@ -48,9 +54,13 @@ export function describeResumeOccurrenceCases({
       return createEventedWorkflow({ ...params, options });
     }) as typeof createEventedWorkflow;
 
-    async function withHost(workflows: Record<string, any>, body: (host: Host) => Promise<void>) {
+    async function withHost(
+      workflows: Record<string, any>,
+      body: (host: Host) => Promise<void>,
+      agents?: Record<string, any>,
+    ) {
       const driver = new RedeliveryDriver();
-      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows });
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows, agents });
       const warn = vi.spyOn(mastra.getLogger(), 'warn');
       try {
         await mastra.startWorkers();
@@ -656,5 +666,99 @@ export function describeResumeOccurrenceCases({
         });
       });
     }, 20_000);
+
+    // T10. An evented agent resumed after a tool approval. With one step allowed the agent's loop
+    // ends in the resumed iteration, so its finishing step still carries the resume. Delivered
+    // twice while its output processor runs, both copies continued the run without the guards, and
+    // the step after it ran twice.
+    it('runs the step after an evented agent finishes once when its finishing step is delivered twice after a tool approval', async () => {
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+            { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      }) as unknown as LanguageModelV2;
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        execute: async () => ({ found: true }),
+      });
+      const entered = deferred();
+      const held = deferred();
+      let processed = 0;
+      const holdOutput = {
+        id: 'hold-output',
+        processOutputResult: async ({ messages }: { messages: any[] }) => {
+          if (++processed === 1) {
+            entered.resolve();
+            await held.promise;
+          }
+          return messages;
+        },
+      };
+      const agent = createEventedAgent({
+        agent: new Agent({
+          id: 'approval-agent',
+          name: 'approval-agent',
+          instructions: 'Use lookup.',
+          model,
+          tools: { lookup },
+          outputProcessors: [holdOutput],
+        }),
+        storageVersion,
+      });
+      const drain = async (stream: ReadableStream<unknown>) => {
+        const reader = stream.getReader();
+        while (!(await reader.read()).done) {
+          // consume
+        }
+      };
+      await withHost(
+        {},
+        async ({ driver, warn }) => {
+          try {
+            const started = await agent.stream('Look it up', { requireToolApproval: true, maxSteps: 1 });
+            // The suspended run's stream stays open; the approval request is what the caller waits for.
+            const first = (started.fullStream as ReadableStream<{ type?: string }>).getReader();
+            for (let chunk = await first.read(); !chunk.done; chunk = await first.read()) {
+              if (chunk.value?.type === 'tool-call-approval') break;
+            }
+            const resumed = await agent.resume(started.runId, { approved: true });
+            const finished = drain(resumed.fullStream as ReadableStream<unknown>);
+            await entered.promise;
+            const finishing = driver.events
+              .filter(
+                event =>
+                  event.type === 'workflow.step.run' &&
+                  event.runId === started.runId &&
+                  event.data.workflowId === DurableStepIds.AGENTIC_LOOP,
+              )
+              .at(-1)!;
+            expect(finishing.data.resumeSteps?.length).toBeGreaterThan(0);
+            await redeliverInBody(driver, finishing);
+            held.resolve();
+            await finished;
+            await settle(driver);
+            const after = `${DurableStepIds.AGENTIC_LOOP}@${finishing.data.executionPath[0] + 1}`;
+            expect(processed).toBe(2);
+            expect(driver.deliveryCount({ spec: after, runId: started.runId })).toBe(1);
+            expect(warn).toHaveBeenCalledWith(
+              expect.stringContaining('stale'),
+              expect.objectContaining({ runId: started.runId, storedStartedBy: finishing.id }),
+            );
+          } finally {
+            held.resolve();
+          }
+        },
+        { 'approval-agent': agent },
+      );
+    }, 30_000);
   });
 }
