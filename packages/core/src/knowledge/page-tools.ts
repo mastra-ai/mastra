@@ -57,6 +57,8 @@ export interface KnowledgePageToolHost {
   principals?: readonly string[];
   /** Author recorded on writes; overrides the run's agent id. */
   author?: string;
+  /** Refuse edits, moves, merges and deletes without `expectedVersion` (see `createTools({ requireExpectedVersion })`). */
+  requireExpectedVersion?: boolean;
 }
 
 function maxTokensOf(host: KnowledgePageToolHost): number {
@@ -1275,7 +1277,9 @@ function pageTool(host: KnowledgePageToolHost, canRead: boolean) {
         expectedVersion: {
           type: 'integer',
           minimum: 1,
-          description: 'The version you read or saw pinned; the write is refused if the page changed since.',
+          description: host.requireExpectedVersion
+            ? 'The version you read or saw pinned; the write is refused if the page changed since. Required to edit, move, merge or delete a page; creating one needs none.'
+            : 'The version you read or saw pinned; the write is refused if the page changed since.',
         },
       },
       required: ['op'],
@@ -1283,6 +1287,11 @@ function pageTool(host: KnowledgePageToolHost, canRead: boolean) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as PageInput;
+      if (host.requireExpectedVersion && (args.page || args.op !== 'write') && args.expectedVersion === undefined) {
+        throw new Error(
+          `op "${args.op}" on an existing page needs expectedVersion: read the page first and pass the version you read.`,
+        );
+      }
       const run = await start(host, context, true);
       const { storage, provenance } = run;
       const done = async (page: KnowledgePage) => ({

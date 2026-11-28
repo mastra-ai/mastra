@@ -133,6 +133,7 @@ Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...k
 createTools(options?: {
   read?: boolean; write?: boolean; pinnedContext?: boolean;
   principals?: readonly string[]; author?: string;
+  requireExpectedVersion?: boolean;
 }): Record<string, Tool>
 ```
 
@@ -151,6 +152,17 @@ const tools = knowledge.createTools({
   write: true,
   principals: ['agent:claude-code'],
   author: 'user:123 via mcp:claude-code',
+})
+```
+
+`requireExpectedVersion` makes `knowledge_page` refuse to edit, move, merge or delete a page unless the call passes `expectedVersion`. Without it, the tool uses the version it reads at the time of the call. Turn it on for agents that write without a person watching, so a write planned from an older read can't overwrite a newer change. Creating a page needs no version. It's off by default.
+
+```typescript
+const tools = knowledge.createTools({
+  read: true,
+  write: true,
+  principals: ['agent:curator'],
+  requireExpectedVersion: true,
 })
 ```
 
