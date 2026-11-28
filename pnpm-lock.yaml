@@ -130,7 +130,7 @@ overrides:
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.46': 3.0.46
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.66': 4.0.67
-  '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.38
+  '@ai-sdk/provider@>=4.0.0 <4.0.38': 4.0.39
   '@ai-sdk/provider-utils@>=5.0.0 <5.0.81': 5.0.81
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
   adm-zip@<=0.6.0: 0.6.1
@@ -2800,7 +2800,7 @@ importers:
     devDependencies:
       '@ai-sdk/provider':
         specifier: ^4.0.38
-        version: 4.0.38
+        version: 4.0.39
       '@copilotkit/aimock':
         specifier: ^1.46.0
         version: 1.47.0(vitest@5.1.0)
@@ -4316,7 +4316,7 @@ importers:
         version: 4.0.135(zod@4.6.7)
       '@ai-sdk/provider':
         specifier: ^4.0.38
-        version: 4.0.38
+        version: 4.0.39
       '@ai-sdk/provider-utils':
         specifier: ^5.0.81
         version: 5.0.81(zod@4.6.7)
@@ -11161,6 +11161,10 @@ packages:
 
   '@ai-sdk/provider@4.0.38':
     resolution: {integrity: sha512-GElz70UUCuDFFyD6m6aQJFgRY0HEABQzB5otzgkrisYaF5mnss7o0upAmbBTSD6KWiM9h7lZm1ls2c7xzHR8CA==}
+    engines: {node: '>=22'}
+
+  '@ai-sdk/provider@4.0.39':
+    resolution: {integrity: sha512-jRvAhvW23+TeMGVCME2WGejP/TjzyDg7TplUep3t8HcEYnC2/8zqhCy9RRrjjVs1ljcygABZ8pQ21MbCRdF01w==}
     engines: {node: '>=22'}
 
   '@ai-sdk/react@1.2.12':
@@ -20110,7 +20114,6 @@ packages:
   '@sapphire/shapeshift@4.0.0':
     resolution: {integrity: sha512-d9dUmWVA7MMiKobL3VpLF8P2aeanRTu6ypG2OIaEv/ZHH/SUQ2iHOVyi5wAPjQ+HmnMuL0whK9ez8I/raWbtIg==}
     engines: {node: '>=v16'}
-    deprecated: Shapeshift was created when other validation libraries had significant limitations in performance and error reporting. Those advantages have diminished as libraries such as Zod have become faster and improved their error messages, while also gaining broader environment support, a larger community, and custom error printers.
 
   '@sapphire/snowflake@3.5.5':
     resolution: {integrity: sha512-xzvBr1Q1c4lCe7i6sRnrofxeO1QTP/LKQ6A6qy0iB4x5yfiSfARMEQEghojzTNALDTcv8En04qYNIco9/K9eZQ==}
@@ -32985,7 +32988,7 @@ snapshots:
 
   '@ai-sdk/alibaba@2.0.80(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33004,7 +33007,7 @@ snapshots:
     dependencies:
       '@ai-sdk/anthropic': 4.0.96(zod@4.6.7)
       '@ai-sdk/openai': 4.0.108(zod@4.6.7)
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       '@smithy/eventstream-codec': 4.5.2
       '@smithy/util-utf8': 4.5.2
@@ -33043,13 +33046,13 @@ snapshots:
 
   '@ai-sdk/anthropic@4.0.94(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/anthropic@4.0.96(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33080,7 +33083,7 @@ snapshots:
   '@ai-sdk/cerebras@3.0.82(zod@4.6.7)':
     dependencies:
       '@ai-sdk/openai-compatible': 3.0.82(zod@4.6.7)
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33093,7 +33096,7 @@ snapshots:
   '@ai-sdk/deepinfra@3.0.82(zod@4.6.7)':
     dependencies:
       '@ai-sdk/openai-compatible': 3.0.82(zod@4.6.7)
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33111,7 +33114,7 @@ snapshots:
 
   '@ai-sdk/deepseek@3.0.77(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33138,7 +33141,7 @@ snapshots:
 
   '@ai-sdk/gateway@4.0.135(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       '@vercel/oidc': 3.2.0
       zod: 4.6.7
@@ -33187,7 +33190,7 @@ snapshots:
 
   '@ai-sdk/google@4.0.109(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33212,7 +33215,7 @@ snapshots:
 
   '@ai-sdk/groq@4.0.74(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33255,13 +33258,13 @@ snapshots:
 
   '@ai-sdk/openai-compatible@3.0.82(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai-compatible@3.0.84(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33297,13 +33300,13 @@ snapshots:
 
   '@ai-sdk/openai@4.0.106(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@4.0.108(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33375,6 +33378,10 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
+  '@ai-sdk/provider@4.0.39':
+    dependencies:
+      json-schema: 0.4.0
+
   '@ai-sdk/react@1.2.12(react@19.3.1)(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.6.7)
@@ -33396,7 +33403,7 @@ snapshots:
   '@ai-sdk/togetherai@3.0.83(zod@4.6.7)':
     dependencies:
       '@ai-sdk/openai-compatible': 3.0.82(zod@4.6.7)
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -33431,7 +33438,7 @@ snapshots:
 
   '@ai-sdk/xai@5.0.35(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
@@ -46913,7 +46920,7 @@ snapshots:
   ai@7.0.162(zod@4.6.7):
     dependencies:
       '@ai-sdk/gateway': 4.0.135(zod@4.6.7)
-      '@ai-sdk/provider': 4.0.38
+      '@ai-sdk/provider': 4.0.39
       '@ai-sdk/provider-utils': 5.0.81(zod@4.6.7)
       zod: 4.6.7
 
