@@ -155,6 +155,14 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
   return changed ? { ...live, content: { ...live.content, parts } } : live;
 }
 
+function userTurnText(message: MastraDBMessage): string {
+  const parts = message.content.parts
+    .map(part => (part.type === 'text' ? part.text : ''))
+    .filter(Boolean)
+    .join('\n');
+  return typeof message.content.content === 'string' ? `${message.content.content}\n${parts}` : parts;
+}
+
 /**
  * Returns only the tool parts of a client-sent assistant message that move a stored call
  * forward with a state a client produces (an approval answer or an outcome). The client's text,
@@ -164,14 +172,6 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
  * arguments and metadata stay as stored. A provider-executed call can only take an approval
  * answer, since the provider, not the client, produces its outcome.
  */
-function userTurnText(message: MastraDBMessage): string {
-  const parts = message.content.parts
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .filter(Boolean)
-    .join('\n');
-  return typeof message.content.content === 'string' ? `${message.content.content}\n${parts}` : parts;
-}
-
 function clientToolOutcomes(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
   const storedCalls = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {

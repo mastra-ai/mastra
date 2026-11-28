@@ -1,5 +1,3 @@
-const TURN_TAG = /<\/?turn\b[^>]*>/gi;
-
 export interface TurnSpeaker {
   id: string;
   name: string;
@@ -18,8 +16,38 @@ function escapeTurnAttribute(value: string): string {
     .replace(/[\r\n]+/g, ' ');
 }
 
+function escapeAngleBrackets(value: string): string {
+  return value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * Escape every turn tag so user text cannot be read as markup.
+ *
+ * The scan is manual on purpose. Matching `<turn` and then rescanning to the closing
+ * `>` from every boundary costs time quadratic in the message length on input such as
+ * `'<turn '.repeat(150_000)`, which never terminates a tag. This runs synchronously
+ * while sealing user text, so that cost blocks the event loop. A boundary with no `>`
+ * at or after it cannot start a tag, and neither can any later boundary, so the scan
+ * stops there instead of retrying.
+ */
 function escapeTurnTags(value: string): string {
-  return value.replace(TURN_TAG, tag => tag.replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+  const boundary = /<\/?turn\b/gi;
+  let escaped = '';
+  let copied = 0;
+  let match = boundary.exec(value);
+
+  while (match) {
+    const start = match.index;
+    const end = value.indexOf('>', start);
+    if (end === -1) break;
+
+    escaped += value.slice(copied, start) + escapeAngleBrackets(value.slice(start, end + 1));
+    copied = end + 1;
+    boundary.lastIndex = copied;
+    match = boundary.exec(value);
+  }
+
+  return escaped + value.slice(copied);
 }
 
 /** Set on messages built with `asUserTurn`, so the model can keep that outer tag. */
@@ -77,6 +105,12 @@ export function stripClientAuthoredTurnMarks(messages: unknown): void {
   if (!Array.isArray(messages)) return;
   for (let index = 0; index < messages.length; index++) {
     const message = messages[index];
+    // A request body can nest arrays, and `MessageList.add` flattens them into real
+    // messages, so a mark has to be dropped at every depth.
+    if (Array.isArray(message)) {
+      stripClientAuthoredTurnMarks(message);
+      continue;
+    }
     if (!message || typeof message !== 'object') continue;
     const record = message as Record<string, unknown>;
     let next = record;
