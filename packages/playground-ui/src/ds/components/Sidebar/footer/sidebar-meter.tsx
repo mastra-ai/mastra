@@ -12,60 +12,6 @@ import './sidebar-meter.css';
 
 export type SidebarMeterTone = 'neutral' | 'warning' | 'danger';
 
-const BLOOM_HEIGHT = 100;
-const BLOOM_HOLD_Y = 60;
-const BLOOM_HOLD_X = 22.5;
-
-const FALLOFF_RAMP = [0, 0.08, 0.16, 0.25, 0.34, 0.44, 0.55, 0.66, 0.78, 0.89, 1];
-
-/** The neutral card is its plain fill; a bloom marks a card that needs attention. */
-const TONES = {
-  neutral: { bloom: undefined, text: 'text-muted-foreground' },
-  warning: { bloom: '--warning-indicator', text: 'text-warning-foreground' },
-  danger: { bloom: '--destructive-indicator', text: 'text-destructive-foreground' },
-};
-
-const BLOOM_PEAK = 0.16;
-
-function cubicFalloff(position: number) {
-  const inverse = 1 - position;
-  return inverse * inverse * inverse;
-}
-
-function easedBloom(colorVar: string) {
-  const stops = FALLOFF_RAMP.map(position => {
-    const alpha = (BLOOM_PEAK * cubicFalloff(position) * 100).toFixed(2);
-    return `color-mix(in oklch, var(${colorVar}) ${alpha}%, transparent) ${(position * 100).toFixed(0)}%`;
-  });
-  return `linear-gradient(to right, ${stops.join(', ')})`;
-}
-
-function easedMask(direction: string, hold: number) {
-  const stops = FALLOFF_RAMP.map(position => {
-    const offset = (hold + (100 - hold) * position).toFixed(2);
-    return `rgb(0 0 0 / ${cubicFalloff(position).toFixed(3)}) ${offset}%`;
-  });
-  return `linear-gradient(${direction}, rgb(0 0 0 / 1) 0%, ${stops.join(', ')})`;
-}
-
-const BLOOM_MASK = `${easedMask('to bottom', BLOOM_HOLD_Y)}, ${easedMask('to right', BLOOM_HOLD_X)}`;
-
-function Bloom({ colorVar }: { colorVar: string }) {
-  return (
-    <span
-      aria-hidden
-      data-slot="sidebar-meter-bloom"
-      className="pointer-events-none absolute inset-x-0 top-0 -z-10"
-      style={{
-        height: BLOOM_HEIGHT,
-        backgroundImage: easedBloom(colorVar),
-        maskImage: BLOOM_MASK,
-        maskComposite: 'intersect',
-      }}
-    />
-  );
-}
-
 // Each line is cropped to its letters (cap height to baseline), so the card's padding is the space you see above
 // the first line and below the last.
 const trimToLetters = '[text-box:trim-both_cap_alphabetic]';
@@ -88,6 +34,7 @@ interface SidebarMeterBaseProps extends Omit<ComponentPropsWithoutRef<'div'>, 'c
   /** A shorter amount for the rail, where the card is 40px wide (`$7K` for `$6,649.10`). Defaults to `value`. */
   railValue?: ReactNode;
   status?: ReactNode;
+  /** Anything but `neutral` shows `icon`, the card's only status color. */
   tone?: SidebarMeterTone;
   icon?: ReactNode;
   action?: ReactNode;
@@ -132,7 +79,6 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
   const state: SidebarState = stateProp ?? ctx?.state ?? 'default';
   const Link: LinkComponent = LinkProp ?? ctx?.LinkComponent ?? 'a';
   const isCollapsed = state === 'collapsed';
-  const current = TONES[tone];
 
   return (
     <div
@@ -148,11 +94,10 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
       )}
       {...props}
     >
-      {current.bloom ? <Bloom colorVar={current.bloom} /> : null}
       {href && !loading ? (
         <Link
           href={href}
-          // The card clips its contents for the bloom, so the focus outline is drawn inside, over its border.
+          // The card clips its contents, so the focus outline is drawn inside, over its border.
           className="absolute inset-0 rounded-lg focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus"
           aria-label={linkLabel}
         />
@@ -201,9 +146,8 @@ export const SidebarMeter = forwardRef<HTMLDivElement, SidebarMeterProps>(functi
               // Descenders hang below the crop, so a status that truncates clips only sideways.
               <p
                 className={cn(
-                  'min-w-0 overflow-x-clip text-meta text-ellipsis whitespace-nowrap',
+                  'min-w-0 overflow-x-clip text-meta text-ellipsis whitespace-nowrap text-muted-foreground',
                   trimToLetters,
-                  current.text,
                 )}
               >
                 {status}

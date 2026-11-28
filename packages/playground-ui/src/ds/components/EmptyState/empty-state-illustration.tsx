@@ -74,13 +74,12 @@ export function EmptyStateIllustration({ name }: { name: EmptyStateIllustrationN
         <g mask={`url(#${id}-frame)`}>
           <Art id={id} />
         </g>
-        <circle cx="60" cy="60" r="60" fill={`url(#${id}-glow)`} fillOpacity="0.09" />
-        <defs>
-          <linearGradient id={`${id}-glow`} x1="60" y1="0" x2="60" y2="120" gradientUnits="userSpaceOnUse">
-            <stop stopColor="currentColor" />
-            <stop offset="1" stopColor="currentColor" stopOpacity="0.4" />
-          </linearGradient>
-        </defs>
+        <circle
+          cx="60"
+          cy="60"
+          r="60"
+          className="fill-fill-subtle group-data-[tone=error]/empty-state:fill-badge-red-subtle"
+        />
       </svg>
     </div>
   );

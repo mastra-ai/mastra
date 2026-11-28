@@ -1,4 +1,3 @@
-import { BOARD_LIST_GROUP_HEADER_SURFACE_CLASS } from './board-layout';
 import { IntakeIcon } from './intake-icon';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
@@ -52,54 +51,54 @@ const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string; gradientFrom: string }> = {
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string; headerTint: string }> = {
   neutral: {
     icon: 'text-muted-foreground',
     tint: 'bg-fill-subtle',
     strongTint: 'bg-fill-strong',
-    gradientFrom: 'from-fill-subtle',
+    headerTint: 'bg-fill-subtle',
   },
   orange: {
     icon: 'text-(--orange-500) dark:text-(--orange-400)',
     tint: 'bg-badge-orange-subtle',
     strongTint: 'bg-badge-orange-strong',
-    gradientFrom: 'from-badge-orange-subtle',
+    headerTint: 'bg-badge-orange-subtle',
   },
   cyan: {
     icon: 'text-(--cyan-500) dark:text-(--cyan-400)',
     tint: 'bg-badge-cyan-subtle',
     strongTint: 'bg-badge-cyan-strong',
-    gradientFrom: 'from-badge-cyan-subtle',
+    headerTint: 'bg-badge-cyan-subtle',
   },
   info: {
     icon: 'text-info-indicator',
     tint: 'bg-info-subtle',
     strongTint: 'bg-badge-blue-strong',
-    gradientFrom: 'from-badge-blue-subtle',
+    headerTint: 'bg-badge-blue-subtle',
   },
   green: {
     icon: 'text-badge-green-indicator',
     tint: 'bg-badge-green-subtle',
     strongTint: 'bg-badge-green-strong',
-    gradientFrom: 'from-badge-green-subtle',
+    headerTint: 'bg-badge-green-subtle',
   },
   purple: {
     icon: 'text-badge-purple-indicator',
     tint: 'bg-badge-purple-subtle',
     strongTint: 'bg-badge-purple-strong',
-    gradientFrom: 'from-badge-purple-subtle',
+    headerTint: 'bg-badge-purple-subtle',
   },
   success: {
     icon: 'text-(--green-500) dark:text-(--green-400)',
     tint: 'bg-success-subtle',
     strongTint: 'bg-badge-green-strong',
-    gradientFrom: 'from-badge-green-subtle',
+    headerTint: 'bg-badge-green-subtle',
   },
   destructive: {
     icon: 'text-destructive-indicator',
     tint: 'bg-destructive-subtle',
     strongTint: 'bg-badge-red-strong',
-    gradientFrom: 'from-badge-red-subtle',
+    headerTint: 'bg-badge-red-subtle',
   },
 };
 
@@ -192,14 +191,10 @@ export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
 }
 
-/** Lane headers fade a translucent status tint into a band: raised card in dark, a fill in light where card is white. */
+/** List headers all use translucent tints, so no status reads heavier than another. */
 // eslint-disable-next-line react-refresh/only-export-components -- helper intentionally co-located with the components that use it
 export function stageHeaderTintClass(stage: string, kind?: BoardPhaseKind): string {
-  return cn(
-    BOARD_LIST_GROUP_HEADER_SURFACE_CLASS,
-    'bg-linear-to-r to-transparent',
-    TONE_CLASSES[stageToneFor(stage, kind)].gradientFrom,
-  );
+  return TONE_CLASSES[stageToneFor(stage, kind)].headerTint;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- helper intentionally co-located with the components that use it
