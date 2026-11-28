@@ -1821,6 +1821,18 @@ describe('createScorer', () => {
       expect(mockMastra.observability.addScore).not.toHaveBeenCalled();
     });
 
+    it('should emit the scorer version with the score when one is given', async () => {
+      const mockMastra = createMockMastra();
+      const scorer = createScorer({ id: 'versioned-scorer', description: 'Versioned scorer' }).generateScore(() => 0.5);
+      scorer.__registerMastra(mockMastra as any);
+
+      await scorer.run({ ...testData.scoringInput, scoreSource: 'experiment', scorerVersion: 'version-2' });
+
+      expect(mockMastra.observability.addScore).toHaveBeenCalledWith({
+        score: expect.objectContaining({ scorerId: 'versioned-scorer', scorerVersion: 'version-2', score: 0.5 }),
+      });
+    });
+
     it('should emit addScore without a target trace id when unanchored scoring is allowed', async () => {
       const mockMastra = createMockMastra();
 

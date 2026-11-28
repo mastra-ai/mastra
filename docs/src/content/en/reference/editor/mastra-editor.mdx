@@ -83,6 +83,13 @@ export const mastra = new Mastra({
     defaultValue: '{}',
   },
   {
+    name: 'scorers',
+    type: '{ judgeModel?: (scorer: StorageResolvedScorerDefinitionType) => DynamicArgument<MastraModelConfig> }',
+    description:
+      "Options for stored scorers. `judgeModel` returns the judge model for a stored `llm-judge` scorer, in place of its stored `provider/name` model ID. The Editor calls it when it builds the scorer, after checking that the scorer has instructions and a stored model, so it isn't called for scorers that are missing either. Return a function to resolve the model on every judge call, for example one that returns `{ id, apiKey }` with an API key looked up for that scorer.",
+    isOptional: true,
+  },
+  {
     name: 'builder',
     type: 'AgentBuilderOptions',
     description:
