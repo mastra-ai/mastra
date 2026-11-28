@@ -118,6 +118,7 @@ import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
   ExecuteFunction,
+  ExecuteFunctionParams,
   InnerOutput,
   LoopConditionFunction,
   Step,
@@ -2682,6 +2683,53 @@ export class Workflow<
     });
   }
 
+  /**
+   * Maps the previous step's output with a function. The function's return
+   * type becomes the input the next step must accept.
+   *
+   * The parameter is spelled out instead of using `ExecuteFunction`, whose
+   * output type also types `bail` in its params: inferring `TMapOutput` through
+   * it resolves to `unknown`.
+   */
+  map<TMapOutput>(
+    mappingConfig: (
+      params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>,
+    ) => Promise<TMapOutput | InnerOutput> | TMapOutput | InnerOutput,
+    stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TMapOutput, TRequestContext, TStorageVersion>;
+  map(
+    mappingConfig: {
+      [k: string]:
+        | {
+            step:
+              | Step<string, any, any, any, any, any, TEngineType, any>
+              | Step<string, any, any, any, any, any, TEngineType, any>[];
+            path: string;
+          }
+        | { value: any; schema: PublicSchema<any> }
+        | {
+            initData: Workflow<TEngineType, any, any, any, any, any, any>;
+            path: string;
+          }
+        | {
+            requestContextPath: string;
+            schema: PublicSchema<any>;
+          }
+        /**
+         * String template with `${<scope>.<path>}` placeholders. Resolved at
+         * run time against the step's execution context.
+         *
+         * Scopes: `inputData`, `initData`, `state`, `requestContext`,
+         * `stepResults.<stepId>`. Paths are dotted (`a.b.c`). Whitespace
+         * inside placeholders is not allowed (`${ inputData.x }` errors at
+         * workflow-definition time). Renders `null`/`undefined` as `''`;
+         * throws on objects/arrays.
+         */
+        | { template: string }
+        | DynamicMapping<TPrevSchema, any>;
+    },
+    stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext, TStorageVersion>;
   map(
     mappingConfig:
       | {
@@ -2714,7 +2762,7 @@ export class Workflow<
             | { template: string }
             | DynamicMapping<TPrevSchema, any>;
         }
-      | ExecuteFunction<TState, TPrevSchema, any, any, any, TEngineType>,
+      | ((params: ExecuteFunctionParams<TState, TPrevSchema, any, any, any, TEngineType, TRequestContext>) => unknown),
     stepOptions?: { id?: string | null; description?: string; metadata?: StepMetadata },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, any, TRequestContext, TStorageVersion> {
     // Build a declarative `{ type: 'mapping' }` graph entry; the mapping logic is
@@ -2965,11 +3013,12 @@ export class Workflow<
     >;
   }
 
-  dowhile<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+  dowhile<TStepState, TStepInputSchema, TStepId extends string, TSchemaOut, TStepRC>(
     step: Step<
       TStepId,
       SubsetOf<TStepState, TState>,
-      TStepInputSchema,
+      // Same check as `.then()`: the previous output must satisfy the step's input.
+      TPrevSchema extends TStepInputSchema ? TStepInputSchema : TPrevSchema,
       TSchemaOut,
       any,
       any,
@@ -3019,11 +3068,12 @@ export class Workflow<
     >;
   }
 
-  dountil<TStepState, TStepInputSchema extends TPrevSchema, TStepId extends string, TSchemaOut, TStepRC>(
+  dountil<TStepState, TStepInputSchema, TStepId extends string, TSchemaOut, TStepRC>(
     step: Step<
       TStepId,
       SubsetOf<TStepState, TState>,
-      TStepInputSchema,
+      // Same check as `.then()`: the previous output must satisfy the step's input.
+      TPrevSchema extends TStepInputSchema ? TStepInputSchema : TPrevSchema,
       TSchemaOut,
       any,
       any,
@@ -3076,7 +3126,7 @@ export class Workflow<
   foreach<
     TPrevIsArray extends (TPrevSchema extends any[] ? true : false),
     TStepState,
-    TStepInputSchema extends (TPrevSchema extends (infer TElement)[] ? TElement : never),
+    TStepInputSchema,
     TStepId extends string,
     TSchemaOut,
     TStepRC,
@@ -3085,7 +3135,12 @@ export class Workflow<
       ? Step<
           TStepId,
           SubsetOf<TStepState, TState>,
-          TStepInputSchema,
+          // Same check as `.then()`: each element must satisfy the step's input.
+          TPrevSchema extends (infer TElement)[]
+            ? TElement extends TStepInputSchema
+              ? TStepInputSchema
+              : TElement
+            : any,
           TSchemaOut,
           any,
           any,

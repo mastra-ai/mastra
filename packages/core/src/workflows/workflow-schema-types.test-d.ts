@@ -2,9 +2,10 @@ import { describe, expectTypeOf, it } from 'vitest';
 import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { Mastra } from '../mastra';
 import { createTool } from '../tools';
 import { createWorkflow } from './create';
-import { createStep as createEventedStep } from './evented';
+import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from './evented';
 import type { Step } from './step';
 import { createStep } from './workflow';
 
@@ -331,6 +332,115 @@ describe('Workflow schema type inference', () => {
 
       // @ts-expect-error - step input schema is incompatible with workflow input
       workflow.then(step);
+    });
+  });
+
+  // https://github.com/mastra-ai/mastra/issues/6751
+  describe('function .map() output', () => {
+    const needsName = createStep({
+      id: 'needs-name',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async ({ inputData }) => ({ ok: inputData.name.length > 0 }),
+    });
+
+    const createMapWorkflow = () =>
+      createWorkflow({
+        id: 'map-output-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ ok: z.boolean() }),
+      });
+
+    it('becomes the input of the next step', () => {
+      createMapWorkflow()
+        .map(async ({ inputData }) => ({ name: String(inputData.value), extra: true }))
+        .map(async ({ inputData }) => {
+          expectTypeOf(inputData).toEqualTypeOf<{ name: string; extra: boolean }>();
+          return inputData;
+        });
+    });
+
+    it('accepts a next step whose input the mapped value satisfies', () => {
+      const wf = createMapWorkflow()
+        .map(async ({ inputData }) => ({ name: String(inputData.value) }))
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('accepts a synchronous mapper', () => {
+      const wf = createMapWorkflow()
+        .map(({ inputData }) => ({ name: String(inputData.value) }))
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('accepts a mapper that may bail', () => {
+      const wf = createMapWorkflow()
+        .map(async ({ inputData, bail }) => {
+          if (inputData.value < 0) return bail({ ok: false });
+          return { name: String(inputData.value) };
+        })
+        .then(needsName);
+      expectTypeOf(wf).not.toBeNever();
+    });
+
+    it('keeps bail out of a synchronous mapper output', () => {
+      createMapWorkflow()
+        .map(({ inputData, bail }) => {
+          if (inputData.value < 0) return bail({ ok: false });
+          return { name: String(inputData.value) };
+        })
+        .map(async ({ inputData }) => {
+          expectTypeOf(inputData).toEqualTypeOf<{ name: string }>();
+          return inputData;
+        });
+    });
+
+    it('rejects a next step whose input the mapped value does not satisfy', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ wrong: inputData.value }));
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.then(needsName);
+    });
+
+    const optionalName = createStep({
+      id: 'optional-name',
+      inputSchema: z.object({ name: z.string().optional() }),
+      outputSchema: z.object({ name: z.string().optional() }),
+      execute: async ({ inputData }) => inputData,
+    });
+
+    it('accepts a loop step whose input the mapped value satisfies', () => {
+      const mapped = createMapWorkflow().map(async () => ({ name: undefined as string | undefined }));
+      expectTypeOf(mapped.dountil(optionalName, async () => true)).not.toBeNever();
+      expectTypeOf(mapped.dowhile(optionalName, async () => false)).not.toBeNever();
+    });
+
+    it('rejects a loop step whose input the mapped value does not satisfy', () => {
+      const mapped = createMapWorkflow().map(async ({ inputData }) => ({ wrong: inputData.value }));
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.dountil(needsName, async () => true);
+      // @ts-expect-error - { wrong: number } is not assignable to { name: string }
+      mapped.dowhile(needsName, async () => false);
+    });
+
+    it('keeps an engine workflow with a non-array output registrable on Mastra', () => {
+      const schema = z.object({ n: z.number() });
+      const step = createEventedStep({
+        id: 'evented-step',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData }) => inputData,
+      });
+      const workflow = createEventedWorkflow({ id: 'evented-wf', inputSchema: schema, outputSchema: schema });
+      workflow.then(step).commit();
+      new Mastra({ workflows: { workflow } });
+    });
+
+    it('checks each mapped array element against a foreach step', () => {
+      const mapped = createMapWorkflow().map(async () => [{ name: undefined as string | undefined }]);
+      expectTypeOf(mapped.foreach(optionalName)).not.toBeNever();
+      // @ts-expect-error - { name: string | undefined } is not assignable to { name: string }
+      mapped.foreach(needsName);
     });
   });
 
@@ -831,9 +941,16 @@ describe('declarative builder input chaining', () => {
       .tool(numberTool);
   });
 
-  it('.tool() keeps the `.map()` (any output) escape hatch', () => {
+  it('.tool() rejects a tool after a function `.map()` producing the wrong shape', () => {
+    createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
+      .map(async () => ({ anything: 'goes' }))
+      // @ts-expect-error - { anything: string } is not assignable to tool input { value: number }
+      .tool(numberTool);
+  });
+
+  it('.tool() keeps the object-form `.map()` (any output) escape hatch', () => {
     const wf = createWorkflow({ id: 'wf', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
-      .map(async () => ({ anything: 'goes' })) // map output is `any`
+      .map({ anything: { value: 'goes', schema: z.string() } }) // object-form map output is `any`
       .tool(numberTool); // compiles via the `any` escape hatch
     expectTypeOf(wf).not.toBeNever();
   });

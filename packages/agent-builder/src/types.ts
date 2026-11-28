@@ -197,7 +197,7 @@ export const ValidationFixInputSchema = z.object({
   orderedUnits: z.array(TemplateUnitSchema),
   copiedFiles: z.array(CopiedFileSchema),
   conflictsResolved: z.array(ConflictResolutionSchema).optional(),
-  maxIterations: z.number().optional().default(5),
+  maxIterations: z.number().optional(),
 });
 
 export const ValidationFixResultSchema = z.object({

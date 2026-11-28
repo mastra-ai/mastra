@@ -21,9 +21,9 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
   content={[
   {
     name: 'mappingFunction',
-    type: '(params: { inputData: any }) => Promise<any>',
+    type: '(params: { inputData: any }) => Promise<any> | any',
     description:
-      'Async function that transforms input data and returns the mapped result. The function must return a Promise, so declare it with `async`.',
+      'Function that transforms input data and returns the mapped result. It can be sync or `async`. Its return type becomes the input type of the next step, so TypeScript reports an error when the next step expects a different shape.',
     isOptional: false,
   },
   {
