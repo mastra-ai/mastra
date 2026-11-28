@@ -7,6 +7,8 @@ Both transports now bound the console logs they capture during execution when th
 
 The packages now require `@mastra/core >=1.87.0-0 <2.0.0-0`, because they use the per-run log-cap options and the shared log collector added in this release. The `-0` admits the unreleased `1.87.0` prerelease line that carries the collector; `@mastra/core` and these transports are published together.
 
+Install the core release published alongside these packages. Earlier `1.87.0-alpha.*` prereleases satisfy the range but do not export `createCodeModeLogCollector`, so the transports fail to load against them. The floor cannot be raised past those prereleases here: `scripts/validate-peerdeps.mjs` validates every peer range against the in-repo core version, and the `>=X.Y.Z-0` sentinel is the repository-wide convention. Tighten the floor in a follow-up once the release that carries the collector is published.
+
 Pass the caps to `createCodeMode()`; the transport applies them while it runs the program:
 
 ```typescript
@@ -30,7 +32,7 @@ const { tool, instructions } = createCodeMode(
 }
 ```
 
-**After** — upgrade `@mastra/core` to `1.87.0-0` or later first, then upgrade the transport:
+**After** — upgrade `@mastra/core` to the release published alongside these transports first, then upgrade the transport:
 
 ```json
 {
