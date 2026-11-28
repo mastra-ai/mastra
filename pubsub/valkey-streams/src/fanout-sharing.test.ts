@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Event, EventCallback } from '@mastra/core/events';
+import { Logger } from '@valkey/valkey-glide';
 import { afterEach, beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { createClient } from './client';
 import type { ValkeyClientType } from './client';
@@ -22,6 +26,26 @@ async function waitFor(check: () => boolean, timeoutMs = 5_000): Promise<void> {
 }
 
 const tick = (ms = 300) => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Route GLIDE's native (Rust core) warnings into a temp file so a test can
+ * assert the server-side NOGROUP race is gone (mastra-ai/mastra#31465). The
+ * logger is process-global, so the previous config is restored on `stop()`.
+ */
+function captureNativeWarnings() {
+  const dir = mkdtempSync(join(tmpdir(), 'glide-warn-'));
+  Logger.setLoggerConfig('warn', join(dir, 'capture'));
+  return {
+    stop(): string[] {
+      Logger.setLoggerConfig('warn');
+      const lines: string[] = [];
+      for (const file of readdirSync(dir)) {
+        lines.push(...readFileSync(join(dir, file), 'utf8').split('\n'));
+      }
+      return lines.filter(line => line.length > 0);
+    },
+  };
+}
 
 describe('ValkeyStreamsPubSub fan-out sharing', () => {
   let admin: ValkeyClientType;
@@ -270,5 +294,34 @@ describe('ValkeyStreamsPubSub fan-out sharing', () => {
     await ps.publish(topic, makeEvent('e1'));
     await waitFor(() => b.received.length === 1);
     expect(await groups(topic)).toBe(1);
+  });
+
+  it('drains the last fan-out member before clearTopic deletes, leaving no NOGROUP', async () => {
+    // Regression for mastra-ai/mastra#31465. With a long block the reader sits in
+    // XREADGROUP when the last subscriber leaves. On the old order the reader was
+    // closed before its read returned and a concurrent clearTopic DELed the
+    // stream immediately, so the server woke the blocked read with NOGROUP (a
+    // native WARN). The reader must be unblocked and drained, and clearTopic must
+    // wait for that teardown, before the stream is deleted.
+    const capture = captureNativeWarnings();
+    try {
+      const { ps } = createPubSub({ blockMs: 30_000 });
+      const topic = `t-${randomUUID()}`;
+      const c = collector();
+      await ps.subscribe(topic, c.cb, { startFrom: 'latest' });
+      // Let the reader issue its blocking XREADGROUP.
+      await tick(400);
+      expect(await groups(topic)).toBe(1);
+
+      await Promise.all([ps.unsubscribe(topic, c.cb), ps.clearTopic(topic)]);
+      await tick(600);
+
+      expect(await admin.command(['EXISTS', `${KEY_PREFIX}:${topic}`])).toBe(0);
+      expect(await groups(topic)).toBe(0);
+      const nogroup = capture.stop().filter(line => /NOGROUP/i.test(line));
+      expect(nogroup).toEqual([]);
+    } finally {
+      capture.stop();
+    }
   });
 });
