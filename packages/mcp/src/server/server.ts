@@ -69,9 +69,10 @@ import type {
   Tool as MCPTool,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/server';
+import { SKILLS_EXTENSION_ID } from '@modelcontextprotocol/server/ext/skills';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
-import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../shared/events';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
@@ -98,6 +99,8 @@ import {
   toToolExecutionContext,
 } from './request';
 import type { ContinuationEnvelope } from './request';
+import { registerSkillHandlers, servesDirectories, skillFileContents, skillSourceFor } from './skills';
+import type { MCPServerSkills, SkillSource } from './skills';
 import { BackgroundTaskMCPTaskStore } from './tasks/background-store';
 import { resolveTasksConfig, SelectingMCPTaskStore } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
@@ -272,7 +275,15 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * `toModelOutput` (`modelOutput`), and rewrite it before it is sent (`transform`).
    */
   toolResult?: MCPServerToolResultOptions;
+  /**
+   * Agent Skills served over the MCP Skills extension (SEP-2640): `skills/list`, `skills/get`,
+   * `resources/directory/read`, and each file as a `skill://` resource.
+   */
+  skills?: MCPServerSkills;
 }
+
+/** Skill sources by `skills` config, so servers built per request from one config hash its files once. */
+const skillSources = new WeakMap<MCPServerSkills, SkillSource>();
 
 export interface MCPServerHTTPOptions {
   url: URL;
@@ -380,6 +391,7 @@ export class MCPServer extends MCPServerBase {
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
   private readonly appsRequireClientSupport: boolean;
+  private readonly skillsConfig?: MCPServerSkills;
   /** 2025-era instances serving a request that carries an apps session id (see `withAppsSession`). */
   private readonly legacyAppClients = new WeakSet<Server>();
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
@@ -418,6 +430,9 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
     this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
+    this.skillsConfig = config.skills;
+    // Creating the source checks the config (such as `pageSize`) now; the catalog itself is built on first use.
+    if (this.skillsConfig) this.skillSource();
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -760,12 +775,18 @@ export class MCPServer extends MCPServerBase {
       // itself is gated per request by the caller's `_meta` log-level opt-in.
       logging: {},
     };
-    if (this.resourceOptions || this.appResourceList.length > 0) {
+    if (this.resourceOptions || this.skillsConfig || this.appResourceList.length > 0) {
       capabilities.resources = { subscribe: true, listChanged: true };
+    }
+    if (this.skillsConfig) {
+      capabilities.extensions = {
+        ...capabilities.extensions,
+        [SKILLS_EXTENSION_ID]: { directoryRead: servesDirectories(this.skillsConfig) },
+      };
     }
     if (this.promptOptions) capabilities.prompts = { listChanged: true };
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
-      capabilities.extensions = { [UI_EXTENSION_ID]: {} };
+      capabilities.extensions = { ...capabilities.extensions, [UI_EXTENSION_ID]: {} };
     }
     if (this.eventRegistry.size > 0) {
       capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
@@ -782,7 +803,7 @@ export class MCPServer extends MCPServerBase {
     const { [UI_EXTENSION_ID]: _ui, ...otherExtensions } = extensions ?? {};
     return {
       ...rest,
-      ...(this.resourceOptions && resources ? { resources } : {}),
+      ...((this.resourceOptions || this.skillsConfig) && resources ? { resources } : {}),
       ...(Object.keys(otherExtensions).length > 0 ? { extensions: otherExtensions } : {}),
     };
   }
@@ -831,6 +852,14 @@ export class MCPServer extends MCPServerBase {
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
+    if (this.skillsConfig) {
+      registerSkillHandlers(server, {
+        config: this.skillsConfig,
+        source: this.skillSource(),
+        trace: (instance, method, params, ctx, fn) =>
+          this.traceCustomRequest(instance, method, params, ctx, () => fn()),
+      });
+    }
     if (this.eventRegistry.size > 0) {
       registerEventHandlers(server, {
         registry: this.eventRegistry,
@@ -2100,19 +2129,31 @@ export class MCPServer extends MCPServerBase {
     };
   }
 
+  /** The `skills` source, shared by every server built from the same config. */
+  private skillSource(): SkillSource {
+    const config = this.skillsConfig!;
+    let source = skillSources.get(config);
+    if (!source) {
+      source = skillSourceFor(config, message => this.logger.warn(message));
+      skillSources.set(config, source);
+    }
+    return source;
+  }
+
   private registerResourceHandlers(server: Server): void {
     const options = this.resourceOptions;
     const hasAppResources = this.appResourceList.length > 0;
-    if (!options && !hasAppResources) return;
+    const hasSkills = this.skillsConfig !== undefined;
+    if (!options && !hasAppResources && !hasSkills) return;
 
     // Without app access a server holding only apps answers as one without resources.
     const appResourcesFor = (ctx: ServerContext): Resource[] => {
       if (this.servesApps(server, ctx)) return this.appResourceList;
-      if (!options) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
+      if (!options && !hasSkills) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
       return [];
     };
 
-    const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
+    const ownResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...appResourcesFor(ctx),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
@@ -2120,14 +2161,28 @@ export class MCPServer extends MCPServerBase {
       })) ?? []),
     ];
 
+    // Skills that can't be listed leave the other resources listed; the skills methods report the failure.
+    const skillResources = async (ctx: ServerContext): Promise<Resource[]> => {
+      if (!hasSkills) return [];
+      try {
+        return (await this.skillSource().listResources?.(ctx)) ?? [];
+      } catch (error) {
+        this.logger.warn(
+          `Skills left out of resources/list: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [];
+      }
+    };
+
     // A listed resource wins; otherwise the URI may expand one of the caller's own
-    // templates, so a read stays scoped to what that caller was advertised.
+    // templates, so a read stays scoped to what that caller was advertised. Skill files
+    // are read through the skills source, so lookup doesn't depend on listing them.
     const findResource = async (
       uri: string,
       ctx: ServerContext,
       requestContext: RequestContext,
     ): Promise<Resource | undefined> => {
-      const listed = (await listResources(ctx, requestContext)).find(r => r.uri === uri);
+      const listed = (await ownResources(ctx, requestContext)).find(r => r.uri === uri);
       if (listed || !options?.resourceTemplates) return listed;
       const templates = await options.resourceTemplates({
         extra: toToolExecutionContext(ctx, this.name).extra,
@@ -2140,11 +2195,23 @@ export class MCPServer extends MCPServerBase {
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
     this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
-      resources: await listResources(ctx, trace.requestContext),
+      resources: [
+        ...appResourcesFor(ctx),
+        ...(await skillResources(ctx)),
+        ...((await options?.listResources({
+          extra: toToolExecutionContext(ctx, this.name).extra,
+          requestContext: trace.requestContext,
+        })) ?? []),
+      ],
     }));
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
+      // File-backed skills are all `skill://`; a custom source may serve its own scheme.
+      if (hasSkills && (uri.startsWith('skill://') || 'source' in this.skillsConfig!)) {
+        const file = await this.skillSource().read(uri, ctx);
+        if (file) return { contents: [skillFileContents(uri, file)] };
+      }
       const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 

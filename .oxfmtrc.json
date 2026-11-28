@@ -46,6 +46,7 @@
     "packages/cli/src/commands/api/route-metadata.generated.ts",
     "packages/cli/src/commands/api/feedback-score-schemas.generated.ts",
     "packages/cli/src/commands/api/factory-route-metadata.generated.ts",
+    "packages/server/src/server/mcp/official-skills.generated.ts",
     "client-sdks/ai-sdk/**/*.d.ts",
     "packages/_internal-core/**/*.d.ts",
     "packages/core/**/*.d.ts",

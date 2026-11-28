@@ -24,6 +24,8 @@ export interface ResolvedBuiltinMCPConfig {
   readOnly: boolean;
   /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
   apps: boolean;
+  /** Whether to serve the official Mastra skills over the MCP Skills extension. */
+  skills: boolean;
   /** Studio's base URL, sent to MCP Apps for "Open in Studio" links. */
   studioUrl?: string;
   enumLimit: number;
@@ -148,6 +150,7 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     toolsets,
     readOnly,
     apps: config.apps ?? true,
+    skills: config.skills ?? true,
     studioUrl: resolveStudioUrl(mastra, config),
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },

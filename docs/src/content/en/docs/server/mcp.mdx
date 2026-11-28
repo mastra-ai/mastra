@@ -248,6 +248,29 @@ export const mastra = new Mastra({
 
 Observational Memory starts observing only after a thread reaches its token threshold, 30,000 tokens by default. For a short demo, set a lower `observation.messageTokens` so the agent learns from a few messages. Observational Memory processes messages in the background, so right after `call_agent`, call `get_observations` with `waitForPending: true` to wait (up to 30 seconds) for it to finish before reading.
 
+## Agent skills
+
+The server also serves the official Mastra [Agent Skills](https://agentskills.io) from the [mastra-ai/skills](https://github.com/mastra-ai/skills) repository:
+
+- `skill://mastra/SKILL.md`: How to build with current Mastra APIs: agents, workflows, tools, memory, workspaces, and storage.
+- `skill://mastra-factory/SKILL.md`: How to work with Mastra Factory.
+
+Clients that support the [MCP Skills extension](https://modelcontextprotocol.io/extensions/skills/overview) list these skills and load them when a task needs them, so a connected coding agent works from current Mastra docs without installing anything. Other clients can read the files as resources.
+
+Each Mastra release includes the skills as they were when it was built, so serving them needs no network access. Callers need only `mcp:read`. Serving them needs a version of `@mastra/mcp` with skills support. An older one serves everything else as before. To turn them off:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: { skills: false },
+  },
+})
+```
+
+To serve your own skills, create an [`MCPServer`](/reference/tools/mcp-server#agent-skills-skills) with the `skills` option.
+
 ## OAuth discovery
 
 When `server.auth` is configured, the endpoint tells MCP clients how to get a token, following the [MCP authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization). A request without a valid token gets a `401` whose `WWW-Authenticate` header points at the endpoint's protected-resource metadata ([RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728)):

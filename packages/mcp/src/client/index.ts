@@ -35,3 +35,9 @@ export type { MCPDiscoveryErrorDetails } from './error-utils';
 export * from './oauth-provider';
 export * from './oauth-callback-server';
 export { MCPClientServerProxy } from './server-proxy';
+export { SkillVerificationError } from '@modelcontextprotocol/client/ext/skills';
+export type {
+  DirectoryResource as MCPSkillDirectoryEntry,
+  Skill as MCPSkill,
+  SkillFile as MCPSkillFile,
+} from '@modelcontextprotocol/client/ext/skills';
