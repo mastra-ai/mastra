@@ -827,9 +827,15 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       // Issue #29818: the processed summary must never leak the raw tool value. Issue #31439
       // additionally promotes the model's own response messages, but earlier-step messages and
       // locally executed tool results — whose payload processors redact — are trimmed, so the
-      // exported output stays clean.
-      const inferenceOutputs = inferences.map(i => i.output as Record<string, unknown>);
-      expect(JSON.stringify(inferenceOutputs)).not.toContain('42');
+      // exported output stays clean. Span bookkeeping timestamps are dropped: they are wall-clock
+      // noise, not model or tool content, and their digits can contain the probe value by chance.
+      const dropTimestamps = (key: string, value: unknown) => (key === 'createdAt' ? undefined : value);
+      expect(
+        JSON.stringify(
+          inferences.map(i => i.output),
+          dropTimestamps,
+        ),
+      ).not.toContain('42');
       expect(inferences[0].attributes).toMatchObject({ finishReason: 'tool-calls', usage: { inputTokens: 10 } });
 
       const [toolCall] = testExporter.getSpansByType('tool_call' as any) as any[];
