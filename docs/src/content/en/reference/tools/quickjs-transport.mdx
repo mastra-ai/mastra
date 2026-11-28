@@ -41,17 +41,21 @@ Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper. 
 import { createCodeMode } from '@mastra/core/tools'
 import { QuickJsCodeModeTransport } from '@mastra/quickjs'
 import { getQuickJS } from 'quickjs-emscripten'
-import stripTypes from 'ts-blank-space'
 
 const module = await getQuickJS()
 
-const { tool, instructions } = createCodeMode(
-  { tools },
-  new QuickJsCodeModeTransport({ module, stripTypes }),
-)
+// Import the stripper where it is used, never at module scope: importing it
+// eagerly pulls in TypeScript, whose module initialization needs Node.js
+// globals.
+async function createHostedTransport() {
+  const { default: stripTypes } = await import('ts-blank-space')
+  return new QuickJsCodeModeTransport({ module, stripTypes })
+}
+
+const { tool, instructions } = createCodeMode({ tools }, await createHostedTransport())
 ```
 
-If the program is already plain JavaScript, an identity function is enough: `stripTypes: (code) => code`.
+A stripper passed this way receives the whole program and returns the JavaScript to evaluate, so it has to be synchronous. If the program is already plain JavaScript, an identity function is enough and needs no import at all: `stripTypes: (code) => code`.
 
 ## Constructor parameters
 

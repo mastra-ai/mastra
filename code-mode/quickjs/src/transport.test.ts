@@ -662,10 +662,12 @@ describe('QuickJsCodeModeTransport handle disposal', () => {
     });
   });
 
-  it('leaves nothing allocated after a tick-budget interruption', async () => {
-    // The budget is spent inside the loop, and the guest job queued ahead of it
-    // still has to run before the runtime is freed. Its host call is what proves
-    // the job got there.
+  it('leaves nothing allocated after a tick-budget interruption with a job still queued', async () => {
+    // Fail-first against the pre-tick-budget transport, which ignores
+    // `maxInterruptTicks` and would report TimeoutError here instead. It is not
+    // evidence about the teardown drain in particular: the guest job is consumed
+    // by the pump that runs after evaluation, so the drain never sees it (see the
+    // teardown notes in the PR).
     await expectNoLeaks(
       async transport => {
         const dispatched: string[] = [];

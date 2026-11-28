@@ -18,11 +18,16 @@
  * and asserts a successful response. It is deliberately an import/startup smoke,
  * not a claim that the test compiles WASM in workerd — execution still uses the
  * caller-supplied `module` option.
+ *
+ * The third suite guards the frozen-clock escape: a run that can only be ended by
+ * the tick budget runs in its own process, so a regression fails the test instead
+ * of hanging the suite (see the comment on the test).
  */
+import { execFileSync } from 'node:child_process';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { unstable_dev } from 'wrangler';
 
@@ -57,6 +62,40 @@ describe('emitted package runtime (issue #24357)', () => {
       timeout: 5_000,
     });
     expect(result).toMatchObject({ success: true, result: 6 });
+  });
+});
+
+describe('frozen-clock execution guard', () => {
+  it('ends a run whose only escape is the tick budget, with the clock stopped', { timeout: 60_000 }, () => {
+    // A guest that queues a job which never returns and then spins itself cannot
+    // be bounded by the clock: `Date.now()` never advances under a frozen clock,
+    // so the host wall deadline is unreachable and the tick budget is the only
+    // way out. A regression here blocks the whole process — no test timeout can
+    // interrupt a synchronous WASM call — so the run gets its own process and a
+    // hard kill, which turns the regression into a red test instead of a hung
+    // suite.
+    const script = `
+      Date.now = () => 1_700_000_000_000;
+      const { QuickJsCodeModeTransport } = await import(${JSON.stringify(pathToFileURL(esmEntry).href)});
+      const result = await new QuickJsCodeModeTransport({ maxInterruptTicks: 200 }).run({
+        program: 'Promise.resolve().then(() => { external_late({}); while (true) {} }); while (true) {}',
+        toolIds: ['late'],
+        dispatch: async () => undefined,
+        // Deliberately out of reach: the event loop is blocked for the whole run.
+        timeout: 60_000,
+      });
+      console.log(JSON.stringify(result));
+    `;
+
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      encoding: 'utf8',
+      timeout: 20_000,
+    });
+
+    expect(JSON.parse(output.trim())).toMatchObject({
+      success: false,
+      error: { name: 'ExecutionLimitError' },
+    });
   });
 });
 
