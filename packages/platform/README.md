@@ -1,6 +1,6 @@
 # @mastra/platform (experimental)
 
-Hosted Mastra Platform clients for Memory, Knowledge, and Browser, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
+Hosted Mastra Platform clients for managed agents, Memory, Knowledge, and Browser, with Sandbox and Filesystem re-exported from the `@mastra/platform-workspace` dependency.
 
 ## Installation
 
@@ -26,6 +26,88 @@ const knowledge = new PlatformKnowledge();
 ```
 
 `PlatformSandbox` and `PlatformFilesystem` are also available from `@mastra/platform`.
+
+### Managed agents
+
+`MastraPlatform` creates and runs agents hosted on Mastra Platform. Use a project access token: it names its project, so `projectId` is only needed for other tokens (or set `MASTRA_PROJECT_ID`).
+
+```ts
+import { MastraPlatform } from '@mastra/platform';
+
+const platform = new MastraPlatform({ accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN });
+
+const agent = await platform.createAgent({
+  name: 'Support',
+  instructions: 'Answer billing questions.',
+  model: 'openai/gpt-5-mini',
+});
+
+const response = await agent.stream('Where is my invoice?', {
+  memory: { thread: 'thread-1', resource: 'user-1' },
+});
+for await (const text of response.textStream) process.stdout.write(text);
+
+const { messages } = await agent.listMessages('thread-1', { resourceId: 'user-1' });
+```
+
+A managed agent is a Mastra `Agent` that runs on the Platform: `stream` and `generate` return the same output a local agent does, and you can register it in `new Mastra({ agents })`, hand it to another agent as a sub-agent, or run it as a workflow step. Every run acts for an end user, whose memory, threads, and connected accounts it uses. Pass `memory.resource` or `resourceId`; in a workflow step or a server route, the request context's end user is used. Use `await platform.getAgent(id)` for an existing agent; agents also have `details`, `update`, `delete`, and `listThreads`.
+
+### Memory, knowledge, connected accounts, and sandboxes
+
+The same client reaches the project's other services with the same token.
+
+```ts
+// Memory and Knowledge instances (IDs fall back to MASTRA_MEMORY_INSTANCE_ID / MASTRA_KNOWLEDGE_INSTANCE_ID)
+const memory = platform.getMemory({ instanceId: 'mem_123' });
+const { threads } = await memory.client.listThreads({ resourceId: 'user-1' });
+const knowledge = platform.getKnowledge({ instanceId: 'kn_123' });
+
+// Connect an end user's GitHub account: send them to connectUrl to sign in
+const user = platform.connect.withResource('user-1');
+const { connectionId } = await user.createConnectSession('github');
+const { connectUrl } = await user.getConnectUrl(connectionId);
+const connections = await user.listConnections();
+
+// Start a sandbox and run a command in it
+const sandbox = await platform.createSandbox({ environmentId: 'env_123' });
+const { stdout } = await sandbox.executeCommand('ls', ['-la']);
+
+// Later, reconnect to it by ID (fails if it no longer exists)
+const again = await platform.getSandbox(sandbox.sandboxId!);
+const sandboxes = await platform.sandboxes.list('env_123');
+
+// A provisioned file system, for a Workspace
+const workspace = new Workspace({ filesystem: await platform.getFilesystem('bucket_123') });
+
+// A provisioned database as Mastra storage
+const mastra = new Mastra({ storage: await platform.getStorage('db_123') });
+```
+
+Each of these is the framework type it stands in for: `getMemory` returns a `MastraMemory`, `getKnowledge` a `Knowledge`, `getFilesystem` a `MastraFilesystem`, `createSandbox` and `getSandbox` a `MastraSandbox`, and `getStorage` a `MastraStorage`. `connect` is the `ConnectClient` from `@mastra/connect`; an end user's connections are visible to, and removable by, only that end user. `getStorage` loads the store for the database's kind, so install it alongside: `@mastra/libsql` for Turso, `@mastra/pg` for Neon and Postgres, `@mastra/redis` for Redis. `getSandbox` reconnects through the provider that runs the sandbox; `createSandbox` with a `sandboxId` reattaches if it can and otherwise starts a new one.
+
+### Provisioning projects
+
+Signed in as an organization member (for example with a token from `mastra auth tokens create`), the same client creates projects and provisions what runs in them. Provisioning runs in the background: `create` returns the resource while it is still `provisioning`, and `waitUntilReady` polls until it is ready, throwing `MastraPlatformError` if provisioning fails.
+
+```ts
+const platform = new MastraPlatform({ accessToken: process.env.MASTRA_API_TOKEN, organizationId: 'org_123' });
+
+const created = await platform.projects.create({ name: 'Support Desk' });
+const project = platform.getProject(created.id);
+await project.setupAgents();
+
+const [production] = await project.environments.list();
+const memory = await project.memoryInstances.create({ name: 'support-memory' });
+await project.memoryInstances.waitUntilReady(memory.id);
+
+const database = await project.databases.create({ kind: 'turso', name: 'app-db' });
+await project.databases.waitUntilReady(database.id);
+const { envVars } = await project.databases.connection(database.id);
+
+const files = await project.filesystems.create({ environmentId: production.id, name: 'uploads' });
+```
+
+Creating Memory instances, Knowledge instances, and databases requires the `admin` role.
 
 ### Hosted browser
 

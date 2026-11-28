@@ -5853,6 +5853,12 @@ importers:
 
   packages/platform:
     dependencies:
+      '@mastra/client-js':
+        specifier: workspace:*
+        version: link:../../client-sdks/client-js
+      '@mastra/connect':
+        specifier: workspace:*
+        version: link:../connect
       '@mastra/platform-workspace':
         specifier: workspace:*
         version: link:../../workspaces/platform-workspace
@@ -5860,6 +5866,9 @@ importers:
         specifier: workspace:*
         version: link:../../browser/stagehand
     devDependencies:
+      '@hono/node-server':
+        specifier: ^2.1.3
+        version: 2.1.7(hono@4.13.18)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5
@@ -5869,12 +5878,21 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
       '@mastra/memory':
         specifier: workspace:*
         version: link:../memory
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/redis':
+        specifier: workspace:*
+        version: link:../../stores/redis
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5884,6 +5902,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      hono:
+        specifier: 4.13.18
+        version: 4.13.18
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
