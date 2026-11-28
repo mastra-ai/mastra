@@ -30,6 +30,7 @@ import {
   TOOL_APPROVAL_VERDICTS_KEY,
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
+import { createIterationCompleteContext, createIterationFeedbackMessage } from './shared/iteration-context';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
@@ -552,29 +553,26 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
-      const buildIterationContext = (isFinal: boolean, iteration = state.accumulatedSteps.length) => ({
-        iteration,
-        maxIterations: rt.maxSteps,
-        text: typedInputData.output.text || '',
-        toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
-          id: tc.toolCallId || tc.id || '',
-          name: tc.toolName || tc.name || '',
-          args: (tc.args || {}) as Record<string, unknown>,
-        })),
-        toolResults: toolResultParts.map(tr => ({
-          id: tr.toolCallId,
-          name: tr.toolName,
-          result: normalizeToolOutput(tr.output).output,
-        })),
-        isFinal,
-        finishReason: typedInputData.stepResult?.reason || 'unknown',
-        runId,
-        threadId: rt.threadId,
-        resourceId: rt.resourceId,
-        agentId: rt.agentId,
-        agentName: rt.agentName || rt.agentId,
-        messages: messageList.get.all.db(),
-      });
+      const buildIterationContext = (isFinal: boolean, iteration = state.accumulatedSteps.length) =>
+        createIterationCompleteContext({
+          iteration,
+          maxIterations: rt.maxSteps,
+          text: typedInputData.output.text || '',
+          toolCalls: typedInputData.output.toolCalls || [],
+          toolResults: toolResultParts.map(tr => ({
+            id: tr.toolCallId,
+            name: tr.toolName,
+            result: normalizeToolOutput(tr.output).output,
+          })),
+          isFinal,
+          finishReason: typedInputData.stepResult?.reason || 'unknown',
+          runId,
+          threadId: rt.threadId,
+          resourceId: rt.resourceId,
+          agentId: rt.agentId,
+          agentName: rt.agentName,
+          messages: messageList.get.all.db(),
+        });
 
       if (typedInputData.stepResult?.reason === 'abort') {
         typedInputData.stepResult.isContinued = false;
@@ -623,27 +621,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         buildIterationContext,
         injectFeedback: feedback => {
           messageList.add(
-            {
-              id: rt.mastra?.generateId() || globalThis.crypto.randomUUID(),
-              createdAt: new Date(),
-              type: 'text',
-              role: 'assistant',
-              content: {
-                parts: [
-                  {
-                    type: 'text',
-                    text: feedback,
-                  },
-                ],
-                metadata: {
-                  mode: 'stream',
-                  completionResult: {
-                    suppressFeedback: true,
-                  },
-                },
-                format: 2,
-              },
-            } as MastraDBMessage,
+            createIterationFeedbackMessage(rt.mastra?.generateId() || globalThis.crypto.randomUUID(), feedback),
             'response',
           );
         },

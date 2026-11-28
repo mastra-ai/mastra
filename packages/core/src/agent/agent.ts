@@ -14591,6 +14591,16 @@ export class Agent<
     }
   }
 
+  #durableRunMemoryInfo(workflowInput: DurableAgenticWorkflowInput) {
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    return {
+      threadId: workflowInput.state?.threadId ?? memoryInfo?.threadId,
+      resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+    };
+  }
+
   /**
    * Execute the durable workflow.
    *
@@ -14617,14 +14627,9 @@ export class Agent<
     // Populate the run row's resourceId column so storage-level resource
     // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
     // mirroring the non-durable agentic loop (loop/workflows/stream.ts).
-    const memoryInfo = (
-      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-    )?.memoryInfo;
-    const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
-
     const run = await this.executionEngine.createRun(workflow, {
       runId,
-      resourceId,
+      resourceId: this.#durableRunMemoryInfo(workflowInput).resourceId,
       pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
     });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
@@ -14663,11 +14668,7 @@ export class Agent<
     try {
       const workflow = this.getWorkflow();
       await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
-      const memoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
+      const { threadId, resourceId } = this.#durableRunMemoryInfo(workflowInput);
       if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
         await agentThreadStreamRuntime.claimDurableThreadLease(
           pubsub,

@@ -6,6 +6,7 @@ import type { LoopContinuationPredicate } from '../../../loop/base-loop-builder'
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
 import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
+import { createIterationCompleteContext, createIterationFeedbackMessage } from '../../../loop/shared/iteration-context';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
@@ -952,15 +953,11 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         onIterationComplete: rt.onIterationComplete,
         buildIterationContext: isFinal => {
           const lastStep = steps[steps.length - 1];
-          return {
+          return createIterationCompleteContext({
             iteration: steps.length,
             maxIterations: runMaxSteps,
             text: lastStep?.text ?? '',
-            toolCalls: (lastStep?.toolCalls ?? []).map((tc: any) => ({
-              id: tc.toolCallId || tc.id || '',
-              name: tc.toolName || tc.name || '',
-              args: (tc.args || {}) as Record<string, unknown>,
-            })),
+            toolCalls: lastStep?.toolCalls ?? [],
             toolResults: (lastStep?.toolResults ?? []).map((tr: any) => ({
               id: tr.toolCallId || tr.id || '',
               name: tr.toolName || tr.name || '',
@@ -973,33 +970,13 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             threadId: rt.threadId,
             resourceId: rt.resourceId,
             agentId: rt.agentId,
-            agentName: rt.agentName ?? rt.agentId,
+            agentName: rt.agentName,
             messages: callbackList().get.all.db(),
-          };
+          });
         },
         injectFeedback: feedback => {
-          // Inject feedback as a synthetic assistant message so the LLM
-          // sees it on the next turn. Mirror the regular agent: mark it
-          // with completionResult.suppressFeedback so isTaskComplete
-          // scorers skip it.
           const feedbackId = rt.mastra?.generateId?.() ?? globalThis.crypto?.randomUUID?.() ?? `msg_${Date.now()}`;
-          callbackList().add(
-            {
-              id: feedbackId,
-              createdAt: new Date(),
-              type: 'text',
-              role: 'assistant',
-              content: {
-                parts: [{ type: 'text', text: feedback }],
-                metadata: {
-                  mode: 'stream',
-                  completionResult: { suppressFeedback: true },
-                },
-                format: 2,
-              },
-            } as any,
-            'response',
-          );
+          callbackList().add(createIterationFeedbackMessage(feedbackId, feedback), 'response');
           // Re-serialize the updated messageList
           transcript.write(callbackList().serialize());
         },
@@ -1323,8 +1300,8 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
                   if (modelSpan?.isInternal) modelSpan.parent ??= agentSpan;
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
-                  const toolCalls = steps.flatMap(step =>
-                    ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                  const toolCalls = steps.flatMap((step: { toolCalls?: DurableToolCallInput[] }) =>
+                    (step.toolCalls ?? []).map(tc => ({
                       toolCallId: tc.toolCallId,
                       toolName: tc.toolName,
                       args: tc.args,
