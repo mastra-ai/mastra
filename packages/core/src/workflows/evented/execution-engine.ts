@@ -273,10 +273,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
     }
 
     let pendingCleanupFinish: Event | undefined;
+    // A restart the processor declines answers only its own caller, with the run's stored outcome.
+    const restartToken = params.restart ? globalThis.crypto.randomUUID() : undefined;
     const finish = this.waitForFinish(pubsub, params.runId, event => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
       if (isForeignExecution?.(event.data?.requestContext, params.requestContext)) return;
+      if (event.data?.storedOutcome && event.data.storedOutcomeFor !== restartToken) return;
       if (
         ![
           'workflow.end',
@@ -419,6 +422,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             format: params.format,
             perStep: params.perStep,
             state: params.restart.state,
+            restartToken,
             ...storageVersionTag,
           },
         });
@@ -535,7 +539,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
       };
     }
 
-    if (callbackArg.status !== 'paused') {
+    // A run's stored outcome sent to a restart that no longer applied (see the processor's
+    // `#declineRestart`): the run already called its lifecycle callbacks when it finished.
+    if (callbackArg.status !== 'paused' && !resultData.storedOutcome) {
       // Invoke lifecycle callbacks before returning
       await this.invokeLifecycleCallbacks({
         status: callbackArg.status,

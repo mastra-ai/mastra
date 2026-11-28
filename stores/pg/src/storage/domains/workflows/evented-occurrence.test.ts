@@ -11,6 +11,7 @@ import {
 } from '../../../../../../packages/core/src/workflows/evented';
 import { describeOccurrenceReplayCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/occurrence-replay-cases';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
+import { describeRestartOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/restart-occurrence-cases';
 import { describeResumeOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/resume-occurrence-cases';
 import { connectionString, TEST_CONFIG } from '../../test-utils';
 
@@ -134,4 +135,5 @@ describe.each([1, 2] as const)('Postgres evented occurrence replay on storage v%
 
   describeOccurrenceReplayCases({ getStorage: () => storage, storageVersion });
   describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion });
+  describeRestartOccurrenceCases({ getStorage: () => storage, storageVersion });
 });

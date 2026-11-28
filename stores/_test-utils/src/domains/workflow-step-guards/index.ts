@@ -351,6 +351,182 @@ export function createWorkflowStepGuardTests({
       });
     });
 
+    // A restart's claim of a step it takes over (`takeover`): it takes the running record of the
+    // occurrence it read, and keeps a result that occurrence saved before the claim.
+    describe('restart takeovers', () => {
+      async function setupTakeover(stored?: StepResult<any, any, any, any>) {
+        const context = await setup();
+        if (stored) await writeStep(context.a, context.runId, { stepId: 'step', requestContext: {}, result: stored });
+        const claim = (worker: typeof context.a, eventId: string, expectedStartedBy: string) =>
+          writeStep(worker, context.runId, {
+            stepId: 'step',
+            result: {
+              status: 'running',
+              startedAt: 3,
+              payload: {},
+              metadata: { startedBy: eventId, __restartPending: true },
+            },
+            requestContext: {},
+            startGuard: { eventId, expectedStartedBy, takeover: true },
+          });
+        const finishOld = (worker: typeof context.a, eventId: string) =>
+          writeStep(worker, context.runId, {
+            stepId: 'step',
+            result: {
+              status: 'success',
+              payload: {},
+              output: 1,
+              startedAt: 1,
+              endedAt: 2,
+              metadata: { startedBy: eventId },
+            },
+            requestContext: {},
+            completionGuard: { eventId },
+          });
+        return { ...context, claim, finishOld };
+      }
+      const runningUnder = (eventId: string, metadata: Record<string, any> = {}): StepResult<any, any, any, any> => ({
+        status: 'running',
+        startedAt: 1,
+        payload: {},
+        metadata: { startedBy: eventId, ...metadata },
+      });
+      const claimed = { status: 'running', metadata: { startedBy: 'restart', __restartPending: true } };
+
+      it('fails explicitly when the run is not stored', async () => {
+        const worker = await stores[0]!.getStore('workflows');
+        await expect(
+          writeStep(worker, randomUUID(), {
+            stepId: 'step',
+            requestContext: {},
+            result: { status: 'running', startedAt: 1, payload: {}, metadata: { startedBy: 'restart' } },
+            startGuard: { eventId: 'restart', expectedStartedBy: 'old', takeover: true },
+          }),
+        ).rejects.toMatchObject({ code: 'WORKFLOW_STEP_CONFLICT', reason: 'missing' });
+      });
+
+      it('refuses when the step has no record but one was expected', async () => {
+        const { a, claim, load } = await setupTakeover();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect((await load())!.context.step).toBeUndefined();
+      });
+
+      it('takes a legacy record without an occurrence', async () => {
+        const { a, claim, load } = await setupTakeover({ status: 'running', startedAt: 1, payload: {} });
+        await claim(a, 'restart', 'old');
+        expect((await load())!.context.step).toMatchObject(claimed);
+      });
+
+      it('takes the running record of the expected occurrence, which a plain start refuses', async () => {
+        const { a, b, write, claim, finishOld, load } = await setupTakeover(runningUnder('old'));
+        const before = await load();
+        await expect(write(b, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+        await claim(a, 'restart', 'old');
+        expect((await load())!.context.step).toMatchObject(claimed);
+        // The occurrence it took over can no longer save its result.
+        await expect(finishOld(b, 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect((await load())!.context.step).toMatchObject(claimed);
+      });
+
+      it('refuses the running record of the expected occurrence once the run ended', async () => {
+        const { a, runId, claim, load } = await setupTakeover(runningUnder('old'));
+        await a!.updateWorkflowState({ workflowName, runId, storageVersion, opts: { status: 'failed' } });
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+      });
+
+      it('refuses a running record of another occurrence', async () => {
+        const { a, claim, load } = await setupTakeover(runningUnder('other'));
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+      });
+
+      // A failed record is an attempt awaiting its retry; a continued one is a result whose next
+      // step has started. The claim leaves each as stored.
+      const finished: Record<string, StepResult<any, any, any, any>> = {
+        success: {
+          status: 'success',
+          payload: {},
+          output: 1,
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old' },
+        },
+        suspended: {
+          status: 'suspended',
+          payload: {},
+          suspendPayload: { why: 1 },
+          startedAt: 1,
+          suspendedAt: 2,
+          metadata: { startedBy: 'old' },
+        },
+        failed: {
+          status: 'failed',
+          error: new Error('Transient failure'),
+          payload: {},
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old' },
+        },
+        continued: {
+          status: 'success',
+          payload: {},
+          output: undefined,
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'old', __continuationStarted: true },
+        },
+      };
+      it.each(Object.keys(finished))('keeps a %s record of the expected occurrence and answers with it', async kind => {
+        const stored = finished[kind]!;
+        const { a, claim, load } = await setupTakeover(stored);
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({
+          code: 'WORKFLOW_STEP_CONFLICT',
+          reason: 'completed',
+          storedResult: { status: stored.status, metadata: stored.metadata },
+        });
+        expect(await load()).toEqual(before);
+      });
+
+      it('refuses a finished record of another occurrence', async () => {
+        const { a, claim, load } = await setupTakeover({
+          status: 'success',
+          payload: {},
+          output: 1,
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'other' },
+        });
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+      });
+
+      it('refuses a record another restart already took over, and lets that restart claim it again', async () => {
+        const { a, b, claim, load } = await setupTakeover(runningUnder('restart', { __restartPending: true }));
+        const before = await load();
+        await expect(claim(b, 'second-restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+        await claim(a, 'restart', 'old');
+        expect((await load())!.context.step).toMatchObject(claimed);
+      });
+
+      it('lets one of two restarts expecting the same occurrence win', async () => {
+        const { a, b, claim, load } = await setupTakeover(runningUnder('old'));
+        const outcomes = await Promise.allSettled([claim(a, 'restart-a', 'old'), claim(b, 'restart-b', 'old')]);
+        expect(outcomes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        const refused = outcomes.filter(result => result.status === 'rejected');
+        expect(refused).toHaveLength(1);
+        expect((refused[0] as PromiseRejectedResult).reason).toMatchObject({ reason: 'stale' });
+        const winner = outcomes[0]!.status === 'fulfilled' ? 'restart-a' : 'restart-b';
+        expect((await load())!.context.step).toMatchObject({ metadata: { startedBy: winner } });
+      });
+    });
+
     it('rejects old completions after a later loop iteration has started', async () => {
       const { a, write, finish, load } = await setup();
       await write(a, 'first');

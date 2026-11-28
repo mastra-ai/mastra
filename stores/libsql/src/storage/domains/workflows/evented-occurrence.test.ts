@@ -5,6 +5,7 @@ import { createClient } from '@libsql/client';
 import { afterAll, beforeAll, describe, expect } from 'vitest';
 import { LibSQLStore } from '../..';
 import { describeOccurrenceReplayCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/occurrence-replay-cases';
+import { describeRestartOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/restart-occurrence-cases';
 import { describeResumeOccurrenceCases } from '../../../../../../packages/core/src/workflows/evented/test-utils/resume-occurrence-cases';
 
 describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i', storageVersion => {
@@ -34,4 +35,5 @@ describe.each([1, 2] as const)('LibSQL evented occurrence replay on storage v%i'
   };
   describeOccurrenceReplayCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
   describeResumeOccurrenceCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
+  describeRestartOccurrenceCases({ getStorage: () => storage, storageVersion, countV1Snapshots });
 });
