@@ -1,7 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
-import { persistGeneratedMessages, persistMessagesWithThreadCreation } from '@mastra/core/memory/internal';
+import {
+  branchThreadWithGeneratedId,
+  persistGeneratedMessages,
+  persistMessagesWithThreadCreation,
+} from '@mastra/core/memory/internal';
 import type { GeneratedMessagePersistenceInput } from '@mastra/core/memory/internal';
+import type { BranchThreadInput, BranchThreadOutput } from '@mastra/core/storage';
 import { describe, expectTypeOf, it } from 'vitest';
 
 describe('@mastra/core/memory/internal generated-message persistence types', () => {
@@ -12,10 +17,15 @@ describe('@mastra/core/memory/internal generated-message persistence types', () 
       observabilityContext?: Parameters<MastraMemory['saveMessages']>[0]['observabilityContext'];
       embeddedMessages?: Map<string, string>;
       thread?: StorageThreadType;
+      requireThreadCreation?: boolean;
       skipVectors?: boolean;
     }>();
     expectTypeOf(persistGeneratedMessages).parameter(0).toEqualTypeOf<MastraMemory>();
     expectTypeOf(persistGeneratedMessages).parameter(2).toEqualTypeOf<readonly string[]>();
+    expectTypeOf(branchThreadWithGeneratedId)
+      .parameter(1)
+      .toEqualTypeOf<BranchThreadInput & { generatedThreadId: string }>();
+    expectTypeOf(branchThreadWithGeneratedId).returns.resolves.toEqualTypeOf<BranchThreadOutput>();
     expectTypeOf(persistMessagesWithThreadCreation).parameter(1).toEqualTypeOf<GeneratedMessagePersistenceInput>();
     expectTypeOf(persistMessagesWithThreadCreation).returns.resolves.toEqualTypeOf<{
       messages: MastraDBMessage[];

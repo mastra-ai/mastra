@@ -809,13 +809,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Gets the effective FGA provider for the current request based on auth mode.
    */
   protected getEffectiveFGAProvider(requestContext: RequestContext) {
-    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
-
-    if (authMode === 'studio') {
-      return this.mastra.getStudio?.()?.fga ?? this.mastra.getServer()?.fga;
-    }
-
-    return this.mastra.getServer()?.fga;
+    return getFGAProvider(this.mastra, requestContext);
   }
 
   /**
@@ -2410,6 +2404,17 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
+  // Branch routes authorize the complete lineage in their handlers and deliberately translate
+  // denied access to BRANCH_NOT_FOUND so the route preflight must not disclose the target thread.
+  if (
+    route.path === '/memory/threads/:threadId/branch' ||
+    route.path === '/memory/threads/:threadId/parent' ||
+    route.path === '/memory/threads/:threadId/branches' ||
+    route.path === '/memory/threads/:threadId/branch-history'
+  ) {
+    return null;
+  }
+
   // Use request context to determine which FGA provider to use (studio vs server)
   const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;

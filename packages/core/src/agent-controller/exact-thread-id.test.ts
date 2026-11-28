@@ -39,6 +39,27 @@ describe('AgentController exact thread id creation', () => {
     expect((await session.thread.getById({ threadId: 'session-1' }))?.resourceId).toBe('session-1');
   });
 
+  it('authorizes a missing exact thread before creating it', async () => {
+    const storage = new InMemoryStore();
+    const controller = await createController(storage);
+
+    await expect(
+      controller.createSession({
+        id: 'session-denied',
+        ownerId: 'owner-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-denied',
+        authorizeThread: async input => {
+          expect(input).toEqual({ threadId: 'thread-denied', exists: false });
+          throw new Error('denied');
+        },
+      }),
+    ).rejects.toThrow('denied');
+
+    const memory = await storage.getStore('memory');
+    expect(await memory.getThreadById({ threadId: 'thread-denied' })).toBeNull();
+  });
+
   it('resumes the requested thread id after restart', async () => {
     const storage = new InMemoryStore();
     const first = await createController(storage);

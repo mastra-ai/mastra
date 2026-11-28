@@ -1,5 +1,6 @@
 import { MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY, MASTRA_THREAD_BRANCH_STATE_METADATA_KEY } from '@mastra/core/memory';
 import type { MastraDBMessage } from '@mastra/core/memory';
+import { getThreadBranchAuthorizationCandidates, inspectThreadBranchState } from '@mastra/core/memory/internal';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MemoryStorage, StorageListThreadsInput } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -156,5 +157,19 @@ describe('branch bookkeeping uses targeted thread lookups', () => {
     await expect(
       memory.listThreads({ filter: { metadata: { [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: 'root' } } }),
     ).rejects.toMatchObject({ id: 'BRANCH_MUTATION_CONFLICT' });
+  });
+
+  it('authorizes and inspects branch lineage without listing threads', async () => {
+    const branch = await memory.branchThread({ threadId: 'root', branchPointMessageId: 'fork' });
+    untargetedListCalls.length = 0;
+
+    const ancestors = await getThreadBranchAuthorizationCandidates(memory, branch.thread.id, 'ancestors');
+    const descendants = await getThreadBranchAuthorizationCandidates(memory, 'root', 'descendants');
+    const state = await inspectThreadBranchState(memory, 'root');
+
+    expect(ancestors.map(candidate => candidate.id).sort()).toEqual([branch.thread.id, 'root'].sort());
+    expect(descendants.map(candidate => candidate.id).sort()).toEqual([branch.thread.id, 'root'].sort());
+    expect(state).toEqual({ state: 'ordinary', hasReadyDescendants: true });
+    expect(untargetedListCalls).toEqual([]);
   });
 });

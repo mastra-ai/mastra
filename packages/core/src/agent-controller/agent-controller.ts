@@ -22,8 +22,10 @@ import {
   MASTRA_THREAD_BRANCH_METADATA_KEY,
   MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
   MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
+  assertNoReservedThreadBranchMetadata,
   createThreadBranchError,
 } from '../memory/branching';
+import { persistGeneratedMessages } from '../memory/internal';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -97,6 +99,59 @@ function getRawThreadBranchMetadata(thread: StorageThreadType): RawThreadBranchM
     throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage is malformed.');
   }
   return { state: branch.state, parentThreadId: branch.parentThreadId };
+}
+
+/**
+ * Read a thread row from raw controller storage and refuse rows that take part in
+ * shared-history branching. Uses one row read and one indexed ready-child query,
+ * never a thread-table scan.
+ */
+async function assertRawControllerThreadAvailable({
+  threadId,
+  memoryStorage,
+}: {
+  threadId: string;
+  memoryStorage: MemoryStorage;
+}): Promise<StorageThreadType | null> {
+  const thread = await memoryStorage.getThreadById({ threadId });
+  const readyChildren = await memoryStorage.listThreads({
+    filter: {
+      ...(thread ? { resourceId: thread.resourceId } : {}),
+      metadata: {
+        [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+        [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+      },
+    },
+    page: 0,
+    perPage: 1,
+  });
+  const hasReadyDescendants = readyChildren.threads.length > 0;
+  if (!thread) {
+    if (hasReadyDescendants) {
+      throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage has a missing parent.');
+    }
+    return null;
+  }
+  const branch = getRawThreadBranchMetadata(thread);
+  if (branch?.state === 'pending') {
+    throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+  }
+  if (branch?.state === 'ready' || hasReadyDescendants) {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      'Thread branching is not supported by the raw Agent Controller storage fallback.',
+    );
+  }
+  return thread;
+}
+
+/**
+ * True when controller storage refused a row because it carries shared-history
+ * branch lineage. Checked by id rather than `instanceof MastraError` so it holds
+ * when core is bundled more than once.
+ */
+function isBranchingUnsupportedError(error: unknown): boolean {
+  return (error as { id?: unknown } | null)?.id === 'BRANCHING_UNSUPPORTED';
 }
 
 /**
@@ -534,7 +589,7 @@ export class AgentController<TState = {}> {
         }),
       generateId: () => this.generateId(),
       resolveTransitionModeId: modeId => this.resolveTransitionModeId(session, modeId),
-      saveSystemReminder: input => this.saveSystemReminder(input),
+      saveSystemReminder: input => this.saveSystemReminder(session, input),
     });
 
     // Seed the selected model: an explicit initialState.currentModelId wins,
@@ -588,6 +643,7 @@ export class AgentController<TState = {}> {
     workspace,
     browser,
     requestContext,
+    authorizeThread,
   }: {
     resourceId?: string;
     id?: string;
@@ -615,6 +671,8 @@ export class AgentController<TState = {}> {
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
+    /** Called with the selected thread before an existing thread is bound or a missing thread is created. */
+    authorizeThread?: (input: { threadId: string; exists: boolean }) => Promise<void>;
   } = {}): Promise<Session<TState>> {
     const effectiveResourceId = resourceId ?? this.config.resourceId ?? this.config.id;
     const effectiveSessionId = id ?? effectiveResourceId;
@@ -686,6 +744,10 @@ export class AgentController<TState = {}> {
         // thread never created.
         if (threadId && session.thread.getId() !== threadId) {
           const existingThread = await session.thread.getById({ threadId });
+          if (existingThread?.resourceId !== undefined && existingThread.resourceId !== effectiveResourceId) {
+            throw new Error(`Thread not found: ${threadId}`);
+          }
+          await authorizeThread?.({ threadId, exists: Boolean(existingThread) });
           if (existingThread) {
             if (existingThread.resourceId !== session.identity.getResourceId()) {
               throw new Error(`Thread not found: ${threadId}`);
@@ -721,6 +783,7 @@ export class AgentController<TState = {}> {
         workspace,
         browser,
         requestContext,
+        authorizeThread,
       });
       this.#sessionsById.set(registryKey, creation);
       try {
@@ -754,6 +817,7 @@ export class AgentController<TState = {}> {
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
+      authorizeThread?: (input: { threadId: string; exists: boolean }) => Promise<void>;
     },
   ): Promise<Session<TState>> {
     // Seed the session's tags into its state so thread tagging + the workspace
@@ -850,10 +914,11 @@ export class AgentController<TState = {}> {
 
     if (overrides?.threadId) {
       const existingThread = await session.thread.getById({ threadId: overrides.threadId });
+      if (existingThread?.resourceId !== undefined && existingThread.resourceId !== effectiveResourceId) {
+        throw new Error(`Thread not found: ${overrides.threadId}`);
+      }
+      await overrides.authorizeThread?.({ threadId: overrides.threadId, exists: Boolean(existingThread) });
       if (existingThread) {
-        if (existingThread.resourceId !== effectiveResourceId) {
-          throw new Error(`Thread not found: ${overrides.threadId}`);
-        }
         await this.config.threadLock?.acquire(existingThread.id);
         session.thread.set({ threadId: existingThread.id });
         await session.thread.loadMetadata({ preserveTokenUsageOnFailure: false });
@@ -887,6 +952,7 @@ export class AgentController<TState = {}> {
         await session.thread.create({ requestContext });
       } else if (candidates.length > 0) {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+        await overrides?.authorizeThread?.({ threadId: mostRecent.id, exists: true });
         await this.config.threadLock?.acquire(mostRecent.id);
         session.thread.set({ threadId: mostRecent.id });
         await session.thread.loadMetadata({ preserveTokenUsageOnFailure: false });
@@ -1261,11 +1327,86 @@ export class AgentController<TState = {}> {
    * resolving configured memory for a clone.
    */
   private createThreadDataStore(session: Session<TState>): ThreadDataStore {
+    let resolvedMemory: Promise<MastraMemory> | undefined;
+    const getConfiguredMemory = async () => {
+      if (!this.config.memory) return undefined;
+      resolvedMemory ??= this.resolveMemory(session);
+      try {
+        return await resolvedMemory;
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Dynamic memory factory returned empty value') {
+          resolvedMemory = undefined;
+          return undefined;
+        }
+        throw error;
+      }
+    };
     return {
-      listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
-        this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
-      getById: ({ threadId }) => this.queryThreadById({ threadId }),
+      listThreads: async ({ resourceId, includeForkedSubagents, metadata }) => {
+        const memory = await getConfiguredMemory();
+        if (!memory || typeof memory.listThreads !== 'function') {
+          return this.queryThreads({ resourceId, includeForkedSubagents, metadata });
+        }
+        const result = await memory.listThreads({
+          filter: {
+            ...(resourceId === undefined ? {} : { resourceId }),
+            ...(metadata === undefined ? {} : { metadata }),
+          },
+          perPage: false,
+        });
+        return (
+          includeForkedSubagents
+            ? result.threads
+            : result.threads.filter(thread => thread.metadata?.forkedSubagent !== true)
+        ).map(thread => ({ ...thread, title: thread.title ?? undefined }));
+      },
+      getStorageById: ({ threadId }) => this.queryThreadById({ threadId }),
+      getById: async ({ threadId }) => {
+        // Thread rows are controller state and persistThreadRow always writes
+        // them to controller storage when it exists, so read them there, as
+        // main does; a miss is a miss. The configured memory resolves the host's
+        // memory factory, which can need a caller the run hasn't bound (createSession
+        // probes a not-yet-created thread id), so it is asked only when the
+        // controller has no storage or storage refuses a shared-history branch row.
+        const readFromMemory = async () => {
+          const memory = await getConfiguredMemory();
+          return memory && typeof memory.getThreadById === 'function'
+            ? ((await memory.getThreadById({ threadId })) ?? null)
+            : null;
+        };
+        let thread: AgentControllerThread | StorageThreadType | null;
+        if (this.#resolveStorage()) {
+          try {
+            thread = await this.queryThreadById({ threadId });
+          } catch (error) {
+            if (!isBranchingUnsupportedError(error)) throw error;
+            thread = await readFromMemory();
+            if (!thread) throw error;
+          }
+        } else {
+          thread = await readFromMemory();
+        }
+        return thread ? { ...thread, title: thread.title ?? undefined } : null;
+      },
       listMessages: async ({ threadId, limit }) => {
+        const memory = await getConfiguredMemory();
+        if (memory) {
+          const result = await memory.recall({
+            threadId,
+            perPage: limit ?? false,
+            page: 0,
+            orderBy: { field: 'createdAt', direction: limit === undefined ? 'ASC' : 'DESC' },
+            // This is a raw UI/storage read, not an LLM prompt: the controller
+            // thread history must surface persisted signal messages (goal judge,
+            // notification inbox) exactly like the raw storage path did.
+            hideSignals: false,
+          });
+          // `recall()` runs results through MessageList, which canonicalizes to
+          // chronological (oldest-first) order regardless of the query direction
+          // above — already the contract this store must return. Do not re-reverse.
+          const messages = result.messages.map(message => this.convertToControllerMessage(message));
+          return { ...result, messages };
+        }
         if (limit !== undefined) {
           const result = await this.queryThreadMessages({
             threadId,
@@ -1282,35 +1423,95 @@ export class AgentController<TState = {}> {
           orderBy: { field: 'createdAt', direction: 'ASC' },
         });
       },
-      firstUserMessages: ({ threadIds }) => this.queryFirstUserMessages({ threadIds }),
-      getMetadata: ({ threadId, key }) => this.readThreadMetadataValue({ threadId, key }),
+      firstUserMessages: async ({ threadIds }) => {
+        const memory = await getConfiguredMemory();
+        if (!memory) return this.queryFirstUserMessages({ threadIds });
+        const firstUserMessages = new Map<string, MastraDBMessage>();
+        for (const threadId of threadIds) {
+          const result = await memory.recall({
+            threadId,
+            perPage: false,
+            orderBy: { field: 'createdAt', direction: 'ASC' },
+          });
+          const message = result.messages.find(isUserAuthoredMessage);
+          if (message) firstUserMessages.set(threadId, this.convertToControllerMessage(message));
+        }
+        return firstUserMessages;
+      },
+      getMetadata: ({ threadId, key }) => this.readThreadMetadataValue(session, { threadId, key }),
       setMetadata: ({ threadId, key, value }) => this.writeThreadMetadataValue({ threadId, key, value }),
       deleteMetadata: ({ threadId, key }) => this.removeThreadMetadataValue({ threadId, key }),
       hasStorage: () => !!this.#resolveStorage(),
-      saveThread: ({ thread }) => this.persistThreadRow(thread),
+      saveThread: ({ thread }) => this.persistThreadRow(session, thread),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
+        this.cloneThreadRow({
+          session,
+          sourceThreadId,
+          resourceId,
+          title,
+          metadata,
+          requestContext,
+          resolveSessionMemory: getConfiguredMemory,
+        }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
     };
   }
 
-  /** Persist a thread row to memory storage (gateway primitive for the Session thread domain). */
-  private async persistThreadRow(thread: AgentControllerThread): Promise<void> {
+  /**
+   * Persist a thread row into the controller's own storage (gateway primitive for
+   * the Session thread domain).
+   *
+   * Thread rows are controller state — settings, titles and clone bookkeeping all
+   * read them back from controller storage — so they go there even when a
+   * configured memory resolves per caller to a different store. `callerMemory` is
+   * passed only by clone, whose row also has to exist beside the messages the
+   * caller's memory now holds.
+   */
+  private async persistThreadRow(
+    _session: Session<TState> | undefined,
+    thread: AgentControllerThread,
+    _requestContext?: RequestContext,
+    callerMemory?: MastraMemory,
+  ): Promise<void> {
+    assertNoReservedThreadBranchMetadata(thread.metadata);
+    const persistedThread = {
+      id: thread.id,
+      resourceId: thread.resourceId,
+      title: thread.title ?? '',
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      metadata: thread.metadata,
+    };
+    if (this.#resolveStorage()) await this.saveThreadRowToStorage(persistedThread);
+    if (!callerMemory) return;
+    const existing = await callerMemory.getThreadById({ threadId: persistedThread.id });
+    if (existing) {
+      await callerMemory.updateThread({
+        id: persistedThread.id,
+        title: persistedThread.title,
+        metadata: persistedThread.metadata,
+      });
+      return;
+    }
+    await callerMemory.saveThread({ thread: persistedThread });
+  }
+
+  /** Write a thread row into the controller's own memory storage (no configured-memory path). */
+  private async saveThreadRowToStorage(persistedThread: {
+    id: string;
+    resourceId: string;
+    title: string;
+    createdAt: Date;
+    updatedAt: Date;
+    metadata?: Record<string, unknown>;
+  }): Promise<void> {
     if (!this.#resolveStorage()) return;
     const memoryStorage = await this.getMemoryStorage();
-    await memoryStorage.saveThread({
-      thread: {
-        id: thread.id,
-        resourceId: thread.resourceId,
-        title: thread.title ?? '',
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-        metadata: thread.metadata,
-      },
-    });
+    await assertRawControllerThreadAvailable({ threadId: persistedThread.id, memoryStorage });
+    await memoryStorage.saveThread({ thread: persistedThread });
   }
 
   /**
@@ -1347,17 +1548,21 @@ export class AgentController<TState = {}> {
   private async cloneThreadRow({
     session,
     sourceThreadId,
+    newThreadId,
     resourceId,
     title,
     metadata,
     requestContext,
+    resolveSessionMemory,
   }: {
     session: Session<TState>;
     sourceThreadId: string;
+    newThreadId?: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
     requestContext?: RequestContext;
+    resolveSessionMemory?: () => Promise<MastraMemory | undefined>;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
     const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
@@ -1368,7 +1573,18 @@ export class AgentController<TState = {}> {
       );
     }
 
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    if (!this.config.memory) {
+      // Without configured memory, `memory` is the controller storage's memory domain.
+      const memoryStorage = await this.getMemoryStorage();
+      await assertRawControllerThreadAvailable({ threadId: sourceThreadId, memoryStorage });
+      if (newThreadId) {
+        const destination = await assertRawControllerThreadAvailable({ threadId: newThreadId, memoryStorage });
+        if (destination) {
+          throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with the requested ID already exists.');
+        }
+      }
+    }
+    const result = await memory.cloneThread({ sourceThreadId, newThreadId, resourceId, title, metadata });
     const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
@@ -1381,7 +1597,7 @@ export class AgentController<TState = {}> {
     // thread rows; mirror the row so getById, listing, and ownership checks see it.
     if (callerMemory) {
       try {
-        await this.persistThreadRow(cloned);
+        await this.persistThreadRow(session, cloned, undefined, callerMemory);
       } catch (error) {
         // Without the controller row the clone is unreachable; remove it rather than orphan it.
         await callerMemory.deleteThread(cloned.id).catch(() => {});
@@ -1391,11 +1607,18 @@ export class AgentController<TState = {}> {
     return cloned;
   }
 
-  private async readThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<unknown> {
-    if (!this.#resolveStorage()) return undefined;
+  private async readThreadMetadataValue(
+    session: Session<TState>,
+    { threadId, key }: { threadId: string; key: string },
+  ): Promise<unknown> {
+    if (!this.config.memory && !this.#resolveStorage()) return undefined;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
+      // Settings are controller state, so read the controller's own row rather
+      // than a per-caller memory that may hold its own copy of the thread.
+      const memoryStorage = this.#resolveStorage() ? await this.getMemoryStorage() : undefined;
+      const thread = memoryStorage
+        ? await assertRawControllerThreadAvailable({ threadId, memoryStorage })
+        : await (this.config.memory ? await this.resolveMemory(session) : undefined)?.getThreadById({ threadId });
       const metadata = thread?.metadata as Record<string, unknown> | undefined;
       return metadata?.[key];
     } catch {
@@ -1468,7 +1691,7 @@ export class AgentController<TState = {}> {
     await this.initStorage();
     if (!this.#resolveStorage()) return null;
     const memoryStorage = await this.getMemoryStorage();
-    const thread = await memoryStorage.getThreadById({ threadId });
+    const thread = await assertRawControllerThreadAvailable({ threadId, memoryStorage });
     if (!thread) return null;
     return {
       id: thread.id,
@@ -1622,9 +1845,9 @@ export class AgentController<TState = {}> {
       };
     }
 
-    const result = await (
-      await this.getMemoryStorage()
-    ).listMessages({
+    const memoryStorage = await this.getMemoryStorage();
+    await assertRawControllerThreadAvailable({ threadId, memoryStorage });
+    const result = await memoryStorage.listMessages({
       threadId,
       ...(resourceId !== undefined ? { resourceId } : {}),
       ...(perPage !== undefined ? { perPage } : {}),
@@ -1725,12 +1948,16 @@ export class AgentController<TState = {}> {
     if (!title) return undefined;
 
     // An explicit regenerate un-pins the title: auto-naming resumes from here.
-    await this.persistThreadRow({
-      ...thread,
-      title,
-      metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: false },
-      updatedAt: new Date(),
-    });
+    await this.persistThreadRow(
+      session,
+      {
+        ...thread,
+        title,
+        metadata: { ...thread.metadata, [TITLE_PINNED_THREAD_METADATA_KEY]: false },
+        updatedAt: new Date(),
+      },
+      requestContext,
+    );
     session?.emit({ type: 'thread_title_updated', threadId, title });
     return title;
   }
@@ -2453,23 +2680,25 @@ export class AgentController<TState = {}> {
    * when no storage is configured — the Session guards the no-thread case before
    * calling. Returns the saved {@link MastraDBMessage}.
    */
-  private async saveSystemReminder({
-    threadId,
-    resourceId,
-    message,
-    reminderType,
-    role,
-    metadata,
-  }: {
-    threadId: string;
-    resourceId: string;
-    message: string;
-    reminderType: string;
-    role: 'user' | 'assistant' | 'system';
-    metadata?: Record<string, unknown>;
-  }): Promise<MastraDBMessage | null> {
-    if (!this.#resolveStorage()) return null;
-    const memoryStorage = await this.getMemoryStorage();
+  private async saveSystemReminder(
+    session: Session<TState>,
+    {
+      threadId,
+      resourceId,
+      message,
+      reminderType,
+      role,
+      metadata,
+    }: {
+      threadId: string;
+      resourceId: string;
+      message: string;
+      reminderType: string;
+      role: 'user' | 'assistant' | 'system';
+      metadata?: Record<string, unknown>;
+    },
+  ): Promise<MastraDBMessage | null> {
+    if (!this.config.memory && !this.#resolveStorage()) return null;
     const dbMessage = {
       id: globalThis.crypto.randomUUID(),
       role,
@@ -2490,6 +2719,15 @@ export class AgentController<TState = {}> {
       },
     };
 
+    if (this.config.memory) {
+      const memory = await this.resolveMemory(session);
+      if (!memory) return null;
+      const result = await persistGeneratedMessages(memory, { messages: [dbMessage] }, [dbMessage.id]);
+      const saved = result.messages[0] ?? dbMessage;
+      return this.convertToControllerMessage(saved);
+    }
+
+    const memoryStorage = await this.getMemoryStorage();
     const target = await memoryStorage.getThreadById({ threadId });
     const targetBranch = target ? getRawThreadBranchMetadata(target) : null;
     if (targetBranch?.state === 'pending') {
@@ -2883,6 +3121,30 @@ export class AgentController<TState = {}> {
     if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
 
     return requestContext;
+  }
+
+  /** Resolve the configured memory for a session, including dynamic factories. */
+  async resolveSessionMemory(session: Session<TState>): Promise<MastraMemory | undefined> {
+    if (!this.config.memory) {
+      return undefined;
+    }
+    return this.resolveMemory(session);
+  }
+
+  /** Resolve configured memory for read-only transports without constructing a session. */
+  async resolveMemoryForRequestContext(requestContext: RequestContext): Promise<MastraMemory | undefined> {
+    const memory = this.config.memory;
+    if (!memory) {
+      return undefined;
+    }
+    if (typeof memory !== 'function') {
+      return memory;
+    }
+    const resolved = await Promise.resolve(memory({ requestContext }));
+    if (!resolved) {
+      throw new Error('Dynamic memory factory returned empty value');
+    }
+    return resolved;
   }
 
   /**

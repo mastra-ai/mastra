@@ -1,0 +1,100 @@
+---
+title: "Reference: Branch navigation | Memory"
+description: "API reference for finding a branch parent, listing direct children, and reading root-to-current lineage."
+packages:
+  - "@mastra/memory"
+---
+
+# Branch navigation
+
+Use `getParentThread()`, `listBranches()`, and `getBranchHistory()` to inspect shared-history thread lineage. These methods return sanitized public thread objects and don't expose reserved lineage or Observational Memory storage metadata.
+
+## `getParentThread()`
+
+Returns the direct parent of a thread. A root thread returns `null`.
+
+```typescript
+const parent = await memory.getParentThread({ threadId: 'branch-1' })
+```
+
+### Signature
+
+```typescript oxfmt:false
+getParentThread(input: { threadId: string }): Promise<StorageThreadType | null>
+```
+
+## `listBranches()`
+
+Returns the ready direct children of one thread. It doesn't return nested descendants.
+
+```typescript
+const result = await memory.listBranches({
+  threadId: 'conversation-1',
+  page: 0,
+  perPage: 20,
+})
+```
+
+### Signature
+
+```typescript oxfmt:false
+listBranches(input: {
+  threadId: string
+  page?: number
+  perPage?: number | false
+}): Promise<{
+  branches: BranchThreadOutput[]
+  total: number
+  page: number
+  perPage: number | false
+  hasMore: boolean
+}>
+```
+
+`page` defaults to `0`, and `perPage` defaults to `100`. Set `perPage: false` with `page: 0` to return all direct children. Results are ordered by child `createdAt`, then child `id`.
+
+Each `branches` entry has the same `{ thread, branch }` shape returned by [`branchThread()`](/reference/memory/branchThread). Pending children aren't included.
+
+## `getBranchHistory()`
+
+Returns the selected path from its root to the current thread. It doesn't include sibling paths.
+
+```typescript
+const { history } = await memory.getBranchHistory({
+  threadId: 'nested-branch',
+})
+```
+
+### Signature
+
+```typescript oxfmt:false
+getBranchHistory(input: { threadId: string }): Promise<{
+  history: Array<{
+    thread: StorageThreadType
+    branch: PublicThreadBranchMetadata | null
+  }>
+}>
+```
+
+The first entry is the root and has `branch: null`. Every later entry describes how that thread branches from the preceding entry:
+
+```typescript
+interface PublicThreadBranchMetadata {
+  parentThreadId: string
+  branchPointMessageId: string
+  branchPointCreatedAt: Date
+  branchCreatedAt: Date
+}
+```
+
+## Authorization and scale
+
+Authenticated server routes authorize the requested thread and every ancestor before returning lineage. Direct-child listing authorizes and filters all candidates before pagination so inaccessible children don't affect rows or totals.
+
+Lineage discovery, authorization filtering, and exact handling of large same-timestamp message groups can require unbounded `perPage: false` reads from the storage adapter. This first version favors exact results over bounded discovery work.
+
+Operations that accept multiple thread paths don't combine branches. A thread-ID array containing a branch participant, `listMessagesByResourceId()` on a resource with visible branches, or resource-only semantic search on a visible branched resource fails with `BRANCH_INVALID_REQUEST`. Select one `threadId` so Mastra can resolve one canonical path.
+
+## Errors
+
+These methods use the branch errors documented by [`branchThread()`](/reference/memory/branchThread#errors). `listBranches()` also returns `BRANCH_INVALID_REQUEST` when `page` is negative, `perPage` isn't a positive integer, or `perPage: false` is combined with a nonzero page.

@@ -1,11 +1,15 @@
 import type { MastraDBMessage } from '../agent/message-list';
 import type { ObservabilityContext } from '../observability';
+import type { BranchThreadInput, BranchThreadOutput } from '../storage/types';
 
+import { createThreadBranchError } from './branching';
 import type { MastraMemory } from './memory';
 import type { MemoryConfig, StorageThreadType } from './types';
 
-// Compatibility note: @mastra/memory keeps a copy of these values in
-// packages/memory/src/branching/core-compat.ts so it loads on older @mastra/core versions. Keep both in sync.
+// Compatibility note: @mastra/memory and @mastra/server keep copies of these values in
+// packages/memory/src/branching/core-compat.ts and
+// packages/server/src/server/handlers/thread-branching-compat.ts so they load on older @mastra/core
+// versions. Keep all three in sync.
 export type GeneratedMessagePersistenceInput = {
   messages: MastraDBMessage[];
   memoryConfig?: MemoryConfig;
@@ -14,11 +18,16 @@ export type GeneratedMessagePersistenceInput = {
   embeddedMessages?: Map<string, string>;
   /** @internal Thread to create atomically with validated message persistence when absent. */
   thread?: StorageThreadType;
+  /** @internal Reject when `thread` already exists instead of persisting into it. */
+  requireThreadCreation?: boolean;
   /** @internal Store the messages without writing semantic recall vectors; the SemanticRecall processor writes them. */
   skipVectors?: boolean;
 };
 
 const GENERATED_MESSAGE_PERSISTENCE_HOOK = '__mastraPersistGeneratedMessages';
+const GENERATED_BRANCH_PERSISTENCE_HOOK = '__mastraBranchThreadWithGeneratedId';
+const THREAD_BRANCH_STATE_HOOK = '__mastraInspectThreadBranchState';
+const THREAD_BRANCH_AUTHORIZATION_CANDIDATES_HOOK = '__mastraGetThreadBranchAuthorizationCandidates';
 
 function assertGeneratedMessageIds(input: GeneratedMessagePersistenceInput, generatedMessageIds: readonly string[]) {
   const inputIds = input.messages.map(message => message.id);
@@ -49,7 +58,12 @@ export async function persistGeneratedMessages(
   generatedMessageIds: readonly string[],
 ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
   if (generatedMessageIds.length === 0) {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
 
@@ -57,7 +71,12 @@ export async function persistGeneratedMessages(
 
   const hook = getGeneratedMessagePersistenceHook(memory);
   if (typeof hook !== 'function') {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
   return (
@@ -78,7 +97,12 @@ export async function persistMessagesWithThreadCreation(
   if (generatedMessageIds.length > 0) assertGeneratedMessageIds(input, generatedMessageIds);
   const hook = getGeneratedMessagePersistenceHook(memory);
   if (typeof hook !== 'function') {
-    const { thread: _thread, skipVectors: _skipVectors, ...saveInput } = input;
+    const {
+      thread: _thread,
+      requireThreadCreation: _requireThreadCreation,
+      skipVectors: _skipVectors,
+      ...saveInput
+    } = input;
     return memory.saveMessages(saveInput);
   }
   return (
@@ -87,4 +111,67 @@ export async function persistMessagesWithThreadCreation(
       generatedMessageIds: readonly string[],
     ) => ReturnType<MastraMemory['saveMessages']>
   ).call(memory, input, generatedMessageIds);
+}
+
+export type InternalThreadBranchState = {
+  state: 'absent' | 'ordinary' | 'pending' | 'ready';
+  hasReadyDescendants: boolean;
+};
+
+export type InternalThreadBranchAuthorizationCandidate = {
+  id: string;
+  resourceId?: string;
+};
+
+/** @internal Returns raw relationship candidates so transports can authorize them before strict lineage validation. */
+export async function getThreadBranchAuthorizationCandidates(
+  memory: MastraMemory,
+  threadId: string,
+  direction: 'ancestors' | 'children' | 'descendants',
+): Promise<InternalThreadBranchAuthorizationCandidate[]> {
+  const hook = (memory as unknown as Record<string, unknown>)[THREAD_BRANCH_AUTHORIZATION_CANDIDATES_HOOK];
+  if (typeof hook !== 'function') {
+    if (memory.supportsThreadBranching) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'The configured memory does not support pre-validation branch authorization.',
+      );
+    }
+    const thread = await memory.getThreadById({ threadId });
+    return thread ? [{ id: thread.id, resourceId: thread.resourceId }] : [];
+  }
+  return (
+    hook as (
+      threadId: string,
+      direction: 'ancestors' | 'children' | 'descendants',
+    ) => Promise<InternalThreadBranchAuthorizationCandidate[]>
+  ).call(memory, threadId, direction);
+}
+
+/** @internal Reports physical branch state without exposing reserved lineage metadata publicly. */
+export async function inspectThreadBranchState(
+  memory: MastraMemory,
+  threadId: string,
+): Promise<InternalThreadBranchState> {
+  const hook = (memory as unknown as Record<string, unknown>)[THREAD_BRANCH_STATE_HOOK];
+  if (typeof hook !== 'function') {
+    const thread = await memory.getThreadById({ threadId });
+    return { state: thread ? 'ordinary' : 'absent', hasReadyDescendants: false };
+  }
+  return (hook as (threadId: string) => Promise<InternalThreadBranchState>).call(memory, threadId);
+}
+
+/** @internal Creates a branch with a transport-authorized generated thread ID. */
+export async function branchThreadWithGeneratedId(
+  memory: MastraMemory,
+  input: BranchThreadInput & { generatedThreadId: string },
+): Promise<BranchThreadOutput> {
+  const hook = (memory as unknown as Record<string, unknown>)[GENERATED_BRANCH_PERSISTENCE_HOOK];
+  if (typeof hook !== 'function') {
+    throw new Error('The configured memory does not support transport-authorized branch creation.');
+  }
+  return (hook as (input: BranchThreadInput & { generatedThreadId: string }) => Promise<BranchThreadOutput>).call(
+    memory,
+    input,
+  );
 }

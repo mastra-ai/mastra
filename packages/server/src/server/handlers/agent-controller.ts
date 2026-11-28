@@ -12,6 +12,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
+import type { MastraMemory } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import { validateStorageMetadataFilter } from '@mastra/core/storage';
 // Type-only import: erased at runtime, so this cannot crash against an older
@@ -27,6 +28,14 @@ import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/me
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { shareStreamChunk } from '../server-adapter/serialize';
 import { handleError } from './error';
+import {
+  authorizeMemoryThreadAccess,
+  authorizeThreadBranchTree,
+  createMemoryThreadIfAbsent,
+  filterThreadsByBranchAccess,
+  inspectVisibleMemoryThread,
+} from './thread-branching';
+import { createThreadBranchError } from './thread-branching-compat';
 import { enforceThreadAccess } from './utils';
 
 /**
@@ -71,7 +80,11 @@ const RESERVED_THREAD_METADATA_KEYS = {
 } satisfies Record<ReservedThreadMetadataKey, true>;
 
 function isReservedThreadMetadataKey(key: string): boolean {
-  return Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) || key.startsWith('modeModelId_');
+  return (
+    key === '__mastra_thread_branch' ||
+    Object.hasOwn(RESERVED_THREAD_METADATA_KEYS, key) ||
+    key.startsWith('modeModelId_')
+  );
 }
 
 function storageTagFilter(tags: Record<string, string>) {
@@ -117,6 +130,43 @@ async function resolveSessionResourceId(controller: AgentController<any>, sessio
   if (live) return live.identity.getResourceId();
   const thread = await controller.queryThreadById({ threadId: sessionId });
   return thread?.resourceId ?? sessionId;
+}
+
+/**
+ * Authorizes the current thread of a live session for the caller.
+ *
+ * Session routes act on whatever thread the session is bound to, so the
+ * per-thread branch/ownership check has to run against that thread rather
+ * than a request parameter. `Session` exposes the thread id and resource; the
+ * callers of this helper have already resolved and authorized execute access
+ * through `getSession`/`getExistingSession`.
+ */
+async function authorizeActiveControllerSession({
+  mastra,
+  controller,
+  session,
+  requestContext,
+  permission = MastraFGAPermissions.MEMORY_WRITE,
+}: {
+  mastra: any;
+  controller: AgentController<any>;
+  session: Session<any>;
+  requestContext: RequestContext;
+  permission?: Parameters<typeof enforceThreadAccess>[0]['permission'];
+}): Promise<void> {
+  const threadId = session.thread.getId();
+  if (!threadId) {
+    throw new HTTPException(404, { message: 'Thread not found' });
+  }
+  await authorizeControllerThreadAccess({
+    mastra,
+    controller,
+    session,
+    requestContext,
+    threadId,
+    resourceId: session.identity.getResourceId() ?? threadId,
+    permission,
+  });
 }
 
 /**
@@ -170,6 +220,131 @@ async function getExistingSession(
   // in-memory session was lost after a restart, recover it from its stored
   // thread through the execute-authorized path.
   return getSession(controller, sessionId, requestContext);
+}
+
+async function authorizeControllerThreadAccess({
+  mastra,
+  controller,
+  session,
+  requestContext,
+  threadId,
+  resourceId,
+  permission = MastraFGAPermissions.MEMORY_READ,
+  allowCreate = false,
+}: {
+  mastra: any;
+  controller: AgentController<any>;
+  session?: Session<any>;
+  requestContext: RequestContext;
+  threadId: string;
+  resourceId: string;
+  permission?: Parameters<typeof enforceThreadAccess>[0]['permission'];
+  allowCreate?: boolean;
+}): Promise<MastraMemory | undefined> {
+  const memoryResolvers = controller as AgentController<any> & {
+    resolveSessionMemory?: (session: Session<any>) => Promise<MastraMemory | undefined>;
+    resolveMemoryForRequestContext?: (requestContext: RequestContext) => Promise<MastraMemory | undefined>;
+  };
+  const memory = session
+    ? await memoryResolvers.resolveSessionMemory?.call(controller, session)
+    : await memoryResolvers.resolveMemoryForRequestContext?.call(controller, requestContext);
+  if (!memory) {
+    const storageController = controller as AgentController<any> & {
+      queryThreadById?: (input: { threadId: string }) => Promise<any>;
+      queryThreads?: (input: { resourceId?: string; includeForkedSubagents?: boolean }) => Promise<any[]>;
+    };
+    const thread = storageController.queryThreadById
+      ? await storageController.queryThreadById.call(controller, { threadId })
+      : null;
+    const threads = storageController.queryThreads
+      ? await storageController.queryThreads.call(controller, { resourceId, includeForkedSubagents: true })
+      : thread
+        ? [thread]
+        : [];
+    const threadMetadata = thread?.metadata as Record<string, unknown> | undefined;
+    const hasBranchMetadata = Boolean(threadMetadata && Object.hasOwn(threadMetadata, '__mastra_thread_branch'));
+    const branchMetadata = threadMetadata?.__mastra_thread_branch;
+    if (
+      hasBranchMetadata &&
+      branchMetadata &&
+      typeof branchMetadata === 'object' &&
+      (branchMetadata as { state?: unknown }).state === 'pending'
+    ) {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    const isBranchParticipant =
+      hasBranchMetadata ||
+      threads.some(candidate => {
+        const metadata = (candidate.metadata as Record<string, unknown> | undefined)?.__mastra_thread_branch;
+        return (
+          metadata &&
+          typeof metadata === 'object' &&
+          ((candidate.id === threadId && (metadata as { state?: unknown }).state === 'ready') ||
+            ((metadata as { parentThreadId?: unknown; state?: unknown }).parentThreadId === threadId &&
+              (metadata as { state?: unknown }).state === 'ready'))
+        );
+      });
+    if (isBranchParticipant) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'Thread branching is not supported by the configured memory.',
+      );
+    }
+    if (!thread && !allowCreate) {
+      throw new HTTPException(404, { message: `thread ${threadId} not found` });
+    }
+    try {
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId,
+        thread: thread ?? undefined,
+        effectiveResourceId: resourceId,
+        permission,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException && error.status === 403) {
+        throw new HTTPException(404, { message: 'Thread not found' });
+      }
+      throw error;
+    }
+    return undefined;
+  }
+
+  const branchState = await inspectVisibleMemoryThread(memory, threadId, { allowCreate });
+  const thread = branchState.state === 'absent' ? null : await memory.getThreadById({ threadId });
+  if (!thread) {
+    if (!allowCreate) {
+      throw new HTTPException(404, { message: `thread ${threadId} not found` });
+    }
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+    return memory;
+  }
+
+  try {
+    const authorize =
+      permission === MastraFGAPermissions.MEMORY_READ ? authorizeMemoryThreadAccess : authorizeThreadBranchTree;
+    await authorize({
+      mastra,
+      requestContext,
+      memory,
+      thread,
+      effectiveResourceId: resourceId,
+      permission,
+    });
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 403) {
+      throw new HTTPException(404, { message: 'Thread not found' });
+    }
+    throw error;
+  }
+  return memory;
 }
 
 /**
@@ -594,6 +769,9 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   requiresPermission: 'agent-controller:execute',
   handler: async ({ mastra, controllerId, resourceId, sessionId, tags, threadId, requestContext }) => {
     try {
+      if (tags && Object.keys(tags).some(isReservedThreadMetadataKey)) {
+        throw new HTTPException(400, { message: 'Session tags contain reserved metadata.' });
+      }
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       await controller.init();
       const id = (sessionId ?? resourceId)!;
@@ -1011,6 +1189,7 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       session.abort();
       return { ok: true };
     } catch (error) {
@@ -1036,6 +1215,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       // Resolve the parked approval gate so the session's own run loop drives the
       // continuation and emits its events to subscribers (the open SSE stream).
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
@@ -1095,6 +1275,7 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       // A resumed tool drives the run to its next terminal or suspension boundary.
       // Awaiting it holds this request open until the continuation finishes, which
       // can trip the request timeout and leave CORS mutating an already-sent response.
@@ -1139,6 +1320,7 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       const author = getRequestMessageAuthor(requestContext);
       ackBackgroundSessionWork({
         work: session.steer({ content: message, files, requestContext, ...(author ? { author } : {}) }),
@@ -1170,6 +1352,7 @@ export const SWITCH_AGENT_CONTROLLER_MODE_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       await session.mode.switch({ modeId });
       return { ok: true };
     } catch (error) {
@@ -1196,6 +1379,7 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       await session.model.switch(modelId, { thinkingLevel });
       return { ok: true };
     } catch (error) {
@@ -1294,10 +1478,22 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       const ds = session.displayState.get();
       const threadId = requestedThreadId ?? session.thread.getId() ?? undefined;
       const storage = mastra.getStorage();
-      if (requestedThreadId) {
-        const memory = await storage?.getStore('memory');
-        const thread = await memory?.getThreadById({ threadId: requestedThreadId, resourceId });
-        if (!thread) throw new HTTPException(404, { message: `thread "${requestedThreadId}" not found` });
+      if (threadId) {
+        try {
+          await authorizeControllerThreadAccess({
+            mastra,
+            controller,
+            session,
+            requestContext,
+            threadId,
+            resourceId,
+          });
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 404) {
+            throw new HTTPException(404, { message: `thread "${threadId}" not found` });
+          }
+          throw error;
+        }
       }
       const threadState = threadId ? await storage?.getStore('threadState') : undefined;
       const storedTasks = threadId ? await threadState?.getState<unknown>({ threadId, type: 'task' }) : undefined;
@@ -1392,10 +1588,28 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId }) => {
+  handler: async ({ mastra, controllerId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      return { runs: controller.listActiveThreadRuns() };
+      const runs = [];
+      for (const run of controller.listActiveThreadRuns()) {
+        try {
+          await authorizeControllerThreadAccess({
+            mastra,
+            controller,
+            requestContext,
+            threadId: run.threadId,
+            resourceId: run.resourceId ?? '',
+          });
+          runs.push(run);
+        } catch (error) {
+          const id = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+          if ((!(error instanceof HTTPException) || error.status !== 404) && id !== 'BRANCH_NOT_FOUND') {
+            throw error;
+          }
+        }
+      }
+      return { runs };
     } catch (error) {
       return handleError(error, 'error listing active controller runs');
     }
@@ -1415,7 +1629,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, sessionId, limit, tags }) => {
+  handler: async ({ mastra, controllerId, sessionId, limit, tags, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
@@ -1443,6 +1657,21 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
                 return tagEntries.every(([key, value]) => values[key] === value);
               },
       });
+      // Resolve memory once for the whole page: authorizing each thread through
+      // the controller would re-query the resource for every row.
+      const memoryResolvers = controller as AgentController<any> & {
+        resolveMemoryForRequestContext?: (requestContext: RequestContext) => Promise<MastraMemory | undefined>;
+      };
+      const listMemory = await memoryResolvers.resolveMemoryForRequestContext?.call(controller, requestContext);
+      const accessibleThreads = listMemory
+        ? await filterThreadsByBranchAccess({
+            mastra,
+            requestContext,
+            memory: listMemory,
+            threads,
+            effectiveResourceId: resourceId,
+          })
+        : threads;
       // A thread's metadata mixes the session scoping tags (stamped at creation,
       // e.g. `projectPath`) with internal session bookkeeping that
       // `Session.loadMetadata()` reads back (selected model/mode, observer/
@@ -1465,11 +1694,11 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       // are ignored as filter tags so callers can't match on session bookkeeping.
       const scoped =
         tagEntries.length > 0
-          ? threads.filter(t => {
+          ? accessibleThreads.filter(t => {
               const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
               return tagEntries.every(([key, value]) => metadata[key] === value);
             })
-          : threads;
+          : accessibleThreads;
       const toTime = (t: { updatedAt?: Date; createdAt?: Date }) => (t.updatedAt ?? t.createdAt)?.getTime() ?? 0;
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const limited = normalizedLimit !== undefined ? sorted.slice(0, normalizedLimit) : sorted;
@@ -1542,6 +1771,7 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       const result = await session.sendNotificationSignal(
         {
           source,
@@ -1724,29 +1954,23 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
 
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const resourceId = await resolveSessionResourceId(controller, sessionId);
-      const thread = await controller.queryThreadById({ threadId });
-      if (!thread || (thread.resourceId && thread.resourceId !== resourceId)) {
-        throw new HTTPException(404, { message: 'Thread not found' });
-      }
-      await enforceThreadAccess({
+      const memory = await authorizeControllerThreadAccess({
         mastra,
+        controller,
         requestContext,
         threadId,
-        thread,
-        effectiveResourceId: resourceId,
+        resourceId,
       });
 
-      // Read-only route: delegate storage retrieval to the controller without
-      // constructing a Session, which would initialize the workspace/sandbox.
       const isLegacyLimitQuery = limit !== undefined;
-      const result = await controller.queryThreadMessages(
+      const query =
         limit !== undefined
           ? {
               threadId,
               resourceId,
               perPage: limit,
               page: page ?? 0,
-              orderBy: { field: 'createdAt', direction: 'DESC' as const },
+              orderBy: { field: 'createdAt' as const, direction: 'DESC' as const },
             }
           : {
               threadId,
@@ -1756,8 +1980,8 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
               ...(orderBy !== undefined ? { orderBy } : {}),
               ...(include !== undefined ? { include } : {}),
               ...(filter !== undefined ? { filter } : {}),
-            },
-      );
+            };
+      const result = memory ? await memory.recall(query) : await controller.queryThreadMessages(query);
       const messages = isLegacyLimitQuery ? result.messages.reverse() : result.messages;
 
       return {
@@ -1800,6 +2024,7 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       ackBackgroundSessionWork({
         work: session.followUp({ content: message, files, requestContext }),
         session,
@@ -1898,6 +2123,13 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getExistingSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({
+        mastra,
+        controller,
+        session,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
       const record = await controller.getObservationalMemoryRecord(session);
       return { record: record ?? undefined };
     } catch (error) {
@@ -1927,6 +2159,7 @@ export const SET_AGENT_CONTROLLER_RESOURCE_ID_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       await controller.setResourceId(session, { resourceId: newResourceId });
       return { ok: true };
     } catch (error) {
@@ -1951,6 +2184,13 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getExistingSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({
+        mastra,
+        controller,
+        session,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
       const resourceIds = await controller.getKnownResourceIds(session);
       return { resourceIds };
     } catch (error) {
@@ -2006,6 +2246,13 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getExistingSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({
+        mastra,
+        controller,
+        session,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
       const threadId = session.thread.getId();
       if (!threadId) return { goal: undefined };
       const agent = getAgentForSession(controller, session);
@@ -2035,6 +2282,7 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       const threadId = session.thread.getId();
       if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
@@ -2068,6 +2316,7 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       const threadId = session.thread.getId();
       if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
@@ -2100,6 +2349,7 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       const threadId = session.thread.getId();
       if (!threadId) throw new HTTPException(400, { message: 'session has no active thread' });
       const agent = getAgentForSession(controller, session);
@@ -2131,6 +2381,13 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getExistingSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({
+        mastra,
+        controller,
+        session,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
       const rules = session.permissions.getRules();
       return {
         categories: rules.categories as Record<string, 'allow' | 'ask' | 'deny'> | undefined,
@@ -2159,6 +2416,7 @@ export const SET_AGENT_CONTROLLER_CATEGORY_PERMISSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       await session.permissions.setForCategory({ category, policy });
       return { ok: true };
     } catch (error) {
@@ -2185,6 +2443,7 @@ export const SET_AGENT_CONTROLLER_TOOL_PERMISSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, sessionId, requestContext);
+      await authorizeActiveControllerSession({ mastra, controller, session, requestContext });
       await session.permissions.setForTool({ toolName, policy });
       return { ok: true };
     } catch (error) {

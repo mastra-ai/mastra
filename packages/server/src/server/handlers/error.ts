@@ -120,6 +120,17 @@ function isObservabilityStorageNotImplementedError(error: unknown): error is Err
   return typeof id === 'string' && id.startsWith('OBSERVABILITY_STORAGE_') && id.endsWith('_NOT_IMPLEMENTED');
 }
 
+// Thread-branch refusals are a caller problem, not a server fault: branching unsupported is a
+// missing capability (501, logged as a warning by adapters), a bad request or an unknown thread
+// are the usual 400/404, and corrupt lineage or a lost concurrent mutation is a 409.
+const THREAD_BRANCH_ERROR_STATUSES = {
+  BRANCHING_UNSUPPORTED: 501,
+  BRANCH_INVALID_REQUEST: 400,
+  BRANCH_NOT_FOUND: 404,
+  BRANCH_LINEAGE_CORRUPT: 409,
+  BRANCH_MUTATION_CONFLICT: 409,
+} as const satisfies Record<string, StatusCode>;
+
 /**
  * Structural check for ZodError instances.
  *
@@ -243,6 +254,17 @@ export function handleError(error: unknown, defaultMessage: string): never {
     throw new HTTPException(501, {
       message: error.message,
       stack: error.stack,
+      cause: error,
+    });
+  }
+
+  const branchCode = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+  if (typeof branchCode === 'string' && branchCode in THREAD_BRANCH_ERROR_STATUSES) {
+    const status = THREAD_BRANCH_ERROR_STATUSES[branchCode as keyof typeof THREAD_BRANCH_ERROR_STATUSES];
+    const message = error instanceof Error ? error.message : defaultMessage;
+    throw new HTTPException(status, {
+      res: Response.json({ error: { code: branchCode, message } }, { status }),
+      message,
       cause: error,
     });
   }
