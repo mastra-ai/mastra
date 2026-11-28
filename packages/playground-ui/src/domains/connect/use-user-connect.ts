@@ -78,8 +78,18 @@ function useConnectFetch(): ConnectFetch {
 }
 
 /**
- * Resolves a server-relative launch-gate path (returned by the session route
- * as `launchUrl`) against the SDK's base URL for top-level popup navigation.
+ * Resolves a launch-gate URL (returned by the session route as `launchUrl`)
+ * for the browser. A server-relative path resolves against the SDK's base
+ * URL; an absolute URL, which a server behind a proxy returns because it
+ * knows the gate's public address, is used as is.
+ */
+function launchHref(baseUrl: string | undefined, launchUrl: string): string {
+  if (URL.canParse(launchUrl)) return launchUrl;
+  return baseUrl ? `${baseUrl}${launchUrl}` : launchUrl;
+}
+
+/**
+ * Resolves a session's `launchUrl` for top-level popup navigation.
  * The launch route is authenticated by the browser's session cookie — the
  * server re-verifies that this browser owns the pending session before
  * redirecting into the vendor OAuth flow.
@@ -87,7 +97,7 @@ function useConnectFetch(): ConnectFetch {
 export function useConnectLaunchHref(): (launchUrl: string) => string {
   const client = useMastraClient();
   const { baseUrl } = client.options;
-  return useCallback((launchUrl: string) => (baseUrl ? `${baseUrl}${launchUrl}` : launchUrl), [baseUrl]);
+  return useCallback((launchUrl: string) => launchHref(baseUrl, launchUrl), [baseUrl]);
 }
 
 /**
@@ -103,9 +113,7 @@ function useRedeemLaunchToken(): (launchUrl: string) => Promise<UserConnectLaunc
   return useCallback(
     async launchUrl => {
       const fetchFn = customFetch ?? fetch;
-      // `launchUrl` is the full server-relative gate path (it already carries
-      // the connect mount prefix), so it resolves against the bare base URL.
-      const response = await fetchFn(`${baseUrl ?? ''}${launchUrl}`, {
+      const response = await fetchFn(launchHref(baseUrl, launchUrl), {
         headers: { ...headers, accept: 'application/json' },
         credentials,
       });
