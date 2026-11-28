@@ -96,14 +96,17 @@ const webSearch = {
   args: {},
 };
 
-/** Step 1 and 2 call `lookup`, step 3 answers — `secondId` is the reused or distinct id. */
-function scriptedModel(secondId: string, captured: Captured) {
+/**
+ * Step 1 and 2 call `lookup`, step 3 answers — `secondId` is the reused or distinct id and
+ * `secondQ` the second step's arguments (`b` differs from step 1, `a` repeats it).
+ */
+function scriptedModel(secondId: string, captured: Captured, secondQ = 'b') {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       captured.prompts.push(prompt as any[]);
       const step = captured.prompts.length;
       if (step === 1) return toolCallStream('s1', 'call_0', 'a');
-      if (step === 2) return toolCallStream('s2', secondId, 'b');
+      if (step === 2) return toolCallStream('s2', secondId, secondQ);
       return textStream('s3', 'done');
     },
   });
@@ -140,13 +143,13 @@ describe('tool call id reuse within a run (#31609)', () => {
     await Promise.all(pubsubs.splice(0).map(pubsub => pubsub.close()));
   });
 
-  async function runAgent(kind: Kind, secondId: string): Promise<any[][]> {
+  async function runAgent(kind: Kind, secondId: string, secondQ = 'b'): Promise<any[][]> {
     const captured: Captured = { prompts: [] };
     const base = new Agent({
       id: 'repro',
       name: 'repro',
       instructions: 'test',
-      model: scriptedModel(secondId, captured) as LanguageModelV2,
+      model: scriptedModel(secondId, captured, secondQ) as LanguageModelV2,
       tools: { lookup },
       ...(kind === 'plain' ? {} : { memory: new MockMemory({ storage: new InMemoryStore() }) }),
     });
@@ -157,7 +160,7 @@ describe('tool call id reuse within a run (#31609)', () => {
 
     const out = await (agent as any).stream('go', {
       maxSteps: 5,
-      ...(kind === 'plain' ? {} : { memory: { thread: `t-${kind}-${secondId}`, resource: 'r' } }),
+      ...(kind === 'plain' ? {} : { memory: { thread: `t-${kind}-${secondId}-${secondQ}`, resource: 'r' } }),
     });
     for await (const _chunk of out.fullStream) {
       // drain to completion
@@ -177,16 +180,26 @@ describe('tool call id reuse within a run (#31609)', () => {
     expect(toolCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_1 {"q":"b"}']);
     expect(toolResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_1 {"answer":"result-b"}']);
   });
+
+  it.each<Kind>(['plain', 'memory', 'durable'])(
+    '%s: keeps both calls when a later step repeats call_0 with the same arguments',
+    async kind => {
+      // Same id *and* same arguments: only the step separates the two invocations.
+      const prompts = await runAgent(kind, 'call_0', 'a');
+      expect(toolCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_0 {"q":"a"}']);
+      expect(toolResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_0 {"answer":"result-a"}']);
+    },
+  );
 });
 
 /** Step 1 and 2 let the provider return `web_search`'s result inline; step 3 answers. */
-function scriptedProviderModel(secondId: string, captured: Captured) {
+function scriptedProviderModel(secondId: string, captured: Captured, secondQ = 'b') {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
       captured.prompts.push(prompt as any[]);
       const step = captured.prompts.length;
       if (step === 1) return providerCallStream('s1', 'call_0', 'a');
-      if (step === 2) return providerCallStream('s2', secondId, 'b');
+      if (step === 2) return providerCallStream('s2', secondId, secondQ);
       return textStream('s3', 'done');
     },
   });
@@ -216,13 +229,13 @@ describe('provider-executed call and result in one response (#31609)', () => {
     await Promise.all(pubsubs.splice(0).map(pubsub => pubsub.close()));
   });
 
-  async function runProviderAgent(kind: Kind, secondId: string): Promise<any[][]> {
+  async function runProviderAgent(kind: Kind, secondId: string, secondQ = 'b'): Promise<any[][]> {
     const captured: Captured = { prompts: [] };
     const base = new Agent({
       id: 'repro',
       name: 'repro',
       instructions: 'test',
-      model: scriptedProviderModel(secondId, captured) as LanguageModelV2,
+      model: scriptedProviderModel(secondId, captured, secondQ) as LanguageModelV2,
       tools: { web_search: webSearch },
       ...(kind === 'plain' ? {} : { memory: new MockMemory({ storage: new InMemoryStore() }) }),
     });
@@ -233,7 +246,7 @@ describe('provider-executed call and result in one response (#31609)', () => {
 
     const out = await (agent as any).stream('go', {
       maxSteps: 5,
-      ...(kind === 'plain' ? {} : { memory: { thread: `p-${kind}-${secondId}`, resource: 'r' } }),
+      ...(kind === 'plain' ? {} : { memory: { thread: `p-${kind}-${secondId}-${secondQ}`, resource: 'r' } }),
     });
     for await (const _chunk of out.fullStream) {
       // drain to completion
@@ -253,4 +266,15 @@ describe('provider-executed call and result in one response (#31609)', () => {
     expect(providerCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_1 {"q":"b"}']);
     expect(providerResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_1 {"answer":"result-b"}']);
   });
+
+  it.each<Kind>(['plain', 'memory', 'durable'])(
+    '%s: keeps both calls when a later step repeats call_0 with the same arguments',
+    async kind => {
+      // The gateway coalesces call and result into one part, so the repeated invocation is only
+      // separated from the first by the step it arrives in (#31609).
+      const prompts = await runProviderAgent(kind, 'call_0', 'a');
+      expect(providerCallsIn(prompts[2]!)).toEqual(['call_0 {"q":"a"}', 'call_0 {"q":"a"}']);
+      expect(providerResultsIn(prompts[2]!)).toEqual(['call_0 {"answer":"result-a"}', 'call_0 {"answer":"result-a"}']);
+    },
+  );
 });

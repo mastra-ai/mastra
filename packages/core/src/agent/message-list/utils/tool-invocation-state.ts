@@ -37,6 +37,25 @@ export function isSameToolInvocation(a: MastraToolInvocation, b: MastraToolInvoc
   return isSameToolCall(a.toolCallId, a.args, b);
 }
 
+/**
+ * Whether `incoming` is a copy of a call the message already stores, rather than a new invocation
+ * that happens to reuse the same id (and even the same arguments).
+ *
+ * A toolCallId identifies a call only within one response (#31609): a later step of the same run may
+ * reuse both the id and the arguments for a genuinely new call. The merge decides that from position
+ * and time rather than content — the caller passes `incomingOpensNewOccurrence` when the part arrives
+ * on a newer response and a step-start already stored after the occurrence shows its step has ended.
+ * The runtime re-adds accumulated parts without either, so a replay stays a copy.
+ */
+export function isStoredCopyOfInvocation(
+  stored: { toolInvocation: MastraToolInvocation },
+  incoming: { toolInvocation: MastraToolInvocation },
+  incomingOpensNewOccurrence: boolean,
+): boolean {
+  if (!isSameToolInvocation(stored.toolInvocation, incoming.toolInvocation)) return false;
+  return !incomingOpensNewOccurrence;
+}
+
 // How far a tool invocation has progressed. A tool part may only be moved forward by a later copy
 // of the same call; a copy at the same or an earlier stage never overwrites what is stored.
 const TOOL_INVOCATION_STATE_RANK: Record<ToolInvocationState, number> = {

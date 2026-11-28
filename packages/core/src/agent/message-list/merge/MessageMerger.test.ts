@@ -304,9 +304,43 @@ describe('MessageMerger tool call id reuse across steps', () => {
     expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'a')]);
   });
 
-  // Two occurrences share the same cache content, so the merge-gate counts must keep the second
-  // response's parts out rather than inserting them a third time when the runtime re-adds it.
-  it('adds nothing when the later-step response is merged again', () => {
+  // A gateway can also return a call and its result together in one response. The second
+  // invocation must survive even though its parts arrive as a single group.
+  it('keeps a later call and its result that arrive together in one response when the id is reused', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'b'), answer('call_0', 'b')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'b')]);
+  });
+
+  it('keeps a later call and result that arrive together when the arguments repeat a completed id', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [call('call_0', 'a'), answer('call_0', 'a')],
+    );
+    expectParts(list, [step, answer('call_0', 'a'), step, answer('call_0', 'a')]);
+  });
+
+  it('sends both pairs to the model when a later response carries the reused call and result together', () => {
+    const list = mergeSequence(
+      [step, call('call_0', 'a')],
+      [answer('call_0', 'a')],
+      [step, call('call_0', 'b'), answer('call_0', 'b')],
+    );
+    expect(modelParts(list)).toEqual([
+      'tool-call:call_0',
+      'tool-result:call_0',
+      'tool-call:call_0',
+      'tool-result:call_0',
+    ]);
+  });
+
+  // The runtime re-adds an already-merged response on the message it belongs to, so re-merging the
+  // accumulated parts must not insert a third copy of either occurrence.
+  it('adds nothing when the accumulated response is merged again', () => {
     const list = mergeSequence(
       [step, call('call_0', 'a')],
       [answer('call_0', 'a')],
@@ -316,9 +350,7 @@ describe('MessageMerger tool call id reuse across steps', () => {
     );
     const before = structuredClone(list.get.all.db());
     const stored = structuredClone(before[0]!.content.parts) as Part[];
-    // The runtime re-adds the later step's result and then its accumulated response.
-    list.add({ ...message([answer('call_0', 'b')]), createdAt: new Date(createdAt.getTime() + 5000) }, 'response');
-    list.add({ ...message(stored), createdAt: new Date(createdAt.getTime() + 7000) }, 'response');
+    list.add({ ...message(stored), createdAt }, 'response');
     expect(list.get.all.db()).toEqual(before);
   });
 

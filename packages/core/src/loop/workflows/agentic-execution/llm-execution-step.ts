@@ -107,7 +107,11 @@ import { trackOpenReasoning, watchInterruptibleStream } from '../../shared/inter
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { describeNonSuccessFinishReason } from '../../shared/non-success-finish-reason';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
-import { hasPendingToolInvocation, readToolResultFromMessageList } from '../../shared/read-tool-result';
+import {
+  hasPendingProviderToolInvocation,
+  hasPendingToolInvocation,
+  readToolResultFromMessageList,
+} from '../../shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
@@ -1139,7 +1143,15 @@ async function processOutputStream<OUTPUT = undefined>({
           // the call arrived in an earlier step and was committed as state:'call'. A
           // same-stream result has no part yet, and a reused toolCallId must not patch the
           // earlier step's finished call (#31609). Both are left to buildMessagesFromChunks.
-          if (hasPendingToolInvocation(messageList, chunk.payload.toolCallId)) {
+          //
+          // Some providers return a deferred result under a DIFFERENT toolCallId than the
+          // call (e.g. @ai-sdk/google `file_search`); the name-based fallback in
+          // `updateToolInvocation` reconciles those, so the gate must also admit a
+          // still-pending provider-executed call with the same tool name.
+          if (
+            hasPendingToolInvocation(messageList, chunk.payload.toolCallId) ||
+            hasPendingProviderToolInvocation(messageList, chunk.payload.toolName)
+          ) {
             messageList.updateToolInvocation({
               type: 'tool-invocation',
               toolInvocation: {

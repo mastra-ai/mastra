@@ -1304,30 +1304,32 @@ export class MessageList {
 
         // A toolCallId can name more than one invocation when a later step reuses it (#31609), so a
         // mapped output is kept per invocation, in call order, and handed to the model messages in
-        // that same order rather than letting the last one stand for every occurrence.
-        const storedModelOutputs = new Map<string, unknown[]>();
+        // that same order rather than letting the last one stand for every occurrence. An occurrence
+        // without a mapping keeps a hole rather than borrowing a sibling's output, so its raw result
+        // reaches the model.
+        const outputsByToolCallId = new Map<string, (unknown | undefined)[]>();
         for (const dbMsg of this.messages) {
           if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
 
           for (const part of dbMsg.content.parts) {
-            if (
-              part.type === 'tool-invocation' &&
-              part.toolInvocation?.state === 'result' &&
-              part.providerMetadata?.mastra &&
-              typeof part.providerMetadata.mastra === 'object' &&
-              Object.hasOwn(part.providerMetadata.mastra, 'modelOutput') &&
-              // A nullish `modelOutput` means the tool's toModelOutput opted out of mapping,
-              // so the raw result must be kept.
-              (part.providerMetadata.mastra as Record<string, unknown>).modelOutput != null
-            ) {
-              const outputs = storedModelOutputs.get(part.toolInvocation.toolCallId) ?? [];
-              outputs.push((part.providerMetadata.mastra as Record<string, unknown>).modelOutput);
-              storedModelOutputs.set(part.toolInvocation.toolCallId, outputs);
-            }
+            if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+
+            const mastra = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
+            // A nullish `modelOutput` means the tool's toModelOutput opted out of mapping, so the raw
+            // result must be kept; either way the occurrence holds a slot.
+            const mapped =
+              mastra && typeof mastra === 'object' && Object.hasOwn(mastra, 'modelOutput') && mastra.modelOutput != null
+                ? mastra.modelOutput
+                : undefined;
+            const outputs = outputsByToolCallId.get(part.toolInvocation.toolCallId) ?? [];
+            outputs.push(mapped);
+            outputsByToolCallId.set(part.toolInvocation.toolCallId, outputs);
           }
         }
 
-        if (storedModelOutputs.size > 0) {
+        const hasMapping = (outputs: (unknown | undefined)[]) => outputs.some(output => output !== undefined);
+
+        if ([...outputsByToolCallId.values()].some(hasMapping)) {
           const usedOutputs = new Map<string, number>();
           for (const modelMsg of modelMessages) {
             if (modelMsg.role !== 'tool' || !Array.isArray(modelMsg.content)) continue;
@@ -1335,19 +1337,21 @@ export class MessageList {
             for (let i = 0; i < modelMsg.content.length; i++) {
               const part = modelMsg.content[i]!;
               if (part.type !== 'tool-result') continue;
-              const outputs = storedModelOutputs.get(part.toolCallId);
-              if (!outputs) continue;
-              // Conversion emits one result per stored invocation, in call order. If it dropped any,
-              // the newest mapping stands in for the occurrences that are left.
+              const outputs = outputsByToolCallId.get(part.toolCallId);
+              if (!outputs || !hasMapping(outputs)) continue;
+              // Conversion emits one result per stored invocation, in call order.
               const position = usedOutputs.get(part.toolCallId) ?? 0;
               usedOutputs.set(part.toolCallId, position + 1);
+              const mapped = outputs[position];
+              // An occurrence that was never mapped keeps the raw result the conversion produced.
+              if (mapped === undefined) continue;
               // The stored modelOutput is substituted into `output` here. The
               // internal `mastra.modelOutput` marker stays on the part: input
               // processors read it to tell a toModelOutput-mapped result apart
               // from a raw fallback (see ToolCallFilter).
               modelMsg.content[i] = {
                 ...part,
-                output: (outputs[position] ?? outputs[outputs.length - 1]) as any,
+                output: mapped as any,
               };
             }
           }

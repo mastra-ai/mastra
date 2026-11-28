@@ -1870,6 +1870,62 @@ describe('MessageList V5 Support', () => {
       expect(toolResultOutputs).toEqual(['first-output', 'second-output']);
     });
 
+    it('should keep the raw result for a reused toolCallId occurrence that has no modelOutput (#31609)', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Search twice', 'input');
+
+      // The first occurrence has no mapping, the second does. The unmapped one must reach the model as
+      // its raw result instead of borrowing the mapped output of the occurrence that follows it.
+      const reusedIdMessage: MastraDBMessage = {
+        id: 'msg-reused-id-sparse',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'a' },
+                result: { raw: 'a-raw' },
+              },
+            },
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'b' },
+                result: { raw: 'b-raw' },
+              },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'mapped-b' } } },
+            },
+          ],
+        },
+      };
+
+      list.add(reusedIdMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResultOutputs = prompt
+        .filter(m => m.role === 'tool')
+        .flatMap(m => (m as any).content as any[])
+        .filter(part => part.type === 'tool-result')
+        .map(part => part.output?.value ?? part.output);
+      // The unmapped occurrence keeps the conversion's raw output, not the sibling's mapped value.
+      expect(toolResultOutputs[0]).not.toEqual('mapped-b');
+      expect(toolResultOutputs[1]).toEqual('mapped-b');
+    });
+
     it('should preserve raw result in stored messages when modelOutput is set', async () => {
       const list = new MessageList({ threadId, resourceId });
 

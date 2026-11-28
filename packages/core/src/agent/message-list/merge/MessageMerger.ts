@@ -1,7 +1,7 @@
 import { CacheKeyGenerator } from '../cache/CacheKeyGenerator';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../state/types';
 import { stampPart, stampToolPartUpdate } from '../utils/stamp-part';
-import { isSameToolInvocation, isTerminalToolInvocationState } from '../utils/tool-invocation-state';
+import { isStoredCopyOfInvocation, isTerminalToolInvocationState } from '../utils/tool-invocation-state';
 
 type MessagePart = MastraMessageContentV2['parts'][number];
 
@@ -139,6 +139,17 @@ export class MessageMerger {
     options: MessageMergeOptions = {},
   ): void {
     const openNewOccurrences = options.openNewOccurrences ?? true;
+    // Whether the incoming message is a response newer than the message being merged into. A part on a
+    // newer response is a new event for its call even when it repeats a stored call's id and
+    // arguments (a gateway can restart numbering every response), whereas the runtime re-adds
+    // accumulated parts on the message they were first stored on, so a replay never lands on a newer
+    // message (#31609). Folding stored history (`openNewOccurrences: false`) deliberately treats
+    // everything it is given as a replay.
+    const incomingIsNewerResponse =
+      openNewOccurrences &&
+      typeof incomingMessage.createdAt !== 'undefined' &&
+      typeof latestMessage.createdAt !== 'undefined' &&
+      new Date(incomingMessage.createdAt).getTime() > new Date(latestMessage.createdAt).getTime();
     if (incomingMessage.content.metadata) {
       latestMessage.content.metadata = {
         ...(latestMessage.content.metadata ?? {}),
@@ -157,16 +168,28 @@ export class MessageMerger {
     // id; a result in the same response must pair with the call it belongs to instead of overwriting
     // the earlier, already-finished invocation (#31609).
     const openedInvocations = new Map<string, Extract<MessagePart, { type: 'tool-invocation' }>>();
-    // Every stored invocation by the id it carries, so an incoming part can find the stored copies of
-    // its own id without rescanning the message. Nothing this loop does appends to the stored parts:
-    // parts it decides to add are only merged in afterwards, by `addPartsToMessage`.
-    const storedInvocationsByToolCallId = new Map<string, Extract<MessagePart, { type: 'tool-invocation' }>[]>();
-    for (const storedPart of latestMessage.content.parts) {
+    // Every stored invocation by the id it carries, with its position, so an incoming part can find
+    // the stored copies of its own id without rescanning the message. Nothing this loop does appends
+    // to the stored parts: parts it decides to add are only merged in afterwards, by
+    // `addPartsToMessage`.
+    const storedInvocationsByToolCallId = new Map<
+      string,
+      { part: Extract<MessagePart, { type: 'tool-invocation' }>; index: number }[]
+    >();
+    // A step-start already stored after an occurrence means a later step of the run has begun, so an
+    // incoming part whose id matches that occurrence belongs to the new step rather than re-describing
+    // the earlier one (#31609).
+    let lastStoredStepStartIndex = -1;
+    for (const [storedIndex, storedPart] of latestMessage.content.parts.entries()) {
+      if (storedPart.type === 'step-start') {
+        lastStoredStepStartIndex = storedIndex;
+        continue;
+      }
       if (storedPart.type !== 'tool-invocation' || !storedPart.toolInvocation) continue;
       const { toolCallId } = storedPart.toolInvocation;
       const copies = storedInvocationsByToolCallId.get(toolCallId);
-      if (copies) copies.push(storedPart);
-      else storedInvocationsByToolCallId.set(toolCallId, [storedPart]);
+      if (copies) copies.push({ part: storedPart, index: storedIndex });
+      else storedInvocationsByToolCallId.set(toolCallId, [{ part: storedPart, index: storedIndex }]);
     }
 
     for (const [index, part] of incomingMessage.content.parts.entries()) {
@@ -180,8 +203,20 @@ export class MessageMerger {
         const openedPart = openedInvocations.get(toolCallId);
         const storedInvocations = storedInvocationsByToolCallId.get(toolCallId) ?? [];
         // Copies of the id that describe this very call, and copies still waiting for their outcome.
-        const sameCall = storedInvocations.filter(p => isSameToolInvocation(p.toolInvocation, part.toolInvocation));
-        const pending = storedInvocations.filter(p => !isTerminalToolInvocationState(p.toolInvocation.state));
+        // A part that starts its own invocation (a newer response whose stored copy a step-start
+        // already follows) is a new event for the call, not a copy of it.
+        const sameCall = storedInvocations
+          .filter(({ part: storedPart, index: storedIndex }) =>
+            isStoredCopyOfInvocation(
+              storedPart,
+              part,
+              incomingIsNewerResponse && storedIndex < lastStoredStepStartIndex,
+            ),
+          )
+          .map(({ part: storedPart }) => storedPart);
+        const pending = storedInvocations
+          .filter(({ part: storedPart }) => !isTerminalToolInvocationState(storedPart.toolInvocation.state))
+          .map(({ part: storedPart }) => storedPart);
         const existingCallPart =
           openedPart ?? MessageMerger.matchStoredInvocation({ isCallState, openNewOccurrences, sameCall, pending });
         const existingCallToolInvocation = !!existingCallPart;
@@ -204,6 +239,10 @@ export class MessageMerger {
           partsToAdd.set(index, newPart);
           if (storedInvocations.length > 0) {
             openedInvocations.set(toolCallId, newPart);
+            // A result in this same response turns the copy above into a `result`-state part, whose
+            // cache key (id + state) then equals the already-stored outcome's, so the merge-gate counts
+            // would read it as a duplicate and drop the whole occurrence (#31609).
+            forcedInserts.add(index);
           }
           continue;
         }

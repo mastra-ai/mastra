@@ -7,6 +7,7 @@ import { isAgentWorkflowTool } from '../../../tools/toolchecks';
 import { isValidationError } from '../../../tools/validation';
 import type { ModelFacingValidationError } from '../../../tools/validation';
 import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
+import { toolResultArgsMatch } from '../read-tool-result';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
 interface MappingSpan {
@@ -155,9 +156,14 @@ export function snapshotToolResult(result: unknown): string | undefined {
  * processor committed in `providerMetadata.mastra.modelOutput` (undefined when it
  * cleared it), otherwise `fallback`, the output mapped before the hook.
  */
-export function latestProcessedModelOutput(messageList: MessageList, toolCallId: string, fallback: unknown): unknown {
+export function latestProcessedModelOutput(
+  messageList: MessageList,
+  toolCallId: string,
+  fallback: unknown,
+  args?: unknown,
+): unknown {
   const mastra = (
-    findCommittedToolInvocationPart(messageList, toolCallId)?.providerMetadata as
+    findCommittedToolInvocationPart(messageList, toolCallId, args)?.providerMetadata as
       | { mastra?: Record<string, unknown> }
       | undefined
   )?.mastra;
@@ -189,6 +195,9 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   tool: { toModelOutput?: (output: unknown) => unknown } | undefined;
   toolName: string;
   toolCallId: string;
+  /** Arguments the caller holds for the call. Tells a reused id's occurrences apart
+   * (#31609) when reading back the part a processor committed. */
+  toolArgs?: unknown;
   /** The result the processors were given. */
   resultBeforeProcessors: unknown;
   /** `snapshotToolResult(resultBeforeProcessors)`, taken before the processors ran. */
@@ -202,7 +211,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   validationError?: ModelFacingValidationError;
   parentSpan?: ToolMappingParentSpan;
 }): Promise<Record<string, unknown> | undefined> {
-  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
+  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId, deps.toolArgs);
 
   const processorMastra = (part?.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
   const { mastra: previousMastra, ...otherNamespaces } = deps.providerMetadata ?? {};
@@ -243,7 +252,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   });
 }
 
-function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string) {
+function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string, args?: unknown) {
   const messages = messageList.get.all.db();
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
@@ -252,7 +261,11 @@ function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: s
       if (
         part?.type === 'tool-invocation' &&
         part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation.state === 'result'
+        part.toolInvocation.state === 'result' &&
+        // A reused id may have several committed occurrences (#31609); pick the
+        // one whose arguments describe the call being resolved, tolerating a
+        // caller that only holds a sanitized subset.
+        toolResultArgsMatch(args, part.toolInvocation.args)
       ) {
         return part as typeof part & { toolInvocation: { result?: unknown } };
       }

@@ -2736,6 +2736,7 @@ export function createDurableToolCallStep() {
                 tool: mappingTool,
                 toolName,
                 toolCallId,
+                toolArgs: cleanedArgs,
                 resultBeforeProcessors,
                 resultSnapshotBeforeProcessors,
                 providerMetadata,

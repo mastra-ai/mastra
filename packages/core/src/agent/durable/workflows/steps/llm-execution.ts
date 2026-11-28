@@ -22,7 +22,11 @@ import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-backg
 import { trackOpenReasoning, watchInterruptibleStream } from '../../../../loop/shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import { persistUnavailableAttachments } from '../../../../loop/shared/persist-unavailable-attachments';
-import { hasPendingToolInvocation, readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
+import {
+  hasPendingProviderToolInvocation,
+  hasPendingToolInvocation,
+  readToolResultFromMessageList,
+} from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../../../loop/shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
@@ -2121,7 +2125,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // earlier step and was committed as state:'call'. A same-stream result has
                   // no part yet, and a reused toolCallId must not patch the earlier step's
                   // finished call (#31609). Both are left to buildMessagesFromChunks.
-                  if (hasPendingToolInvocation(messageList, resultPayload.toolCallId)) {
+                  //
+                  // Some providers return a deferred result under a DIFFERENT toolCallId than
+                  // the call; the name-based fallback in `updateToolInvocation` reconciles
+                  // those, so the gate must also admit a still-pending provider-executed call
+                  // with the same tool name.
+                  if (
+                    hasPendingToolInvocation(messageList, resultPayload.toolCallId) ||
+                    hasPendingProviderToolInvocation(messageList, resultPayload.toolName)
+                  ) {
                     messageList.updateToolInvocation({
                       type: 'tool-invocation',
                       toolInvocation: {

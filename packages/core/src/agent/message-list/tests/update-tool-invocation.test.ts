@@ -582,6 +582,42 @@ describe('MessageList.updateToolInvocation', () => {
     expect(result).toBe(false);
   });
 
+  it('reconciles a provider result delivered under a different id (#31609)', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'model-call',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'provider-result',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    } as any);
+
+    expect(updated).toBe(true);
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ data: 'search' });
+    // The stored call is reconciled onto the result's id so replay stays consistent.
+    expect(part.toolInvocation.toolCallId).toBe('provider-result');
+  });
+
   it('should preserve providerMetadata from the input part', () => {
     const messageList = new MessageList();
 
