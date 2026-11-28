@@ -1,0 +1,109 @@
+---
+title: "Mastra Platform | Browser"
+description: "Give Mastra agents hosted browsers from Mastra Platform, driven with the same tools as AgentBrowser and ended automatically when a thread or agent is done."
+packages:
+  - "@mastra/platform"
+---
+
+# PlatformBrowser
+
+`PlatformBrowser` from `@mastra/platform` gives agents hosted browsers that run on Mastra Platform. It starts a browser through your project's workspace, connects to it over the Chrome DevTools Protocol (CDP), and drives it with the same accessibility-first tools as [AgentBrowser](/integrations/browsers/agent-browser) (`browser_goto`, `browser_snapshot`, `browser_click`, and so on). No local Chromium install is needed.
+
+Hosted browsers are in early access, so starting a browser in a project that doesn't have them yet fails with a message saying they aren't available.
+
+## When to use Mastra Platform browsers
+
+Use `PlatformBrowser` when you need:
+
+- Hosted browsers for agents deployed on Mastra Platform, with no extra API keys
+- Browser automation in environments that can't launch a local browser
+- Per-thread isolation, with each browser ended when its thread is done
+- Browser sessions listed on your project's **Browsers** page, with live view, activity log, and recordings
+
+## Quickstart
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/platform
+```
+
+On Mastra Platform, deploys already receive `MASTRA_PLATFORM_ACCESS_TOKEN`, `MASTRA_PROJECT_ID`, and `MASTRA_ENVIRONMENT_ID`. For local runs, set them yourself, as described in [Workspaces](/docs/mastra-platform/workspaces#local-development):
+
+```bash title=".env"
+MASTRA_PLATFORM_ACCESS_TOKEN=sk_your-api-token
+MASTRA_PROJECT_ID=your-project-id
+MASTRA_ENVIRONMENT_ID=your-environment-id
+```
+
+Create a browser and assign it to an agent:
+
+```typescript title="src/mastra/agents/web-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { PlatformBrowser } from '@mastra/platform'
+
+export const webAgent = new Agent({
+  id: 'web-agent',
+  name: 'Web Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  browser: new PlatformBrowser(),
+  instructions: `You are a web automation assistant.
+
+When interacting with pages:
+1. Use browser_snapshot to get the current page state and element refs
+2. Use the refs (like @e1, @e2) to target elements for clicks and typing
+3. After actions, take another snapshot to verify the result`,
+})
+```
+
+To pass the values directly instead of reading them from the environment, use `accessToken`, `projectId`, and `environmentId`.
+
+## Browser scope
+
+`PlatformBrowser` follows the same `scope` option as `AgentBrowser`:
+
+- `'thread'` (default): Each conversation thread gets its own hosted browser. The browser ends when the thread's browser session closes.
+- `'shared'`: All threads drive one hosted browser, which ends when the `PlatformBrowser` closes.
+
+```typescript
+const browser = new PlatformBrowser({
+  scope: 'shared',
+})
+```
+
+## Session options
+
+Set options for every browser the instance starts under the `session` key:
+
+```typescript
+const browser = new PlatformBrowser({
+  viewport: { width: 1280, height: 800 },
+  session: {
+    idleTimeoutSeconds: 120,
+    maxDurationSeconds: 1800,
+    recording: true,
+  },
+})
+```
+
+- `idleTimeoutSeconds`: Seconds without activity before the platform ends the browser. Defaults to 300.
+- `maxDurationSeconds`: Longest the browser may run, in seconds. Unset by default.
+- `stealth`: Ask the browser vendor to reduce bot detection, where supported.
+- `recording`: Record the session so you can play it back from the project's **Browsers** page, where supported.
+
+The top-level `viewport` option sets the hosted browser's window size.
+
+## Errors
+
+Starting a browser fails with a message that names the cause:
+
+- Hosted browsers aren't available for the project yet (404).
+- The organization started too many browsers in the last minute (429). Wait a minute and try again.
+- Hosted browsers aren't set up on this deployment (501).
+- The access token was refused (401 or 403).
+
+## Related
+
+- [Browser overview](/docs/browser)
+- [AgentBrowser](/integrations/browsers/agent-browser)
+- [Mastra Platform workspaces](/docs/mastra-platform/workspaces)

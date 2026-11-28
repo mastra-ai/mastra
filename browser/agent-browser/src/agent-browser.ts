@@ -693,6 +693,12 @@ export class AgentBrowser extends MastraBrowser {
     if (!this.isBrowserRunning(threadId)) {
       return null;
     }
+    // Reading state must never open a browser: in 'thread' scope a thread
+    // without one has no state, and opening one would launch (or, for remote
+    // providers, provision) a browser only to read its empty tabs.
+    if (this.threadManager.getScope() === 'thread') {
+      return this.getBrowserStateForThread(threadId);
+    }
     try {
       const manager = await this.getManagerForThread(threadId);
       return this.getBrowserStateForManager(manager, threadId);

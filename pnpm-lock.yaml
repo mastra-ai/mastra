@@ -5853,12 +5853,12 @@ importers:
 
   packages/platform:
     dependencies:
+      '@mastra/agent-browser':
+        specifier: workspace:*
+        version: link:../../browser/agent-browser
       '@mastra/platform-workspace':
         specifier: workspace:*
         version: link:../../workspaces/platform-workspace
-      '@mastra/stagehand':
-        specifier: workspace:*
-        version: link:../../browser/stagehand
     devDependencies:
       '@internal/ai-sdk-v5':
         specifier: workspace:*
@@ -5884,6 +5884,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      playwright-core:
+        specifier: ^1.64.1
+        version: 1.64.1
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)

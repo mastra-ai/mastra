@@ -41,7 +41,8 @@
     "vitest": "catalog:",
     "zod": "catalog:",
     "@mastra/pg": "workspace:*",
-    "@mastra/platform-workspace": "workspace:*"
+    "@mastra/platform-workspace": "workspace:*",
+    "playwright-core": "^1.64.1"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.82.0-0 <2.0.0-0",
@@ -64,7 +65,7 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@mastra/platform-workspace": "workspace:*",
-    "@mastra/stagehand": "workspace:*"
+    "@mastra/agent-browser": "workspace:*",
+    "@mastra/platform-workspace": "workspace:*"
   }
 }

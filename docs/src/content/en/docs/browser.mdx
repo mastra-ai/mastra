@@ -12,11 +12,12 @@ Browser support lets agents navigate websites, interact with page elements, fill
 - **SDK providers** wrap a browser automation library and give the agent browser tools directly.
 - **CLI providers** launch a browser that the agent controls through command-line tools.
 
-Mastra includes three SDK providers and one CLI provider:
+Mastra includes four SDK providers and one CLI provider:
 
 - [**AgentBrowser**](/integrations/browsers/agent-browser): An SDK provider built on Playwright that finds page elements through accessibility information. Use it for general web automation and scraping.
 - [**Stagehand**](/integrations/browsers/stagehand): An SDK provider built on the Stagehand library from Browserbase. It uses AI to find page elements. Use it for complex interactions where describing an element in natural language works better than a fixed selector.
 - [**FirecrawlBrowser**](/integrations/browsers/firecrawl): An SDK provider that runs AgentBrowser tools in hosted Firecrawl Browser Sandbox sessions. Use it to avoid running browsers on your own infrastructure.
+- [**PlatformBrowser**](/integrations/browsers/mastra-platform): An SDK provider that runs AgentBrowser tools in hosted browsers from Mastra Platform. Use it for agents deployed on Mastra Platform.
 - [**BrowserViewer**](/integrations/browsers/browser-viewer): A CLI provider that launches Chrome and passes its Chrome DevTools Protocol (CDP) URL to CLI tools such as agent-browser, browser-use, and browse. Use it for workspace agents that control browsers through shell commands.
 
 ## When to use a browser
@@ -182,6 +183,7 @@ Recordings use Motion-JPEG AVI and don't require `ffmpeg`. The default maximum d
 - [AgentBrowser](/integrations/browsers/agent-browser)
 - [Stagehand](/integrations/browsers/stagehand)
 - [Firecrawl](/integrations/browsers/firecrawl)
+- [Mastra Platform](/integrations/browsers/mastra-platform)
 - [BrowserViewer](/integrations/browsers/browser-viewer)
 - [MastraBrowser reference](/reference/browser/mastra-browser)
 - 📹 [Mastra browser capabilities workshop](https://www.youtube.com/watch?v=E9KFsZEnQO8\&t=5s)

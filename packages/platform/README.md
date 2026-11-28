@@ -29,7 +29,7 @@ const knowledge = new PlatformKnowledge();
 
 ### Hosted browser
 
-Create a hosted browser from your Mastra Platform project's browser page, then pass its CDP URL to `PlatformBrowser`. Treat the CDP URL as a secret: anyone holding it can connect to that browser. Keep it server-side, do not commit it, and use a secure environment variable such as `MASTRA_BROWSER_CDP_URL`.
+`PlatformBrowser` starts hosted browsers in your Mastra Platform project and connects the agent to them. Set `MASTRA_PLATFORM_ACCESS_TOKEN` (or `MASTRA_PLATFORM_SECRET_KEY`), `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`, or pass `accessToken`, `projectId` and `environmentId`.
 
 ```ts
 import { Agent } from '@mastra/core/agent';
@@ -38,17 +38,11 @@ import { PlatformBrowser } from '@mastra/platform';
 const agent = new Agent({
   name: 'browser-agent',
   model: 'openai/gpt-4o-mini',
-  browser: new PlatformBrowser({ cdpUrl: process.env.MASTRA_BROWSER_CDP_URL! }),
+  browser: new PlatformBrowser(),
 });
 ```
 
-Alternatively, provide a Mastra Platform project ID and access token to provision a new Browserbase-backed session on demand. Browserbase credentials stay on the Platform server.
-
-```ts
-const browser = new PlatformBrowser({ projectId: 'your-project-id' });
-```
-
-`PlatformBrowser` uses `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY` and `MASTRA_PROJECT_ID` when the corresponding options are omitted for on-demand provisioning. It POSTs `{ projectId }` to `https://platform.mastra.ai/v1/browsers/sessions` (overridable with `apiUrl` or `MASTRA_BROWSER_API_URL`) and connects to the returned CDP URL with shared browser scope. A project access token must be authorized for that project. Supplying `cdpUrl` skips provisioning and does not require a Platform token or project ID.
+By default each thread gets its own browser, which ends when the thread session closes. Use `scope: 'shared'` for one browser across threads. Session settings such as `idleTimeoutSeconds`, `maxDurationSeconds`, `stealth` and `recording` go under `session`. Hosted browsers must be enabled for your organization.
 
 ### Knowledge transport contract
 
