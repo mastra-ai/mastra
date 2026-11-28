@@ -9,6 +9,7 @@ import {
 import type {
   KnowledgeChangeEvent,
   KnowledgeImporterContext,
+  KnowledgeImporterFlushReceipt,
   KnowledgeImporterHost,
   KnowledgeImportItem,
   KnowledgeImporterOp,
@@ -966,6 +967,50 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       await expect(flushOnce(host, started.runId, started.generation, 3, ops)).rejects.toMatchObject({
         code: 'seq_mismatch',
       });
+    });
+
+    it('replays a receipt stored before the merged count existed with merged: 0, and keeps a stored merged count', async () => {
+      const { knowledge } = setup();
+      const host = knowledge.importers!.host;
+      const storage = await knowledge.getStorage();
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const { runId, generation } = started;
+      const record = async (seq: number, ops: KnowledgeImporterOp[], receipt: Record<string, unknown>) => {
+        const digest = await knowledgeImporterFlushDigest({ ops });
+        await storage.transaction(tx =>
+          tx.importers!.recordFlush({
+            runId,
+            generation,
+            seq,
+            digest,
+            receipt: receipt as unknown as KnowledgeImporterFlushReceipt,
+            counts: {},
+          }),
+        );
+      };
+      // A receipt written by an older host: every count but merged.
+      const older = [upsert({ sourceId: 'p1' })];
+      const olderReceipt = { seq: 1, created: 1, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0 };
+      await record(1, older, { ...olderReceipt, refused: [], pending: false });
+      expect(await flushOnce(host, runId, generation, 1, older)).toEqual({
+        ...olderReceipt,
+        merged: 0,
+        refused: [],
+        pending: false,
+      });
+      // The same replay found only under the run lock: a concurrent identical flush committed after the peek.
+      const getFlush = vi
+        .spyOn(Object.getPrototypeOf(storage.importers!) as { getFlush: () => Promise<unknown> }, 'getFlush')
+        .mockResolvedValueOnce(null);
+      expect(await flushOnce(host, runId, generation, 1, older)).toMatchObject({ seq: 1, merged: 0 });
+      expect(getFlush).toHaveBeenCalledTimes(2);
+      getFlush.mockRestore();
+
+      const newer = [upsert({ sourceId: 'p2' })];
+      const newerReceipt = { ...olderReceipt, seq: 2, created: 0, merged: 3, refused: [], pending: false };
+      await record(2, newer, newerReceipt);
+      expect(await flushOnce(host, runId, generation, 2, newer)).toEqual(newerReceipt);
     });
 
     it('commits state with its flush, and replays a finish exactly once recorded', async () => {
