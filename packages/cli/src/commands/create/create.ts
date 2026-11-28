@@ -7,6 +7,7 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
+import { MASTRA_GATEWAY_URL, MASTRA_PROJECTS_URL } from '../auth/client.js';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
@@ -36,7 +37,7 @@ import {
   validateProjectName,
 } from './command';
 import type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions } from './command';
-import { adaptDefaultTemplate, writeManagedApiKey } from './provider-adapter';
+import { adaptDefaultTemplate, isDotenvSafeValue, writeManagedApiKey } from './provider-adapter';
 import {
   cleanupOwnedStagingDirectory,
   createOwnedStagingDirectory,
@@ -640,6 +641,41 @@ async function discardUnusedGatewayKey(platformSetup: PlatformSetupResult | unde
   });
 }
 
+const DEFAULT_GATEWAY_URL = 'https://gateway-api.mastra.ai';
+
+/**
+ * The gateway the new key belongs to, when it is not the production default. A key minted
+ * against staging only works on the staging gateway, and the project would otherwise call
+ * production. Written as origin plus path without a trailing slash or `/v1`, the form the
+ * runtime and templates document.
+ *
+ * The CLI never calls the gateway itself: keys are minted through the platform API. The
+ * derived `MASTRA_GATEWAY_URL` is still the only place the CLI records which gateway goes with
+ * that platform, and a value exported in the shell takes precedence there. That override is
+ * how a local or self-hosted platform is paired with its gateway, so it is written as well,
+ * which keeps the project on the same host the shell was configured for.
+ *
+ * Returns `invalid` for a value that is not an absolute http(s) URL or that can't be written
+ * to `.env` safely. The key is still written in that case and the URL is left to the user.
+ */
+function gatewayUrlForEnv(): { url?: string; invalid?: true } {
+  const raw = MASTRA_GATEWAY_URL;
+  // Checked before parsing, because the URL parser silently drops tabs and line breaks.
+  if (!isDotenvSafeValue(raw)) return { invalid: true };
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return { invalid: true };
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.search) {
+    return { invalid: true };
+  }
+  const url = `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '').replace(/\/v1$/, '');
+  if (!isDotenvSafeValue(url)) return { invalid: true };
+  return url === DEFAULT_GATEWAY_URL ? {} : { url };
+}
+
 async function finishGatewaySetup({
   projectPath,
   platformSetup,
@@ -650,7 +686,7 @@ async function finishGatewaySetup({
   analytics: PosthogAnalytics | null | undefined;
 }): Promise<string> {
   const envName = color.cyan(GATEWAY_API_KEY_ENV);
-  const manualSteps = `Get a key at ${color.cyan('https://gateway.mastra.ai')} and set ${envName} in ${color.cyan('.env')}.`;
+  const manualSteps = `Get a key in the Mastra dashboard at ${color.cyan(MASTRA_PROJECTS_URL)} and set ${envName} in ${color.cyan('.env')}.`;
   const gateway = platformSetup?.status === 'ready' ? platformSetup.gateway : undefined;
 
   if (gateway?.status !== 'ready') {
@@ -666,7 +702,15 @@ async function finishGatewaySetup({
     return `${reason}${manualSteps}`;
   }
 
-  if (!(await writeManagedApiKey({ projectPath, apiKeyEnv: GATEWAY_API_KEY_ENV, apiKey: gateway.apiKey }))) {
+  const { url: gatewayUrl, invalid: gatewayUrlInvalid } = gatewayUrlForEnv();
+  if (
+    !(await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: GATEWAY_API_KEY_ENV,
+      apiKey: gateway.apiKey,
+      ...(gatewayUrl ? { extraEnv: { MASTRA_GATEWAY_URL: gatewayUrl } } : {}),
+    }))
+  ) {
     await discardUnusedGatewayKey(platformSetup);
     analytics?.trackEvent('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
     return `${color.yellow('Could not write the Gateway key to .env.')}\n\n${manualSteps}`;
@@ -677,7 +721,10 @@ async function finishGatewaySetup({
     outcome: 'completed',
     opened_dashboard: gateway.openedDashboard ?? false,
   });
-  const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.`;
+  const gatewayUrlNote = gatewayUrlInvalid
+    ? `\n${color.yellow('MASTRA_GATEWAY_URL is not a valid http(s) URL, so it was not written to .env.')} If this key is not for the production gateway, set ${color.cyan('MASTRA_GATEWAY_URL')} in ${color.cyan('.env')}.`
+    : '';
+  const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.${gatewayUrlNote}`;
   const creditsUrl = color.cyan(gateway.creditsUrl);
   if (gateway.unlimited) {
     return `${written}\n${gateway.orgName} has unlimited Gateway credits.`;

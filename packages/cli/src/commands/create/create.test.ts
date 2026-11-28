@@ -46,6 +46,15 @@ vi.mock('../../analytics/index', () => ({
   getAnalytics: vi.fn(() => null),
 }));
 
+const clientMocks = vi.hoisted(() => ({ gatewayUrl: 'https://gateway-api.mastra.ai/v1' }));
+
+vi.mock('../auth/client.js', () => ({
+  MASTRA_PROJECTS_URL: 'https://projects.test',
+  get MASTRA_GATEWAY_URL() {
+    return clientMocks.gatewayUrl;
+  },
+}));
+
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
   LoginCancelledError: class LoginCancelledError extends Error {},
@@ -78,7 +87,8 @@ vi.mock('./coding-agents', () => ({
   detectCodingAgentSkills: vi.fn(),
 }));
 
-vi.mock('./provider-adapter', () => ({
+vi.mock('./provider-adapter', async importOriginal => ({
+  ...(await importOriginal<typeof import('./provider-adapter')>()),
   adaptDefaultTemplate: vi.fn(),
   writeManagedApiKey: vi.fn(),
 }));
@@ -144,6 +154,7 @@ function mockValidGitHubProject() {
 beforeEach(async () => {
   vi.clearAllMocks();
   fsMocks.existsSync.mockReturnValue(false);
+  clientMocks.gatewayUrl = 'https://gateway-api.mastra.ai/v1';
   global.fetch = vi.fn();
 
   const prompts = await import('@clack/prompts');
@@ -524,6 +535,65 @@ describe('managed Gateway', () => {
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('gateway-key');
   });
 
+  it('points a project created against staging at the staging gateway', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const adapter = await mockGatewayAdapter();
+    clientMocks.gatewayUrl = 'https://gateway-api.staging.mastra.ai/v1';
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith({
+      projectPath: path.resolve('my-project'),
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: 'gateway-key',
+      extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway-api.staging.mastra.ai' },
+    });
+  });
+
+  it('writes a gateway URL with a path as origin and path, without a trailing /v1/', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const adapter = await mockGatewayAdapter();
+    clientMocks.gatewayUrl = 'https://gateway.example.test/base/v1/';
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ extraEnv: { MASTRA_GATEWAY_URL: 'https://gateway.example.test/base' } }),
+    );
+  });
+
+  it.each([
+    ['a line break', 'https://gateway.example.test\nOTHER=1'],
+    ['a #', 'https://gateway.example.test/#fragment'],
+    ['a quote', 'https://gateway.example.test/"x'],
+    ['no http scheme', 'ftp://gateway.example.test'],
+    ['an unparseable value', 'not a url'],
+  ])('keeps the key but leaves out a gateway URL with %s', async (_label, gatewayUrl) => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const adapter = await mockGatewayAdapter();
+    clientMocks.gatewayUrl = gatewayUrl;
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith({
+      projectPath: path.resolve('my-project'),
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: 'gateway-key',
+    });
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('MASTRA_GATEWAY_URL is not a valid http(s) URL, so it was not written to .env.'),
+    );
+  });
+
   it('links the dashboard at $0 without waiting for credits', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
@@ -595,7 +665,9 @@ describe('managed Gateway', () => {
       expect.stringContaining('Could not create a Gateway key: Gateway unavailable'),
     );
     expect(prompts.note).toHaveBeenCalledWith(
-      expect.stringContaining('Get a key at https://gateway.mastra.ai and set MASTRA_GATEWAY_API_KEY in .env.'),
+      expect.stringContaining(
+        'Get a key in the Mastra dashboard at https://projects.test and set MASTRA_GATEWAY_API_KEY in .env.',
+      ),
     );
     expect(trackEvent).toHaveBeenCalledWith('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
   });
@@ -731,7 +803,9 @@ describe('managed Gateway', () => {
     expect(gatewayApi.createGatewayApiKey).not.toHaveBeenCalled();
     expect(adapter.writeManagedApiKey).not.toHaveBeenCalled();
     expect(prompts.note).toHaveBeenCalledWith(
-      expect.stringContaining('Get a key at https://gateway.mastra.ai and set MASTRA_GATEWAY_API_KEY in .env.'),
+      expect.stringContaining(
+        'Get a key in the Mastra dashboard at https://projects.test and set MASTRA_GATEWAY_API_KEY in .env.',
+      ),
     );
     expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Could not create a Gateway key'));
   });
