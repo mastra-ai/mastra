@@ -84,6 +84,7 @@ export async function applyBackgroundToolResult(deps: {
   const failed = params.status === 'failed';
   const terminalStatus = failed ? 'failed' : 'completed';
 
+  let targetArgs: unknown = deps.args;
   for (const message of messageList.get.all.db()) {
     if (message.role !== 'assistant' || !message.content?.parts) continue;
     for (const part of message.content.parts) {
@@ -103,6 +104,12 @@ export async function applyBackgroundToolResult(deps: {
       // `updateToolInvocation` walks newest-first, so the write below also
       // targets the current turn's placeholder, never a historical part.
       if (backgroundTask.taskId !== params.taskId) continue;
+      // This occurrence is identified by its toolCallId *and* task id, so pass its
+      // own args to `updateToolInvocation` below: a durable tool runs with
+      // internal-only keys stripped from the caller's copy (e.g. `_background`),
+      // while the stored call keeps them, so an exact comparison of `deps.args`
+      // would miss the occurrence this scan just found and append a duplicate.
+      targetArgs = part.toolInvocation.args;
       if (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') {
         if (backgroundTask.status !== terminalStatus) {
           throw new Error(
@@ -163,7 +170,7 @@ export async function applyBackgroundToolResult(deps: {
           : { state: 'result' as const, result }),
         toolCallId: params.toolCallId,
         toolName: params.toolName,
-        args: deps.args,
+        args: targetArgs,
         ...(deps.approvalGrant ?? {}),
       },
       providerMetadata,

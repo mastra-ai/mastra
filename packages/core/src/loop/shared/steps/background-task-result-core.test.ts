@@ -39,6 +39,9 @@ function makeBackgroundInvocationPart(opts: {
   taskId: string;
   status: 'running' | 'completed' | 'failed';
   result: unknown;
+  /** The stored call's args; durable calls keep the internal-only keys the
+   * caller's copy was stripped of. Defaults to the harness's plain args. */
+  args?: unknown;
 }): NonNullable<MastraDBMessage['content']['parts']>[number] {
   return {
     type: 'tool-invocation',
@@ -46,7 +49,7 @@ function makeBackgroundInvocationPart(opts: {
       state: 'result',
       toolCallId: opts.toolCallId,
       toolName: 'background-work',
-      args: { input: 'x' },
+      args: opts.args ?? { input: 'x' },
       result: opts.result,
     },
     providerMetadata: {
@@ -211,6 +214,66 @@ describe('applyBackgroundToolResult identity scan', () => {
 
     await expect(applyBackgroundToolResult(deps)).rejects.toThrow(/Background task status conflict for task "task-1"/);
     expect(flush).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The occurrence this scan found is identified by (toolCallId, taskId), never by
+ * comparing args: a durable tool executes with internal-only keys stripped from
+ * the caller's copy (`_background` — see the `args` docblock), while the stored
+ * call keeps them, so `deps.args` is never byte-identical to the stored part and
+ * an exact match on it would miss the very occurrence the scan just located.
+ * That miss falls through to the fallback append, and the transcript keeps the
+ * placeholder *and* a second occurrence of the same call id.
+ *
+ * The read path already tolerates this asymmetry (`toolResultArgsMatch` in
+ * read-tool-result.ts); this locks the write path to it. (#31609)
+ */
+describe('applyBackgroundToolResult occurrence args tolerance', () => {
+  it("folds the result into the occurrence it found even though the caller's args were stripped of internal-only keys", async () => {
+    const messageList = new MessageList();
+    const storedArgs = { name: 'comparison', _background: { disposition: 'deferred' } };
+    messageList.add(
+      makeAssistantMessage(
+        [
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-1',
+            status: 'running',
+            result: 'Background task started. Task ID: task-1.',
+            args: storedArgs,
+          }),
+        ],
+        'msg-1',
+      ),
+      'response',
+    );
+
+    const { deps } = makeDeps(messageList, {
+      taskId: 'task-1',
+      result: { name: 'comparison', amount: 42 },
+    });
+
+    // A deferred task completes after the dispatching turn ended, so the hook
+    // runs on a resumed leg and carries the tool-call step's sanitized args
+    // (no `_background`), exactly as the durable engine passes them.
+    await expect(
+      applyBackgroundToolResult({ ...deps, hasResumeData: true, args: { name: 'comparison' } }),
+    ).resolves.toBeUndefined();
+
+    const invocationParts = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'call_0');
+
+    // One occurrence, updated in place — not the placeholder plus a duplicate.
+    expect(invocationParts).toHaveLength(1);
+    const part = invocationParts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(part.providerMetadata.mastra.backgroundTask).toEqual({ taskId: 'task-1', status: 'completed' });
+    // The occurrence keeps its own identity — the stored args survive the write.
+    expect(part.toolInvocation.args).toEqual(storedArgs);
   });
 });
 
