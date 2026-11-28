@@ -30,9 +30,17 @@ function parseEventBlock<T>(eventBlock: string): ParsedA2AEvent<T> {
   const lines = trimmedBlock.split(/\r?\n/);
   const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
 
-  const payload = dataLines.length > 0 ? dataLines.join('\n') : trimmedBlock;
+  // Skip SSE comments and metadata without treating raw JSON records as SSE.
+  if (dataLines.length === 0 && lines.every(line => /^(?::|[a-zA-Z][\w-]*:|(?:event|id|retry|data)$)/.test(line))) {
+    return {};
+  }
 
-  if (!payload || payload === '[DONE]') {
+  const payload = dataLines.length > 0 ? dataLines.join('\n').trim() : trimmedBlock;
+  if (!payload) {
+    return {};
+  }
+
+  if (payload === '[DONE]') {
     return { done: true };
   }
 
@@ -77,7 +85,7 @@ export async function* processA2AStream<T = A2AStreamEventData>(
         const { eventBlock, rest } = splitNextEvent(buffer);
         buffer = rest;
 
-        if (!eventBlock) {
+        if (eventBlock === undefined) {
           break;
         }
 
