@@ -7,6 +7,7 @@
 
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
+import { OBSERVATION_CONTEXT_PROMPT, OBSERVATION_CONTEXT_PROMPT_THREAD } from '@mastra/memory/processors';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
@@ -83,13 +84,20 @@ export const claudeCodeMiddleware: LanguageModelMiddleware = {
  * Prompt caching middleware for Anthropic
  *
  * Adds cache breakpoints at strategic locations:
- * 1. Last system message (end of static instructions + dynamic memory)
- * 2. Most recent user/assistant message (conversation context), `conversation` scope only
+ * 1. Last system message before observational memory's context, when memory adds one
+ * 2. Last system message (end of static instructions + dynamic memory)
+ * 3. Most recent user/assistant message (conversation context), `conversation` scope only
  *
  * This allows Anthropic to cache:
- * - System prompts and instructions (rarely change)
+ * - System prompts and instructions (rarely change), even after memory rewrites its observations
  * - Conversation history up to the last message
  */
+const isObservationalMemoryContext = (message: { role: string; content: unknown }) =>
+  message.role === 'system' &&
+  typeof message.content === 'string' &&
+  (message.content.startsWith(OBSERVATION_CONTEXT_PROMPT_THREAD) ||
+    message.content.startsWith(OBSERVATION_CONTEXT_PROMPT));
+
 export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): LanguageModelMiddleware => ({
   specificationVersion: 'v4',
   transformParams: async ({ params }) => {
@@ -142,6 +150,19 @@ export const createPromptCacheMiddleware = (scope: AnthropicPromptCacheScope): L
     // Add cache breakpoint to last system message
     if (lastSystemIdx >= 0) {
       prompt[lastSystemIdx] = addCacheToMessage(prompt[lastSystemIdx]);
+    }
+
+    // Observational memory's context is the last system messages, and it changes whenever
+    // memory rewrites its observations. Anthropic only reads back from marked blocks, so
+    // also mark the system message just before it to keep the instructions cached then.
+    const memoryContextIdx = prompt.findIndex(isObservationalMemoryContext);
+    const beforeMemoryIdx = memoryContextIdx - 1;
+    if (
+      beforeMemoryIdx >= 0 &&
+      beforeMemoryIdx !== lastSystemIdx &&
+      (prompt[beforeMemoryIdx] as any).role === 'system'
+    ) {
+      prompt[beforeMemoryIdx] = addCacheToMessage(prompt[beforeMemoryIdx]);
     }
 
     // Add cache breakpoint to the most recent message (last in array)

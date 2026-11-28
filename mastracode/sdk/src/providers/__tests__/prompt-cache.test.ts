@@ -1,3 +1,10 @@
+import { MessageList } from '@mastra/core/agent';
+import { InMemoryStore } from '@mastra/core/storage';
+import {
+  OBSERVATION_CONTEXT_PROMPT,
+  OBSERVATION_CONTEXT_PROMPT_THREAD,
+  ObservationalMemory,
+} from '@mastra/memory/processors';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraCodeGateway } from '../../agents/mastracode-gateway.js';
 import type { AuthCredential, CredentialStore } from '../../auth/types.js';
@@ -67,6 +74,58 @@ describe('createPromptCacheMiddleware', () => {
   });
 });
 
+// Observational memory adds its context as the last system messages: a preamble, then the
+// observations. When memory rewrites them, a breakpoint on the last system message alone
+// matches nothing, so Anthropic reads none of the unchanged instructions in front of them.
+const memoryPrompt = (observations: string, preamble = OBSERVATION_CONTEXT_PROMPT_THREAD) => [
+  { role: 'system', content: 'Instructions' },
+  { role: 'system', content: 'Skills' },
+  { role: 'system', content: `${preamble}\n\nIMPORTANT: reference these observations.` },
+  { role: 'system', content: '<observations>' },
+  { role: 'system', content: observations },
+  { role: 'system', content: '</observations>' },
+  { role: 'user', content: [{ type: 'text', text: 'Next question' }] },
+];
+
+const cachedIndexes = (prompt: any[]) =>
+  prompt.flatMap((message, index) => {
+    const parts = typeof message.content === 'string' ? [message] : message.content;
+    return parts.some((part: any) => part.providerOptions?.anthropic?.cacheControl) ? [index] : [];
+  });
+
+describe('createPromptCacheMiddleware with observational memory', () => {
+  it('also marks the last system message before memory context, so a memory rewrite keeps the instructions cached', async () => {
+    const result = await createPromptCacheMiddleware('conversation').transformParams!({
+      params: { prompt: memoryPrompt('- user likes tea') },
+      type: 'stream',
+    } as any);
+    const out = result.prompt as any[];
+
+    expect(cachedIndexes(out)).toEqual([1, 5, 6]);
+    expect(out[1].providerOptions).toEqual(oneHourCache);
+  });
+
+  it('recognises resource-scoped memory context too', async () => {
+    const result = await createPromptCacheMiddleware('system').transformParams!({
+      params: { prompt: memoryPrompt('- user likes tea', OBSERVATION_CONTEXT_PROMPT) },
+      type: 'generate',
+    } as any);
+    const out = result.prompt as any[];
+
+    expect(cachedIndexes(out)).toEqual([1, 5]);
+    expect(out[1].providerOptions).toEqual(fiveMinuteCache);
+  });
+
+  it('adds nothing when memory context is the first system message', async () => {
+    const result = await createPromptCacheMiddleware('conversation').transformParams!({
+      params: { prompt: memoryPrompt('- user likes tea').slice(2) },
+      type: 'stream',
+    } as any);
+
+    expect(cachedIndexes(result.prompt as any[])).toEqual([3, 4]);
+  });
+});
+
 const routes = {
   'API-key route': {
     routeThroughMastraGateway: false,
@@ -133,6 +192,97 @@ describe.each(Object.entries(routes))('cache_control sent by the %s', (_name, ro
     expect(bodies).toHaveLength(1);
     return JSON.stringify(bodies[0]).match(/"cache_control":\{[^}]*\}/g);
   }
+
+  async function sentBodies(prompts: any[][]) {
+    const bodies: any[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string | URL, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return new Response(
+          JSON.stringify({
+            id: 'msg_1',
+            type: 'message',
+            role: 'assistant',
+            model: 'claude-haiku-4-5',
+            content: [{ type: 'text', text: 'ok' }],
+            stop_reason: 'end_turn',
+            stop_sequence: null,
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const gateway = new MastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway.example.com',
+      routeThroughMastraGateway: route.routeThroughMastraGateway,
+      credentialStore: fakeStore({ anthropic: route.credential }),
+    });
+    const model = gateway.resolveLanguageModel({
+      providerId: 'anthropic',
+      modelId: 'claude-haiku-4-5',
+      apiKey: 'test',
+    });
+    for (const prompt of prompts) await (model as any).doGenerate({ prompt });
+    return bodies;
+  }
+
+  it('keeps a breakpoint on unchanged system text when memory rewrites its observations', async () => {
+    const [before, after] = await sentBodies([
+      memoryPrompt('- user likes tea'),
+      memoryPrompt('- user likes tea\n- user moved to Sooke'),
+    ]);
+    // Everything up to and including the first marked system block: what Anthropic can read back.
+    const cachedPrefix = (body: any) => {
+      const first = body.system.findIndex((block: any) => block.cache_control);
+      return first < 0 ? undefined : JSON.stringify(body.system.slice(0, first + 1));
+    };
+
+    expect(JSON.stringify(before.system)).not.toBe(JSON.stringify(after.system));
+    expect(cachedPrefix(before)).toBeDefined();
+    expect(cachedPrefix(before)).toContain('Skills');
+    expect(cachedPrefix(before)).not.toContain('observations');
+    expect(cachedPrefix(after)).toBe(cachedPrefix(before));
+    expect(JSON.stringify(after).match(/"cache_control"/g)).toHaveLength(3);
+  });
+
+  it('finds the context observational memory really renders', async () => {
+    const store = await new InMemoryStore().getStore('memory');
+    if (!store) throw new Error('InMemoryStore has no memory domain');
+    const om = new ObservationalMemory({
+      storage: store,
+      scope: 'thread',
+      observation: { model: 'openai/gpt-4o-mini', messageTokens: 1000, bufferTokens: 200 },
+      reflection: { model: 'openai/gpt-4o-mini', observationTokens: 2000 },
+    });
+    const promptWith = async (activeObservations: string) => {
+      const context = await om.buildContextSystemMessages({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        record: { activeObservations } as any,
+        currentDate: new Date('2026-11-21T12:00:00Z'),
+      });
+      const list = new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' });
+      list.addSystem('Instructions');
+      list.addSystem('Skills');
+      for (const message of context ?? []) list.addSystem(message, 'observational-memory');
+      list.add({ role: 'user', content: 'Next question' }, 'input');
+      return list.get.all.aiV5.prompt();
+    };
+    const [before, after] = await sentBodies([
+      await promptWith('Date: Nov 21, 2026\n* 🔴 (09:00) User likes tea'),
+      await promptWith('Date: Nov 21, 2026\n* 🔴 (09:00) User likes tea\n* 🔴 (09:30) User moved to Sooke'),
+    ]);
+    const firstMarked = (body: any) => body.system.findIndex((block: any) => block.cache_control);
+
+    expect(JSON.stringify(before.system)).not.toBe(JSON.stringify(after.system));
+    expect(before.system[firstMarked(before)].text).toBe('Skills');
+    expect(after.system[firstMarked(after)].text).toBe('Skills');
+    expect(JSON.stringify(after.system.slice(0, firstMarked(after) + 1))).toBe(
+      JSON.stringify(before.system.slice(0, firstMarked(before) + 1)),
+    );
+  });
 
   it('sends two 1h breakpoints by default', async () => {
     expect(await sentCacheControls()).toEqual([
