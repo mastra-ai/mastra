@@ -94,6 +94,41 @@ export const shopAgent = new Agent({
             isOptional: true,
             defaultValue: 'execute_typescript',
           },
+          {
+            name: 'maxCalls',
+            type: 'number',
+            description:
+              'Maximum number of `external_*` calls a single program may attempt. Exceeding it fails the whole run with a `CodeModeLimitError`, even when the program catches the rejection. Must be a positive integer. Unset by default.',
+            isOptional: true,
+          },
+          {
+            name: 'maxConcurrentCalls',
+            type: 'number',
+            description:
+              'Maximum number of `external_*` calls allowed to run at once. Additional calls queue in arrival order instead of failing. Must be a positive integer. Unset by default.',
+            isOptional: true,
+          },
+          {
+            name: 'maxResultBytes',
+            type: 'number',
+            description:
+              "Maximum UTF-8 byte size of each nested tool result. A larger result fails the whole run with a `CodeModeLimitError`, even when the program catches the rejection. Applies to each nested tool result, not the program's final return value. Must be a non-negative integer. Unset by default.",
+            isOptional: true,
+          },
+          {
+            name: 'maxLogBytes',
+            type: 'number',
+            description:
+              'Maximum UTF-8 bytes of captured console logs. Overflow truncates the logs and the program still succeeds. `0` captures no logs. Must be a non-negative integer. Unset by default.',
+            isOptional: true,
+          },
+          {
+            name: 'maxLogLines',
+            type: 'number',
+            description:
+              'Maximum number of captured console log lines. Overflow truncates the logs and the program still succeeds. `0` captures no logs. Must be a non-negative integer. Unset by default.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -107,6 +142,18 @@ export const shopAgent = new Agent({
   },
 ]}
 />
+
+## Execution limits
+
+All five execution limits are opt-in. When unset, call counts, concurrency, result size, and captured logs are unlimited. Set them to bound what model-authored code can consume:
+
+- `maxCalls` and `maxResultBytes` fail the whole run with a `CodeModeLimitError` when exceeded, even if the program catches the individual rejection. Use them to cap how many tools a program can reach and how much data each nested result can carry.
+- `maxConcurrentCalls` queues calls in arrival order instead of failing, so a program that fans out with `Promise.all` still completes, with less host-side pressure at once.
+- `maxLogBytes` and `maxLogLines` truncate the captured logs instead of failing. The program still succeeds, and `logs` in the result stays within the cap.
+
+The limits layer on top of `timeout` and, for in-process transports, their own runtime budgets such as the QuickJS `maxInterruptTicks`. For multi-tenant deployments, set explicit call, concurrency, result, log, and timeout budgets rather than relying on defaults.
+
+When the calling tool's abort signal fires, the run is cancelled and any in-flight `external_*` calls are aborted.
 
 ## Returns
 

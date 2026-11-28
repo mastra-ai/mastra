@@ -34,6 +34,75 @@ export interface CodeModeConfig {
 
   /** The generated tool's id. Default: `execute_typescript`. */
   id?: string;
+
+  /**
+   * Maximum number of `external_*` calls a single program may attempt.
+   *
+   * Exceeding it fails the whole run with a {@link CodeModeLimitError} naming
+   * `maxCalls`, even when the guest code catches the individual rejection.
+   * Must be a positive integer. Optional; omitted means unlimited.
+   */
+  maxCalls?: number;
+
+  /**
+   * Maximum number of `external_*` calls allowed to execute concurrently.
+   *
+   * Additional calls queue (FIFO) instead of failing. Must be a positive
+   * integer. Optional; omitted means unlimited.
+   */
+  maxConcurrentCalls?: number;
+
+  /**
+   * Maximum UTF-8 byte size of each nested tool result.
+   *
+   * A result exceeding it fails the whole run with a
+   * {@link CodeModeLimitError} naming `maxResultBytes`, even when the guest
+   * code catches the individual rejection. Applies to each nested tool result,
+   * not the program's final return value. Must be a non-negative integer.
+   * Optional; omitted means unlimited.
+   */
+  maxResultBytes?: number;
+
+  /**
+   * Maximum UTF-8 bytes of captured console logs.
+   *
+   * Overflow truncates the logs — the program still succeeds. Must be a
+   * non-negative integer (0 captures no logs). Optional; omitted means
+   * unlimited.
+   */
+  maxLogBytes?: number;
+
+  /**
+   * Maximum number of captured console log lines.
+   *
+   * Overflow truncates the logs — the program still succeeds. Must be a
+   * non-negative integer (0 captures no logs). Optional; omitted means
+   * unlimited.
+   */
+  maxLogLines?: number;
+}
+
+/**
+ * Error raised when a configured Code Mode execution limit is exceeded.
+ *
+ * `option` and `value` name the exact {@link CodeModeConfig} option that
+ * tripped and its configured value, so callers can distinguish a call-count
+ * or result-size failure without parsing the message. Call and result limits
+ * are sticky: once one trips, the run fails even if guest code caught the
+ * individual rejection.
+ */
+export class CodeModeLimitError extends Error {
+  /** The config option that tripped: `maxCalls` or `maxResultBytes`. */
+  readonly option: 'maxCalls' | 'maxResultBytes';
+  /** The configured value of that option. */
+  readonly value: number;
+
+  constructor(option: 'maxCalls' | 'maxResultBytes', value: number, detail?: string) {
+    super(`Code Mode execution limit exceeded: ${option} (configured ${value})${detail ? ` — ${detail}` : ''}`);
+    this.name = 'CodeModeLimitError';
+    this.option = option;
+    this.value = value;
+  }
 }
 
 /**
@@ -133,5 +202,18 @@ export interface CodeModeTransport {
     /** Optional per-call hooks for tracing. */
     onExternalCall?: (tool: string, args: unknown) => void;
     onExternalResult?: (tool: string, durationMs: number, error?: unknown) => void;
+
+    /**
+     * Maximum UTF-8 bytes of captured console logs. A transport that buffers
+     * logs during execution should honor this to keep its memory bounded;
+     * omitted means unlimited. Core additionally replays the returned logs
+     * through the same cap as a compatibility guard.
+     */
+    maxLogBytes?: number;
+    /**
+     * Maximum number of captured console log lines. A transport that buffers
+     * logs during execution should honor this; omitted means unlimited.
+     */
+    maxLogLines?: number;
   }): Promise<CodeModeToolResult>;
 }

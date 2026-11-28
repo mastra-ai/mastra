@@ -1,4 +1,10 @@
 export { createCodeMode, createCodeModeTool, type CodeModeResult } from './code-mode';
+export { CodeModeLimitError } from './types';
+export {
+  createCodeModeLogCollector,
+  type CodeModeLogCollector,
+  type CodeModeLogCollectorOptions,
+} from './log-collector';
 export {
   createCodeModeInstructions,
   generateStubs,

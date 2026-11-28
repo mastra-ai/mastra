@@ -24,7 +24,7 @@
  *   actionable error when the flag is missing.
  */
 
-import { sanitizeToolId } from '@mastra/core/tools';
+import { createCodeModeLogCollector, sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import { transformSync } from 'esbuild';
 import ivm from 'isolated-vm';
@@ -99,11 +99,23 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
   }
 
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
-    const { program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
+    const {
+      program,
+      toolIds,
+      dispatch,
+      timeout,
+      abortSignal,
+      onExternalCall,
+      onExternalResult,
+      maxLogBytes,
+      maxLogLines,
+    } = opts;
 
     const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
-    const logs: string[] = [];
+    // Bounded capture: an unbounded `console.log` loop in guest code cannot grow
+    // this buffer for the lifetime of the run.
+    const logs = createCodeModeLogCollector({ maxLogBytes, maxLogLines });
 
     // Observer hooks are caller-supplied and best-effort: a throwing hook must
     // never prevent the RPC from responding, or the matching in-isolate promise
@@ -133,7 +145,7 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
       const err = error as { message?: string };
       return {
         success: false,
-        logs,
+        logs: logs.logs(),
         error: { message: err?.message ?? String(error), name: 'SyntaxError' },
       };
     }
@@ -200,7 +212,11 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
 
     try {
       if (abortSignal?.aborted) {
-        return { success: false, logs, error: { message: 'Code Mode execution aborted', name: 'AbortError' } };
+        return {
+          success: false,
+          logs: logs.logs(),
+          error: { message: 'Code Mode execution aborted', name: 'AbortError' },
+        };
       }
 
       const context = await isolate.createContext();
@@ -302,7 +318,7 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
       if (outcome.kind === 'timeout' || timedOut) {
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: `Code Mode execution timed out after ${timeout}ms`, name: 'TimeoutError' },
         };
       }
@@ -310,27 +326,31 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
       if (outcome.kind === 'error') {
         const err = outcome.error as { message?: string; name?: string };
         if (abortSignal?.aborted) {
-          return { success: false, logs, error: { message: 'Code Mode execution aborted', name: 'AbortError' } };
+          return {
+            success: false,
+            logs: logs.logs(),
+            error: { message: 'Code Mode execution aborted', name: 'AbortError' },
+          };
         }
         // The eval `timeout` option rejects with "Script execution timed out".
         if (/timed out/i.test(err?.message ?? '')) {
           return {
             success: false,
-            logs,
+            logs: logs.logs(),
             error: { message: `Code Mode execution timed out after ${timeout}ms`, name: 'TimeoutError' },
           };
         }
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: err?.message ?? String(outcome.error), name: err?.name },
         };
       }
 
       const envelope = JSON.parse(outcome.json) as GuestResultEnvelope;
       return envelope.ok
-        ? { success: true, result: envelope.value, logs }
-        : { success: false, error: envelope.error, logs };
+        ? { success: true, result: envelope.value, logs: logs.logs() }
+        : { success: false, error: envelope.error, logs: logs.logs() };
     } finally {
       if (timer) clearTimeout(timer);
       abortSignal?.removeEventListener('abort', onAbort);

@@ -47,7 +47,7 @@
  * calls can therefore be in flight at once.
  */
 
-import { sanitizeToolId } from '@mastra/core/tools';
+import { createCodeModeLogCollector, sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import { getQuickJS } from 'quickjs-emscripten';
 import type { QuickJSDeferredPromise, QuickJSHandle, QuickJSWASMModule } from 'quickjs-emscripten';
@@ -243,13 +243,25 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
   }
 
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
-    const { program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
+    const {
+      program,
+      toolIds,
+      dispatch,
+      timeout,
+      abortSignal,
+      onExternalCall,
+      onExternalResult,
+      maxLogBytes,
+      maxLogLines,
+    } = opts;
     const maxInterruptTicks = this.#maxInterruptTicks;
     const shouldInterrupt = this.#shouldInterrupt;
 
     const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
-    const logs: string[] = [];
+    // Bounded capture: an unbounded `console.log` loop in guest code cannot grow
+    // this buffer for the lifetime of the run.
+    const logs = createCodeModeLogCollector({ maxLogBytes, maxLogLines });
 
     // Observer hooks are caller-supplied and best-effort: a throwing hook must
     // never prevent the RPC from responding, or the matching in-guest promise
@@ -300,7 +312,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       const err = error as { message?: string };
       return {
         success: false,
-        logs,
+        logs: logs.logs(),
         error: { message: err?.message ?? String(error), name: 'SyntaxError' },
       };
     }
@@ -347,7 +359,11 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     const wasm = this.#module ?? (await getQuickJS());
 
     if (abortSignal?.aborted) {
-      return { success: false, logs, error: { message: 'Code Mode execution aborted', name: 'AbortError' } };
+      return {
+        success: false,
+        logs: logs.logs(),
+        error: { message: 'Code Mode execution aborted', name: 'AbortError' },
+      };
     }
 
     const runtime = wasm.newRuntime();
@@ -479,12 +495,12 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
 
     const timedOutResult = (): CodeModeToolResult => ({
       success: false,
-      logs,
+      logs: logs.logs(),
       error: { message: `Code Mode execution timed out after ${timeout}ms`, name: 'TimeoutError' },
     });
     const abortedResult = (): CodeModeToolResult => ({
       success: false,
-      logs,
+      logs: logs.logs(),
       error: { message: 'Code Mode execution aborted', name: 'AbortError' },
     });
 
@@ -498,7 +514,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       if (interrupted === 'limit') {
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: {
             message: `Code Mode execution interrupted after ${maxInterruptTicks} interrupt ticks (maxInterruptTicks)`,
             name: 'ExecutionLimitError',
@@ -508,7 +524,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       if (interrupted === 'predicate') {
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: 'Code Mode execution interrupted by shouldInterrupt', name: 'InterruptError' },
         };
       }
@@ -607,7 +623,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
         // must surface as the matching error, not a generic bootstrap failure.
         const mapped = interruptedResult();
         if (mapped) return mapped;
-        return { success: false, logs, error: { message: err?.message ?? 'Code Mode bootstrap failed' } };
+        return { success: false, logs: logs.logs(), error: { message: err?.message ?? 'Code Mode bootstrap failed' } };
       }
       bootstrap.value.dispose();
 
@@ -643,7 +659,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
         if (mapped) return mapped;
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: err?.message ?? 'Code Mode evaluation failed', name: err?.name },
         };
       }
@@ -703,7 +719,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
         if (mapped) return mapped;
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: err?.message ?? 'Code Mode evaluation failed', name: err?.name },
         };
       }
@@ -712,8 +728,8 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       settled.value.dispose();
       const envelope = JSON.parse(json) as GuestResultEnvelope;
       return envelope.ok
-        ? { success: true, result: envelope.value, logs }
-        : { success: false, error: envelope.error, logs };
+        ? { success: true, result: envelope.value, logs: logs.logs() }
+        : { success: false, error: envelope.error, logs: logs.logs() };
     } finally {
       if (timer) clearTimeout(timer);
       if (onAbort) abortSignal?.removeEventListener('abort', onAbort);

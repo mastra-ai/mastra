@@ -13,12 +13,97 @@ import type { WorkspaceSandbox } from '../../workspace/sandbox/sandbox';
 import { createTool } from '../tool';
 import type { Tool } from '../tool';
 import { isValidationError } from '../validation';
+import { createCodeModeLogCollector } from './log-collector';
 import { createCodeModeInstructions } from './stub-generator';
 import { StdioCodeModeTransport } from './transport';
+import { CodeModeLimitError } from './types';
 import type { CodeModeConfig, CodeModeToolDispatcher, CodeModeToolResult, CodeModeTransport } from './types';
 
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_TOOL_NAME = 'execute_typescript';
+
+/**
+ * Validate an optional numeric limit, throwing an actionable error before any
+ * guest code runs. Counts and concurrency require at least 1; byte/line caps
+ * accept 0 to mean "capture nothing".
+ */
+function assertLimit(value: number | undefined, name: string, minimum: number): void {
+  if (value === undefined) return;
+  if (!Number.isInteger(value) || value < minimum) {
+    const requirement = minimum === 0 ? 'a non-negative integer' : 'a positive integer';
+    throw new RangeError(`Code Mode option "${name}" must be ${requirement}; received ${String(value)}`);
+  }
+}
+
+const utf8Encoder = new TextEncoder();
+
+/**
+ * UTF-8 byte size of a nested tool result's JSON representation. Returns 0 for
+ * values JSON cannot serialize (undefined, functions, circular references),
+ * preserving the transport's existing non-serializable-result behavior.
+ */
+function codeModeResultBytes(result: unknown): number {
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(result);
+  } catch {
+    return 0;
+  }
+  return json === undefined ? 0 : utf8Encoder.encode(json).length;
+}
+
+/**
+ * Abort-aware FIFO semaphore. At most `limit` tasks run at once; excess callers
+ * wait in arrival order. Every slot is released in `finally`, and waiters reject
+ * on abort without running their task.
+ */
+function createCallSemaphore(limit: number, signal: AbortSignal) {
+  const abortReason = () => signal.reason ?? new Error('Code Mode execution aborted');
+  let active = 0;
+  const waiters: Array<{ resolve: () => void; reject: (error: unknown) => void; onAbort: () => void }> = [];
+
+  const release = () => {
+    active -= 1;
+    const next = waiters.shift();
+    if (next) {
+      signal.removeEventListener('abort', next.onAbort);
+      active += 1;
+      next.resolve();
+    }
+  };
+
+  const acquire = (): Promise<void> => {
+    if (signal.aborted) return Promise.reject(abortReason());
+    if (active < limit) {
+      active += 1;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve, reject) => {
+      const waiter = {
+        resolve,
+        reject,
+        onAbort: () => {
+          const index = waiters.indexOf(waiter);
+          if (index >= 0) waiters.splice(index, 1);
+          reject(abortReason());
+        },
+      };
+      waiters.push(waiter);
+      signal.addEventListener('abort', waiter.onAbort, { once: true });
+    });
+  };
+
+  return {
+    async run<T>(task: () => Promise<T>): Promise<T> {
+      await acquire();
+      try {
+        return await task();
+      } finally {
+        release();
+      }
+    },
+  };
+}
 
 const codeModeInputSchema = z.object({
   code: z
@@ -71,6 +156,27 @@ export function createCodeModeTool(
   const toolsById = indexToolsById(config);
   const toolIds = [...toolsById.keys()];
 
+  // Validate limits up front so a misconfiguration fails before any guest code
+  // runs. Counts and concurrency require at least 1; byte/line caps accept 0.
+  const { maxCalls, maxConcurrentCalls, maxResultBytes, maxLogBytes, maxLogLines } = config;
+  assertLimit(maxCalls, 'maxCalls', 1);
+  assertLimit(maxConcurrentCalls, 'maxConcurrentCalls', 1);
+  assertLimit(maxResultBytes, 'maxResultBytes', 0);
+  assertLimit(maxLogBytes, 'maxLogBytes', 0);
+  assertLimit(maxLogLines, 'maxLogLines', 0);
+
+  /**
+   * Replay returned logs through the shared collector so a custom transport
+   * that ignored the caps still yields bounded output. With no cap configured
+   * the same array is returned by identity, leaving transport output untouched.
+   */
+  const boundLogs = (lines: string[] | undefined): string[] | undefined => {
+    if (!lines || (maxLogBytes === undefined && maxLogLines === undefined)) return lines;
+    const collector = createCodeModeLogCollector({ maxLogBytes, maxLogLines });
+    for (const line of lines) collector.push(line);
+    return collector.logs();
+  };
+
   return createTool({
     id,
     description:
@@ -99,40 +205,118 @@ export function createCodeModeTool(
         }
       }
 
+      // Run-scoped cancellation: one controller per execute invocation. The
+      // outer signal's reason is forwarded to it, its signal reaches both the
+      // transport and every nested tool, and it is aborted when the transport
+      // finishes for any reason so leftover nested work stops too.
+      const outerSignal = ctx?.abortSignal;
+      const runController = new AbortController();
+      const forwardAbort = () => runController.abort(outerSignal?.reason);
+      if (outerSignal) {
+        if (outerSignal.aborted) forwardAbort();
+        else outerSignal.addEventListener('abort', forwardAbort, { once: true });
+      }
+
+      // Sticky limit failure: the first call/result limit that trips fails the
+      // whole run, even if the guest catches the individual rejection.
+      let limitError: CodeModeLimitError | undefined;
+      let callCount = 0;
+      const semaphore =
+        maxConcurrentCalls !== undefined ? createCallSemaphore(maxConcurrentCalls, runController.signal) : undefined;
+
       // Each external_* call re-enters the real Mastra tool pipeline (validation,
       // request-context checks, tracing) on the host, with the outer tool's context.
       const dispatch: CodeModeToolDispatcher = async (toolId, args) => {
+        // Count every dispatch attempt before doing any work, so a guest cannot
+        // exceed the budget by targeting an unavailable tool.
+        if (maxCalls !== undefined && ++callCount > maxCalls) {
+          const error = new CodeModeLimitError('maxCalls', maxCalls, 'more external tool calls were attempted');
+          limitError ??= error;
+          runController.abort(error);
+          throw limitError;
+        }
+
         const tool = toolsById.get(toolId);
         if (!tool?.execute) {
           throw new Error(`Tool "${toolId}" is not available in Code Mode`);
         }
-        const result = await tool.execute(args, {
-          mastra: ctx?.mastra,
-          requestContext: ctx?.requestContext,
-          abortSignal: ctx?.abortSignal,
-          workspace: ctx?.workspace,
-        });
-        if (isValidationError(result)) {
-          throw new Error(result.message ?? `Invalid input for tool "${toolId}"`);
-        }
-        return result;
+        // Capture so the narrowing survives into the async closure below.
+        const execute = tool.execute;
+
+        const invoke = async () => {
+          const result = await execute(args, {
+            mastra: ctx?.mastra,
+            requestContext: ctx?.requestContext,
+            abortSignal: runController.signal,
+            workspace: ctx?.workspace,
+          });
+          if (isValidationError(result)) {
+            throw new Error(result.message ?? `Invalid input for tool "${toolId}"`);
+          }
+          if (maxResultBytes !== undefined) {
+            const size = codeModeResultBytes(result);
+            if (size > maxResultBytes) {
+              const error = new CodeModeLimitError(
+                'maxResultBytes',
+                maxResultBytes,
+                `a nested tool result was ${size} bytes for tool "${toolId}"`,
+              );
+              limitError ??= error;
+              runController.abort(error);
+              throw limitError;
+            }
+          }
+          return result;
+        };
+
+        return semaphore ? semaphore.run(invoke) : invoke();
       };
 
       // The TypeScript program is written to a .ts module by the transport;
       // the sandbox's node strips the type annotations natively at import.
-      return ctx.observe.span(`code-mode:${id}`, () =>
-        transport.run({
-          sandbox,
-          program: code,
-          toolIds,
-          dispatch,
-          timeout,
-          abortSignal: ctx?.abortSignal,
-          onExternalCall: (tool, args) => ctx.observe.log('info', 'code-mode external call', { tool, args }),
-          onExternalResult: (tool, durationMs, error) =>
-            ctx.observe.log(error ? 'error' : 'info', 'code-mode external result', { tool, durationMs }),
-        }),
-      );
+      const outcome = await (async () => {
+        try {
+          const value = await ctx.observe.span(`code-mode:${id}`, () =>
+            transport.run({
+              sandbox,
+              program: code,
+              toolIds,
+              dispatch,
+              timeout,
+              abortSignal: runController.signal,
+              onExternalCall: (tool, args) => ctx.observe.log('info', 'code-mode external call', { tool, args }),
+              onExternalResult: (tool, durationMs, error) =>
+                ctx.observe.log(error ? 'error' : 'info', 'code-mode external result', { tool, durationMs }),
+              maxLogBytes,
+              maxLogLines,
+            }),
+          );
+          return { ok: true as const, value };
+        } catch (error) {
+          return { ok: false as const, error };
+        } finally {
+          outerSignal?.removeEventListener('abort', forwardAbort);
+          // Terminate any in-flight nested tool work once the transport is done.
+          if (!runController.signal.aborted) runController.abort();
+        }
+      })();
+
+      // A named execution limit outranks whatever the transport reported, so a
+      // guest that caught the rejection still fails the run.
+      if (limitError) {
+        return {
+          success: false,
+          logs: outcome.ok ? boundLogs(outcome.value.logs) : undefined,
+          error: { message: limitError.message, name: limitError.name },
+        };
+      }
+      if (!outcome.ok) throw outcome.error;
+
+      // Compatibility guard: a third-party transport may ignore the log caps,
+      // so replay its lines through the same collector. Our transports already
+      // truncate, and replay is idempotent because the marker is a plain line.
+      const bounded = boundLogs(outcome.value.logs);
+      return bounded === outcome.value.logs ? outcome.value : { ...outcome.value, logs: bounded };
     },
   }) as unknown as Tool<any, any>;
 }
