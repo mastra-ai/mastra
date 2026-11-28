@@ -260,6 +260,7 @@ const receiptCounts = (counts: Record<string, number>): KnowledgeImportCounts =>
   moved: counts.moved ?? 0,
   removed: counts.removed ?? 0,
   stubbed: counts.stubbed ?? 0,
+  merged: counts.merged ?? 0,
   refused: counts.refused ?? 0,
 });
 

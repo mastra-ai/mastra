@@ -65,6 +65,8 @@ export interface KnowledgeImportCounts {
   moved: number;
   removed: number;
   stubbed: number;
+  /** Upserts skipped because someone merged the item's page into another page. */
+  merged: number;
   refused: number;
 }
 
