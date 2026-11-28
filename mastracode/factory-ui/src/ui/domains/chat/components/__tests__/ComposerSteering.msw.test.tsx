@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../overlays';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { Composer } from '../Composer';
 import {

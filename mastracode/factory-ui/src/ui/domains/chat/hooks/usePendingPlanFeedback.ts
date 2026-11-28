@@ -1,6 +1,6 @@
 import type { PlanResume } from '@mastra/client-js';
 
-import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
+import { isPlanReadablePath, usePlanFile } from '@mastra/react/hooks/factory';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from '../components/submit-plan-source';
 import { isEndedPrompt } from '../context/ChatSessionActionsContext';

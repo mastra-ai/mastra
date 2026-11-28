@@ -3,7 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
 import { useFactoryWeb } from '@mastra/react/hooks/factory';
-import type { LiveSessionResponse } from '../../../../api/types';
+import type { LiveSessionResponse } from '@internal/factory-contract';
 import { liveDictationSupported, startLiveDictation } from '../services/liveDictation';
 import type { LiveDictation, LiveDictationSession } from '../services/liveDictation';
 

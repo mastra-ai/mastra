@@ -1,9 +1,5 @@
-import {
-  MODEL_FALLBACK_PART_TYPE,
-  modelFallbackNoticeText,
-  parseModelFallbackPart,
-} from '@mastra/code-sdk/model-fallback';
-import type { ModelFallbackPartData } from '@mastra/code-sdk/model-fallback';
+import { MODEL_FALLBACK_PART_TYPE, modelFallbackNoticeText, parseModelFallbackPart } from '@mastra/core/llm/reasoning';
+import type { ModelFallbackPartData } from '@mastra/core/llm/reasoning';
 import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
 import type { DataMessagePart } from '@mastra/playground-ui/domains/chat/transcript/components/transcript-parts';
 import { IconArrowsRepeatRightLeft } from '@mastra/playground-ui/icons/central/IconArrowsRepeatRightLeft';

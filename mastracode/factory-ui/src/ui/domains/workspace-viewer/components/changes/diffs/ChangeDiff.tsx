@@ -1,7 +1,7 @@
 import { CodeDiff } from '@mastra/playground-ui/components/CodeDiff';
 import type { Ref } from 'react';
 
-import type { WorkspaceChange, WorkspacePatchOmission } from '../../../../../../api/types';
+import type { WorkspaceChange, WorkspacePatchOmission } from '@internal/factory-contract';
 import type { DiffLayout } from '../../../hooks/useDiffLayout';
 import { ChangeStatusIcon } from '../ChangeStatusIcon';
 import { FileLineSummary } from './FileLineSummary';

@@ -2,7 +2,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 
-import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery } from '@mastra/react/hooks/factory';
 import type { SessionViewer } from '../context/SessionHostContext';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';

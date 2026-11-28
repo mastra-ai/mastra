@@ -3,7 +3,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Factory } from 'lucide-react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
-import { factoryHomePath } from '../../workspaces/services/factoryPaths';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 import type { FactoryProject } from '@internal/factory-contract';
 
 function factoryContext(repositorySlugs: string[]): string {
@@ -25,6 +25,7 @@ export function GlobalSearchFactoriesResults({
   activeFactoryId: string | undefined;
   onSelect: GlobalSearchSelectHandler;
 }) {
+  const { links } = useSessionHost();
   if (factories.length === 0) return null;
 
   return (
@@ -39,7 +40,7 @@ export function GlobalSearchFactoriesResults({
             subtitle={factoryContext(repositorySlugs)}
             value={`${factory.name} ${factory.id} ${repositorySlugs.join(' ')} Factory`}
             shortcut={currentFactoryShortcut(factory.id, activeFactoryId)}
-            onSelect={() => onSelect(factoryHomePath(factory), false)}
+            onSelect={() => onSelect(links.project(factory.id), false)}
           />
         );
       })}

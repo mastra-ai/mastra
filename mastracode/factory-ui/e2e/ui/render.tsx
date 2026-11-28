@@ -3,13 +3,13 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, renderHook, waitFor } from '@testing-library/react';
 import type { RenderHookOptions } from '@testing-library/react';
-import { useMemo } from 'react';
+import { forwardRef, useMemo } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
 import { useFactorySessionData } from '../../src/ui/domains/chat/context/RouterSessionHost';
 import { SessionHostContext } from '../../src/ui/domains/chat/context/SessionHostContext';
-import type { SessionHost } from '../../src/ui/domains/chat/context/SessionHostContext';
+import type { SessionHost, SessionLinkProps } from '../../src/ui/domains/chat/context/SessionHostContext';
 import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
 
 /**
@@ -27,6 +27,13 @@ export const TEST_API = createApiConfig({ baseUrl: TEST_BASE_URL });
  * plain links, and navigation that goes nowhere. Tests that render inside a
  * router mount `RouterSessionHost` there instead, which takes precedence.
  */
+const StaticSessionLink = forwardRef<HTMLAnchorElement, SessionLinkProps>(function StaticSessionLink(
+  { returnHere: _returnHere, ...props },
+  ref,
+) {
+  return <a ref={ref} {...props} />;
+});
+
 const STATIC_SESSION_HOST: Omit<SessionHost, 'data'> = {
   factoryProjectId: undefined,
   sessionId: undefined,
@@ -34,7 +41,7 @@ const STATIC_SESSION_HOST: Omit<SessionHost, 'data'> = {
   draftSessionId: undefined,
   routeKind: 'none',
   location: { pathname: '/', search: '', state: null },
-  LinkComponent: ({ href, returnHere: _returnHere, ...props }) => <a href={href} {...props} />,
+  LinkComponent: StaticSessionLink,
   navigate: () => {},
   links: {
     settings: section => `/settings/${section}`,
@@ -42,6 +49,10 @@ const STATIC_SESSION_HOST: Omit<SessionHost, 'data'> = {
     userThread: threadId => `/user/threads/${threadId}`,
     newUserSession: () => '/user/new',
     channelThread: threadId => `/threads/${threadId}`,
+    knowledgePage: pageId => `/knowledge?page=${pageId}`,
+    project: projectId => `/projects/${projectId}`,
+    card: workItemId => `/cards/${workItemId}`,
+    workItemBoard: () => '/boards/work',
   },
 };
 

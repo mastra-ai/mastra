@@ -5,8 +5,8 @@ import { memo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 
-import type { WorkspaceChanges, WorkspaceChangesScope } from '../../../../api/types';
-import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
+import type { WorkspaceChanges, WorkspaceChangesScope } from '@internal/factory-contract';
+import { useWorkspaceChanges, useWorkspaceFile } from '@mastra/react/hooks/factory';
 import type { WorkspacePanelPage, WorkspaceSectionSlots } from '../context/WorkspacePanelContext';
 import { overviewClass } from '../layout';
 import type { WorkspacePanelSize } from '../layout';

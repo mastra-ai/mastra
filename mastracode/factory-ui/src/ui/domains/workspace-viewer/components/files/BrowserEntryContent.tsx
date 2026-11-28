@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconFolderLink } from '@mastra/playground-ui/icons/central/IconFolderLink';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import type { WorkspaceTreeEntry } from '../../../../../api/types';
+import type { WorkspaceTreeEntry } from '@internal/factory-contract';
 import { CHANGE_STATUSES } from '../changes/change-statuses';
 import { ChangeStatusLetter } from '../changes/ChangeStatusLetter';
 import type { ChangeMarks } from './change-marks';

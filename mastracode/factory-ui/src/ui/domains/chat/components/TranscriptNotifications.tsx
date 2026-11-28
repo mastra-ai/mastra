@@ -22,7 +22,6 @@ import type { ReactNode } from 'react';
 import { useSessionHost } from '../context/SessionHostContext';
 
 import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
-import { threadPath } from '../../workspaces/services/factoryPaths';
 
 import { PullRequestStatusIcon } from '@mastra/playground-ui/domains/factory';
 import type { NotificationEntry, NotificationSummaryEntry } from '../services/transcript';

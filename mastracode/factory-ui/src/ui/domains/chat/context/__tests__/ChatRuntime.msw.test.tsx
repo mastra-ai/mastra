@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../overlays';
 import { GoalPanel } from '../../components/GoalPanel';
 import { GoalStatus } from '../../components/StatusLine/GoalStatus';
 import { OperationalMemoryStatus } from '../../components/StatusLine/OperationalMemoryStatus';

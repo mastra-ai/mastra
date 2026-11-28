@@ -7,8 +7,13 @@ import { formatModelName } from '@mastra/playground-ui/utils/model';
 import type { ReactNode } from 'react';
 import { useSessionHost } from '../../context/SessionHostContext';
 
-import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
-import { catalogModelPickerValue, findPickerModel, modelPickerProviders } from '../../../../lib/modelPickerCatalog';
+import { useAvailableModelsQuery } from '@mastra/react/hooks/factory';
+import {
+  catalogModelPickerValue,
+  findPickerModel,
+  modelPickerProviders,
+  ProviderBrandIcon,
+} from '@mastra/playground-ui/domains/factory';
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
@@ -16,7 +21,6 @@ import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatThinking } from '../../context/useChatThinking';
 import { useModelCredential } from '../../hooks/useModelCredential';
-import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { sessionDefaultsAnchor } from '../../services/sessionSettings';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';

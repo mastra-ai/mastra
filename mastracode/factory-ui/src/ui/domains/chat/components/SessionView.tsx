@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
 
-import { useRouteThreadSync } from '../../../../hooks/useRouteThreadSync';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../../workspace-viewer/hooks/useWiderThan';
 import { RAIL_MIN_REM } from '../../workspace-viewer/layout';
@@ -58,7 +57,6 @@ function ThreadRailSlot() {
 
 function SessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
   useGlobalShortcuts();
-  useRouteThreadSync();
   useHandoffPrompt();
   const { busy, transcript } = useChatTranscript();
   useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);

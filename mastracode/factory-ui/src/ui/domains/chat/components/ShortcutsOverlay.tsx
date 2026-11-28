@@ -3,7 +3,7 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 
-import { useOverlays } from '../../../lib/overlays';
+import { useOverlays } from '../overlays';
 
 interface Shortcut {
   keys: string[];

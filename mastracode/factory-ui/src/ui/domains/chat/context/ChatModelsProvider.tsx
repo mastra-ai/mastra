@@ -3,8 +3,7 @@ import type { ModelPackSet, ModelSelectionRequest } from '@internal/factory-cont
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
+import { useDefaultModelQuery, useFallbackModelQuery } from '@mastra/react/hooks/factory';
 import { usePendingSessionModel, useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
 import { DEFAULT_MODEL_SELECTION, selectionPack } from '../services/modelSelection';
 import { routedModelDefaults } from './chatDefaultModel';

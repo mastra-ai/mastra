@@ -13,7 +13,7 @@ import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { SessionModelTarget } from '../../../../../hooks/useSessionModel';
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';

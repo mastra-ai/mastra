@@ -2,7 +2,7 @@ import { CodeDiffList } from '@mastra/playground-ui/components/CodeDiff';
 import { useImperativeHandle, useRef } from 'react';
 import type { Ref } from 'react';
 
-import type { WorkspaceChangePatches } from '../../../../../../api/types';
+import type { WorkspaceChangePatches } from '@internal/factory-contract';
 import type { DiffLayout } from '../../../hooks/useDiffLayout';
 import { changesInTreeOrder } from '../tree/change-tree';
 import { ChangeDiff } from './ChangeDiff';

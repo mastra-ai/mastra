@@ -1,6 +1,6 @@
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
-import { useOverlays } from '../../../lib/overlays';
+import { useOverlays } from '../../chat/overlays';
 import { rememberGlobalSearchTrigger } from '../services/searchTriggerFocus';
 
 export function useGlobalSearchControls() {

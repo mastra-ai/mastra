@@ -8,7 +8,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import { createQueryClient } from '../../../../../query-client';
-import type { WorkspaceFileIndex, WorkspaceTreeEntry } from '../../../../../api/types';
+import type { WorkspaceFileIndex, WorkspaceTreeEntry } from '@internal/factory-contract';
 import type { TimelineEntry } from '../../../chat/services/transcript';
 import { useRefreshWorkspaceFilesOnToolCalls } from '../../useRefreshWorkspaceFilesOnToolCalls';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';

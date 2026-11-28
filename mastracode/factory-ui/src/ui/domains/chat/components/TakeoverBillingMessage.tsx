@@ -3,8 +3,8 @@ import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { resolveModel } from '@mastra/playground-ui/utils/model';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
-import type { SessionModelCatalog } from '../../../../hooks/useSessionModelCatalog';
+import { useAvailableModelsQuery } from '@mastra/react/hooks/factory';
+import type { SessionModelCatalog } from '@mastra/client-js';
 import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS } from '../services/sessionSettings';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModelScope } from '../context/useChatModelScope';

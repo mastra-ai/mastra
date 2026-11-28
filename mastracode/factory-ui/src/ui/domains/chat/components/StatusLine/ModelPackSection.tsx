@@ -5,7 +5,7 @@ import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCh
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { ModelPackTimeline } from '../../../settings/components/models/packs/ModelPackTimeline';
+import { ModelPackTimeline } from '@mastra/playground-ui/domains/factory';
 
 interface ModelPackSectionProps {
   packs: readonly ModelPack[];

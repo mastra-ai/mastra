@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../overlays';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import type { ConnectionStatus } from '../../hooks/useAgentControllerConnection';

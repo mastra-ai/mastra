@@ -4,7 +4,7 @@ import { HttpResponse, ws } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import type { LiveSessionResponse } from '../../../../../api/types';
+import type { LiveSessionResponse } from '@internal/factory-contract';
 import { renderThread, stubPreparingSession } from './composer-session-test-fixture';
 import { acceptTranscribe, answerLiveSession, composerReady, stubVoiceSettings } from './voice-dictation-test-fixture';
 

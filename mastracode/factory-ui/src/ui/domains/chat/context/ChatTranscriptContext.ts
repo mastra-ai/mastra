@@ -1,6 +1,6 @@
 import { createContext } from 'react';
 
-import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
+import type { ChatSessionPhase } from '../services/sessionStatus';
 import type { SessionStateSnapshot } from '../services/runtime';
 import type { OutgoingFile, TranscriptState } from '../services/transcript';
 

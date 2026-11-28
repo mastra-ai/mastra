@@ -4,14 +4,18 @@ import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
+import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
+import { useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
 } from '../../../../hooks/useAgentControllerGoalMutations';
 import {
   useAbortAgentControllerMutation,
   useApproveAgentControllerToolMutation,
+  useFollowUpAgentControllerMutation,
   useRespondAgentControllerSuspensionMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
@@ -26,7 +30,8 @@ import { useChatSessionContext } from './useChatSessionContext';
 
 /** Factory's session actions, served by the Agent Controller. */
 export function ChatSessionActionsProvider({ children }: { children: ReactNode }) {
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, resourceId, sessionThreadId, threadTags, resourceReady } =
+    useChatSessionContext();
   const queryClient = useQueryClient();
   const args = { agentControllerId: AGENT_CONTROLLER_ID, sessionId, baseUrl, enabled: sessionEnabled };
 
@@ -35,6 +40,14 @@ export function ChatSessionActionsProvider({ children }: { children: ReactNode }
   const approve = useApproveAgentControllerToolMutation(args);
   const respond = useRespondAgentControllerSuspensionMutation(args);
   const createThread = useCreateAgentControllerThreadMutation(args);
+  const followUp = useFollowUpAgentControllerMutation(args);
+  const setGoal = useSetAgentControllerGoalMutation(args);
+  const setSessionModel = useSetSessionModelMutation({
+    resourceId,
+    threadId: sessionThreadId ?? sessionId,
+    sessionId,
+  });
+  const threadsQuery = useAgentControllerThreads({ ...args, threadTags, enabled: resourceReady });
   const pauseGoal = usePauseAgentControllerGoalMutation(args);
   const resumeGoal = useResumeAgentControllerGoalMutation(args);
   const clearGoal = useClearAgentControllerGoalMutation(args);
@@ -62,7 +75,11 @@ export function ChatSessionActionsProvider({ children }: { children: ReactNode }
           messages,
         ),
       switchingThread,
+      followUp: followUp.mutateAsync,
+      model: { setSelection: setSessionModel.mutateAsync },
+      threads: { list: threadsQuery.data },
       goal: {
+        set: objective => setGoal.mutateAsync(objective),
         pause: () => pauseGoal.mutateAsync(),
         resume: () => resumeGoal.mutateAsync(),
         clear: () => clearGoal.mutateAsync(),
@@ -77,6 +94,10 @@ export function ChatSessionActionsProvider({ children }: { children: ReactNode }
       respond.mutateAsync,
       respond.isPending,
       createThread.mutateAsync,
+      followUp.mutateAsync,
+      setSessionModel.mutateAsync,
+      threadsQuery.data,
+      setGoal.mutateAsync,
       pauseGoal.mutateAsync,
       resumeGoal.mutateAsync,
       clearGoal.mutateAsync,

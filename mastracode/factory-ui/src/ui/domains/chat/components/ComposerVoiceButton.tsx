@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
+import { useVoiceSettings } from '@mastra/react/hooks/factory';
 import { VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
 import { voiceDictationSupported } from './useVoiceDictation';
 import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';

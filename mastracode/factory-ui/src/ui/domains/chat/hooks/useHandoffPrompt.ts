@@ -2,14 +2,12 @@ import type { ModelSelectionRequest } from '@internal/factory-contract';
 import { useEffect, useRef } from 'react';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
-import { useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import type { PendingImage } from '../context/ComposerImagesContext';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
 import { readHandoffPrompt } from '../services/promptHandoff';
 import type { PromptHandoff } from '../services/promptHandoff';
@@ -76,21 +74,11 @@ export function clearPendingHandoff(sessionId: string): void {
 
 export function useHandoffPrompt(): void {
   const { location, navigate } = useSessionHost();
-  const { sessionId, resourceId, sessionThreadId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, sessionEnabled } = useChatSessionContext();
   const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
   const { restoreComposerDraft } = useChatCommands();
   const { setImages } = useComposerImagesState();
-  const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const { mutateAsync: setSessionModel } = useSetSessionModelMutation({
-    resourceId,
-    threadId: sessionThreadId ?? sessionId,
-    sessionId,
-  });
+  const { send: sendMessage, model } = useChatSessionActions();
   const handedOff = useRef(false);
   const recovered = useRef(false);
   const shown = useRef(false);
@@ -102,9 +90,11 @@ export function useHandoffPrompt(): void {
     if (handedOff.current) return;
     const startOn = async (selection: ModelSelectionRequest) => {
       if (selection.kind === 'default') return;
-      await setSessionModel(selection).catch((error: unknown) =>
-        pushNotice(error instanceof Error ? error.message : 'Could not start on the picked model.', 'error'),
-      );
+      await model
+        ?.setSelection(selection)
+        .catch((error: unknown) =>
+          pushNotice(error instanceof Error ? error.message : 'Could not start on the picked model.', 'error'),
+        );
     };
     // The prompt shows as soon as the thread opens, while its session may still
     // be being created; it sends once the session exists.
@@ -173,7 +163,7 @@ export function useHandoffPrompt(): void {
     restoreComposerDraft,
     sessionId,
     sendMessage,
-    setSessionModel,
+    model,
     sessionEnabled,
     setImages,
   ]);

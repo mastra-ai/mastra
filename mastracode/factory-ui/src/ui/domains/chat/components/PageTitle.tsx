@@ -1,12 +1,9 @@
 import { useEffect } from 'react';
-import { useSessionHost } from '../context/SessionHostContext';
+import { useRouteSessionId, useSessionHost } from '../context/SessionHostContext';
 
-import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
-import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
-import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { workItemReference } from '@mastra/playground-ui/domains/factory';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useChatSessionContext } from '../context/useChatSessionContext';
 
 const noSessionCard = () => ({ item: undefined });
 const noSessionRepository = () => ({ repository: undefined });
@@ -16,21 +13,14 @@ export function PageTitle() {
   const { factoryProjectId: factoryId, threadId, data } = useSessionHost();
   const useSessionCard = data.useSessionCard ?? noSessionCard;
   const useSessionRepository = data.useSessionRepository ?? noSessionRepository;
-  const { sessionId: chatSessionId, threadTags, baseUrl, resourceReady } = useChatSessionContext();
   const routeSessionId = useRouteSessionId();
   const { item } = useSessionCard();
   const { repository } = useSessionRepository();
 
-  const threadsQuery = useAgentControllerThreads({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId: chatSessionId,
-    threadTags,
-    baseUrl,
-    enabled: resourceReady,
-  });
+  const { threads } = useChatSessionActions();
 
   const reference = item && workItemReference(item, repository?.slug);
-  const threadTitle = threadsQuery.data?.find(thread => thread.id === threadId)?.title?.trim();
+  const threadTitle = threads?.list?.find(thread => thread.id === threadId)?.title?.trim();
 
   useEffect(() => {
     if (!routeSessionId || !threadTitle) return;

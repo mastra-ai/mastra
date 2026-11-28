@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import type { WorkspaceChanges } from '../../../../api/types';
+import type { WorkspaceChanges } from '@internal/factory-contract';
 import { useRecreateSessionSandbox } from '../../workspaces/hooks/useRecreateSessionSandbox';
 import type { RecreateSandboxTarget } from '../../workspaces/hooks/useRecreateSessionSandbox';
 import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';

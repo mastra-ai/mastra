@@ -1,6 +1,6 @@
 import { Tree } from '@mastra/playground-ui/components/Tree';
 
-import type { WorkspaceChanges } from '../../../../../../api/types';
+import type { WorkspaceChanges } from '@internal/factory-contract';
 import { buildChangeTree, groupedRepositories, repositoryProvider } from './change-tree';
 import type { RepositoryProviders } from './change-tree';
 import { ChangeTreeItem } from './ChangeTreeItem';

@@ -1,4 +1,4 @@
-import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
+import { ProviderBrandIcon } from '@mastra/playground-ui/domains/factory';
 import { HolderBadge } from './ModelCredential';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';

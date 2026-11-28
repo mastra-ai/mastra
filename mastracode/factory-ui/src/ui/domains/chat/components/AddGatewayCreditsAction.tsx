@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useMastraGatewayCreditsQuery } from '../../../../hooks/use-providers';
-import { ASK_ADMIN_FOR_CREDITS } from '../../workspaces/components/mastra-gateway-credits';
+import { useMastraGatewayCreditsQuery } from '@mastra/react/hooks/factory';
+import { ASK_ADMIN_FOR_CREDITS } from '../services/mastra-gateway-credits';
 
 export function AddGatewayCreditsAction() {
   const { data: credits } = useMastraGatewayCreditsQuery();

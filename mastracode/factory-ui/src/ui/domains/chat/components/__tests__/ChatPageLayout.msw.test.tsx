@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '../../overlays';
 import { ChatPageLayout } from '../ChatPageLayout';
 
 function DesktopSidebarStateProbe() {

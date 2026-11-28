@@ -1,8 +1,8 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 
-import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery, useModelReasoningOptions } from '@mastra/react/hooks/factory';
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatModels } from '../../context/useChatModels';

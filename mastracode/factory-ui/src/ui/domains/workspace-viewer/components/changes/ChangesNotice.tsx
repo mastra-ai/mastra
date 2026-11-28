@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { WorkspaceChangePatches } from '../../../../../api/types';
+import type { WorkspaceChangePatches } from '@internal/factory-contract';
 import { unreadableRepositories } from './unreadable-repositories';
 
 export function ChangesNotice({ changes }: { changes: WorkspaceChangePatches }) {

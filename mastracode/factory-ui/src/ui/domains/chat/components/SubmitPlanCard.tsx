@@ -17,7 +17,7 @@ import {
   PlanTitle,
 } from '@mastra/playground-ui/components/ai/plan';
 
-import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
+import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '@mastra/react/hooks/factory';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
 import { Txt } from '@mastra/playground-ui/components/Txt';

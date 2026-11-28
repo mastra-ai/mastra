@@ -1,9 +1,8 @@
 import { useContext } from 'react';
 import { useSessionHost } from './SessionHostContext';
 
-import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
-import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
-import { useSessionModelCatalogQuery } from '../../../../hooks/useSessionModelCatalog';
+import type { AvailableModelsTarget } from '@mastra/react/hooks/factory';
+import { useSessionModelCatalogQuery } from '@mastra/react/hooks/factory';
 import { newChatCatalogTarget } from './chatDefaultModel';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -16,7 +15,7 @@ export function useChatModelScope() {
   // The displayed thread decides billing; the session-primary thread is only a fallback.
   const displayedThreadId = useContext(ChatThreadMessagesContext)?.threadId;
   const factoryId = factorySessionState?.factoryProjectId ?? routeFactoryId;
-  const projectQuery = useFactoryProjectQuery(factoryId);
+  const projectQuery = useSessionHost().data.useProjectSettings(factoryId);
   const sessionTarget = draftSessionId
     ? undefined
     : {

@@ -1,10 +1,9 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
+import { DEFAULT_THINKING_LEVEL } from '@internal/factory-contract';
 
 import { useSessionHost } from '../context/SessionHostContext';
-
-import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
-import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
-import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
+import { useModelReasoningOptions } from '@mastra/react/hooks/factory';
+import type { AvailableModelsTarget } from '@mastra/react/hooks/factory';
 import type { FactoryModelScope } from '@internal/factory-contract';
 import { resolveEffectiveThinkingLevel, routedThinkingDefault } from '../services/thinkingLevels';
 import type { EffectiveThinkingLevel, PersonalThinkingDefault, ThinkingDefault } from '../services/thinkingLevels';
@@ -28,11 +27,14 @@ export function useEffectiveThinkingLevel({
   thinkingDefault: ThinkingDefault | undefined;
   loadError: Error | undefined;
 } {
-  const { factoryProjectId: factoryId } = useSessionHost();
-  const factoryDefaultQuery = useFactoryThinkingDefaultQuery(factoryId);
+  const { factoryProjectId: factoryId, data } = useSessionHost();
+  const projectQuery = data.useProjectSettings(factoryId);
+  const factoryDefault = projectQuery.data
+    ? (projectQuery.data.defaultThinkingLevel ?? DEFAULT_THINKING_LEVEL)
+    : undefined;
   const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
-  const thinkingDefault = routedThinkingDefault(modelScope, personalDefault, factoryDefaultQuery.data);
+  const thinkingDefault = routedThinkingDefault(modelScope, personalDefault, factoryDefault);
   const level = resolveEffectiveThinkingLevel({ modelId, reasoningOptions, override, thinkingDefault });
-  const loadError = factoryDefaultQuery.error ?? personalDefaultError ?? undefined;
+  const loadError = projectQuery.error ?? personalDefaultError ?? undefined;
   return { level, thinkingDefault, loadError: level ? undefined : loadError };
 }

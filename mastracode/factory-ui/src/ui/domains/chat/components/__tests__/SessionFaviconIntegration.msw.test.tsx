@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../../../lib/overlays';
-import { ChatMessageBoundary } from '../../context/ChatSessionProvider';
+import { OverlaysProvider } from '../../overlays';
+import { ChatMessageBoundary } from '../../context/ChatMessageBoundary';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from './composer-session-test-fixture';
 

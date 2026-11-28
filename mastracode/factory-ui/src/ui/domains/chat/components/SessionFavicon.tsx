@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import type { ChatSessionPhase } from '../../workspaces/services/sessionStatus';
+import type { ChatSessionPhase } from '../services/sessionStatus';
 
 const FAVICONS: Record<ChatSessionPhase, string> = {
   initializing: '/favicon-session-initializing.svg',

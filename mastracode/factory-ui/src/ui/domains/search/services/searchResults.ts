@@ -1,4 +1,4 @@
-import type { SessionList } from '../../chat/context/SessionHostContext';
+import type { SessionLinks, SessionList } from '../../chat/context/SessionHostContext';
 import { cardContextSessions } from '@internal/factory-contract';
 import type { CardContextSession, WorkItem, WorkItemSessionRef, FactoryUserSession } from '@internal/factory-contract';
 import { workItemNumber } from '@mastra/factory/work-items/card-number';
@@ -13,14 +13,12 @@ import {
   CARD_SOURCES,
 } from '@mastra/playground-ui/domains/factory';
 import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
-import { relationshipPath } from '../../factory/services/relationshipPath';
-import { threadPath } from '../../workspaces/services/factoryPaths';
 import {
   getFactorySessionKind,
   getReviewBranchIdentifier,
   getUserSessionLabel,
   isAutomaticUserSessionBranch,
-} from '../../workspaces/services/sessionPresentation';
+} from '../../chat/services/sessionPresentation';
 
 export interface SessionSearchResult {
   id: string;
@@ -131,7 +129,7 @@ function buildValue(
 }
 
 function createFactorySessionResult(
-  factoryId: string,
+  links: SessionLinks,
   session: FactoryUserSession,
   association: SessionWorkItem | undefined,
 ): SessionSearchResult {
@@ -157,13 +155,13 @@ function createFactorySessionResult(
     identifier,
     value,
     search: rowSearch(item, value),
-    path: threadPath(factoryId, { sessionId: session.sessionId, threadId }),
+    path: links.thread({ sessionId: session.sessionId, threadId }),
     preserveOrigin: true,
     updatedAt: item?.updatedAt ?? session.updatedAt,
   };
 }
 
-function createUserSessionResult(factoryId: string, session: FactoryUserSession): SessionSearchResult {
+function createUserSessionResult(links: SessionLinks, session: FactoryUserSession): SessionSearchResult {
   const kind = 'user-session';
   const title = getUserSessionLabel(session);
   const value = buildValue(session, kind, title, undefined, undefined);
@@ -175,7 +173,7 @@ function createUserSessionResult(factoryId: string, session: FactoryUserSession)
     context: isAutomaticUserSessionBranch(session) ? ['User session'] : ['User session', session.branch],
     value,
     search: rowSearch(undefined, value),
-    path: `/factories/${factoryId}/user/threads/${session.sessionId}`,
+    path: links.userThread(session.sessionId),
     preserveOrigin: false,
     updatedAt: session.updatedAt,
   };
@@ -200,7 +198,7 @@ function workItemsBySessionId(
 }
 
 export function createSessionSearchGroups(input: {
-  factoryId: string;
+  links: SessionLinks;
   repositories: SessionList[];
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each session reads by the phase it runs. */
@@ -221,12 +219,12 @@ export function createSessionSearchGroups(input: {
 
   for (const repository of input.repositories) {
     for (const session of repository.workspaces) {
-      const result = createFactorySessionResult(input.factoryId, session, bySessionId.get(session.sessionId));
+      const result = createFactorySessionResult(input.links, session, bySessionId.get(session.sessionId));
       if (result.kind === 'review-session') review.push(result);
       else work.push(result);
     }
     for (const session of repository.userSessions) {
-      user.push(createUserSessionResult(input.factoryId, session));
+      user.push(createUserSessionResult(input.links, session));
     }
   }
 
@@ -237,7 +235,7 @@ export function createSessionSearchGroups(input: {
   };
 }
 
-function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
+function createWorkItemResult(links: SessionLinks, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = CARD_SOURCES[item.source].label;
   const stage = currentItemStageLabel(item, board);
@@ -261,7 +259,7 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     identifier,
     value,
     search: rowSearch(item, value),
-    path: relationshipPath(item, factoryId),
+    path: links.workItemBoard(item),
     updatedAt: item.updatedAt,
     item,
   };
@@ -269,13 +267,13 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
 
 /** Board entries with no session to open: the cards nobody has started. */
 export function createWorkItemSearchResults(input: {
-  factoryId: string;
+  links: SessionLinks;
   /** The cards holding no session. */
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
   boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
   return input.workItems
-    .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item)))
+    .map(item => createWorkItemResult(input.links, item, boardOf(input.boards, item)))
     .sort(newestFirst);
 }

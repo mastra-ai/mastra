@@ -1,9 +1,8 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useSessionHost } from '../context/SessionHostContext';
+import { useRouteSessionId, useSessionHost } from '../context/SessionHostContext';
 
-import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
-import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
+import { isFactoryOwnedSession } from '../services/sessionPresentation';
 import type { SessionOwnershipLock } from '@internal/factory-contract';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { TakeOwnershipDialog } from './TakeOwnershipDialog';
@@ -25,11 +24,14 @@ export function TeammateSessionLine() {
   const { factoryProjectId: factoryId, data } = useSessionHost();
   const session = data.useUserSession(useRouteSessionId()).data;
   const viewerUserId = data.useViewer().data?.user?.userId;
+  // The host's data hooks are fixed for its lifetime, so this optional hook runs on every render or none.
+  const takeOwnership = data.useTakeSessionOwnership?.(factoryId);
   const { modelScope } = useChatModelScope();
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 
   const owner = session.owner;
-  const canTakeOwnership = session.capabilities?.takeOwnership === true && factoryId !== undefined;
+  const canTakeOwnership =
+    session.capabilities?.takeOwnership === true && factoryId !== undefined && takeOwnership !== undefined;
   const lock = session.capabilities?.ownershipLock;
   const steering = isFactoryOwnedSession(session)
     ? 'You’re steering the Factory’s session'
@@ -45,7 +47,9 @@ export function TeammateSessionLine() {
       <Txt as="p" variant="caption" tone="muted" className="truncate">
         {lock ? `${steering}. ${lockReason(lock, modelScope === 'factory')}.` : steering}
       </Txt>
-      {canTakeOwnership && <TakeOwnershipDialog factoryId={factoryId} session={session} />}
+      {canTakeOwnership && (
+        <TakeOwnershipDialog factoryId={factoryId} session={session} takeOwnership={takeOwnership} />
+      )}
     </div>
   );
 }

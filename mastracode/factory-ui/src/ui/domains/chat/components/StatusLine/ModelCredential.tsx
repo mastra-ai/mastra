@@ -4,7 +4,7 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { LucideIcon } from 'lucide-react';
 
-import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
+import { ProviderBrandIcon } from '@mastra/playground-ui/domains/factory';
 import { useChatModels } from '../../context/useChatModels';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import type { CredentialHolder } from '../../hooks/useModelCredential';

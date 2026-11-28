@@ -1,4 +1,4 @@
-import type { WorkspaceChanges } from '../../../../../../api/types';
+import type { WorkspaceChanges } from '@internal/factory-contract';
 
 export const WORKSPACE = 'session-1';
 

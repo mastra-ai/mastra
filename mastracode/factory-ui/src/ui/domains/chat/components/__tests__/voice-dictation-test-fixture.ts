@@ -4,7 +4,7 @@ import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import type { VoiceSettingsResponse } from '../../../../../api/types';
+import type { VoiceSettingsResponse } from '@internal/factory-contract';
 import { renderThread, stubPreparingSession } from './composer-session-test-fixture';
 
 export interface TranscribeRequest {

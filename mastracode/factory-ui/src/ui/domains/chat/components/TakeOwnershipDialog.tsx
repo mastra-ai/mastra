@@ -2,12 +2,19 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 
 import type { FactoryUserSession } from '@internal/factory-contract';
-import { useTakeSessionOwnership } from '../../workspaces/hooks/useTakeSessionOwnership';
+import type { SessionTakeOwnership } from '../context/SessionHostContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { TakeoverBillingMessage } from './TakeoverBillingMessage';
 
-export function TakeOwnershipDialog({ factoryId, session }: { factoryId: string; session: FactoryUserSession }) {
-  const takeOwnership = useTakeSessionOwnership(factoryId);
+export function TakeOwnershipDialog({
+  factoryId,
+  session,
+  takeOwnership,
+}: {
+  factoryId: string;
+  session: FactoryUserSession;
+  takeOwnership: SessionTakeOwnership;
+}) {
   const { busy } = useChatTranscript();
   const ownerLabel = session.owner?.name ?? 'a teammate';
 

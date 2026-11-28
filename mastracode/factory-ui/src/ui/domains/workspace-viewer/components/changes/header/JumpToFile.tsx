@@ -3,8 +3,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { pluralize } from '@mastra/playground-ui/utils/string';
 import { useState } from 'react';
 
-import type { WorkspaceChangesScope } from '../../../../../../api/types';
-import { useWorkspacePatches } from '../../../../../../hooks/use-fs';
+import type { WorkspaceChangesScope } from '@internal/factory-contract';
+import { useWorkspacePatches } from '@mastra/react/hooks/factory';
 import type { RepositoryProviders } from '../tree/change-tree';
 import { ChangeTree } from '../tree/ChangeTree';
 import { IconCodeTree } from '@mastra/playground-ui/icons/central/IconCodeTree';

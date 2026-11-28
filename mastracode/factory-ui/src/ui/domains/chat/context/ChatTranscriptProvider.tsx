@@ -4,7 +4,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useContext, useEffectEvent, useLayoutEffect, useReducer } from 'react';
 
-import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
+import { chatSessionPhase } from '../services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
 import type { ChatRuntimeState, SessionStateSnapshot } from '../services/runtime';

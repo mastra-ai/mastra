@@ -1,5 +1,5 @@
 import type { VirtualTreeRow } from '@mastra/playground-ui/components/VirtualTree';
-import type { WorkspaceTreeEntry, WorkspaceTreeListing } from '../../../../../api/types';
+import type { WorkspaceTreeEntry, WorkspaceTreeListing } from '@internal/factory-contract';
 import { foldersAbove } from './folders-above';
 
 export type BrowserEntryRow = VirtualTreeRow & { kind: 'entry'; entry: WorkspaceTreeEntry };

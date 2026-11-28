@@ -8,7 +8,7 @@ import { Composer } from './Composer';
 import { Transcript } from './Transcript';
 import type { TranscriptTail } from './Transcript';
 import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
-import { ChatMessageBoundary } from '../context/ChatSessionProvider';
+import { ChatMessageBoundary } from '../context/ChatMessageBoundary';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
 

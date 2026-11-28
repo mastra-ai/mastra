@@ -8,13 +8,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { WorkspaceChangePatches } from '../../../../../api/types';
+import type { WorkspaceChangePatches, FactoryUserSession } from '@internal/factory-contract';
 import { queryKeys } from '../../../../../api/keys';
 import { ChatPageLayout } from '../../../chat/components/ChatPageLayout';
 import { ChatTranscriptContext } from '../../../chat/context/ChatTranscriptContext';
 import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptContext';
 import { initialTranscript } from '../../../chat/services/transcript';
-import type { FactoryUserSession } from '@internal/factory-contract';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 import { WorkspacePanelDock } from '../WorkspacePanelDock';

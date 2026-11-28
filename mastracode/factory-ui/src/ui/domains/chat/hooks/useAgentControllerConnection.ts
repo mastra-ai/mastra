@@ -11,7 +11,9 @@ import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControl
 import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
 import { switchThreadMutationKey } from '../../../../hooks/useAgentControllerThreadMutations';
 
-export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
+import type { ConnectionStatus } from '../context/ChatConnectionContext';
+
+export type { ConnectionStatus };
 type SseConnectionState = 'never' | 'connected' | 'dropped';
 
 function nextSseConnectionState(previous: SseConnectionState, connected: boolean): SseConnectionState {

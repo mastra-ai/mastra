@@ -1,8 +1,9 @@
+import type { AgentControllerSessionState } from '@mastra/client-js';
 import { createContext } from 'react';
 
-import type { ConnectionStatus, useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
+export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 
-export type ChatConnectionState = ReturnType<typeof useAgentControllerConnection>['state'];
+export type ChatConnectionState = AgentControllerSessionState;
 
 export interface ChatConnectionApi {
   status: ConnectionStatus;

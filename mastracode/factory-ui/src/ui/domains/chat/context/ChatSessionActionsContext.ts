@@ -1,4 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import type { PlanResume } from '@mastra/client-js';
 import { createContext } from 'react';
 
@@ -9,6 +10,7 @@ export interface OutgoingMessage {
 }
 
 export interface ChatGoalActions {
+  set: (objective: string) => Promise<unknown>;
   pause: () => Promise<unknown>;
   resume: () => Promise<unknown>;
   clear: () => Promise<unknown>;
@@ -35,7 +37,18 @@ export interface ChatSessionActionsApi {
   seedThreadMessages?: (threadId: string, messages: MastraDBMessage[]) => void;
   /** A thread switch is in flight; the bound thread is unknown until it lands. */
   switchingThread: boolean;
+  /** Queues a message to run after the current one. */
+  followUp?: (text: string) => Promise<unknown>;
   goal?: ChatGoalActions;
+  /** Pins the session to a model before its first message. */
+  model?: { setSelection: (selection: ModelSelectionRequest) => Promise<unknown> };
+  /** The session's threads, for titles. */
+  threads?: { list: readonly ChatThreadSummary[] | undefined };
+}
+
+export interface ChatThreadSummary {
+  id: string;
+  title?: string;
 }
 
 export class RejectedReplyError extends Error {

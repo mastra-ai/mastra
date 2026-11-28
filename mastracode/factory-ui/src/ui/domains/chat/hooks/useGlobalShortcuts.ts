@@ -1,31 +1,23 @@
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
-import { useOverlays } from '../../../lib/overlays';
+import { useOverlays } from '../overlays';
 import { useSessionHost } from '../context/SessionHostContext';
 import { useChatTranscript } from '../context/useChatTranscript';
-import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useGlobalSearchControls } from '../../search/hooks/useGlobalSearchControls';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useAbortAgentControllerMutation } from '../../../../hooks/useAgentControllerRunMutations';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
   const { factoryProjectId: factoryId } = useSessionHost();
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const { closeSearch } = useGlobalSearchControls();
-  const abortMutation = useAbortAgentControllerMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
+  const { abort } = useChatSessionActions();
 
   function escapeAction() {
     if (!factoryId) return undefined;
     if (overlays.isOpen('search')) return closeSearch;
     if (overlays.isOpen('shortcuts')) return () => overlays.close('shortcuts');
     if (overlays.isOpen('sidebar')) return () => overlays.close('sidebar');
-    if (busy) return () => abortMutation.mutate();
+    if (busy) return () => void abort();
     return undefined;
   }
   const onEscape = escapeAction();

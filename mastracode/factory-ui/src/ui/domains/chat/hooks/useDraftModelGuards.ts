@@ -1,8 +1,5 @@
 import { useSessionHost } from '../context/SessionHostContext';
-import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
-import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
+import { useFallbackModelQuery, useDefaultModelQuery, useProvidersQuery } from '@mastra/react/hooks/factory';
 import { isConnectedAt } from '../../settings/components/provider-credential';
 import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import type { ModelDefaultsAnchor } from '../services/sessionSettings';
@@ -30,7 +27,7 @@ export function useDraftModelGuards(
 ): DraftModelGuards {
   const factoryQuery = useSessionHost().data.useProject(factoryId);
   const activeFactory = factoryQuery.data;
-  const projectQuery = useFactoryProjectQuery(activeFactory?.id);
+  const projectQuery = useSessionHost().data.useProjectSettings(activeFactory?.id);
   const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
   const storedScope = projectQuery.data?.modelScope;

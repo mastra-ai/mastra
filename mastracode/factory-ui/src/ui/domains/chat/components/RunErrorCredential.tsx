@@ -1,7 +1,7 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery } from '@mastra/react/hooks/factory';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatModels } from '../context/useChatModels';
 import { useChatTranscript } from '../context/useChatTranscript';

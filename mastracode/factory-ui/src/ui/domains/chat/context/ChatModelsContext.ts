@@ -1,5 +1,5 @@
 import type { ModelPack, ModelSelectionRequest } from '@internal/factory-contract';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
 import { createContext } from 'react';
 
 export interface ChatModelsApi {

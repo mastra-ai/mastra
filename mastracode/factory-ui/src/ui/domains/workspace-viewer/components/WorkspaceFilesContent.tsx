@@ -1,6 +1,5 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useRouteSessionId, useSessionHost } from '../../chat/context/SessionHostContext';
 
-import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
 import { overviewClass } from '../layout';

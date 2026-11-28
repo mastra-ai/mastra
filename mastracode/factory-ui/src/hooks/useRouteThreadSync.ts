@@ -100,3 +100,9 @@ export function useRouteThreadSync() {
     switchToRouteThread(routeThreadId, sessionKeyChanged);
   }, [routeThreadId, sessionEnabled, sessionId, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }
+
+/** Factory keeps its route and the Agent Controller's active thread in step; the shared view doesn't. */
+export function RouteThreadSync() {
+  useRouteThreadSync();
+  return null;
+}

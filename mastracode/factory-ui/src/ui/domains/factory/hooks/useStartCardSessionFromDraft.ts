@@ -89,7 +89,6 @@ export function useStartCardSessionFromDraft(
     );
     stashHandoffFiles(sessionId, files);
     continueIntoThread(
-      factoryId,
       { sessionId, threadId: sessionId },
       startPromptHandoff(sessionId, prompt, { shownMessageId, modelSelection: selection }),
     );

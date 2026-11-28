@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { useOverlays } from '../../../../lib/overlays';
+import { useOverlays } from '../../overlays';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 

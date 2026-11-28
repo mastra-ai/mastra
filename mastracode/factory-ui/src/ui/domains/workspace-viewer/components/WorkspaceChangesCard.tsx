@@ -8,7 +8,7 @@ import { pluralize } from '@mastra/playground-ui/utils/string';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import type { WorkspaceChange } from '../../../../api/types';
+import type { WorkspaceChange } from '@internal/factory-contract';
 import {
   FILE_ROWS_LIMIT,
   additionShare,
@@ -41,7 +41,10 @@ interface WorkspaceChangeStats {
 }
 
 export type WorkspaceChangesSummary =
-  { state: 'unread' } | { state: 'loading' } | { state: 'failed' } | { state: 'read'; stats: WorkspaceChangeStats };
+  | { state: 'unread' }
+  | { state: 'loading' }
+  | { state: 'failed' }
+  | { state: 'read'; stats: WorkspaceChangeStats };
 
 function filesLabel({ files, repositories }: WorkspaceChangeStats): string {
   const label = pluralize(files.length, 'file');

@@ -1,8 +1,9 @@
 import { createContext, useContext } from 'react';
-import type { AnchorHTMLAttributes, ComponentType } from 'react';
+import type { AnchorHTMLAttributes, ForwardRefExoticComponent, RefAttributes } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type {
   FactoryProject,
+  FactoryProjectPayload,
   FactoryUserSession,
   LinkedRepositoryPayload,
   WorkItem,
@@ -20,8 +21,7 @@ export type SessionSettingsSection = SettingsSection;
 /** Places on the settings pages a session links to. */
 export type SessionSettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
-export interface SessionLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
-  href: string;
+export interface SessionLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
   /** Lets the destination return to the current page. */
   returnHere?: boolean;
 }
@@ -46,17 +46,26 @@ export interface SessionHost {
   draftSessionId: string | undefined;
   routeKind: SessionRouteKind;
   location: { pathname: string; search: string; state: unknown };
-  LinkComponent: ComponentType<SessionLinkProps>;
+  LinkComponent: ForwardRefExoticComponent<SessionLinkProps & RefAttributes<HTMLAnchorElement>>;
   navigate(href: string | { pathname: string; search?: string }, options?: SessionNavigateOptions): void;
-  links: {
-    settings(section: SessionSettingsSection, anchor?: SessionSettingsAnchor): string;
-    thread(thread: { sessionId: string; threadId: string }): string;
-    userThread(threadId: string): string;
-    newUserSession(): string;
-    /** A thread opened from a channel; Factory resolves its session. */
-    channelThread(threadId: string): string;
-  };
+  links: SessionLinks;
   data: SessionHostData;
+}
+
+export interface SessionLinks {
+  settings(section: SessionSettingsSection, anchor?: SessionSettingsAnchor): string;
+  thread(thread: { sessionId: string; threadId: string }): string;
+  userThread(threadId: string): string;
+  newUserSession(): string;
+  /** A thread opened from a channel; Factory resolves its session. */
+  channelThread(threadId: string): string;
+  knowledgePage(pageId: string): string;
+  /** A project's landing page. */
+  project(projectId: string): string;
+  /** A card, opened on the session it shows or a draft that starts one. */
+  card(workItemId: string): string;
+  /** The board a card's source belongs on. */
+  workItemBoard(item: Pick<WorkItem, 'source'> & { readonly board?: string | null }): string;
 }
 
 /** A project's sessions, split into shared workspaces and the viewer's own sessions. */
@@ -85,9 +94,18 @@ export interface SessionViewer {
   user?: { userId?: string; name?: string; avatarUrl?: string };
 }
 
+export interface SessionTakeOwnership {
+  mutate(input: { sessionId: string; expectedOwnerId: string }): void;
+  isPending: boolean;
+}
+
 export interface SessionHostData {
+  /** Lets the viewer take a teammate's session. Absent where sessions have one owner. */
+  useTakeSessionOwnership?: (projectId: string | undefined) => SessionTakeOwnership;
   useProject(projectId: string | undefined): UseQueryResult<FactoryProject | undefined>;
   useProjects(): UseQueryResult<FactoryProject[]>;
+  /** The project's model and thinking defaults. */
+  useProjectSettings(projectId: string | undefined): UseQueryResult<FactoryProjectPayload | undefined>;
   useViewer(options?: { monitorSession?: boolean }): UseQueryResult<SessionViewer>;
   useUserSession(sessionId: string | undefined): UseQueryResult<FactoryUserSession>;
   useSessionList(projectId: string | undefined): UseQueryResult<SessionList>;
@@ -122,4 +140,10 @@ export function useSessionHost(): SessionHost {
   const host = useContext(SessionHostContext);
   if (!host) throw new Error('useSessionHost must be used within a SessionHostContext provider');
   return host;
+}
+
+/** The routed session: a workspace thread's session, or a user session, whose thread id is its session id. */
+export function useRouteSessionId(): string | undefined {
+  const { sessionId, threadId } = useSessionHost();
+  return sessionId ?? threadId;
 }
