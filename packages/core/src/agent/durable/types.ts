@@ -1023,6 +1023,11 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
+    /**
+     * Title from the thread's stored messages instead of `messageListState`, and only a thread row
+     * that exists: never create one to hold the title. Set for observational-memory runs.
+     */
+    fromStoredThread?: boolean;
   }) => Promise<string | undefined>;
   /**
    * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish

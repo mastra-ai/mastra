@@ -19,7 +19,7 @@ vi.mock('../../utils/resolve-runtime', () => ({
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
 }));
 
-const { runDurableFinishSideEffects } = await import('../finalize-run');
+const { generateDurableThreadTitle, runDurableFinishSideEffects } = await import('../finalize-run');
 
 function makeInitData(
   state: Record<string, unknown>,
@@ -195,7 +195,7 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
-  it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
+  it('titles an observational-memory run without flushing it, and only into an existing thread', async () => {
     const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
     const flushMessages = vi.fn().mockResolvedValue(undefined);
 
@@ -218,10 +218,11 @@ describe('runDurableFinishSideEffects', () => {
       messageListState: makeMessageListState(),
     });
 
-    // Neither finish-time memory write runs, so the run cannot leave behind a
-    // titled thread that holds no messages.
+    // OM saves its own messages, so finalize does not flush them. The title is still generated,
+    // but told never to create the thread row, so a title cannot end up in an otherwise empty row.
     expect(flushMessages).not.toHaveBeenCalled();
-    expect(generateThreadTitle).not.toHaveBeenCalled();
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(generateThreadTitle).toHaveBeenCalledWith(expect.objectContaining({ fromStoredThread: true }));
   });
 
   it('still generates a title for an ordinary run', async () => {
@@ -476,5 +477,86 @@ describe('runDurableFinishSideEffects', () => {
 
     expect(seen?.memoryConfig?.readOnly).toBe(true);
     expect(seen?.thread?.id).toBe('thread-1');
+  });
+});
+
+// #30478: an OM run titles from its stored thread, newest first. A long first turn stores many
+// assistant/tool messages after the request, so the request can sit past the first page.
+describe('generateDurableThreadTitle from a stored thread', () => {
+  const dbMessage = (i: number, role: 'user' | 'assistant', text: string) => ({
+    id: `m-${String(i).padStart(4, '0')}`,
+    role,
+    threadId: 'thread-1',
+    resourceId: 'resource-1',
+    createdAt: new Date(1_000_000 + i * 1000),
+    content: { format: 2 as const, parts: [{ type: 'text' as const, text }] },
+  });
+
+  function storedThread(assistantMessages: number) {
+    const messages = [
+      dbMessage(0, 'user', 'What is the weather in Lisbon today?'),
+      ...Array.from({ length: assistantMessages }, (_, i) => dbMessage(i + 1, 'assistant', `step ${i + 1}`)),
+    ];
+    const recall = vi.fn(async ({ perPage, page = 0 }: { perPage: number; page?: number }) => {
+      const newestFirst = [...messages].reverse();
+      const slice = newestFirst.slice(page * perPage, (page + 1) * perPage);
+      return {
+        messages: slice,
+        total: messages.length,
+        page,
+        perPage,
+        hasMore: (page + 1) * perPage < messages.length,
+      };
+    });
+    const memory = {
+      getThreadById: vi.fn().mockResolvedValue({ id: 'thread-1', resourceId: 'resource-1', title: '' }),
+      getMergedThreadConfig: () => ({ generateTitle: true }),
+      recall,
+      updateThread: vi.fn().mockResolvedValue(undefined),
+      createThread: vi.fn(),
+    };
+    const genTitle = vi.fn().mockResolvedValue('Lisbon Weather');
+    const agent = {
+      resolveTitleGenerationConfig: () => ({ shouldGenerate: true }),
+      filterUiMessagesByThread: (_list: unknown, _threadId: string, ui: unknown[]) => ui,
+      getMostRecentUserMessage: (ui: Array<{ role: string }>) => ui.filter(m => m.role === 'user').at(-1),
+      genTitle,
+    };
+    return { memory, agent, genTitle, recall };
+  }
+
+  const run = ({ memory, agent }: ReturnType<typeof storedThread>) =>
+    generateDurableThreadTitle({
+      agent: agent as any,
+      memory: memory as any,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      messageListState: makeMessageListState(),
+      fromStoredThread: true,
+    });
+
+  const userText = (genTitle: ReturnType<typeof vi.fn>) =>
+    JSON.stringify((genTitle.mock.calls[0]?.[0] as { parts?: unknown })?.parts ?? genTitle.mock.calls[0]?.[0]);
+
+  it('pages back past a long first turn to the request', async () => {
+    const thread = storedThread(90);
+
+    await expect(run(thread)).resolves.toBe('Lisbon Weather');
+
+    expect(thread.genTitle).toHaveBeenCalledTimes(1);
+    expect(userText(thread.genTitle)).toContain('What is the weather in Lisbon today?');
+    expect(thread.memory.updateThread).toHaveBeenCalledWith(expect.objectContaining({ title: 'Lisbon Weather' }));
+    expect(thread.recall).toHaveBeenCalledTimes(3);
+  });
+
+  it('stops paging at the bound and writes no title when the request is further back', async () => {
+    const thread = storedThread(500);
+
+    await expect(run(thread)).resolves.toBeUndefined();
+
+    expect(thread.genTitle).not.toHaveBeenCalled();
+    expect(thread.memory.updateThread).not.toHaveBeenCalled();
+    expect(thread.memory.createThread).not.toHaveBeenCalled();
+    expect(thread.recall).toHaveBeenCalledTimes(5);
   });
 });

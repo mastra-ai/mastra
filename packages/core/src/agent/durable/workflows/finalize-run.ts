@@ -27,7 +27,7 @@ import { createOutputHandler } from '../../../stream/base/output-format-handlers
 import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
-import type { SerializedMessageListState } from '../../message-list/state';
+import type { MastraDBMessage, SerializedMessageListState } from '../../message-list/state';
 import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
@@ -506,14 +506,12 @@ export async function runDurableFinishSideEffects({
   let titleGeneration: Promise<void> | undefined;
   let titleForStream: Promise<string | undefined> | undefined;
 
-  // Same exclusions as the persistence block above: an observational-memory run writes no
-  // messages here, and titling it would create a thread row holding a title and nothing else.
-  if (
-    durableState?.threadId &&
-    durableState?.resourceId &&
-    !durableState.observationalMemory &&
-    !durableState.memoryConfig?.readOnly
-  ) {
+  // Observational memory saves its own messages, so the flush above skips OM runs, and the run's
+  // message list is OM's working context rather than the transcript: by now it may have dropped
+  // the request it observed and added its continuation reminder. Title an OM run from its stored
+  // thread instead, and only if that row exists, so a title never ends up in a row holding
+  // nothing else.
+  if (durableState?.threadId && durableState?.resourceId && !durableState.memoryConfig?.readOnly) {
     const titleArgs: GenerateThreadTitleArgs = {
       threadId: durableState.threadId,
       resourceId: durableState.resourceId,
@@ -521,6 +519,7 @@ export async function runDurableFinishSideEffects({
       messageListState: messageList.serialize(),
       requestContext: effectiveRequestContext,
       tracingContext,
+      fromStoredThread: !!durableState.observationalMemory,
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
@@ -937,6 +936,30 @@ async function runStructuringPass({
 }
 
 /**
+ * An observational-memory run titles from its stored thread, newest first. A long first turn stores
+ * an assistant message and a tool result per tool call after the request, so page back until a user
+ * message turns up, but stop after STORED_TITLE_PAGES so a huge thread cannot hold the finish.
+ */
+const STORED_TITLE_PAGE_SIZE = 40;
+const STORED_TITLE_PAGES = 5;
+
+async function loadStoredTitleMessages(memory: MastraMemory, threadId: string, resourceId: string) {
+  const newestFirst: MastraDBMessage[] = [];
+  for (let page = 0; page < STORED_TITLE_PAGES; page++) {
+    const result = await memory.recall({
+      threadId,
+      resourceId,
+      page,
+      perPage: STORED_TITLE_PAGE_SIZE,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+    });
+    newestFirst.push(...result.messages);
+    if (!result.hasMore || result.messages.some(message => message.role === 'user')) break;
+  }
+  return new MessageList({ threadId, resourceId }).add(newestFirst.reverse(), 'memory');
+}
+
+/**
  * Generate a durable thread title from messages belonging to that thread.
  * This is standalone so a remote worker can call it with the agent and memory
  * it rebuilt from its own Mastra instance.
@@ -950,15 +973,19 @@ export async function generateDurableThreadTitle({
   messageListState,
   requestContext,
   tracingContext,
+  fromStoredThread,
 }: GenerateThreadTitleArgs & { agent: AnyAgent; memory: MastraMemory }): Promise<string | undefined> {
   const thread = await memory.getThreadById({ threadId });
+  if (fromStoredThread && !thread) return undefined;
   const mergedConfig = memory.getMergedThreadConfig(memoryConfig);
   const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
     mergedConfig.generateTitle,
   );
   if (!shouldGenerate || thread?.title) return undefined;
 
-  const titleMessageList = new MessageList().deserialize(messageListState);
+  const titleMessageList = fromStoredThread
+    ? await loadStoredTitleMessages(memory, threadId, resourceId)
+    : new MessageList().deserialize(messageListState);
   const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
   if (uiMessages.length < (minMessages ?? 1)) return undefined;
 
