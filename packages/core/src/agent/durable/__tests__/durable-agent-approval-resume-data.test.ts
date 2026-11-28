@@ -8,8 +8,11 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Knowledge, knowledgeMemoryScopes, knowledgePersonaScopes } from '../../../knowledge';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
+import { RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Workflow } from '../../../workflows/workflow';
@@ -23,10 +26,12 @@ function createToolCallThenTextModel(
   tool: { name: string; args: object },
   abortOnResume = false,
   onResumeCall?: (abortSignal?: AbortSignal) => void,
+  onPrompt?: (prompt: unknown) => void,
 ) {
   let callCount = 0;
   return new MockLanguageModelV2({
-    doStream: async ({ abortSignal }) => {
+    doStream: async ({ abortSignal, prompt }) => {
+      onPrompt?.(prompt);
       callCount++;
       if (callCount > 1 && abortOnResume) {
         onResumeCall?.(abortSignal);
@@ -173,6 +178,70 @@ describe('DurableAgent approval resume data', () => {
     await vi.waitFor(() => expect([...globalRunRegistry.keys()]).not.toContain(initial.runId));
     await new Promise(r => setTimeout(r, 50));
     expect([...globalRunRegistry.keys()]).not.toContain(initial.runId);
+  });
+
+  it('delivers the resumed persona pins after a warm durable approval resume', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      pinnedContext: true,
+      scopes: { ...knowledgeMemoryScopes(), ...knowledgePersonaScopes() },
+    });
+    for (const role of ['support', 'sales']) {
+      await knowledge.upsertPage({
+        scope: `agent:persona:role:${role}`,
+        path: 'rules',
+        name: 'Rules',
+        body: `${role} guidance for this run`,
+      });
+    }
+    const prompts: string[] = [];
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'persona-resume-agent',
+      name: 'Persona Resume Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }, false, undefined, prompt =>
+        prompts.push(JSON.stringify(prompt)),
+      ) as LanguageModelV2,
+      tools: { approvalTool },
+      memory: new MockMemory(),
+      knowledge,
+      scopes: ['org:acme'],
+      metadata: ({ requestContext }) => ({ persona: { role: requestContext.get('role') } }),
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    new Mastra({ logger: false, storage: new MockStore(), agents: { personaResumeAgent: durableAgent } });
+    const initialContext = new RequestContext();
+    initialContext.set('role', 'support');
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the approval tool', {
+      requestContext: initialContext,
+      memory: { thread: 'persona-resume-thread', resource: 'persona-resume-resource' },
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('support guidance for this run');
+    const resumedContext = new RequestContext();
+    resumedContext.set('role', 'sales');
+    const resumed = await durableAgent.resume(initial.runId, { approved: true }, { requestContext: resumedContext });
+    await resumed.output.consumeStream();
+    expect(prompts).toHaveLength(2);
+    const resumedPinSignal = JSON.stringify(JSON.parse(prompts[1]!).at(-1));
+    expect(resumedPinSignal).toContain('pinned-knowledge-update');
+    expect(resumedPinSignal).toContain('- removed');
+    expect(resumedPinSignal).toContain('sales guidance for this run');
+    expect(resumedPinSignal).not.toContain('support guidance for this run');
+    resumed.cleanup();
+    initial.cleanup();
   });
 
   it('releases settled workflow handles and the external resume abort listener', async () => {
