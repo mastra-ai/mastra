@@ -2435,7 +2435,10 @@ export class MessageList {
     if (index !== -1) this.#boundaryFingerprints.set(boundary, { messageId, prefix: prefixFingerprint(parts, index) });
   }
 
-  /** Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row. */
+  /**
+   * Sealing is not optional: a moved id whose boundary is missing folds the next response into the previous row.
+   * Without an id, the latest assistant message is sealed wherever it came from.
+   */
   public rotateResponseMessageId(sealMessageId?: string): string {
     if (!this.markResponseMessageBoundary(sealMessageId)) this.markResponseMessageBoundary();
     return this.newMessageId('assistant');
@@ -2444,7 +2447,7 @@ export class MessageList {
   public markResponseMessageBoundary(messageId?: string): boolean {
     const message = messageId
       ? this.messages.find(message => message.id === messageId)
-      : [...this.messages].reverse().find(message => message.role === 'assistant');
+      : this.messages.findLast(message => message.role === 'assistant');
 
     if (!message || message.role !== 'assistant') {
       return false;
@@ -2458,7 +2461,9 @@ export class MessageList {
       },
     };
 
-    if (!this.stateManager.isResponseMessage(message)) {
+    // Only a named message joins this run's response. The fallback can land on a recalled, context or input message,
+    // which needs the boundary for ordering but is not part of this run's response.
+    if (messageId && !this.stateManager.isResponseMessage(message)) {
       this.stateManager.removeMessage(message);
       this.stateManager.addToSource(message, 'response');
     }
