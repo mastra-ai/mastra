@@ -82,6 +82,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
+import { isSystemReminderMessage } from '../memory/system-reminders';
 import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import type { NotificationDeliveryPolicyInput } from '../notifications/delivery-policy';
@@ -1040,6 +1041,10 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
 
 /** Tool sources slower than this are named on the `agent:prepare-tools` span. */
 const SLOW_TOOL_SOURCE_MS = 100;
+
+/** How far back a title looks through stored messages for the user's request: 5 pages of 40. */
+const STORED_TITLE_PAGE_SIZE = 40;
+const STORED_TITLE_PAGES = 5;
 
 /**
  * Assistant messages in a delegating agent's context that keep content once tool calls
@@ -4019,6 +4024,7 @@ export class Agent<
         __runInputProcessors: this.__runInputProcessors.bind(this),
         __runProcessInputStep: this.__runProcessInputStep.bind(this),
         getMostRecentUserMessage: this.getMostRecentUserMessage.bind(this),
+        getTitleUiMessages: this.getTitleUiMessages.bind(this),
         genTitle: this.genTitle.bind(this),
         resolveTitleGenerationConfig: this.resolveTitleGenerationConfig.bind(this),
         convertInstructionsToString,
@@ -5104,6 +5110,61 @@ export class Agent<
         .map(m => m.id),
     );
     return uiMessages.filter(m => threadMessageIds.has(m.id));
+  }
+
+  /**
+   * The thread's messages a title is made from. System reminders, such as observational memory's
+   * continuation reminder, are `user` messages but not the user's words, so they are left out.
+   */
+  private titleUiMessages(messageList: MessageList, threadId: string) {
+    const reminderIds = new Set(
+      messageList.get.all
+        .db()
+        .filter(isSystemReminderMessage)
+        .map(m => m.id),
+    );
+    return this.filterUiMessagesByThread(messageList, threadId, messageList.get.all.ui()).filter(
+      message => !reminderIds.has(message.id),
+    );
+  }
+
+  /**
+   * The thread's messages to generate a title from. Once observational memory observes mid-turn it
+   * drops the request from the run's messages, leaving only its continuation reminder, so when no
+   * user message remains, title from the thread's stored messages, which still hold it.
+   * @internal
+   */
+  async getTitleUiMessages(memory: MastraMemory, messageList: MessageList, threadId: string, resourceId: string) {
+    const uiMessages = this.titleUiMessages(messageList, threadId);
+    if (uiMessages.some(message => message.role === 'user')) return uiMessages;
+    try {
+      return this.titleUiMessages(await this.loadStoredTitleMessages(memory, threadId, resourceId), threadId);
+    } catch (error) {
+      this.logger.warn('Failed to load stored messages for thread title', { agent: this.name, error });
+      return [];
+    }
+  }
+
+  /**
+   * The thread's newest stored messages, for titling a run whose message list no longer holds the
+   * user's request. A long turn stores an assistant message and a tool result per tool call after the
+   * request, so page back until a user message turns up, but stop after STORED_TITLE_PAGES pages so a
+   * huge thread cannot hold up the run.
+   */
+  private async loadStoredTitleMessages(memory: MastraMemory, threadId: string, resourceId: string) {
+    const newestFirst: MastraDBMessage[] = [];
+    for (let page = 0; page < STORED_TITLE_PAGES; page++) {
+      const result = await memory.recall({
+        threadId,
+        resourceId,
+        page,
+        perPage: STORED_TITLE_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+      });
+      newestFirst.push(...result.messages);
+      if (!result.hasMore || result.messages.some(m => m.role === 'user' && !isSystemReminderMessage(m))) break;
+    }
+    return new MessageList({ threadId, resourceId }).add(newestFirst.reverse(), 'memory');
   }
 
   async genTitle(
@@ -10114,11 +10175,10 @@ export class Agent<
             | undefined,
         );
 
-        const uiMessages = messageList.get.all.ui();
         const requiredMessages = minMessages ?? 1;
 
         if (shouldGenerate && !thread.title) {
-          const threadUiMessages = this.filterUiMessagesByThread(messageList, thread.id, uiMessages);
+          const threadUiMessages = await this.getTitleUiMessages(memory, messageList, thread.id, thread.resourceId);
 
           if (threadUiMessages.length >= requiredMessages) {
             const userMessage = this.getMostRecentUserMessage(threadUiMessages);
