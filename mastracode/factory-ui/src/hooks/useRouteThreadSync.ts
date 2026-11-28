@@ -3,9 +3,9 @@ import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../api/keys';
-import { useChatConnection } from '../ui/domains/chat/context/useChatConnection';
-import { useChatSessionContext } from '../ui/domains/chat/context/useChatSessionContext';
-import { useChatTranscript } from '../ui/domains/chat/context/useChatTranscript';
+import { useChatConnection } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatConnection';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
+import { useChatTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatTranscript';
 import { createAgentControllerClient } from '../ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';

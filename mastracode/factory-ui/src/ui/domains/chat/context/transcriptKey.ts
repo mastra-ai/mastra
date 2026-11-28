@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import { useSessionHost } from './SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 interface TranscriptIdentity {
   sessionId: string;

@@ -8,7 +8,7 @@ import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/Ch
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../overlays';
+import { OverlaysProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverPolyfill implements ResizeObserver {

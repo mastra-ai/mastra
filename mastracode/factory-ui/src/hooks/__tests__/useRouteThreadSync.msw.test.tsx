@@ -6,12 +6,12 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { ChatConnectionContext } from '../../ui/domains/chat/context/ChatConnectionContext';
-import { ChatSessionContext } from '../../ui/domains/chat/context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../ui/domains/chat/context/ChatSessionContext';
-import { ChatTranscriptContext } from '../../ui/domains/chat/context/ChatTranscriptContext';
-import type { ChatTranscriptApi } from '../../ui/domains/chat/context/ChatTranscriptContext';
-import { initialTranscript } from '../../ui/domains/chat/services/transcript';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import type { ChatTranscriptApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import { initialTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 import { useRouteThreadSync } from '../useRouteThreadSync';
 import { useAgentControllerConnection } from '../../ui/domains/chat/hooks/useAgentControllerConnection';
 

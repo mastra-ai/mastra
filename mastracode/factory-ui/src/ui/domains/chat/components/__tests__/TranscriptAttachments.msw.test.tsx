@@ -2,8 +2,8 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import type { TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 describe('transcript attachments', () => {
   describe('when an image is sent or restored', () => {

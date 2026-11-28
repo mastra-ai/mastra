@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { Composer } from '../Composer';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 beforeEach(useOverlayControllerHandlers);

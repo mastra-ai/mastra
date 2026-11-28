@@ -1,0 +1,260 @@
+import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import { isKnownAgentControllerEvent } from '@mastra/client-js';
+import type { TokenUsage } from '@mastra/core/agent-controller';
+import { replaceEqualDeep } from '@tanstack/react-query';
+
+import type { OMBudgets } from './om';
+
+export type SessionStateSnapshot = Pick<AgentControllerSessionState, 'threadId' | 'omProgress' | 'tokenUsage'>;
+export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
+export type GoalSnapshot = Pick<
+  Extract<AgentControllerEvent, { type: 'goal_evaluation' }>['payload'],
+  'objective' | 'status' | 'iteration' | 'maxRuns' | 'passed' | 'reason'
+>;
+
+export interface ChatRuntimeState {
+  usage?: TokenUsage;
+  followUpCount: number;
+  omProgress?: OMBudgets;
+  omPhase: OMPhase;
+  bufferingMessages: boolean;
+  bufferingObservations: boolean;
+  goal?: GoalSnapshot;
+  runsStarted: number;
+  tokensPerSec: number;
+  /** Assistant message the decode window measures; a different message starts a new window. */
+  _decodeMessageId?: string;
+  _decodeStartedAt: number;
+  _decodeLastDeltaAt: number;
+  _decodeHasReasoning: boolean;
+}
+
+export const initialChatRuntime: ChatRuntimeState = {
+  followUpCount: 0,
+  runsStarted: 0,
+  omPhase: 'idle',
+  bufferingMessages: false,
+  bufferingObservations: false,
+  tokensPerSec: 0,
+  _decodeStartedAt: 0,
+  _decodeLastDeltaAt: 0,
+  _decodeHasReasoning: false,
+};
+
+type RuntimeAction =
+  | { type: 'event'; event: AgentControllerEvent }
+  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
+
+type MessagePart = Extract<AgentControllerEvent, { type: 'message_start' }>['message']['content']['parts'][number];
+
+/**
+ * Providers sometimes hold a whole response and send it at once after generating it,
+ * so it arrives within a few milliseconds and its generation time is unobservable.
+ * Such steps keep the last reading instead of dividing by the delivery time.
+ */
+const MIN_DECODE_WINDOW_SEC = 0.05;
+
+/** An empty thinking or text block: the model has started generating it. */
+function isGenerationBlockStart(
+  part: MessagePart | undefined,
+): part is Extract<MessagePart, { type: 'text' | 'reasoning' }> {
+  if (part?.type === 'text') return part.text === '';
+  if (part?.type === 'reasoning') {
+    return part.reasoning === '' && part.details.every(detail => detail.type !== 'text' || detail.text === '');
+  }
+  return false;
+}
+
+/**
+ * Opens the step's decode window when a block starts generating rather than at its first
+ * delta: providers can hold a block and deliver it in one late burst (notably summarized
+ * thinking), which would otherwise divide the whole block by milliseconds. The window is
+ * bound to the assistant message, so a step whose usage never arrived cannot leave its
+ * interval open over the next step. Tool arguments stream before their step's
+ * message_start, so they carry the message id; unstamped ones (older servers) keep the
+ * current window.
+ */
+function markGenerationStart(
+  state: ChatRuntimeState,
+  messageId: string | undefined,
+  isReasoning: boolean,
+  now: number,
+): ChatRuntimeState {
+  if (messageId !== undefined && state._decodeMessageId !== messageId) {
+    return {
+      ...state,
+      _decodeMessageId: messageId,
+      _decodeStartedAt: now,
+      _decodeLastDeltaAt: 0,
+      _decodeHasReasoning: isReasoning,
+    };
+  }
+  return {
+    ...state,
+    _decodeStartedAt: state._decodeStartedAt || now,
+    _decodeHasReasoning: state._decodeHasReasoning || isReasoning,
+  };
+}
+
+export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): ChatRuntimeState {
+  if (action.type === 'reset') {
+    const matchingSnapshot =
+      action.threadId !== undefined && action.state?.threadId === action.threadId ? action.state : undefined;
+    return { ...initialChatRuntime, usage: matchingSnapshot?.tokenUsage, omProgress: matchingSnapshot?.omProgress };
+  }
+
+  const event = action.event;
+  if (!isKnownAgentControllerEvent(event)) return state;
+
+  switch (event.type) {
+    case 'agent_start':
+      return {
+        ...state,
+        runsStarted: state.runsStarted + 1,
+        tokensPerSec: 0,
+        _decodeMessageId: undefined,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+      };
+    case 'agent_end':
+      return {
+        ...state,
+        _decodeMessageId: undefined,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+      };
+    case 'message_start': {
+      // The first thinking or text block of a message arrives inside its message_start.
+      const firstPart = event.message.content.parts.at(-1);
+      if (event.message.role !== 'assistant' || !isGenerationBlockStart(firstPart)) return state;
+      return markGenerationStart(state, event.message.id, firstPart.type === 'reasoning', Date.now());
+    }
+    case 'message_update':
+      if (event.event.type === 'part') {
+        const part = event.event.part;
+        if (!isGenerationBlockStart(part)) return state;
+        return markGenerationStart(state, event.id, part.type === 'reasoning', Date.now());
+      }
+      if (event.event.delta.length > 0) {
+        const now = Date.now();
+        return {
+          ...markGenerationStart(state, event.id, event.event.type === 'reasoning-delta', now),
+          _decodeLastDeltaAt: now,
+        };
+      }
+      return state;
+    case 'tool_input_start':
+      return markGenerationStart(state, event.messageId, false, Date.now());
+    case 'tool_input_delta':
+      if (typeof event.argsTextDelta === 'string' && event.argsTextDelta.length > 0) {
+        const now = Date.now();
+        return { ...markGenerationStart(state, event.messageId, false, now), _decodeLastDeltaAt: now };
+      }
+      return state;
+    case 'usage_update': {
+      const usage = event.usage;
+      // Provider output already includes reasoning. Initial waiting and subsequent tool
+      // execution are not decode time.
+      const reportedReasoning = usage.reasoningTokens ?? 0;
+      // Thinking that never streamed has no observable duration, so measure the output
+      // we did see rather than dividing hidden tokens by a text-only window.
+      const stepTokens =
+        reportedReasoning > 0 && !state._decodeHasReasoning
+          ? usage.completionTokens - reportedReasoning
+          : usage.completionTokens;
+      const decodeSeconds = (state._decodeLastDeltaAt - state._decodeStartedAt) / 1000;
+      let tokensPerSec = state.tokensPerSec;
+      if (state._decodeStartedAt > 0 && decodeSeconds >= MIN_DECODE_WINDOW_SEC && stepTokens > 0) {
+        const instantaneous = stepTokens / decodeSeconds;
+        tokensPerSec =
+          state.tokensPerSec > 0
+            ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
+            : Math.round(instantaneous);
+      }
+      return {
+        ...state,
+        usage: event.total ?? state.usage,
+        tokensPerSec,
+        _decodeMessageId: undefined,
+        _decodeStartedAt: 0,
+        _decodeLastDeltaAt: 0,
+        _decodeHasReasoning: false,
+      };
+    }
+    case 'display_state_changed': {
+      // Snapshots arrive many times a second and mostly repeat what is shown; the same state lets React skip the chat.
+      return replaceEqualDeep(state, {
+        ...state,
+        omProgress: event.displayState.omProgress ?? state.omProgress,
+        usage: event.displayState.tokenUsage ?? state.usage,
+        bufferingMessages: event.displayState.bufferingMessages ?? false,
+        bufferingObservations: event.displayState.bufferingObservations ?? false,
+      });
+    }
+    case 'goal_evaluation':
+      return { ...state, goal: event.payload };
+    case 'follow_up_queued':
+      return { ...state, followUpCount: event.count };
+    case 'om_status': {
+      const { active, buffered } = event.windows;
+      return replaceEqualDeep(state, {
+        ...state,
+        omProgress: {
+          pendingTokens: active.messages.tokens,
+          threshold: active.messages.threshold,
+          observationTokens: active.observations.tokens,
+          reflectionThreshold: active.observations.threshold,
+        },
+        bufferingMessages: buffered.observations.status === 'running',
+        bufferingObservations: buffered.reflection.status === 'running',
+      });
+    }
+    case 'state_changed': {
+      const { observationThreshold, reflectionThreshold } = event.state;
+      return patchOMBudgets(state, {
+        ...(event.changedKeys.includes('observationThreshold') && typeof observationThreshold === 'number'
+          ? { threshold: observationThreshold }
+          : {}),
+        ...(event.changedKeys.includes('reflectionThreshold') && typeof reflectionThreshold === 'number'
+          ? { reflectionThreshold }
+          : {}),
+      });
+    }
+    case 'om_observation_start':
+      return { ...state, omPhase: 'observing' };
+    case 'om_reflection_start':
+      return patchOMBudgets({ ...state, omPhase: 'reflecting' }, { observationTokens: event.tokensToReflect });
+    case 'om_buffering_start':
+      return { ...state, omPhase: 'buffering', ...bufferingFlag(event.operationType, true) };
+    case 'om_observation_end':
+      return patchOMBudgets(
+        { ...state, omPhase: 'idle' },
+        { observationTokens: event.observationTokens, pendingTokens: 0 },
+      );
+    case 'om_reflection_end':
+      return patchOMBudgets({ ...state, omPhase: 'idle' }, { observationTokens: event.compressedTokens });
+    case 'om_buffering_end':
+    case 'om_buffering_failed':
+    case 'om_activation':
+      return { ...state, omPhase: 'idle', ...bufferingFlag(event.operationType, false) };
+    case 'om_observation_failed':
+    case 'om_reflection_failed':
+      return { ...state, omPhase: 'idle' };
+    default:
+      return state;
+  }
+}
+
+/** Without a full reading yet, the view keeps showing the session snapshot rather than a partial one. */
+function patchOMBudgets(state: ChatRuntimeState, patch: Partial<OMBudgets>): ChatRuntimeState {
+  return state.omProgress ? { ...state, omProgress: { ...state.omProgress, ...patch } } : state;
+}
+
+function bufferingFlag(
+  operationType: 'observation' | 'reflection',
+  running: boolean,
+): Pick<ChatRuntimeState, 'bufferingMessages'> | Pick<ChatRuntimeState, 'bufferingObservations'> {
+  return operationType === 'observation' ? { bufferingMessages: running } : { bufferingObservations: running };
+}

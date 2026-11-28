@@ -24,9 +24,9 @@ import {
   useCreateAgentControllerThreadMutation,
 } from '../../../../hooks/useAgentControllerThreadMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ChatSessionActionsContext } from './ChatSessionActionsContext';
-import type { ChatSessionActionsApi } from './ChatSessionActionsContext';
-import { useChatSessionContext } from './useChatSessionContext';
+import { ChatSessionActionsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionActionsContext';
+import type { ChatSessionActionsApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionActionsContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 /** Factory's session actions, served by the Agent Controller. */
 export function ChatSessionActionsProvider({ children }: { children: ReactNode }) {

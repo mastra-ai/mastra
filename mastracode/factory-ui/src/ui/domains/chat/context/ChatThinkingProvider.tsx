@@ -6,11 +6,14 @@ import { useAgentControllerSettings } from '../../../../hooks/useAgentController
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { useEffectiveThinkingLevel } from '../hooks/useEffectiveThinkingLevel';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ChatThinkingContext } from './ChatThinkingContext';
-import type { ChatSessionThinkingLevel, ChatThinkingApi } from './ChatThinkingContext';
-import { useChatModels } from './useChatModels';
-import { useChatModelScope } from './useChatModelScope';
-import { useChatSessionContext } from './useChatSessionContext';
+import { ChatThinkingContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThinkingContext';
+import type {
+  ChatSessionThinkingLevel,
+  ChatThinkingApi,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThinkingContext';
+import { useChatModels } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatModels';
+import { useChatModelScope } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatModelScope';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 /** One provider for a draft and its thread, so a Start keeps the thinking control mounted. */
 export function ChatThinkingProvider({ children }: { children: ReactNode }) {

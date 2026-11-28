@@ -9,8 +9,8 @@ import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/ren
 import { queryKeys } from '../../../../../api/keys';
 import { createQueryClient } from '../../../../../query-client';
 import type { WorkspaceFileIndex, WorkspaceTreeEntry } from '@internal/factory-contract';
-import type { TimelineEntry } from '../../../chat/services/transcript';
-import { useRefreshWorkspaceFilesOnToolCalls } from '../../useRefreshWorkspaceFilesOnToolCalls';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { useRefreshWorkspaceFilesOnToolCalls } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 
 const TREE_URL = `${TEST_BASE_URL}/web/workspace/tree`;

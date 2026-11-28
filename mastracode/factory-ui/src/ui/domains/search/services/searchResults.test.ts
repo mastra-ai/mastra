@@ -2,7 +2,7 @@ import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItem, FactoryUserSession } from '@internal/factory-contract';
-import type { SessionLinks } from '../../chat/context/SessionHostContext';
+import type { SessionLinks } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from './searchResults';
 
 const FACTORY_ID = 'factory-1';

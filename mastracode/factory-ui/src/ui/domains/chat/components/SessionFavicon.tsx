@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import type { ChatSessionPhase } from '../services/sessionStatus';
+import type { ChatSessionPhase } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionStatus';
 
 const FAVICONS: Record<ChatSessionPhase, string> = {
   initializing: '/favicon-session-initializing.svg',

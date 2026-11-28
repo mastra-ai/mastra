@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { MessageEntry, NoticeEntry, SuspensionPrompt } from '../../services/transcript';
-import type { MessagePart } from '../transcript-parts';
-import { drawsModelFallback } from '../ModelFallbackActivity';
+import type {
+  MessageEntry,
+  NoticeEntry,
+  SuspensionPrompt,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import type { MessagePart } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/transcript-parts';
+import { drawsModelFallback } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/modelFallback';
 import { planTurnActivity, sameEntryActivity } from './activity-plan';
 import type { EntryActivity } from './activity-plan';
 

@@ -6,18 +6,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 import { traySurface } from '../../../ui/tray';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
-import { MODEL_DEFAULTS_ANCHORS } from '../services/sessionSettings';
-import type { ModelDefaultsAnchor } from '../services/sessionSettings';
-import { reservedSpaceClass } from '../../workspace-viewer/layout';
-import { useChatTranscript } from '../context/useChatTranscript';
+import { MODEL_DEFAULTS_ANCHORS } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import type { ModelDefaultsAnchor } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import { reservedSpaceClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
+import { useChatTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';
-import { useGlobalShortcuts } from '../hooks/useGlobalShortcuts';
+import { useGlobalShortcuts } from '@mastra/playground-ui/domains/factory/session/thread/chat/hooks/useGlobalShortcuts';
 import { ComposerPanel } from './ComposerPanel';
-import { TranscriptEntries } from './Transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 

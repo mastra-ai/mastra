@@ -8,8 +8,11 @@ import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
 import { useFactorySessionData } from '../../src/ui/domains/chat/context/RouterSessionHost';
-import { SessionHostContext } from '../../src/ui/domains/chat/context/SessionHostContext';
-import type { SessionHost, SessionLinkProps } from '../../src/ui/domains/chat/context/SessionHostContext';
+import { SessionHostContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import type {
+  SessionHost,
+  SessionLinkProps,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
 
 /**

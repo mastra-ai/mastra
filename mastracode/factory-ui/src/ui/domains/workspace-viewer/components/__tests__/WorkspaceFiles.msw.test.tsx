@@ -11,9 +11,9 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { WorkspaceChangePatches, FactoryUserSession } from '@internal/factory-contract';
 import { queryKeys } from '../../../../../api/keys';
 import { ChatPageLayout } from '../../../chat/components/ChatPageLayout';
-import { ChatTranscriptContext } from '../../../chat/context/ChatTranscriptContext';
-import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptContext';
-import { initialTranscript } from '../../../chat/services/transcript';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import type { ChatTranscriptApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import { initialTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 import { WorkspacePanelDock } from '../WorkspacePanelDock';

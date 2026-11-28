@@ -1,7 +1,7 @@
 import { groupTurns } from '@mastra/playground-ui/components/ThreadRail';
 import { describe, expect, it } from 'vitest';
 
-import type { TimelineEntry } from './transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 import { replySteps } from './turns';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');

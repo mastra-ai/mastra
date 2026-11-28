@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { Composer } from '../Composer';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 const COMMAND_NAMES = [

@@ -6,9 +6,13 @@ import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { createInitialTranscript, initialTranscript, transcriptReducer } from '../../services/transcript';
-import type { TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import {
+  createInitialTranscript,
+  initialTranscript,
+  transcriptReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 import { runningTools, settledTools } from './fixtures/tool-outcomes';
 
 const CREATED_AT = new Date('2026-09-16T10:00:00.000Z');

@@ -12,7 +12,7 @@ import { Link, useParams } from 'react-router';
 
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
-import { SessionView } from '../domains/chat/components/SessionView';
+import { SessionView } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/SessionView';
 import { RouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';

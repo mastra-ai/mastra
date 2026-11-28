@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { WorkspaceFile, FactoryUserSession } from '@internal/factory-contract';
-import { SubmitPlanCard } from '../SubmitPlanCard';
+import { SubmitPlanCard } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';
 /** A path an agent can submit from inside a repo checkout: served from that checkout's `.artifacts` root. */

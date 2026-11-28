@@ -7,8 +7,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { NotificationEntry, TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import type {
+  NotificationEntry,
+  TimelineEntry,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const factoryId = 'fp-1';
 const PHASE = 'plan-session';

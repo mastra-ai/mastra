@@ -1,4 +1,4 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 export function useGlobalSearchNavigation(closeSearch: () => void) {
   const { navigate } = useSessionHost();

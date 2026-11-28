@@ -6,8 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../overlays';
-import { ChatMessageBoundary } from '../../context/ChatMessageBoundary';
+import { OverlaysProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/overlays';
+import { ChatMessageBoundary } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatMessageBoundary';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from './composer-session-test-fixture';
 

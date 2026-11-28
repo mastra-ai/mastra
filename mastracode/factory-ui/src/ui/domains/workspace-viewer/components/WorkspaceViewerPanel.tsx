@@ -1,4 +1,4 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { memo, useState } from 'react';
@@ -8,8 +8,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import type { WorkspaceChanges, WorkspaceChangesScope } from '@internal/factory-contract';
 import { useWorkspaceChanges, useWorkspaceFile } from '@mastra/react/hooks/factory';
 import type { WorkspacePanelPage, WorkspaceSectionSlots } from '../context/WorkspacePanelContext';
-import { overviewClass } from '../layout';
-import type { WorkspacePanelSize } from '../layout';
+import { overviewClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
+import type { WorkspacePanelSize } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import type { RepositoryProviders } from './changes/tree/change-tree';
 import { PanelFrame } from './PanelFrame';
 import { PanelSubject } from './PanelSubject';

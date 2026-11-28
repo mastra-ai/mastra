@@ -1,5 +1,5 @@
 import { Tree } from '@mastra/playground-ui/components/Tree';
-import { treeRowContainmentClass } from '../../../layout';
+import { treeRowContainmentClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { ChangeCounts } from '../ChangeCounts';
 import { ChangeStatusIcon } from '../ChangeStatusIcon';
 import type { ChangeTreeNode } from './change-tree';

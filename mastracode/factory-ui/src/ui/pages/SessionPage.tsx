@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
-import { SessionView } from '../domains/chat/components/SessionView';
+import { SessionView } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/SessionView';
 import { RouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { CardDraftPage } from './CardDraftPage';
 

@@ -10,7 +10,7 @@ import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
 import { pickSessionProperty } from './fixtures/sessionProperties';

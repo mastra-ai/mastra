@@ -1,0 +1,32 @@
+import { useChatRuntime } from '../../context/useChatRuntime';
+import type { OMWorkByBudget } from '../../services/om';
+
+import { omWork } from '../../services/om';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+import { Shimmer } from '@/ds/components/Shimmer';
+
+const MemoryGlyph = agentGlyph('memory');
+
+const statusItem = 'inline-flex items-center gap-1 text-muted-foreground [&_svg]:text-subtle-foreground';
+
+function holdingLabel({ messages, observations }: OMWorkByBudget): string | undefined {
+  if (messages === 'blocking') return 'saving memory';
+  if (observations === 'blocking') return 'consolidating memory';
+  return undefined;
+}
+
+export function RuntimeActivity() {
+  const runtime = useChatRuntime();
+  const label = holdingLabel(omWork(runtime));
+
+  return (
+    <>
+      {label && (
+        <span className={statusItem}>
+          <MemoryGlyph size={13} /> <Shimmer>{label}</Shimmer>
+        </span>
+      )}
+      {runtime.tokensPerSec > 0 && <span className={statusItem}>{runtime.tokensPerSec} tok/s</span>}
+    </>
+  );
+}

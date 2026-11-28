@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { Composer } from './Composer';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
 
 const composerPanelClass = 'composer-enter flex min-w-0 w-full max-w-full shrink-0 flex-col gap-1.5';
 

@@ -8,17 +8,17 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../overlays';
-import { GoalPanel } from '../../components/GoalPanel';
-import { GoalStatus } from '../../components/StatusLine/GoalStatus';
-import { OperationalMemoryStatus } from '../../components/StatusLine/OperationalMemoryStatus';
-import { QueuedFollowUps } from '../../components/StatusLine/QueuedFollowUps';
-import { Transcript } from '../../components/Transcript';
+import { OverlaysProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/overlays';
+import { GoalPanel } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/GoalPanel';
+import { GoalStatus } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/GoalStatus';
+import { OperationalMemoryStatus } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/OperationalMemoryStatus';
+import { QueuedFollowUps } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/QueuedFollowUps';
+import { Transcript } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
-import type { SessionStateSnapshot } from '../../services/runtime';
-import { useChatCommands } from '../ChatCommandsProvider';
+import type { SessionStateSnapshot } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/runtime';
+import { useChatCommands } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatCommandsContext';
 import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
-import { useChatTranscript } from '../useChatTranscript';
+import { useChatTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatTranscript';
 
 const snapshot: SessionStateSnapshot = {
   threadId: SESSION_ID,

@@ -1,11 +1,15 @@
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { useFallbackModelQuery, useDefaultModelQuery, useProvidersQuery } from '@mastra/react/hooks/factory';
 import { isConnectedAt } from '../../settings/components/provider-credential';
-import { sessionDefaultsAnchor } from '../services/sessionSettings';
-import type { ModelDefaultsAnchor } from '../services/sessionSettings';
+import { sessionDefaultsAnchor } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import type { ModelDefaultsAnchor } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
 import type { FactoryProject } from '@internal/factory-contract';
-import type { ChatSessionContextApi } from '../context/ChatSessionContext';
-import { newChatCatalogTarget, routedDefaultModelId, routedModelDefaults } from '../context/chatDefaultModel';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import {
+  newChatCatalogTarget,
+  routedDefaultModelId,
+  routedModelDefaults,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/chatDefaultModel';
 
 export interface MissingCredentialGuard {
   modelId: string;

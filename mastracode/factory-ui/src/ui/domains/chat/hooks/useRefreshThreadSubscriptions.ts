@@ -1,10 +1,10 @@
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { useEffect, useRef } from 'react';
 
 import type { ChangeRequestProvider } from '@internal/factory-contract';
-import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
-import type { TranscriptState } from '../services/transcript';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
+import { useChatTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatTranscript';
+import type { TranscriptState } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 
 function notificationKey(entries: TranscriptState['entries']): string {
   return entries

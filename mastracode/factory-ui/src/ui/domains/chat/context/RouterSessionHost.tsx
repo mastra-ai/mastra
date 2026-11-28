@@ -30,8 +30,13 @@ import { useTakeSessionOwnership } from '../../workspaces/hooks/useTakeSessionOw
 import { relationshipPath } from '../../factory/services/relationshipPath';
 import { cardPath, factoryHomePath, newUserSessionPath, threadPath } from '../../workspaces/services/factoryPaths';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { SessionHostContext } from './SessionHostContext';
-import type { SessionHost, SessionHostData, SessionLinkProps, SessionRouteKind } from './SessionHostContext';
+import { SessionHostContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import type {
+  SessionHost,
+  SessionHostData,
+  SessionLinkProps,
+  SessionRouteKind,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 /** Factory's project, viewer and session data, read through its own query cache. */
 export function useFactorySessionData(): SessionHostData {

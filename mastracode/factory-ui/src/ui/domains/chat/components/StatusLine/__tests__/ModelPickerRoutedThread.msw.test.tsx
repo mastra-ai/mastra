@@ -9,13 +9,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
-import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
 import { ChatPermissionsProvider } from '../../../context/ChatPermissionsProvider';
-import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { ChatSessionBoundary } from '../../../context/ChatSessionProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
-import { ModelPicker } from '../ModelPicker';
+import { ModelPicker } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/ModelPicker';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};

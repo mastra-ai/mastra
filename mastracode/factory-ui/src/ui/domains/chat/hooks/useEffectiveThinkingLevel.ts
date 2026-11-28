@@ -1,12 +1,19 @@
 import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
 import { DEFAULT_THINKING_LEVEL } from '@internal/factory-contract';
 
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { useModelReasoningOptions } from '@mastra/react/hooks/factory';
 import type { AvailableModelsTarget } from '@mastra/react/hooks/factory';
 import type { FactoryModelScope } from '@internal/factory-contract';
-import { resolveEffectiveThinkingLevel, routedThinkingDefault } from '../services/thinkingLevels';
-import type { EffectiveThinkingLevel, PersonalThinkingDefault, ThinkingDefault } from '../services/thinkingLevels';
+import {
+  resolveEffectiveThinkingLevel,
+  routedThinkingDefault,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/thinkingLevels';
+import type {
+  EffectiveThinkingLevel,
+  PersonalThinkingDefault,
+  ThinkingDefault,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/thinkingLevels';
 
 export function useEffectiveThinkingLevel({
   modelId,

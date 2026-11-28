@@ -10,7 +10,7 @@ import type { SessionFrameSlots } from '../components/SessionRouteFrame';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
-import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
+import { useThreadWorkspacePath } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/hooks/useThreadWorkspacePath';
 import { currentItemStage } from '@mastra/playground-ui/domains/factory';
 import { CardStageBar } from '../components/CardStageBar';
 import { CardStageSummary } from '../components/CardStageSummary';

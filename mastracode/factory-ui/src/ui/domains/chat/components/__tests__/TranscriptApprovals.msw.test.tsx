@@ -2,7 +2,7 @@ import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { TranscriptEntries } from '../Transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 import { toolApproval } from './fixtures/tool-approval';
 
 describe('transcript approvals', () => {

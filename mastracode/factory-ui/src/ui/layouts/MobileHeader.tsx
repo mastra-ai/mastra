@@ -4,7 +4,7 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 
-import { useGlobalSearchControls } from '../domains/search/hooks/useGlobalSearchControls';
+import { useGlobalSearchControls } from '@mastra/playground-ui/domains/factory/session/thread/search/hooks/useGlobalSearchControls';
 
 export function MobileHeader() {
   const { isMobile } = useSidebar();

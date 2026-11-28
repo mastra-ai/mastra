@@ -7,15 +7,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import { ChatCommandsProvider } from '../../context/ChatCommandsProvider';
-import { ChatModelsContext } from '../../context/ChatModelsContext';
-import { ChatPermissionsContext } from '../../context/ChatPermissionsContext';
-import { ChatSessionActionsContext } from '../../context/ChatSessionActionsContext';
-import { ChatThinkingContext } from '../../context/ChatThinkingContext';
-import { useChatModels } from '../../context/useChatModels';
-import { useChatSessionActions } from '../../context/useChatSessionActions';
-import { Composer } from '../Composer';
-import { GoalPanel } from '../GoalPanel';
+import { ChatCommandsProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatCommandsProvider';
+import { ChatModelsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatModelsContext';
+import { ChatPermissionsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatPermissionsContext';
+import { ChatSessionActionsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionActionsContext';
+import { ChatThinkingContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThinkingContext';
+import { useChatModels } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatModels';
+import { useChatSessionActions } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionActions';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
+import { GoalPanel } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/GoalPanel';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 type Capability = 'goal' | 'followUp' | 'thinking' | 'permissions' | 'modelSwitching';

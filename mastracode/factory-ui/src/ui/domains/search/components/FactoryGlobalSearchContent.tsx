@@ -1,4 +1,4 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
 import {

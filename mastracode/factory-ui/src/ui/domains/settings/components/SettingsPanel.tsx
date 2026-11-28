@@ -2,8 +2,8 @@ import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useParams } from 'react-router';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
-import { useChatPermissions } from '../../chat/context/useChatPermissions';
-import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useChatPermissions } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatPermissions';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import {

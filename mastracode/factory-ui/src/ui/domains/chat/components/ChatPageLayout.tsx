@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import { reservedSpaceClass } from '../../workspace-viewer/layout';
+import { reservedSpaceClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { chatHeaderStyle, headerCapsuleClass } from './chatPageHeader';
 import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 

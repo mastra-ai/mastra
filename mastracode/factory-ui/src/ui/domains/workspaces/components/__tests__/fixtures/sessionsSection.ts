@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
-import type { ChatSessionContextApi } from '../../../../chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 
 export function stubSessionsFactory(factoryId: string, projectRepositoryIds: string[]) {
   server.use(

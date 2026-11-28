@@ -3,10 +3,10 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../../e2e/ui/render';
-import { ChatRuntimeContext } from '../../../context/ChatRuntimeContext';
-import type { ChatRuntimeApi } from '../../../context/ChatRuntimeContext';
-import { OperationalMemoryStatus } from '../OperationalMemoryStatus';
-import { RuntimeActivity } from '../RuntimeActivity';
+import { ChatRuntimeContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatRuntimeContext';
+import type { ChatRuntimeApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatRuntimeContext';
+import { OperationalMemoryStatus } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/OperationalMemoryStatus';
+import { RuntimeActivity } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/RuntimeActivity';
 
 const omProgress: AgentControllerOMProgress = {
   status: 'idle',

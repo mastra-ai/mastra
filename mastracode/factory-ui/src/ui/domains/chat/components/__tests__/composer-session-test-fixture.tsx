@@ -13,15 +13,15 @@ import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { SessionModelTarget } from '../../../../../hooks/useSessionModel';
-import { OverlaysProvider } from '../../overlays';
+import { OverlaysProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { DraftSessionCreateError } from '../../../workspaces/services/user-sessions';
-import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
-import { failedDraftState } from '../../services/handoffFiles';
-import { useThreadWorkspacePath } from '../../../workspace-viewer/hooks/useThreadWorkspacePath';
-import { SessionChatSurface } from '../SessionChatSurface';
+import { useHandoffPrompt } from '@mastra/playground-ui/domains/factory/session/thread/chat/hooks/useHandoffPrompt';
+import { failedDraftState } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/handoffFiles';
+import { useThreadWorkspacePath } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/hooks/useThreadWorkspacePath';
+import { SessionChatSurface } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/SessionChatSurface';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};

@@ -7,11 +7,11 @@ import type { ReactNode } from 'react';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
-import { ChatConnectionContext } from '../ChatConnectionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
 import { ChatModelsProvider } from '../ChatModelsProvider';
-import { ChatSessionContext } from '../ChatSessionContext';
-import type { ChatSessionContextApi } from '../ChatSessionContext';
-import { useChatModels } from '../useChatModels';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { useChatModels } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatModels';
 
 const draftSession: ChatSessionContextApi = {
   sessionId: 'draft-1',

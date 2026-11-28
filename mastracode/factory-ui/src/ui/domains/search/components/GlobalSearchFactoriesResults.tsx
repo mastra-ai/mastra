@@ -3,7 +3,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Factory } from 'lucide-react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import type { FactoryProject } from '@internal/factory-contract';
 
 function factoryContext(repositorySlugs: string[]): string {

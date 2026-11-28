@@ -1,4 +1,7 @@
-import type { SessionLinks, SessionList } from '../../chat/context/SessionHostContext';
+import type {
+  SessionLinks,
+  SessionList,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { cardContextSessions } from '@internal/factory-contract';
 import type { CardContextSession, WorkItem, WorkItemSessionRef, FactoryUserSession } from '@internal/factory-contract';
 import { workItemNumber } from '@mastra/factory/work-items/card-number';
@@ -18,7 +21,7 @@ import {
   getReviewBranchIdentifier,
   getUserSessionLabel,
   isAutomaticUserSessionBranch,
-} from '../../chat/services/sessionPresentation';
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionPresentation';
 
 export interface SessionSearchResult {
   id: string;

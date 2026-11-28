@@ -12,13 +12,16 @@ import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import type { SessionModelTarget } from '../../../../../../hooks/useSessionModel';
-import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
-import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
-import { ChangeModelAction, ModelPicker } from '../ModelPicker';
+import {
+  ChangeModelAction,
+  ModelPicker,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/ModelPicker';
 import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
 
 /** Opens the model picker and returns its thinking section, named by level and origin. */

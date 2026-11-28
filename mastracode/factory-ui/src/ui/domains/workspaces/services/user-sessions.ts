@@ -4,7 +4,10 @@
  * which resolves its source-control provider; individual-session routes resolve
  * the provider from the durable session row.
  */
-export { DraftSessionCreateError, isSessionNotFound } from '../../chat/services/sessionErrors';
+export {
+  DraftSessionCreateError,
+  isSessionNotFound,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionErrors';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
 import type { FactoryUserSession } from '@internal/factory-contract';

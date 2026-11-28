@@ -1,0 +1,88 @@
+import { useChatRuntime } from '../../context/useChatRuntime';
+import type { OMWork } from '../../services/om';
+import { omWork } from '../../services/om';
+import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@/ds/components/TokenBudget';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
+import { IconChatBubble7 } from '@/ds/icons/central/IconChatBubble7';
+
+const messageLabel: Record<OMWork, string> = {
+  idle: 'Message window until next observation',
+  background: 'Saving the message window to memory in the background',
+  blocking: 'Saving the message window to memory',
+};
+
+const observationLabel: Record<OMWork, string> = {
+  idle: 'Observations accumulated until next reflection',
+  background: 'Consolidating observations in the background',
+  blocking: 'Consolidating observations',
+};
+
+function reading(tokens: number, threshold: number) {
+  return `${formatCompactTokens(tokens)} of ${formatCompactTokens(threshold)}k`;
+}
+
+export function OperationalMemoryStatus() {
+  const runtime = useChatRuntime();
+  const om = runtime.omProgress;
+  const work = omWork(runtime);
+  const showMsg = om && om.threshold > 0;
+  const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
+
+  if (!showMsg && !showMem) return null;
+
+  const messageTone = work.messages === 'blocking' ? 'warning' : 'messages';
+  const observationTone = work.observations === 'blocking' ? 'warning' : 'memory';
+  // Buttons hide descendant semantics, so the trigger names both budgets.
+  const spoken = [
+    showMsg && `${messageLabel[work.messages]}, ${reading(om.pendingTokens, om.threshold)}`,
+    showMem && `${observationLabel[work.observations]}, ${reading(om.observationTokens, om.reflectionThreshold)}`,
+  ].filter(Boolean);
+
+  return (
+    <Popover>
+      <PopoverTrigger variant="ghost" size="sm" aria-label={`Memory budgets: ${spoken.join('. ')}`} className="gap-3">
+        {showMsg && (
+          <TokenBudget
+            label={messageLabel[work.messages]}
+            threshold={om.threshold}
+            tokens={om.pendingTokens}
+            tone={messageTone}
+            working={work.messages !== 'idle'}
+          />
+        )}
+        {showMem && (
+          <TokenBudget
+            label={observationLabel[work.observations]}
+            threshold={om.reflectionThreshold}
+            tokens={om.observationTokens}
+            tone={observationTone}
+            working={work.observations !== 'idle'}
+          />
+        )}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="flex flex-col gap-3.5" side="top">
+        {showMsg && (
+          <TokenBudgetDetail
+            description="Read into memory once full"
+            icon={<IconChatBubble7 />}
+            label="Messages"
+            threshold={om.threshold}
+            tokens={om.pendingTokens}
+            tone={messageTone}
+          />
+        )}
+        {showMem && (
+          <TokenBudgetDetail
+            description="Consolidated into a reflection once full"
+            icon={<IconBrain />}
+            label="Observations"
+            threshold={om.reflectionThreshold}
+            tokens={om.observationTokens}
+            tone={observationTone}
+          />
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}

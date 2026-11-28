@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { reservedSpaceClass } from '../layout';
+import { reservedSpaceClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { WorkspacePanelDockCard } from './WorkspacePanelDockCard';
 
 function measureCapsule(capsule: HTMLDivElement) {
