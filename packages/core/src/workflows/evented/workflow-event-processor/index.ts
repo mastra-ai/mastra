@@ -4480,8 +4480,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           completionGuard: { eventId: args.eventId! },
         });
       }
-      // The retry's claim expects this attempt's stamp. A resumed step keeps its suspended record
-      // with that stamp, so the retry still reads its suspend data from it.
+      // The retry's claim expects this attempt's stamp. For a resumed step the retry gets the
+      // suspended record in memory, with that stamp: the stored record of the failed attempt has no
+      // suspend fields, and the retry reads its suspend data from the record it is handed.
       if (guardStart) {
         stepResults[leafId] = isResumedEntry
           ? { ...stepResults[leafId]!, metadata: { ...stepResults[leafId]?.metadata, startedBy: args.eventId } }

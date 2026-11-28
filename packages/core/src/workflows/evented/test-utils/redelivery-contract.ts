@@ -46,6 +46,11 @@ export async function drainHandlers(timeoutMs = 10_000): Promise<void> {
     // Handling that just settled may hand events to a subscriber on a later tick.
     await new Promise(resolve => setTimeout(resolve, 0));
     if (handledCalls().length === calls.length) return;
+    // Settled work wins the race against an expired timer, so deliveries that keep arriving would
+    // otherwise keep this loop going past the deadline.
+    if (performance.now() >= deadline) {
+      throw new Error(`Processor work did not settle: deliveries kept arriving (${handledCalls().length} so far)`);
+    }
   }
 }
 

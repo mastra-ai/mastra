@@ -393,7 +393,13 @@ export function describeResumeOccurrenceCases({
             event.data.resumeSteps?.length &&
             event.data.executionPath?.[0] === 0
           ) {
-            releaseFirst = () => publish(topic, event, options);
+            // Single use, so the cleanup below only publishes an event the case never released.
+            let released = false;
+            releaseFirst = async () => {
+              if (released) return;
+              released = true;
+              await publish(topic, event, options);
+            };
             firstStepEvent.resolve();
             return;
           }
@@ -996,8 +1002,10 @@ export function describeResumeOccurrenceCases({
     // The child's hand-back then completes that step under its stored occurrence, so the record
     // must read as running again or the guard keeps the suspension and the parent never continues.
     // A child that declines running snapshots writes no run of its own on resume; on storage v2 it
-    // always does. When the worker stops after the child's own write and before the parent's, the
-    // redelivered resume finds itself applied and must still move the parent's step.
+    // always does. The last row stops the worker at the child's write to the parent's step. That
+    // write comes before the child stores its own run and marks the resume applied, so the
+    // redelivered resume applies again and moves the parent's step. If the parent's step moved after
+    // the mark, the redelivery would find the resume applied and the parent would stay suspended.
     it.each([
       { name: 'stores running snapshots', declinesRunning: false, stopsBeforeParentWrite: false },
       { name: 'declines running snapshots', declinesRunning: true, stopsBeforeParentWrite: false },
@@ -1183,6 +1191,10 @@ export function describeResumeOccurrenceCases({
                 return publish(topic, event, options);
               });
               await redeliverInBody(driver, finishing);
+              // The duplicate's next step must be the one held before the original copy goes on.
+              if (order === 'the slower copy completes first') {
+                await expect.poll(() => heldNext, { timeout: 10_000 }).toBeDefined();
+              }
               held.resolve();
               await settleSecondCompletion(
                 driver,
