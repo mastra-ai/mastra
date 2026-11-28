@@ -10,8 +10,8 @@ import { useSessionHost } from '../context/SessionHostContext';
 
 import { traySurface } from '../../../ui/tray';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
-import { MODEL_DEFAULTS_ANCHORS, settingsSectionPath } from '../../settings/settingsSections';
-import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
+import { MODEL_DEFAULTS_ANCHORS } from '../services/sessionSettings';
+import type { ModelDefaultsAnchor } from '../services/sessionSettings';
 import { reservedSpaceClass } from '../../workspace-viewer/layout';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { DraftModelGuards, MissingCredentialGuard } from '../hooks/useDraftModelGuards';

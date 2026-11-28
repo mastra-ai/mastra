@@ -1,7 +1,7 @@
 import { useSessionHost } from '../../chat/context/SessionHostContext';
 
-import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import { DraftSessionCreateError } from '../../workspaces/services/user-sessions';
+import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { sessionUnavailableError, DraftSessionCreateError } from '../../chat/services/sessionErrors';
 
 /** Workspace for the current route — user threads have no `sessionId` segment, so resolve from the thread. */
 export function useThreadWorkspacePath() {

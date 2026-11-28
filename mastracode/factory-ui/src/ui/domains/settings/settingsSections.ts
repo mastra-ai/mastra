@@ -1,44 +1,12 @@
-import type { FactoryModelScope } from '../workspaces/services/github';
-import { MODEL_DEFAULTS_ANCHORS, MODEL_ROUTES } from './components/models/routing/model-routes';
-
-export type SettingsSection =
-  | 'account'
-  | 'factory'
-  | 'connections'
-  | 'repositories'
-  | 'intake'
-  | 'models'
-  | 'memory'
-  | 'tools'
-  | 'skills'
-  | 'behavior'
-  | 'debug';
-
-export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
-  account: 'My account',
-  factory: 'Manage Factory',
-  connections: 'Connections',
-  repositories: 'Repositories',
-  intake: 'Work Intake',
-  models: 'Models',
-  memory: 'Memory',
-  tools: 'Tools',
-  skills: 'Skills',
-  behavior: 'Behavior',
-  debug: 'Debug',
-};
-
-export { MODEL_DEFAULTS_ANCHORS };
-
-export type ModelDefaultsAnchor = (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS];
-
-export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined): ModelDefaultsAnchor {
-  if (!modelScope) return MODEL_DEFAULTS_ANCHORS.personal;
-  return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
-}
-
-export { VOICE_INPUT_ANCHOR } from '../chat/context/SessionHostContext';
-import type { VOICE_INPUT_ANCHOR } from '../chat/context/SessionHostContext';
+export {
+  MODEL_DEFAULTS_ANCHORS,
+  SETTINGS_SECTION_LABELS,
+  VOICE_INPUT_ANCHOR,
+  sessionDefaultsAnchor,
+} from '../chat/services/sessionSettings';
+export type { ModelDefaultsAnchor, SettingsSection } from '../chat/services/sessionSettings';
+import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS } from '../chat/services/sessionSettings';
+import type { ModelDefaultsAnchor, SettingsSection, VOICE_INPUT_ANCHOR } from '../chat/services/sessionSettings';
 
 type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 

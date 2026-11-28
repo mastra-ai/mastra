@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModelScope } from '../context/useChatModelScope';
 
 /** Observer and reflector models come from Memory settings, not the session model picker. */

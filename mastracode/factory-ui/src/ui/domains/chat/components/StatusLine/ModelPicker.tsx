@@ -17,7 +17,7 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatThinking } from '../../context/useChatThinking';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
+import { sessionDefaultsAnchor } from '../../services/sessionSettings';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelPackSection } from './ModelPackSection';

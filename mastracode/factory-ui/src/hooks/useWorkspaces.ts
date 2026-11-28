@@ -190,10 +190,7 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery(userSessionQueryOptions(baseUrl, sessionId));
 }
 
-export function sessionUnavailableError(query: UseQueryResult<FactoryUserSession>): Error | undefined {
-  if (!query.error) return undefined;
-  return query.isLoadingError || isSessionNotFound(query.error) ? query.error : undefined;
-}
+export { sessionUnavailableError } from '../ui/domains/chat/services/sessionErrors';
 
 export function useCreateWorkspaceMutation(factoryId: string | undefined, projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();

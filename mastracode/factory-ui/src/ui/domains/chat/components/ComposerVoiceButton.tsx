@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { useSessionHost } from '../context/SessionHostContext';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
-import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
+import { VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
 import { voiceDictationSupported } from './useVoiceDictation';
 import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';

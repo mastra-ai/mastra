@@ -3,7 +3,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';

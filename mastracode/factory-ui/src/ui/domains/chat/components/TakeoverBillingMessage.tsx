@@ -5,7 +5,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../hooks/useSessionModelCatalog';
-import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
+import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS } from '../services/sessionSettings';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModelScope } from '../context/useChatModelScope';
 

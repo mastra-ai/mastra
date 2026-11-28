@@ -1,16 +1,15 @@
-import type { MODEL_DEFAULTS_ANCHORS } from '@mastra/playground-ui/domains/factory';
 import { createContext, useContext } from 'react';
 import type { AnchorHTMLAttributes, ComponentType } from 'react';
 
+import type { ModelDefaultsAnchor, SettingsSection, VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
+
+export { VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
+
 /** The settings pages a session links to. */
-export type SessionSettingsSection = 'models' | 'memory';
+export type SessionSettingsSection = SettingsSection;
 
-export const VOICE_INPUT_ANCHOR = 'voice-input';
-
-/** Places on the models page a session links to. */
-export type SessionSettingsAnchor =
-  | (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS]
-  | typeof VOICE_INPUT_ANCHOR;
+/** Places on the settings pages a session links to. */
+export type SessionSettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 
 export interface SessionLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
   href: string;

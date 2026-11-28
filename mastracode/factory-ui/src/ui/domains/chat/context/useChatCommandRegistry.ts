@@ -20,7 +20,7 @@ import {
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
