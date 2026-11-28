@@ -134,10 +134,8 @@ describe('RerunExperimentButton', () => {
 
     const versionField = await screen.findByRole<HTMLInputElement>('combobox', { name: /^Agent version/ });
     await waitFor(() => expect(versionField.value).toBe('v1'));
-    // The version's own model is what the run uses, so it is what the picker shows.
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('claude-haiku-4-5'),
-    );
+    // A pinned version does not change a code-defined agent's model, so the picker keeps showing the agent's own.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('gpt-4o-mini'));
     fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));

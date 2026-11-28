@@ -19,7 +19,7 @@ const latestVersion: AgentVersionResponse = {
   createdAt: '2026-11-02T10:00:00.000Z',
 };
 
-// Saved on another model than the agent runs on now, so a run that ignores the pinned version's model is visible.
+// Saved on another model than the agent runs on now, so a run that keeps using the agent's model is visible.
 const publishedVersion: AgentVersionResponse = {
   id: publishedAgentVersionId,
   agentId: agentIdWithVersions,

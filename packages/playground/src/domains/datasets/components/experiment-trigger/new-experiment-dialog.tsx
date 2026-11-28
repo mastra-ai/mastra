@@ -26,7 +26,6 @@ import { RunExperimentAction } from './run-experiment-action';
 import { ScorersField } from './scorers-field';
 import { TargetField } from './target-field';
 import { useAgentModelChoice } from './use-agent-model-choice';
-import { useAgentVersionChoice } from './use-agent-version-choice';
 import { useDatasetChoice } from './use-dataset-choice';
 import { useExperimentName } from './use-experiment-name';
 import { useRequestContextInput } from './use-request-context-input';
@@ -69,22 +68,17 @@ export function NewExperimentDialog({
   const scorerChoice = useScorerChoice({ datasetId: datasetChoice.datasetId, initialScorerIds });
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
   const { target } = targetChoice;
+  const agentModelChoice = useAgentModelChoice(target?.defaultModel);
   const isAgentTarget = target?.type === 'agent';
-  // One versions query feeds both the version field and the model picker, which must show a pinned version's model.
-  const agentVersionChoice = useAgentVersionChoice({
-    agentId: isAgentTarget ? target.id : undefined,
-    initialVersion: initialAgentVersion,
-  });
-  // A pinned version brings its own model; the picker shows that instead of the agent's current one.
-  const agentModelChoice = useAgentModelChoice(agentVersionChoice.selectedVersionModel ?? target?.defaultModel);
   const agentModel = isAgentTarget ? agentModelChoice.agentModel : undefined;
   // Runs on different models would otherwise share a name, so the picked model joins the default one.
   const nameLabel = agentModel && target ? `${target.label} ${agentModel.modelId}` : target?.label;
   const experimentName = useExperimentName({ initialName, targetLabel: nameLabel });
   const [description, setDescription] = useState(initialDescription ?? '');
+  const [agentVersion, setAgentVersion] = useState(initialAgentVersion);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   // A version is only ever sent for an agent target, and a pick belongs to the agent it was made for.
-  const agentVersionToRun = isAgentTarget ? agentVersionChoice.version : undefined;
+  const agentVersionToRun = isAgentTarget ? agentVersion : undefined;
   const { triggerExperiment } = useDatasetMutations();
 
   const { datasetId } = datasetChoice;
@@ -98,7 +92,7 @@ export function NewExperimentDialog({
   const handleTargetValueChange = (targetValue: string) => {
     targetChoice.setTargetValue(targetValue);
     agentModelChoice.reset();
-    agentVersionChoice.reset();
+    setAgentVersion(undefined);
   };
 
   const handleDatasetChange = (nextDatasetId: string) => {
@@ -184,9 +178,9 @@ export function NewExperimentDialog({
               </div>
               {isAgentTarget && target && (
                 <AgentVersionField
-                  versions={agentVersionChoice.versions}
-                  version={agentVersionChoice.version}
-                  onVersionChange={agentVersionChoice.setVersion}
+                  agentId={target.id}
+                  version={agentVersion}
+                  onVersionChange={setAgentVersion}
                   container={contentRef}
                 />
               )}
