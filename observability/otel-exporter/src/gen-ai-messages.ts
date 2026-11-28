@@ -78,7 +78,8 @@ const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
         'toolName' in p &&
         'output' in p &&
         typeof p.output === 'object' &&
-        p.output !== null))
+        p.output !== null &&
+        'value' in p.output))
   );
 };
 

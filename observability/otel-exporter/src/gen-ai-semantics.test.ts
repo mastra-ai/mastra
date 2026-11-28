@@ -936,23 +936,28 @@ describe('convertMastraMessagesToGenAIMessages', () => {
   });
 
   it('treats a tool result with no value object as an unknown shape', () => {
-    // A `toModelOutput` callback can return `null` or a primitive. The declared tool-result
-    // shape is `{ value: unknown }`, so these are not messages the input paths recognize and
-    // the caller's unchanged passthrough applies, instead of converting an empty message.
-    const nullOutput = [
-      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: null }] },
-    ];
-    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(nullOutput))).toBe(JSON.stringify(nullOutput));
-    expect(convertMastraMessagesToGenAIMessages(JSON.stringify({ messages: nullOutput }))).toBe(
-      JSON.stringify(nullOutput),
-    );
+    // A `toModelOutput` callback can return `null`, a primitive, an array, or a plain object
+    // with no `value`. The declared tool-result shape is `{ value: unknown }`, so anything
+    // without a value is not a message the input paths recognize: the caller's unchanged
+    // passthrough applies instead of converting an empty message.
+    const unconvertible: Record<string, unknown> = {
+      'null output': null,
+      'primitive output': 'text',
+      'empty object output': {},
+      'object output with no value': { type: 'json' },
+      'array output': [1, 2],
+    };
+    for (const [name, output] of Object.entries(unconvertible)) {
+      const messages = [
+        { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output }] },
+      ];
+      const bare = JSON.stringify(messages);
+      expect(convertMastraMessagesToGenAIMessages(bare), name).toBe(bare);
+      expect(convertMastraMessagesToGenAIMessages(JSON.stringify({ messages })), name).toBe(JSON.stringify(messages));
+      expect(convert(messages), name).toEqual(messages);
+    }
 
-    const stringOutput = [
-      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: 'text' }] },
-    ];
-    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(stringOutput))).toBe(JSON.stringify(stringOutput));
-
-    // A conforming result still converts, including one whose value is itself `null`.
+    // A conforming result still converts, including values that are themselves empty or null.
     expect(
       convert([
         {
@@ -981,5 +986,13 @@ describe('convertMastraMessagesToGenAIMessages', () => {
         },
       ]),
     ).toEqual([{ role: 'tool', parts: [{ type: 'tool_call_response', id: 't3', name: 'lookup', response: 'null' }] }]);
+    expect(
+      convert([
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 't4', toolName: 'lookup', output: { value: {} } }],
+        },
+      ]),
+    ).toEqual([{ role: 'tool', parts: [{ type: 'tool_call_response', id: 't4', name: 'lookup', response: '{}' }] }]);
   });
 });
