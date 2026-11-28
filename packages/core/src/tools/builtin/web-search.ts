@@ -59,21 +59,27 @@ export function createWebSearchProviderTool(provider: WebSearchProvider): Provid
   } as ProviderDefinedTool;
 }
 
+// Mastra Gateway ids nest the upstream provider: `mastra/<provider>/<model>`. Without a Gateway key
+// the router can't hand the model to the gateway and reports `mastra` as its provider.
+const MASTRA_GATEWAY_PREFIX = 'mastra/';
+
 function getProviderString(providerOrModel: unknown): string {
   if (typeof providerOrModel === 'string') {
-    return providerOrModel;
+    return providerOrModel.startsWith(MASTRA_GATEWAY_PREFIX)
+      ? providerOrModel.slice(MASTRA_GATEWAY_PREFIX.length)
+      : providerOrModel;
   }
 
   if (typeof providerOrModel === 'object' && providerOrModel !== null) {
     const model = providerOrModel as { provider?: unknown; modelId?: unknown; id?: unknown };
     if (typeof model.provider === 'string') {
-      if (model.provider === 'openai-compatible') {
+      if (model.provider === 'openai-compatible' || model.provider === 'mastra') {
         if (typeof model.modelId === 'string') {
-          return model.modelId;
+          return getProviderString(model.modelId);
         }
 
         if (typeof model.id === 'string') {
-          return model.id;
+          return getProviderString(model.id);
         }
       }
 

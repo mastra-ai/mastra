@@ -29,6 +29,14 @@ describe('webSearchTool', () => {
     expect(normalizeWebSearchProvider('xai/grok-4')).toBe('xai');
   });
 
+  it('looks past the Mastra Gateway prefix', () => {
+    expect(normalizeWebSearchProvider('mastra/openai/gpt-5-mini')).toBe('openai');
+    expect(normalizeWebSearchProvider('mastra/anthropic/claude-sonnet-4-5')).toBe('anthropic');
+    expect(normalizeWebSearchProvider({ provider: 'mastra', modelId: 'google/gemini-2.5-pro' })).toBe('google');
+    expect(normalizeWebSearchProvider({ provider: 'mastra', id: 'mastra/xai/grok-4' })).toBe('xai');
+    expect(() => normalizeWebSearchProvider('mastra/custom-provider/model')).toThrow(MastraError);
+  });
+
   it('normalizes openai-compatible models with supported router-style model ids', () => {
     expect(normalizeWebSearchProvider({ provider: 'openai-compatible', modelId: 'openai/gpt-5-mini' })).toBe('openai');
     expect(
