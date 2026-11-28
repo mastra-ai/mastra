@@ -1,17 +1,20 @@
+import { useState } from 'react';
+import { SkillCreateDialogBody } from './skill-create-dialog-body';
+import type { SkillSource } from './skill-create-dialog-body';
 import { SkillSaveButton } from './skill-save-button';
-import { SkillSimpleForm } from './skill-simple-form';
 import type { SkillSimpleFormProps } from './skill-simple-form';
 import { Button } from '@/ds/components/Button';
 import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/ds/components/Drawer';
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ds/components/Dialog';
 import { Notice } from '@/ds/components/Notice';
+import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 
 export function SkillCreateDialog({
   fields,
@@ -28,33 +31,55 @@ export function SkillCreateDialog({
   onCreate: () => void;
   editing?: boolean;
 }) {
+  const [source, setSource] = useState<SkillSource>(editing ? 'write' : 'upload');
+
   return (
-    <Drawer open side="right" variant="floating" onOpenChange={open => !open && !pending && onClose()}>
-      <DrawerContent className="w-xl max-w-full" aria-busy={pending}>
-        <DrawerHeader>
-          <DrawerTitle>{editing ? 'Edit skill' : 'Create skill'}</DrawerTitle>
-          <DrawerDescription>
+    <Dialog open onOpenChange={open => !open && !pending && onClose()}>
+      <DialogContent size="lg" className="h-[min(80dvh,48rem)]" aria-busy={pending}>
+        <DialogHeader>
+          <DialogTitle>{editing ? 'Edit skill' : 'New skill'}</DialogTitle>
+          <DialogDescription>
             {editing
               ? 'Changes apply to all agents using the latest version of this project skill.'
-              : 'Describe what your skill should do.'}
-          </DrawerDescription>
-        </DrawerHeader>
-        <DrawerBody>
-          <SkillSimpleForm {...fields} />
+              : 'Upload a SKILL.md, or write the skill here.'}
+          </DialogDescription>
+          {editing ? null : (
+            <SegmentedControl
+              className="mt-3 self-start"
+              aria-label="Start from"
+              value={source}
+              onValueChange={setSource}
+            >
+              <SegmentedControlItem value="upload">Upload</SegmentedControlItem>
+              <SegmentedControlItem value="write">Write</SegmentedControlItem>
+            </SegmentedControl>
+          )}
+        </DialogHeader>
+        <DialogBody layout="fill" className="overflow-y-auto">
+          <SkillCreateDialogBody
+            source={source}
+            fields={fields}
+            onUpload={skill => {
+              fields.onNameChange(skill.name);
+              fields.onDescriptionChange(skill.description);
+              fields.onInstructionsChange(skill.instructions);
+              setSource('write');
+            }}
+          />
           {error && <Notice variant="warning" title={error} role="alert" />}
-        </DrawerBody>
-        <DrawerFooter>
+        </DialogBody>
+        <DialogFooter>
           <Button type="button" disabled={pending} onClick={onClose}>
             Cancel
           </Button>
           <SkillSaveButton
             editing={editing}
-            disabled={!fields.name.trim() || !fields.instructions.trim()}
+            disabled={source === 'upload' || !fields.name.trim() || !fields.instructions.trim()}
             pending={pending}
             onSave={onCreate}
           />
-        </DrawerFooter>
-      </DrawerContent>
-    </Drawer>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
