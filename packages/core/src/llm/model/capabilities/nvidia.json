@@ -73,10 +73,10 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
-    "deepseek-ai/deepseek-v4.1-flash": [
+    "moonshotai/kimi-k2.6": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "minimaxai/minimax-m3.1-flash": [
@@ -85,23 +85,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "google/diffusiongemma-26b-a4b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
+    "nvidia/nemotron-3.5-lightning-30b-a3b": [
       {
         "type": "toggle"
       }
     ],
     "nvidia/nemotron-3.5-super-vl-120b-a12b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -117,7 +106,7 @@
         "max": 32768
       }
     ],
-    "nvidia/nemotron-3.5-lightning-30b-a3b": [
+    "nvidia/nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -132,25 +121,13 @@
         "max": 32768
       }
     ],
-    "openai/gpt-oss-20b": [
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "stepfun-ai/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "meta/muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -160,6 +137,29 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "meta/muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "google/diffusiongemma-26b-a4b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
       }
     ]
   }

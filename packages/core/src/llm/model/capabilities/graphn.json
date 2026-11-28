@@ -25,12 +25,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "qwen3.8-27b": [
       {
         "type": "toggle"
@@ -40,15 +34,21 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "qwen3-vl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3-vl": [
-      {
-        "type": "toggle"
       }
     ]
   }
