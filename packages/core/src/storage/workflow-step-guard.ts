@@ -3,6 +3,11 @@ import type { StepResult, WorkflowRunState } from '../workflows';
 export type WorkflowStepStartGuard = {
   eventId: string;
   expectedStartedBy?: string;
+  /**
+   * The claim of a step a resume or a time travel re-enters. It also takes a `running` record
+   * started by `expectedStartedBy`: a worker that resumed the step without a guard leaves one.
+   */
+  resumeClaim?: boolean;
   /** Prune the predecessor only after this delivery has durably claimed its input. */
   previousStep?: { stepId: string; eventId: string; result: StepResult<any, any, any, any> };
 };
@@ -61,7 +66,7 @@ export function assertWorkflowStepGuard({
     if (!stored && startGuard.expectedStartedBy === undefined) return;
     if (
       stored &&
-      (stored.status !== 'running' || stored.metadata?.__restartPending === true) &&
+      (stored.status !== 'running' || stored.metadata?.__restartPending === true || startGuard.resumeClaim) &&
       startedBy === startGuard.expectedStartedBy
     )
       return;

@@ -1,7 +1,58 @@
 import { isDeepStrictEqual } from 'node:util';
 import { expect, vi } from 'vitest';
+import type { Event } from '../../../events/types';
 import { WorkflowEventProcessor } from '../workflow-event-processor';
 import type { RedeliveryDriver, RedeliveryMatch } from './redelivery-driver';
+
+/** The `handle()` calls a live {@link RedeliveryDriver} recorded, with the work each returned. */
+function handledCalls() {
+  const handle = vi.mocked(WorkflowEventProcessor.prototype.handle);
+  return handle.mock.calls.map(([event], index) => ({ event, result: handle.mock.results[index]?.value }));
+}
+
+function withinDeadline<T>(work: Promise<T>, deadline: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not settle`)), Math.max(0, deadline - performance.now()));
+  });
+  return Promise.race([work, expired]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Waits until every processor that received one of `events` finished handling it. Needs a live
+ * {@link RedeliveryDriver}, whose spy records the calls.
+ */
+export async function settleDeliveries(events: Event[], timeoutMs = 10_000): Promise<void> {
+  const ids = new Set(events.map(event => event.id));
+  const work = handledCalls()
+    .filter(call => ids.has(call.event.id))
+    .map(call => call.result);
+  await withinDeadline(Promise.allSettled(work), performance.now() + timeoutMs, 'Handling the deliveries');
+}
+
+/**
+ * Waits until the processors have no delivery left to handle, including deliveries that handling
+ * published. Call it once nothing is held inside a step. Needs a live {@link RedeliveryDriver}.
+ */
+export async function drainHandlers(timeoutMs = 10_000): Promise<void> {
+  const deadline = performance.now() + timeoutMs;
+  for (;;) {
+    const calls = handledCalls();
+    await withinDeadline(
+      Promise.allSettled(calls.map(call => call.result)),
+      deadline,
+      `Processor work (${calls.length} deliveries)`,
+    );
+    // Handling that just settled may hand events to a subscriber on a later tick.
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (handledCalls().length === calls.length) return;
+    // Settled work wins the race against an expired timer, so deliveries that keep arriving would
+    // otherwise keep this loop going past the deadline.
+    if (performance.now() >= deadline) {
+      throw new Error(`Processor work did not settle: deliveries kept arriving (${handledCalls().length} so far)`);
+    }
+  }
+}
 
 export const REDELIVERY_MODES = ['publish', 'same-id', 'expired'] as const;
 

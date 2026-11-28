@@ -1390,7 +1390,9 @@ export function describeFinishedOccurrenceCases({
     // A workflow that skips running snapshots leaves the stored active path at the step that last
     // saved one, here the step that suspended. The check can't tell from it whether the run went
     // past a finished step, so a late delivery runs the step again instead of leaving the run stuck.
-    it('runs a finished step again when the workflow does not save running snapshots', async () => {
+    // On a store with step guards the step after the resume is guarded too. The redelivery shares
+    // the ID of the first delivery, which saved the result, so the guard continues the run from it.
+    it('finishes the run after a late delivery when the workflow does not save running snapshots', async () => {
       const executions: string[] = [];
       const build = (replica: string) => {
         const reused = work('reused', async id => void executions.push(`${replica}:${id}`));
@@ -1443,7 +1445,7 @@ export function describeFinishedOccurrenceCases({
       expect(await redeliver(b, original)).toEqual({ ok: true });
 
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-      expect(executions).toEqual(['A:reused', 'A:reused', 'B:reused', 'B:last']);
+      expect(executions).toEqual(['A:reused', 'A:reused', ...(stepGuards ? [] : ['B:reused']), 'B:last']);
     }, 20_000);
   });
 }

@@ -284,6 +284,73 @@ export function createWorkflowStepGuardTests({
       expect(await load()).toEqual(before);
     });
 
+    // The claim of a step a resume re-enters (`resumeClaim`). Besides what any start accepts, it takes
+    // a running record started by the expected occurrence: what a worker that resumed the step
+    // without a guard leaves behind when it stops.
+    describe('resume claims', () => {
+      async function setupResume(stored: StepResult<any, any, any, any>) {
+        const context = await setup();
+        await writeStep(context.a, context.runId, { stepId: 'step', requestContext: {}, result: stored });
+        const claim = (worker: typeof context.a, eventId: string, expectedStartedBy: string, resumeClaim = true) =>
+          writeStep(worker, context.runId, {
+            stepId: 'step',
+            result: { status: 'running', startedAt: 3, payload: {}, metadata: { startedBy: eventId } },
+            requestContext: {},
+            startGuard: { eventId, expectedStartedBy, ...(resumeClaim ? { resumeClaim } : {}) },
+          });
+        return { ...context, claim };
+      }
+      const runningUnder = (eventId: string): StepResult<any, any, any, any> => ({
+        status: 'running',
+        startedAt: 1,
+        payload: {},
+        metadata: { startedBy: eventId },
+      });
+
+      it('takes a running record of the expected occurrence, which a plain start refuses', async () => {
+        const { a, claim, load } = await setupResume(runningUnder('resumed-by-old-worker'));
+        const before = await load();
+        await expect(claim(a, 'resume', 'resumed-by-old-worker', false)).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+        await claim(a, 'resume', 'resumed-by-old-worker');
+        expect((await load())!.context.step).toMatchObject({ status: 'running', metadata: { startedBy: 'resume' } });
+      });
+
+      it('refuses a running record of another occurrence', async () => {
+        const { a, claim, load } = await setupResume(runningUnder('other'));
+        const before = await load();
+        await expect(claim(a, 'resume', 'expected')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+      });
+
+      it('takes a finished attempt of the expected occurrence, as a retry does', async () => {
+        const { a, claim, load } = await setupResume({
+          status: 'failed',
+          error: new Error('Transient failure'),
+          payload: {},
+          startedAt: 1,
+          endedAt: 2,
+          metadata: { startedBy: 'attempt' },
+        });
+        await claim(a, 'retry', 'attempt');
+        expect((await load())!.context.step).toMatchObject({ status: 'running', metadata: { startedBy: 'retry' } });
+      });
+
+      it('lets one of two claims expecting the same occurrence win', async () => {
+        const { a, b, claim, load } = await setupResume(runningUnder('resumed-by-old-worker'));
+        const outcomes = await Promise.allSettled([
+          claim(a, 'resume-a', 'resumed-by-old-worker'),
+          claim(b, 'resume-b', 'resumed-by-old-worker'),
+        ]);
+        expect(outcomes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        const refused = outcomes.filter(result => result.status === 'rejected');
+        expect(refused).toHaveLength(1);
+        expect((refused[0] as PromiseRejectedResult).reason).toMatchObject({ reason: 'stale' });
+        const winner = outcomes[0]!.status === 'fulfilled' ? 'resume-a' : 'resume-b';
+        expect((await load())!.context.step).toMatchObject({ metadata: { startedBy: winner } });
+      });
+    });
+
     it('rejects old completions after a later loop iteration has started', async () => {
       const { a, write, finish, load } = await setup();
       await write(a, 'first');
