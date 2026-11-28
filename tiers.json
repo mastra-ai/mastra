@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-27",
+  "updated": "2026-11-28",
   "scope": "all",
   "files": {
     ".github/scripts/ci-routing.test.ts": {
@@ -29544,10 +29544,10 @@
       "reason": "seed-rule-b"
     },
     "signals/github/src/index.test.ts": {
-      "tier": "out",
-      "since": "2026-11-14",
-      "last_failure": "2026-09-08",
-      "reason": "seed-rule-b"
+      "tier": "in",
+      "since": "2026-11-28",
+      "last_failure": "2026-11-28",
+      "reason": "versioning-fail"
     },
     "stores/_test-utils/src/domains/observability-vnext/span-aggregate.test.ts": {
       "tier": "out",
