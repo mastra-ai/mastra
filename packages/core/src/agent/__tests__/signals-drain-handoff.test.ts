@@ -1632,8 +1632,12 @@ describe('Agent signals: drain and lease handoff', () => {
     const drainedRunKeepsRunning = new Promise<void>(() => {});
     // Registering the follow-up inside `stream` mirrors a real agent: the drain hands the lease over before the run it
     // starts exists as a record, so shutdown has to wait for that admission instead of reading records too early.
+    const registrationStarted = Promise.withResolvers<void>();
+    const releaseRegistration = Promise.withResolvers<void>();
     const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
       const runId = options.runId as string;
+      registrationStarted.resolve();
+      await releaseRegistration.promise;
       await runtime.registerRun(
         agent,
         createFakeThreadRun(runId, drainedRunKeepsRunning),
@@ -1674,6 +1678,13 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(shutdownDone).toBe(false);
 
     handoff.resolve();
+    // Past the lease decision the admission has settled, but the run it reserved still has no record: a shutdown that
+    // only waited for the outcome would read records here and let the follow-up escape it.
+    await registrationStarted.promise;
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    releaseRegistration.resolve();
     await shutdown;
     expect(shutdownDone).toBe(true);
     // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
@@ -1693,8 +1704,12 @@ describe('Agent signals: drain and lease handoff', () => {
     const drainedRunKeepsRunning = new Promise<void>(() => {});
     // Registering the continuation inside `stream` mirrors a real agent: the drain hands the lease over before the run it
     // starts exists as a record, so shutdown has to wait for that admission instead of reading records too early.
+    const registrationStarted = Promise.withResolvers<void>();
+    const releaseRegistration = Promise.withResolvers<void>();
     const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
       const runId = options.runId as string;
+      registrationStarted.resolve();
+      await releaseRegistration.promise;
       await runtime.registerRun(
         agent,
         createFakeThreadRun(runId, drainedRunKeepsRunning),
@@ -1735,6 +1750,13 @@ describe('Agent signals: drain and lease handoff', () => {
     expect(shutdownDone).toBe(false);
 
     handoff.resolve();
+    // Past the lease decision the admission has settled, but the continuation's run still has no record: a shutdown
+    // that only waited for the outcome would read records here and let that run escape it.
+    await registrationStarted.promise;
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    releaseRegistration.resolve();
     await shutdown;
     expect(shutdownDone).toBe(true);
     // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
