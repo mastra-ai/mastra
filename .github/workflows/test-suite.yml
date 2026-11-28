@@ -109,7 +109,7 @@ jobs:
   affected-unit-test:
     name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
-    runs-on: starsling-ubuntu-26.04
+    runs-on: starsling-ubuntu-26.04-16
     timeout-minutes: 60
     strategy:
       fail-fast: false
