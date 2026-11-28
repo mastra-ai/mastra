@@ -58,6 +58,14 @@ export class ObservationTurn {
    */
   drainedPartKeys = new Map<string, Set<string>>();
 
+  /**
+   * Observed messages post-observation cleanup kept in the prompt to honour the retention floor,
+   * with the record's `lastObservedAt` at that time. Later steps keep them until something new is
+   * observed; until then the observed cursor would otherwise remove them.
+   * @internal
+   */
+  floorRetained?: { ids: string[]; lastObservedAt?: number };
+
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
 

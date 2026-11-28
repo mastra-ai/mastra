@@ -371,21 +371,24 @@ export class ObservationStep {
           // resolves to 0 for sync-only, resource-scope, and explicit `bufferActivation: 1` configs,
           // so it cannot be relied on to keep them). Once the model has answered, the observed request
           // itself is not kept: the observations stand in for it, even mid-task.
-          const observedIds = obsResult.cleanupMessageIds;
+          // Messages an earlier cleanup kept for the floor are observed too: this cleanup decides
+          // again which of them stay, so the floor is re-applied over all of them.
+          const observedIds = [...new Set([...(this.turn.floorRetained?.ids ?? []), ...obsResult.cleanupMessageIds])];
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
             statusSnapshot.threshold,
           );
 
+          // Re-check right before removal: output merged in place while the Observer ran (e.g.
+          // a background task result) has not been read either.
+          const cleanupPreserveIds = [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)];
           await om.cleanupMessages({
             threadId,
             resourceId,
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            // Re-check right before removal: output merged in place while the Observer ran (e.g.
-            // a background task result) has not been read either.
-            preserveMessageIds: [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)],
+            preserveMessageIds: cleanupPreserveIds,
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -399,6 +402,14 @@ export class ObservationStep {
           }
 
           await this.turn.refreshRecord();
+          // Observed messages cleanup kept for the floor. Ids it kept only because they were in
+          // flight are left out: once the model has read them, the cursor may drop them.
+          const remainingIds = new Set(getObservableMessages(messageList).map(msg => msg.id));
+          const preservedIds = new Set(cleanupPreserveIds);
+          this.turn.floorRetained = {
+            ids: minRemaining > 0 ? observedIds.filter(id => remainingIds.has(id) && !preservedIds.has(id)) : [],
+            lastObservedAt: this.turn.record.lastObservedAt?.getTime(),
+          };
           if (this.turn.record.generationCount > preObsGeneration) {
             reflected = true;
           }
@@ -435,7 +446,7 @@ export class ObservationStep {
       const pendingMessageIds = new Set(
         [...messageList.get.input.db(), ...messageList.get.response.db()]
           .map(msg => msg.id)
-          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList))
+          .concat(inFlightIds ?? [], this.changedSinceDrain(messageList), this.floorRetainedIds())
           .filter(Boolean),
       );
 
@@ -467,6 +478,13 @@ export class ObservationStep {
     };
     this._prepared = true;
     return this._context;
+  }
+
+  /** Ids cleanup kept for the retention floor, while nothing newer has been observed. */
+  private floorRetainedIds(): string[] {
+    const retained = this.turn.floorRetained;
+    if (!retained || retained.lastObservedAt !== this.turn.record.lastObservedAt?.getTime()) return [];
+    return retained.ids;
   }
 
   /** Ids of already-drained messages that now hold parts the model has not been sent. */
