@@ -1630,10 +1630,14 @@ export class WorkflowEventProcessor extends EventProcessor {
    * forwards `perStep` so a parent workflow pauses after this nested run.
    */
   protected async endWorkflow(
-    args: ProcessorArgs,
+    endArgs: ProcessorArgs,
     status: 'success' | 'failed' | 'canceled' | 'paused' = 'success',
-    pausesRun = !!args.perStep,
+    pausesRun = !!endArgs.perStep,
   ) {
+    // `__bailed` marks the bailing step's stored record. The run's result, which a parent run
+    // continues from, must not carry it.
+    const { __bailed: _bailed, ...endMetadata } = endArgs.prevResult?.metadata ?? {};
+    const args = _bailed ? { ...endArgs, prevResult: { ...endArgs.prevResult, metadata: endMetadata } } : endArgs;
     const {
       workflowId,
       runId,

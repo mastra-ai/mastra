@@ -1131,6 +1131,39 @@ export function describeOccurrenceReplayCases({
         });
       }, 20_000);
 
+      // A bail ends only the run of the step that bails. A parent run continues after its nested
+      // workflow bails, as a plain step and as a loop body.
+      it.each(['step', 'loop body'] as const)(
+        'runs the next step after a nested workflow %s bails',
+        async kind => {
+          const calls: Record<string, number> = {};
+          const child = createWorkflow({ id: `bail-child-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+            .then(
+              createStep({
+                id: 'inner',
+                inputSchema: schema,
+                outputSchema: schema,
+                execute: async ({ bail }) => bail({ n: 5 }),
+              }),
+            )
+            .commit();
+          const workflow: any = createWorkflow({
+            id: `bail-parent-${randomUUID()}`,
+            inputSchema: schema,
+            outputSchema: schema,
+          });
+          if (kind === 'loop body') workflow.dountil(child, async () => true);
+          else workflow.then(child);
+          workflow.then(counted('next', calls)).commit();
+          await withWorkflow(workflow, async () => {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 6 } });
+            expect(calls).toEqual({ next: 1 });
+          });
+        },
+        20_000,
+      );
+
       // The bailing delivery saves its result and fails before it ends the run, so its event is
       // delivered again. That copy finds the saved bail and must end the run with it.
       it('ends the run with a saved bail when the bailing step is delivered again', async () => {
