@@ -9,8 +9,13 @@
 import type { ToolExecutionContext } from '../../tools/types';
 import type { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import type { ComputerScreenshot, SandboxComputer, WorkspaceSandbox } from '../sandbox';
-import { supportsComputer } from '../sandbox';
+import type { ComputerAccessibility, ComputerScreenshot, SandboxComputer, WorkspaceSandbox } from '../sandbox';
+import {
+  accessibilityRefErrorMessage,
+  isAccessibilityRefError,
+  supportsComputer,
+  supportsComputerAccessibility,
+} from '../sandbox';
 import type { Workspace } from '../workspace';
 import { requireSandbox } from './helpers';
 import type { MediaToolResult } from './media';
@@ -40,6 +45,35 @@ export function requireComputer(context: ToolExecutionContext): {
     throw new SandboxFeatureNotSupportedError('computer');
   }
   return { workspace, sandbox, computer: sandbox.computer };
+}
+
+/**
+ * Like {@link requireComputer}, but also requires the optional accessibility
+ * part of the computer capability.
+ */
+export function requireComputerAccessibility(context: ToolExecutionContext): {
+  workspace: Workspace;
+  sandbox: WorkspaceSandbox;
+  computer: SandboxComputer;
+  accessibility: ComputerAccessibility;
+} {
+  const { workspace, sandbox } = requireSandbox(context);
+  if (!supportsComputerAccessibility(sandbox)) {
+    throw new SandboxFeatureNotSupportedError('computer');
+  }
+  return { workspace, sandbox, computer: sandbox.computer, accessibility: sandbox.computer.accessibility };
+}
+
+/**
+ * Rethrow a stale/invalid-ref failure as an error whose text is rebuilt from
+ * the validated `ref` and `reason`, never the thrown error's own message.
+ * Other errors are rethrown unchanged.
+ */
+export function rethrowAccessibilityError(err: unknown): never {
+  if (isAccessibilityRefError(err)) {
+    throw new Error(accessibilityRefErrorMessage(err.ref, err.reason));
+  }
+  throw err;
 }
 
 /** Resolve the per-tool ComputerToolConfig from the workspace tools config. */
@@ -82,9 +116,10 @@ export async function finishComputerAction(
   computer: SandboxComputer,
   toolName: ComputerToolName,
   text: string,
+  defaultScreenshotAfterAction: boolean = DEFAULT_SCREENSHOT_AFTER_ACTION,
 ): Promise<MediaToolResult | string> {
   const config = getComputerToolConfig(workspace, toolName);
-  const screenshotAfterAction = config?.screenshotAfterAction ?? DEFAULT_SCREENSHOT_AFTER_ACTION;
+  const screenshotAfterAction = config?.screenshotAfterAction ?? defaultScreenshotAfterAction;
   if (!screenshotAfterAction) return text;
 
   const delayMs = config?.screenshotDelayMs ?? DEFAULT_SCREENSHOT_DELAY_MS;

@@ -10,8 +10,8 @@ import { describe, it, expect } from 'vitest';
 import type { ProviderStatus } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
-import { supportsComputer } from './sandbox';
-import type { SandboxComputer, WorkspaceSandbox } from './sandbox';
+import { supportsComputer, supportsComputerAccessibility } from './sandbox';
+import type { ComputerAccessibility, SandboxComputer, WorkspaceSandbox } from './sandbox';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
@@ -104,5 +104,45 @@ describe('supportsComputer', () => {
     } else {
       expect.unreachable('guard should have passed');
     }
+  });
+});
+
+describe('supportsComputerAccessibility', () => {
+  const accessibility = (): ComputerAccessibility => ({
+    getTree: async () => ({ snapshotId: 's1', nodes: [], truncated: false }),
+    act: async () => {},
+    setText: async () => {},
+  });
+  const withComputer = (computer: unknown): WorkspaceSandbox => {
+    const sandbox: WorkspaceSandbox = new PlainSandbox();
+    (sandbox as { computer?: unknown }).computer = computer;
+    return sandbox;
+  };
+
+  it('is true for a full computer with a full accessibility part', () => {
+    const sandbox = withComputer({ ...createComputer(), accessibility: accessibility() });
+    expect(supportsComputerAccessibility(sandbox)).toBe(true);
+    if (supportsComputerAccessibility(sandbox)) {
+      // narrowed: no optional chaining
+      expect(typeof sandbox.computer.accessibility.getTree).toBe('function');
+    }
+  });
+
+  it('is false when accessibility is undefined or the key is missing', () => {
+    expect(supportsComputerAccessibility(withComputer({ ...createComputer(), accessibility: undefined }))).toBe(false);
+    expect(supportsComputerAccessibility(withComputer(createComputer()))).toBe(false);
+    expect(supportsComputerAccessibility(new DesktopSandbox())).toBe(false);
+    expect(supportsComputerAccessibility(new PlainSandbox())).toBe(false);
+  });
+
+  it.each(['getTree', 'act', 'setText'] as const)('is false when the part lacks %s', method => {
+    const part = { ...accessibility(), [method]: undefined };
+    expect(supportsComputerAccessibility(withComputer({ ...createComputer(), accessibility: part }))).toBe(false);
+  });
+
+  it('is false when the accessibility part sits on an incomplete computer', () => {
+    expect(supportsComputerAccessibility(withComputer({ accessibility: accessibility() }))).toBe(false);
+    const { drag: _drag, ...partial } = createComputer();
+    expect(supportsComputerAccessibility(withComputer({ ...partial, accessibility: accessibility() }))).toBe(false);
   });
 });

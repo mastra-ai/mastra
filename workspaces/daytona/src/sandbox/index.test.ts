@@ -1710,7 +1710,9 @@ describe('DaytonaSandbox', () => {
       const tools = await createWorkspaceTools(workspace);
 
       const computerToolNames = Object.keys(tools).filter(name => name.startsWith('mastra_workspace_computer_'));
-      expect(computerToolNames.sort()).toEqual(Object.values(WORKSPACE_TOOLS.COMPUTER).sort());
+      const { ACCESSIBILITY_TREE, ACCESSIBILITY_ACT, ACCESSIBILITY_SET_TEXT, ...nonAccessibilityTools } =
+        WORKSPACE_TOOLS.COMPUTER;
+      expect(computerToolNames.sort()).toEqual(Object.values(nonAccessibilityTools).sort());
     });
   });
 

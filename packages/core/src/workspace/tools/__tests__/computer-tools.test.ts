@@ -9,8 +9,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
+import { AccessibilityRefError } from '../..';
 import { WORKSPACE_TOOLS } from '../../constants';
-import type { SandboxComputer, WorkspaceSandbox } from '../../sandbox';
+import type { AccessibilitySnapshot, ComputerAccessibility, SandboxComputer, WorkspaceSandbox } from '../../sandbox';
 import { Workspace } from '../../workspace';
 import { computerScreenshotTool } from '../computer-screenshot';
 import { isMediaToolResult, mediaToModelOutput } from '../media';
@@ -23,7 +24,16 @@ import type { WorkspaceToolsConfig } from '../types';
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-const ALL_COMPUTER_TOOL_NAMES = Object.values(WORKSPACE_TOOLS.COMPUTER);
+const ACCESSIBILITY_TOOL_NAMES = [
+  WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE,
+  WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT,
+  WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT,
+] as const;
+
+/** The 11 pixel computer tools (every computer tool except the optional accessibility ones). */
+const ALL_COMPUTER_TOOL_NAMES = Object.values(WORKSPACE_TOOLS.COMPUTER).filter(
+  name => !(ACCESSIBILITY_TOOL_NAMES as readonly string[]).includes(name),
+);
 
 /** Create a mock SandboxComputer backed by vi.fn()s. */
 function createMockComputer(overrides: Partial<SandboxComputer> = {}): SandboxComputer {
@@ -75,7 +85,7 @@ function createMockSandbox(opts: { computer?: SandboxComputer } = {}): Workspace
  */
 async function setup(computer: SandboxComputer, tools?: WorkspaceToolsConfig) {
   const toolsConfig: WorkspaceToolsConfig = { ...tools };
-  for (const name of ALL_COMPUTER_TOOL_NAMES) {
+  for (const name of [...ALL_COMPUTER_TOOL_NAMES, ...ACCESSIBILITY_TOOL_NAMES]) {
     toolsConfig[name] = { screenshotDelayMs: 0, ...(tools?.[name] as object | undefined) };
   }
   const workspace = new Workspace({ sandbox: createMockSandbox({ computer }), tools: toolsConfig });
@@ -385,5 +395,263 @@ describe('mediaToModelOutput', () => {
 
   it('returns undefined for plain string output', () => {
     expect(mediaToModelOutput('Clicked at (1, 2)')).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Accessibility tools
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT: AccessibilitySnapshot = {
+  snapshotId: 's7',
+  truncated: false,
+  nodes: [
+    { ref: 'g1.s7.0', role: 'application', name: 'desk', states: [], actions: [], depth: 0 },
+    {
+      ref: 'g1.s7.1',
+      role: 'push button',
+      name: 'Save "now"',
+      states: ['enabled', 'focusable'],
+      actions: ['click'],
+      bounds: { x: 10, y: 20, width: 80, height: 30 },
+      depth: 1,
+    },
+    { ref: 'g1.s7.2', role: 'text', name: 'Title', states: ['editable'], actions: [], value: 'hi', depth: 1 },
+  ],
+};
+
+function createMockAccessibility(overrides: Partial<ComputerAccessibility> = {}): ComputerAccessibility {
+  return {
+    getTree: vi.fn(async () => SNAPSHOT),
+    act: vi.fn(async () => {}),
+    setText: vi.fn(async () => {}),
+    ...overrides,
+  };
+}
+
+function computerWithAccessibility(overrides: Partial<ComputerAccessibility> = {}) {
+  const accessibility = createMockAccessibility(overrides);
+  return { computer: createMockComputer({ accessibility }), accessibility };
+}
+
+describe('accessibility tool gating', () => {
+  it('emits the three accessibility tools plus the 11 pixel tools when the part exists', async () => {
+    const { computer } = computerWithAccessibility();
+    const { emitted } = await setup(computer);
+    for (const name of [...ALL_COMPUTER_TOOL_NAMES, ...ACCESSIBILITY_TOOL_NAMES]) {
+      expect(emitted[name], `expected ${name} to be emitted`).toBeDefined();
+    }
+    expect(Object.keys(emitted).filter(k => k.startsWith('mastra_workspace_computer_'))).toHaveLength(14);
+  });
+
+  it('emits only the 11 pixel tools when the part is absent', async () => {
+    const { emitted } = await setup(createMockComputer());
+    for (const name of ACCESSIBILITY_TOOL_NAMES) {
+      expect(emitted[name], `expected ${name} to be absent`).toBeUndefined();
+    }
+    expect(
+      Object.keys(emitted)
+        .filter(k => k.startsWith('mastra_workspace_computer_'))
+        .sort(),
+    ).toEqual([...ALL_COMPUTER_TOOL_NAMES].sort());
+  });
+
+  it('emits no accessibility tools when the part is incomplete', async () => {
+    const accessibility = { ...createMockAccessibility(), setText: undefined } as unknown as ComputerAccessibility;
+    const { emitted } = await setup(createMockComputer({ accessibility }));
+    for (const name of ACCESSIBILITY_TOOL_NAMES) expect(emitted[name]).toBeUndefined();
+  });
+
+  it('emits no accessibility tools for dynamic sandbox resolvers', async () => {
+    const { computer } = computerWithAccessibility();
+    const workspace = new Workspace({ sandbox: async () => createMockSandbox({ computer }) });
+    const tools = await createWorkspaceTools(workspace);
+    for (const name of ACCESSIBILITY_TOOL_NAMES) expect(tools[name]).toBeUndefined();
+  });
+
+  it('respects per-tool enabled and requireApproval config', async () => {
+    const { computer } = computerWithAccessibility();
+    const { emitted } = await setup(computer, {
+      [WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT]: { enabled: false },
+      [WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT]: { requireApproval: true },
+    });
+    expect(emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT]).toBeUndefined();
+    expect(emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].requireApproval).toBe(true);
+    expect(emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE].requireApproval).toBe(false);
+  });
+});
+
+describe('accessibility tools', () => {
+  it('tree formats one indented line per node and passes app/maxNodes through', async () => {
+    const { computer, accessibility } = computerWithAccessibility();
+    const { workspace, emitted } = await setup(computer);
+    const result = await emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE].execute(
+      { app: 'desk', maxNodes: 50 },
+      { workspace },
+    );
+
+    expect(accessibility.getTree).toHaveBeenCalledWith({ app: 'desk', maxDepth: 25, maxNodes: 50 });
+    expect(result).toBe(
+      [
+        'snapshotId: s7',
+        'g1.s7.0 application "desk"',
+        '  g1.s7.1 push button "Save \\"now\\"" states=[enabled,focusable] actions=[click] bounds=10,20,80x30',
+        '  g1.s7.2 text "Title" value="hi" states=[editable]',
+      ].join('\n'),
+    );
+    expect(computer.screenshot).not.toHaveBeenCalled();
+  });
+
+  it('tree notes truncation and applies schema defaults', async () => {
+    const { computer, accessibility } = computerWithAccessibility({
+      getTree: vi.fn(async () => ({ ...SNAPSHOT, truncated: true })),
+    });
+    const { workspace, emitted } = await setup(computer);
+    const result = await emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE].execute({}, { workspace });
+
+    expect(accessibility.getTree).toHaveBeenCalledWith({ maxDepth: 25, maxNodes: 400 });
+    expect(result).toContain('(truncated:');
+  });
+
+  it('act and set_text pass ref, action and text through unchanged without a screenshot', async () => {
+    const { computer, accessibility } = computerWithAccessibility();
+    const { workspace, emitted } = await setup(computer);
+    const text = "quote ' $(x) `y`\nnon-ascii é";
+
+    await expect(
+      emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute({ ref: 'g1.s7.1', action: 'click' }, { workspace }),
+    ).resolves.toBe('Performed click on g1.s7.1');
+    await expect(
+      emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT].execute({ ref: 'g1.s7.2', text }, { workspace }),
+    ).resolves.toBe(`Set text of g1.s7.2 (${text.length} characters)`);
+
+    expect(accessibility.act).toHaveBeenCalledWith('g1.s7.1', 'click');
+    expect(accessibility.setText).toHaveBeenCalledWith('g1.s7.2', text);
+    expect(computer.screenshot).not.toHaveBeenCalled();
+  });
+
+  it('honours screenshotAfterAction: true', async () => {
+    const { computer } = computerWithAccessibility();
+    const { workspace, emitted } = await setup(computer, {
+      [WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT]: { screenshotAfterAction: true },
+    });
+    const result = await emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute(
+      { ref: 'g1.s7.1', action: 'click' },
+      { workspace },
+    );
+    expect(isMediaToolResult(result)).toBe(true);
+    expect(computer.screenshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces an AccessibilityRefError as a tool error naming the stale ref', async () => {
+    const { computer } = computerWithAccessibility({
+      act: vi.fn(async (ref: string) => {
+        throw new AccessibilityRefError(ref, 'generation', 'provider detail that must not leak');
+      }),
+    });
+    const { workspace, emitted } = await setup(computer);
+    await expect(
+      emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute({ ref: 'g1.s7.1', action: 'click' }, { workspace }),
+    ).rejects.toThrow('Accessibility ref g1.s7.1 is no longer valid (generation); read the tree again');
+  });
+
+  it('recognises an AccessibilityRefError from another copy of core by name, ref and reason', async () => {
+    const foreign = Object.assign(new Error('foreign copy message'), {
+      name: 'AccessibilityRefError',
+      ref: 'g1.s7.2',
+      reason: 'changed',
+    });
+    const { computer } = computerWithAccessibility({ setText: vi.fn().mockRejectedValue(foreign) });
+    const { workspace, emitted } = await setup(computer);
+    const run = emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT].execute(
+      { ref: 'g1.s7.2', text: 'x' },
+      { workspace },
+    );
+    await expect(run).rejects.toThrow('Accessibility ref g1.s7.2 is no longer valid (changed); read the tree again');
+  });
+
+  it.each([
+    ['a bad reason', { ref: 'g1.s7.2', reason: 'stale' }],
+    ['a missing ref', { reason: 'gone' }],
+    ['a non-string ref', { ref: 42, reason: 'gone' }],
+  ])('treats a lookalike with %s as an ordinary error', async (_label, fields) => {
+    const lookalike = Object.assign(new Error('ordinary failure'), { name: 'AccessibilityRefError', ...fields });
+    const { computer } = computerWithAccessibility({ act: vi.fn().mockRejectedValue(lookalike) });
+    const { workspace, emitted } = await setup(computer);
+    await expect(
+      emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute({ ref: 'g1.s7.1', action: 'click' }, { workspace }),
+    ).rejects.toBe(lookalike);
+  });
+
+  it('passes other failures through unchanged', async () => {
+    const failure = new Error('node supports actions: click, activate');
+    const { computer } = computerWithAccessibility({ act: vi.fn().mockRejectedValue(failure) });
+    const { workspace, emitted } = await setup(computer);
+    await expect(
+      emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute({ ref: 'g1.s7.1', action: 'jump' }, { workspace }),
+    ).rejects.toBe(failure);
+  });
+
+  it('accepts a 40-character ref with node number 999999', async () => {
+    const ref = `${'g'.repeat(16)}.${'s'.repeat(16)}.999999`;
+    expect(ref).toHaveLength(40);
+    const { computer, accessibility } = computerWithAccessibility();
+    const { workspace, emitted } = await setup(computer);
+    await emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT].execute({ ref, action: 'click' }, { workspace });
+    expect(accessibility.act).toHaveBeenCalledWith(ref, 'click');
+  });
+
+  it('rejects out-of-range input before calling the capability', async () => {
+    const { computer, accessibility } = computerWithAccessibility();
+    const { workspace, emitted } = await setup(computer);
+    const tree = emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE];
+    const act = emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT];
+    const setText = emitted[WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT];
+
+    for (const input of [
+      { maxDepth: 0 },
+      { maxDepth: 41 },
+      { maxNodes: 0 },
+      { maxNodes: 2001 },
+      { maxDepth: 1.5 },
+      { app: 'a'.repeat(257) },
+    ]) {
+      await expect(tree.execute(input, { workspace }), JSON.stringify(input)).resolves.toMatchObject({ error: true });
+    }
+    for (const ref of [
+      'g1.s7',
+      'g1..1',
+      '.s7.1',
+      'g1.s7.x',
+      'g 1.s7.1',
+      'g1.s7.1;rm',
+      'g1.s7.1234567',
+      `${'g'.repeat(17)}.${'s'.repeat(16)}.999999`,
+    ]) {
+      await expect(act.execute({ ref, action: 'click' }, { workspace }), ref).resolves.toMatchObject({ error: true });
+    }
+    await expect(act.execute({ ref: 'g1.s7.1', action: '' }, { workspace })).resolves.toMatchObject({ error: true });
+    await expect(act.execute({ ref: 'g1.s7.1', action: 'a'.repeat(65) }, { workspace })).resolves.toMatchObject({
+      error: true,
+    });
+    await expect(setText.execute({ ref: 'g1.s7.2', text: 'a'.repeat(32769) }, { workspace })).resolves.toMatchObject({
+      error: true,
+    });
+
+    expect(accessibility.getTree).not.toHaveBeenCalled();
+    expect(accessibility.act).not.toHaveBeenCalled();
+    expect(accessibility.setText).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccessibilityRefError', () => {
+  it('carries ref, reason, name and the default message', () => {
+    const error = new AccessibilityRefError('g1.s7.1', 'gone');
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe('AccessibilityRefError');
+    expect(error.ref).toBe('g1.s7.1');
+    expect(error.reason).toBe('gone');
+    expect(error.message).toBe('Accessibility ref g1.s7.1 is no longer valid (gone); read the tree again');
+    expect(new AccessibilityRefError('g1.s7.1', 'malformed', 'custom').message).toBe('custom');
   });
 });

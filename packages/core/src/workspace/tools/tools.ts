@@ -17,10 +17,13 @@ import { FileNotFoundError, FileReadRequiredError } from '../errors';
 import { deriveReadScope, InMemoryFileReadTracker, InMemoryFileWriteLock } from '../filesystem';
 import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../filesystem';
 import type { WorkspaceSandbox } from '../sandbox';
-import { supportsComputer } from '../sandbox';
+import { supportsComputer, supportsComputerAccessibility } from '../sandbox';
 import type { Workspace } from '../workspace';
 import { applyPatchDidWrite, applyPatchTool, getApplyPatchWritePaths } from './apply-patch';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
+import { computerAccessibilityActTool } from './computer-accessibility-act';
+import { computerAccessibilitySetTextTool } from './computer-accessibility-set-text';
+import { computerAccessibilityTreeTool } from './computer-accessibility-tree';
 import { computerClickTool } from './computer-click';
 import { computerDoubleClickTool } from './computer-double-click';
 import { computerDragTool } from './computer-drag';
@@ -709,6 +712,17 @@ export async function createWorkspaceTools(
         targets: { sandbox: true },
       });
       await addTool(WORKSPACE_TOOLS.COMPUTER.WAIT, () => computerWaitTool, { targets: { sandbox: true } });
+      if (supportsComputerAccessibility(workspace.sandbox)) {
+        await addTool(WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_TREE, () => computerAccessibilityTreeTool, {
+          targets: { sandbox: true },
+        });
+        await addTool(WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_ACT, () => computerAccessibilityActTool, {
+          targets: { sandbox: true },
+        });
+        await addTool(WORKSPACE_TOOLS.COMPUTER.ACCESSIBILITY_SET_TEXT, () => computerAccessibilitySetTextTool, {
+          targets: { sandbox: true },
+        });
+      }
     }
   } else if (hasSandboxConfig(workspace)) {
     await addTool(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, () => backgroundExecuteCommandTool, {
