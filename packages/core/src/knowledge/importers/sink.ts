@@ -645,7 +645,11 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     }
     // Where it goes: its parent's page, else its holding item's page, else the anchor. Placed
     // anywhere but under its parent, it waits for a settle slice to move it there.
-    const sourceParent = await liveNodeOf(item.parent);
+    const parentRecord = await nodeOf(item.parent);
+    const parentState = parentRecord ? await stateOf(parentRecord) : null;
+    const sourceParent = parentState === 'live' ? parentRecord : null;
+    // A child that already exists stays where the merge of its parent put it.
+    const parentMerged = parentState === 'merged';
     const misplaced = !!item.parent && !sourceParent;
     const parentNode = sourceParent ?? (await liveNodeOf(item.fallbackParent));
     // A flush with writes always has an anchor.
@@ -708,8 +712,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       if (existing.stub && existing.adopted && !REMOVED_BODIES.has(page.body ?? '')) {
         await keepBody(page.id, page.body ?? '');
       }
-      // A page a person moved out of the target stays where they put it.
-      if (!current.outside && page.parentId !== destination.page.id) {
+      // A page a person moved out of the target stays where they put it, and so does the child of
+      // a merged-away parent.
+      if (!current.outside && !parentMerged && page.parentId !== destination.page.id) {
         // A page can't move under its own subtree.
         if (
           destination.keys.length > current.keys.length &&

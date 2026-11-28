@@ -1767,6 +1767,29 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
     });
 
+    it("leaves a merged item's child under the keeper when both pages are this binding's", async () => {
+      const { run, knowledge, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'k1' }), upsert({ sourceId: 'c1', parent: 'p1' })]);
+      const storage = await knowledge.getStorage();
+      const source = (await page('notion/p1'))!;
+      const keeper = (await page('notion/k1'))!;
+      await storage.mergePages({
+        sourceId: source.id,
+        sourceVersion: source.version,
+        targetId: keeper.id,
+        provenance: person,
+      });
+      const child = (await page('notion/k1/c1'))!;
+      expect(child).not.toBeNull();
+      const receipt = await run([upsert({ sourceId: 'c1', parent: 'p1', body: 'new child body' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { updated: 1, moved: 0, refused: 0 } });
+      expect(await storage.getPage({ id: child.id, read: 'all' })).toMatchObject({
+        parentId: keeper.id,
+        body: 'new child body',
+      });
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
     it('stops a child under the folder waiting for a parent that was merged away', async () => {
       const { run, storage, page } = await mergedSetup();
       // c2 waits for its link target zz too, so a settle slice visits it.
