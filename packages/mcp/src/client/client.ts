@@ -27,6 +27,7 @@ import type {
   McpSubscription,
   ReadResourceResult,
   ClientCapabilities,
+  JSONObject,
   PriorDiscovery,
   SubscriptionFilter,
   VersionNegotiationMode,
@@ -83,6 +84,7 @@ import type {
   ProgressHandler,
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
+  MCPClientCapabilities,
   MCPClientProtocolVersion,
   MCPClientTasksOptions,
   MCPServerImplementation,
@@ -115,6 +117,31 @@ export type {
 type MCPToolListEntry = Awaited<ReturnType<Client['listTools']>>['tools'][0];
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+
+/** MCP Apps extension id, advertised by default so servers know we can render UI resources. */
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+
+/**
+ * Builds the SDK `extensions` capability from a server's configured extensions.
+ *
+ * `false`, `null` and `undefined` are opt-out sentinels: they drop the extension (including the
+ * MCP Apps extension Mastra advertises by default) rather than being sent, since the SDK only
+ * accepts JSON objects. Any other value passes through untouched, so a caller can customise an
+ * extension's settings. A configured entry always wins over the default `{}`.
+ */
+function resolveExtensions(
+  configured: MCPClientCapabilities['extensions'] | undefined,
+  taskOptions: MCPClientTasksOptions | undefined,
+): Record<string, JSONObject> {
+  const extensions: Record<string, JSONObject> = {};
+  for (const [id, value] of Object.entries(configured ?? {})) {
+    if (value !== undefined && value !== null && value !== false) extensions[id] = value;
+  }
+  // Advertise MCP Apps support unless the caller opted out of it above.
+  if (configured?.[UI_EXTENSION_ID] === undefined) extensions[UI_EXTENSION_ID] = {};
+  if (taskOptions) Object.assign(extensions, tasksCapabilityEntry());
+  return extensions;
+}
 
 const SUPPORTED_DIALECTS = new Set([
   JSON_SCHEMA_2020_12,
@@ -574,12 +601,7 @@ export class InternalMastraMCPClient extends MastraBase {
     }
     const clientCapabilities: ClientCapabilities = {
       ...(server.inputRequests ? { elicitation: configured.elicitation ?? { form: {} } } : {}),
-      // Advertise MCP Apps extension support so servers know we can render UI resources
-      extensions: {
-        ...(configured.extensions ?? {}),
-        'io.modelcontextprotocol/ui': {},
-        ...(this.taskOptions ? tasksCapabilityEntry() : {}),
-      },
+      extensions: resolveExtensions(configured.extensions, this.taskOptions),
     };
 
     this.client = new Client(
