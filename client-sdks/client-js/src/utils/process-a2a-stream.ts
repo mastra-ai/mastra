@@ -30,8 +30,12 @@ function parseEventBlock<T>(eventBlock: string): ParsedA2AEvent<T> {
   const lines = trimmedBlock.split(/\r?\n/);
   const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
 
-  // Skip SSE comments and metadata without treating raw JSON records as SSE.
-  if (dataLines.length === 0 && lines.every(line => /^(?::|[a-zA-Z][\w-]*:|(?:event|id|retry|data)$)/.test(line))) {
+  // A leading SSE comment or standard field identifies the frame regardless of extension fields.
+  const startsWithSseMetadata = /^(?::|(?:event|id|retry|data)(?::|\r?\n|$))/.test(trimmedBlock);
+  if (
+    dataLines.length === 0 &&
+    (startsWithSseMetadata || lines.every(line => /^(?::|[a-zA-Z][\w-]*:|(?:event|id|retry|data)$)/.test(line)))
+  ) {
     return {};
   }
 

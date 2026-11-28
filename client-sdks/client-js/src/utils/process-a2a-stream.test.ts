@@ -39,6 +39,29 @@ describe('processA2AStream', () => {
     ]);
   });
 
+  it.each([
+    ['colonless', 'event: ping\nx-heartbeat\n\n'],
+    ['punctuated', 'event: ping\nx.heartbeat: alive\n\n'],
+  ])('delivers artifact updates before the stream closes after %s metadata', async (_name, frame) => {
+    const encoder = new TextEncoder();
+    const { readable, writable } = new TransformStream<Uint8Array>();
+    const writer = writable.getWriter();
+    const events = processA2AStream(readable);
+
+    try {
+      const first = events.next();
+      await writer.write(encoder.encode(eventFrame(status)));
+      expect(await first).toEqual({ done: false, value: status });
+
+      const next = events.next();
+      await writer.write(encoder.encode(frame + eventFrame(artifact)));
+      expect(await next).toEqual({ done: false, value: artifact });
+    } finally {
+      await writer.close();
+      await events.return();
+    }
+  });
+
   it('accepts raw JSON records and a final record without a delimiter', async () => {
     expect(
       await readEvents(`\x1e${JSON.stringify({ result: status })}\n\n`, `\x1e${JSON.stringify(artifact, null, 2)}`),
@@ -49,7 +72,7 @@ describe('processA2AStream', () => {
     expect(await readEvents(eventFrame(status), `${done}\n\n${eventFrame(artifact)}`)).toEqual([status]);
   });
 
-  it('still reports malformed JSON payloads', async () => {
-    await expect(readEvents('data: {broken}\n\n')).rejects.toThrow('Failed to parse A2A stream event');
+  it.each(['data: {broken}\n\n', '\x1e{\nevent: ping\n}\n\n'])('still reports malformed JSON in %j', async frame => {
+    await expect(readEvents(frame)).rejects.toThrow('Failed to parse A2A stream event');
   });
 });
