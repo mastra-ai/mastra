@@ -5,6 +5,7 @@ import {
   canonicalKnowledgeName,
   knowledgePositionBetween,
   knowledgeScopeReadable,
+  KnowledgeTokenBoundError,
 } from './pages';
 
 describe('knowledgePositionBetween', () => {
@@ -185,5 +186,29 @@ describe('page and note token bounds', () => {
     expect(() => assertKnowledgePageDescriptionWithinBound('word '.repeat(200))).toThrow(/100 token limit/);
     expect(() => assertKnowledgeNoteTextWithinBound('Refunds over $500 need a manager.')).not.toThrow();
     expect(() => assertKnowledgeNoteTextWithinBound('word '.repeat(400))).toThrow(/250 token limit/);
+  });
+
+  it('throws a named KnowledgeTokenBoundError with the same message', () => {
+    const thrown = (fn: () => void) => {
+      try {
+        fn();
+      } catch (error) {
+        return error as Error;
+      }
+      throw new Error('expected a throw');
+    };
+    const description = thrown(() => assertKnowledgePageDescriptionWithinBound('word '.repeat(200)));
+    const note = thrown(() => assertKnowledgeNoteTextWithinBound('word '.repeat(400)));
+    for (const error of [description, note]) {
+      expect(error.name).toBe('KnowledgeTokenBoundError');
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toBeInstanceOf(KnowledgeTokenBoundError);
+    }
+    expect(description.message).toBe(
+      'Knowledge page description exceeds the 100 token limit; put long-form text in the page body',
+    );
+    expect(note.message).toBe(
+      'Knowledge note text exceeds the 250 token limit; split it into separate notes or put long-form text in the page body',
+    );
   });
 });
