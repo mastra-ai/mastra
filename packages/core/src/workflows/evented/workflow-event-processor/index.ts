@@ -3970,7 +3970,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             const suspended = (snapshot.context as Record<string, any>)[suspendedId];
             const meta = suspended.suspendPayload?.__workflow_meta ?? {};
             const existingPath: string[] = meta.path ?? [];
-            const nestedLabels: Record<string, { foreachIndex?: number }> = meta.resumeLabels ?? {};
+            // The nested run stores the labels of every suspended branch; a step's record holds only its own.
+            const nestedLabels: Record<string, { foreachIndex?: number }> =
+              snapshot.resumeLabels && Object.keys(snapshot.resumeLabels).length > 0
+                ? snapshot.resumeLabels
+                : (meta.resumeLabels ?? {});
             const resumeLabels = Object.fromEntries(
               Object.entries(nestedLabels).map(([label, { foreachIndex }]) => [
                 label,
