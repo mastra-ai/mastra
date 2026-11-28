@@ -8,6 +8,10 @@ import type { RequestContext } from '../../request-context';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { warnUnsupportedEventedSetup } from '../../workflows/evented/setup-warning';
 import type { ShouldPersistSnapshotFn, WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
+import { AgentExecutionEngine } from '../execution-engine';
+import type { AgentRunLog, AgentRunOwner, SuspendedRequestContextLookup } from '../execution-engine';
+import type { AgentRunRecord } from '../streams/run-records';
+import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from '../streams/run-records';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
   AGENT_STREAM_TOPIC,
@@ -32,8 +36,11 @@ import {
   resolveLeaseProvider,
   supportsRunFencing,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
+  setExecutionClaim,
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
+import type { ExtendedRunRegistry } from './run-registry';
+import { getRunRegistryEntry } from './run-registry';
 import { openStepsOfCrashedSegment } from './segment-spans';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
@@ -57,6 +64,17 @@ type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
 
+/** What an engine needs to set up a run segment it is about to start. */
+export interface ExecutionStart {
+  runId: string;
+  pubsub: PubSub | undefined;
+  executionFence: ExecutionFence | undefined;
+  requestContext: RequestContext | undefined;
+  threadId: string | undefined;
+  resourceId: string | undefined;
+  sharedExecution: boolean;
+}
+
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
 
@@ -67,33 +85,79 @@ const ACTIVE_RUNS_STORAGE_BATCH_SIZE = 100;
 
 export interface DurableWorkflowOptions {
   maxSteps?: number;
-  workflowEngine: 'default' | 'evented';
   storesRunsInJournal: boolean;
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
   logger: IMastraLogger;
   guardrailLogger?: IMastraLogger;
 }
 
-export class DefaultAgentExecutionEngine {
+export class DefaultAgentExecutionEngine extends AgentExecutionEngine {
   #workflow: DurableWorkflow | null = null;
-  #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
   #warnedPersistencePolicy = false;
   /** Canceled parked runs whose abort terminal this process already published. */
   #canceledRunTerminals = new Set<string>();
 
-  constructor(
-    protected readonly id: string,
-    protected mastra?: Mastra,
-  ) {}
-  registerMastra(mastra: Mastra): void {
-    this.mastra = mastra;
-  }
-  get workflow(): DurableWorkflow | null {
-    return this.#workflow;
+  get durable(): true {
+    return true;
   }
 
-  get executionMode(): 'blocking' | 'background' {
-    return 'blocking';
+  /** Default-engine runs publish from the process that executes them. */
+  usesSharedRunLog(_logger: IMastraLogger): boolean {
+    return false;
+  }
+
+  /** Evented runs execute on workers, which may live in another process. */
+  get abortsRemoteExecutors(): true {
+    return true;
+  }
+
+  abortLocalExecution(runId: string, registry: ExtendedRunRegistry, mastra: Mastra | undefined): boolean {
+    const controller = (registry.get(runId) ?? getRunRegistryEntry(runId, mastra))?.abortController;
+    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+    return !!controller;
+  }
+
+  /** The default engine runs steps under the caller's controller, so aborting it stops them. */
+  confirmsLocalAbort(_logger: IMastraLogger): boolean {
+    return true;
+  }
+
+  /** Runs are tracked by the run registry until auto-cleanup clears their replay history. */
+  getRunOwner(runId: string, registry: ExtendedRunRegistry): AgentRunOwner | undefined {
+    if (!registry.has(runId)) return undefined;
+    return { ...registry.getMemoryInfo(runId) };
+  }
+
+  /** The local owner, else the shared record, including legacy records without stream status. */
+  async getReplayOwner(
+    agentId: string,
+    runId: string,
+    localOwner: AgentRunOwner | undefined,
+    { bus, usesSharedRunLog }: AgentRunLog,
+  ): Promise<AgentRunOwner | undefined> {
+    if (localOwner) return localOwner;
+    if (!bus) return undefined;
+    const shared = await readDurableReplayOwner(bus.getRunRecordCache(usesSharedRunLog), agentId, runId);
+    if (!shared) return undefined;
+    return { resourceId: shared.resourceId, threadId: shared.threadId };
+  }
+
+  async getRunRecord(
+    agentId: string,
+    runId: string,
+    { bus, usesSharedRunLog }: AgentRunLog,
+  ): Promise<AgentRunRecord | undefined> {
+    if (!bus) return undefined;
+    return readAgentRunRecord(
+      bus.getRunRecordCache(usesSharedRunLog),
+      agentId,
+      runId,
+      durableReplayOwnerKey(agentId, runId),
+    );
+  }
+
+  get workflow(): DurableWorkflow | null {
+    return this.#workflow;
   }
 
   /** Whether execution returns a suspended result only after its snapshot is persisted. */
@@ -512,21 +576,23 @@ export class DefaultAgentExecutionEngine {
     executionFence: ExecutionFence | undefined,
     abortController: AbortController | undefined,
     pubsub: PubSub,
-    workflowEngine: 'default' | 'evented',
-    logger: IMastraLogger,
+    _logger: IMastraLogger,
   ): PubSub {
-    if (executionFence)
-      pubsub = withExecutionStreamProducer(pubsub, {
-        runId: executionFence.runId,
-        agentId: this.id,
-        mastra: this.mastra,
-        claim: executionFence.claim,
-      });
-    if (!executionFence || this.resolveWorkflowEngine(workflowEngine, logger) !== 'default') return pubsub;
+    if (!executionFence) return pubsub;
+    const produced = this.withStreamProducer(executionFence, pubsub);
     executionFence.onLost(error => {
       if (abortController && !abortController.signal.aborted) abortController.abort(error);
     });
-    return fencePubSub(pubsub, executionFence);
+    return fencePubSub(produced, executionFence);
+  }
+
+  protected withStreamProducer(executionFence: ExecutionFence, pubsub: PubSub): PubSub {
+    return withExecutionStreamProducer(pubsub, {
+      runId: executionFence.runId,
+      agentId: this.id,
+      mastra: this.mastra,
+      claim: executionFence.claim,
+    });
   }
 
   async deleteRunSnapshots(runId: string, workflow: DurableWorkflow): Promise<void> {
@@ -544,41 +610,17 @@ export class DefaultAgentExecutionEngine {
     }
   }
 
-  resolveWorkflowEngine(workflowEngine: 'default' | 'evented', logger: IMastraLogger): 'default' | 'evented' {
-    if (this.#resolvedWorkflowEngine) return this.#resolvedWorkflowEngine;
-    let engine = workflowEngine;
-    if (engine === 'evented' && !this.mastra) {
-      engine = 'default';
-      logger.warn(
-        `EventedAgent '${this.id}' has no Mastra host; running on the default in-process engine. ` +
-          `Register the agent on a Mastra instance (with storage) to get evented execution.`,
-      );
-    } else if (engine === 'evented') {
-      // Read `stores` directly rather than `await getStore('workflows')`: engine
-      // resolution is synchronous (`getWorkflow()` is), and `getStore()` is only
-      // async by signature — it returns `this.stores?.[name]` without awaiting
-      // init, so this sees exactly what the engine's own gate sees.
-      const storage = this.mastra?.getStorage();
-      const workflowsStore = storage?.stores?.workflows;
-      if (workflowsStore && !(workflowsStore.supportsConcurrentUpdates?.() ?? false)) {
-        engine = 'default';
-        logger.warn(
-          `EventedAgent '${this.id}' is registered with ${storage?.name ?? 'a'} storage, which does not apply concurrent ` +
-            `workflow updates atomically (\`supportsConcurrentUpdates()\`); running the durable loop on the default ` +
-            `in-process engine instead. In-flight runs will not resume on their own after a process restart. Use a ` +
-            `storage adapter that supports atomic concurrent updates (for example @mastra/libsql, @mastra/pg or ` +
-            `@mastra/mysql) to get evented execution.`,
-        );
-      }
-    }
-    this.#resolvedWorkflowEngine = engine;
-    return engine;
+  /** The workflow engine this agent's loop runs on. */
+  resolveWorkflowEngine(_logger: IMastraLogger): 'default' | 'evented' {
+    return 'default';
   }
 
-  async ensureEngineWorkersStarted(workflowEngine: 'default' | 'evented', logger: IMastraLogger): Promise<void> {
-    if (this.resolveWorkflowEngine(workflowEngine, logger) === 'evented') {
-      await this.mastra?.__ensureExecutionWorkersStarted();
-    }
+  /** Start the workers that run this agent's steps, when they run on workers. */
+  async ensureEngineWorkersStarted(_logger: IMastraLogger): Promise<void> {}
+
+  /** Whether the error handler of a failed run ends its open step span, given its transport. */
+  endsStepOnRunError(_pubsub: PubSub | undefined, _logger: IMastraLogger): boolean {
+    return true;
   }
 
   createWorkflow(options: DurableWorkflowOptions): ReturnType<typeof createDurableAgenticWorkflow> {
@@ -586,7 +628,7 @@ export class DefaultAgentExecutionEngine {
       maxSteps: options.maxSteps,
       // Resolved, not raw: a hostless evented agent falls back to the default
       // in-process engine (see resolveWorkflowEngine).
-      engine: this.resolveWorkflowEngine(options.workflowEngine, options.logger),
+      engine: this.resolveWorkflowEngine(options.logger),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(options.shouldPersistSnapshot),
       autoStorageVersion: options.storesRunsInJournal,
     });
@@ -627,19 +669,6 @@ export class DefaultAgentExecutionEngine {
           logger: this.mastra.getLogger(),
           storage: this.mastra.getStorage(),
         });
-        // Evented engine: the WorkflowEventProcessor resolves workflows by id
-        // from Mastra's registries, so the loop workflow must be discoverable
-        // there. Register it as an (unscoped) internal workflow — it's a
-        // per-agent singleton. Without this, every run's events would be
-        // unresolvable and the run would hang. Uses the resolved engine so
-        // this stays consistent with the workflow instance just created.
-        //
-        // `distributed`: every process sharing this Mastra setup registers the
-        // same loop, so a dedicated worker process can run it. Keeping its
-        // events local would strand runs started in a process without workers.
-        if (this.resolveWorkflowEngine(options.workflowEngine, options.logger) === 'evented') {
-          this.mastra.__registerInternalWorkflow(this.#workflow, undefined, { distributed: true });
-        }
       }
     }
     return this.#workflow;
@@ -791,7 +820,6 @@ export class DefaultAgentExecutionEngine {
     workflow: DurableWorkflow,
     fence: ExecutionFence,
     pubsub: PubSub,
-    workflowEngine: 'default' | 'evented',
     logger: IMastraLogger,
     resourceId: string | undefined,
     requestContext: RequestContext,
@@ -799,7 +827,7 @@ export class DefaultAgentExecutionEngine {
   ) {
     fence.throwIfLost();
     this.assertRecoveryActive();
-    await this.ensureEngineWorkersStarted(workflowEngine, logger);
+    await this.ensureEngineWorkersStarted(logger);
     fence.throwIfLost();
     this.assertRecoveryActive();
     const run = await this.raceFenceLoss(workflow.createRun({ runId: fence.runId, resourceId, pubsub }), fence);
@@ -961,6 +989,36 @@ export class DefaultAgentExecutionEngine {
     };
   }
 
+  async getSuspendedRequestContextValue({
+    mastra,
+    agent,
+    runId,
+    key,
+  }: SuspendedRequestContextLookup): Promise<unknown> {
+    if (!mastra) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agent.name}" __getSuspendedRunRequestContextValue() requires the agent to be registered on a Mastra instance.`,
+        details: { agentName: agent.name, runId },
+      });
+    }
+
+    const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${agent.name}" __getSuspendedRunRequestContextValue() requires persistent storage to load the run snapshot.`,
+        details: { agentName: agent.name, runId },
+      });
+    }
+
+    return this.loadSuspendedRequestContextValue(workflowsStore, runId, agent, key);
+  }
+
   async loadSuspendedRequestContextValue(
     workflowsStore: WorkflowsStorage,
     runId: string,
@@ -1036,12 +1094,14 @@ export class DefaultAgentExecutionEngine {
   prepareExecution(
     _pubsub: PubSub | undefined,
     _fence: ExecutionFence | undefined,
-    _workflowEngine: 'default' | 'evented',
     _logger: IMastraLogger,
     _guardrailLogger: IMastraLogger | undefined,
-  ): { sharedExecution: boolean; usesRunPubSub: boolean } {
-    return { sharedExecution: false, usesRunPubSub: true };
+  ): { sharedExecution: boolean; usesRunPubSub: boolean; returnsResult: boolean } {
+    return { sharedExecution: false, usesRunPubSub: true, returnsResult: true };
   }
+
+  /** Runs after the workflow is resolved, before its run is created. The default engine needs nothing. */
+  async beforeStart(_start: ExecutionStart, _logger: IMastraLogger): Promise<void> {}
 }
 
 /**
@@ -1051,10 +1111,7 @@ export class DefaultAgentExecutionEngine {
  */
 export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   #warnedUnfencedSharedExecution = false;
-
-  override get executionMode(): 'blocking' | 'background' {
-    return 'background';
-  }
+  #resolvedWorkflowEngine: 'default' | 'evented' | null = null;
 
   // Evented execution can return before the suspended snapshot lands.
   override get suspendPersistedOnReturn(): boolean {
@@ -1067,14 +1124,106 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
     return this.mastra?.__hasLocalWorkflowExecution() ?? true;
   }
 
+  /**
+   * Evented, unless the agent has no Mastra host or its store can't apply
+   * concurrent updates atomically; then the loop falls back to the default
+   * in-process engine, with a warning. Resolved once.
+   */
+  override resolveWorkflowEngine(logger: IMastraLogger): 'default' | 'evented' {
+    if (this.#resolvedWorkflowEngine) return this.#resolvedWorkflowEngine;
+    let engine: 'default' | 'evented' = 'evented';
+    if (!this.mastra) {
+      engine = 'default';
+      logger.warn(
+        `EventedAgent '${this.id}' has no Mastra host; running on the default in-process engine. ` +
+          `Register the agent on a Mastra instance (with storage) to get evented execution.`,
+      );
+    } else {
+      // Read `stores` directly rather than `await getStore('workflows')`: engine
+      // resolution is synchronous (`getWorkflow()` is), and `getStore()` is only
+      // async by signature — it returns `this.stores?.[name]` without awaiting
+      // init, so this sees exactly what the engine's own gate sees.
+      const storage = this.mastra?.getStorage();
+      const workflowsStore = storage?.stores?.workflows;
+      if (workflowsStore && !(workflowsStore.supportsConcurrentUpdates?.() ?? false)) {
+        engine = 'default';
+        logger.warn(
+          `EventedAgent '${this.id}' is registered with ${storage?.name ?? 'a'} storage, which does not apply concurrent ` +
+            `workflow updates atomically (\`supportsConcurrentUpdates()\`); running the durable loop on the default ` +
+            `in-process engine instead. In-flight runs will not resume on their own after a process restart. Use a ` +
+            `storage adapter that supports atomic concurrent updates (for example @mastra/libsql, @mastra/pg or ` +
+            `@mastra/mysql) to get evented execution.`,
+        );
+      }
+    }
+    this.#resolvedWorkflowEngine = engine;
+    return engine;
+  }
+
+  override async ensureEngineWorkersStarted(logger: IMastraLogger): Promise<void> {
+    if (this.resolveWorkflowEngine(logger) === 'evented') {
+      await this.mastra?.__ensureExecutionWorkersStarted();
+    }
+  }
+
+  /** Evented workers publish run frames on Mastra's shared log. */
+  override usesSharedRunLog(logger: IMastraLogger): boolean {
+    return this.resolveWorkflowEngine(logger) === 'evented';
+  }
+
+  /** An evented caller's controller does not confirm that its executor stopped. */
+  override confirmsLocalAbort(logger: IMastraLogger): boolean {
+    return this.resolveWorkflowEngine(logger) === 'default';
+  }
+
+  /**
+   * Behind a broker another worker may have ended the open step already, so the
+   * worker that handles its failure ends it.
+   */
+  override endsStepOnRunError(pubsub: PubSub | undefined, logger: IMastraLogger): boolean {
+    return this.resolveWorkflowEngine(logger) !== 'evented' || !pubsub || !reachesOtherProcesses(pubsub);
+  }
+
+  /** Evented workers don't run under the caller's controller, so a lost fence has nothing local to abort. */
+  override fenceRunPubSub(
+    executionFence: ExecutionFence | undefined,
+    abortController: AbortController | undefined,
+    pubsub: PubSub,
+    logger: IMastraLogger,
+  ): PubSub {
+    if (!executionFence) return pubsub;
+    if (this.resolveWorkflowEngine(logger) === 'default') {
+      return super.fenceRunPubSub(executionFence, abortController, pubsub, logger);
+    }
+    return this.withStreamProducer(executionFence, pubsub);
+  }
+
+  override getWorkflow(options: DurableWorkflowOptions): DurableWorkflow {
+    const existing = this.workflow;
+    const workflow = super.getWorkflow(options);
+    // The WorkflowEventProcessor resolves workflows by id from Mastra's
+    // registries, so the loop workflow must be discoverable there. Register it
+    // as an (unscoped) internal workflow — it's a per-agent singleton. Without
+    // this, every run's events would be unresolvable and the run would hang.
+    // Uses the resolved engine so this stays consistent with the workflow
+    // instance just created.
+    //
+    // `distributed`: every process sharing this Mastra setup registers the
+    // same loop, so a dedicated worker process can run it. Keeping its events
+    // local would strand runs started in a process without workers.
+    if (!existing && this.mastra && this.resolveWorkflowEngine(options.logger) === 'evented') {
+      this.mastra.__registerInternalWorkflow(workflow, undefined, { distributed: true });
+    }
+    return workflow;
+  }
+
   override prepareExecution(
     pubsub: PubSub | undefined,
     fence: ExecutionFence | undefined,
-    workflowEngine: 'default' | 'evented',
     logger: IMastraLogger,
     guardrailLogger: IMastraLogger | undefined,
-  ): { sharedExecution: boolean; usesRunPubSub: boolean } {
-    const engine = this.resolveWorkflowEngine(workflowEngine, logger);
+  ): { sharedExecution: boolean; usesRunPubSub: boolean; returnsResult: boolean } {
+    const engine = this.resolveWorkflowEngine(logger);
     const sharedTransport = engine === 'evented' && pubsub !== undefined && reachesOtherProcesses(pubsub);
     if (sharedTransport && this.mastra) {
       const mastra = this.mastra;
@@ -1093,8 +1242,56 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
           'to keep workers running independently of the API process.',
       );
     }
-    return { sharedExecution, usesRunPubSub: engine === 'default' };
+    return { sharedExecution, usesRunPubSub: engine === 'default', returnsResult: false };
   }
+
+  /**
+   * Starts this process's workers and, for a shared execution, claims the
+   * thread lease and records the execution claim.
+   */
+  override async beforeStart(start: ExecutionStart, logger: IMastraLogger): Promise<void> {
+    await this.ensureEngineWorkersStarted(logger);
+    const { runId, pubsub, executionFence, requestContext, threadId, resourceId } = start;
+    if (!start.sharedExecution || !pubsub || !requestContext || !executionFence || !threadId) return;
+    await agentThreadStreamRuntime.claimDurableThreadLease(
+      pubsub,
+      runId,
+      threadId,
+      resourceId,
+      executionFence.generation,
+      executionFence.executionId,
+      true,
+    );
+    // A takeover can supersede this execution while the thread lease is contended.
+    try {
+      await executionFence.verify();
+    } catch (error) {
+      await agentThreadStreamRuntime
+        .abandonDurableThreadLease(
+          pubsub,
+          runId,
+          threadId,
+          resourceId,
+          executionFence.generation,
+          executionFence.executionId,
+        )
+        .catch(releaseError =>
+          logger.warn('Failed to release thread lease after losing execution ownership', {
+            runId,
+            error: releaseError,
+          }),
+        );
+      throw error;
+    }
+    setExecutionClaim(requestContext, runId, {
+      ...executionFence.claim,
+      threadId,
+      resourceId,
+    });
+  }
+
+  /** Evented runs are left to the workflow's own cleanup. */
+  override releaseRun(): void {}
 
   override finishExecution(
     runId: string,

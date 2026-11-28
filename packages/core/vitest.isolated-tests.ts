@@ -30,6 +30,7 @@ export const isolatedTestFiles = [
   'src/agent-controller/subagent-tool.test.ts', // vi.mock
   'src/agent/__tests__/abort-run-stream-without-thread.test.ts', // global,reset-modules
   'src/agent/__tests__/agent-turn-tool-stream.test.ts', // vi.mock
+  'src/agent/__tests__/execution-engine-load-order.test.ts', // reset-modules
   'src/agent/__tests__/mcp-instructions.test.ts', // vi.mock
   'src/agent/__tests__/model-retry-after.test.ts', // vi.mock
   'src/agent/__tests__/scorers.test.ts', // vi.mock

@@ -1483,8 +1483,8 @@ export interface DurableAgentConfig<
  * DurableAgent extends Agent, delegating most methods to the wrapped agent.
  * It overrides stream() to use durable execution with the agentic workflow.
  *
- * Subclasses (EventedAgent, InngestAgent) override executeWorkflow() to
- * customize how the workflow is executed.
+ * Its execution engine decides how the workflow is executed; EventedAgent
+ * selects the evented engine.
  *
  * @example
  * ```typescript

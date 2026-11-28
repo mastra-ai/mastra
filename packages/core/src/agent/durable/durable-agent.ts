@@ -776,7 +776,6 @@ export class DurableAgent<
       this.executionEngine.workflow ??
       this.executionEngine.getWorkflow({
         maxSteps: this.#maxSteps,
-        workflowEngine: this.workflowEngine,
         storesRunsInJournal: this.storesRunsInJournal,
         shouldPersistSnapshot: this.userShouldPersistSnapshot,
         logger: this.logger,

@@ -27,7 +27,6 @@ import { validateScoringPredicate } from '../evals/predicate';
 import { withAck } from '../events/acking-callback';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
-import { reachesOtherProcesses } from '../events/reach';
 import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
@@ -74,7 +73,6 @@ import {
 import type { AgentLoopResumeClaim } from '../loop/types';
 import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../mastra';
-import { mastraCtorHolder } from '../mastra/mastra-ctor-holder';
 import { createRunScope } from '../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { VersionOverrides } from '../mastra/types';
@@ -152,10 +150,9 @@ import type { SignalProvider } from '../signals/signal-provider';
 import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills-resolver';
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 import type { MemoryStorage, WorkflowsStorage } from '../storage';
-import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
+import { getSnapshotMemoryInfo } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
-import type { RunFence } from '../storage/run-fencing';
-import { matchesRunFence, runOutsideRunFenceScope } from '../storage/run-fencing';
+import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import { ChunkFrom } from '../stream';
 import { usesOpenAIStrictJsonSchema } from '../stream/aisdk/v5/execute';
@@ -191,11 +188,7 @@ import { createWorkflow } from '../workflows/create';
 import { loadStepResults, residentStepResults } from '../workflows/run-journal';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
-import {
-  waitForSuspendedSnapshot,
-  RESUME_SNAPSHOT_POLL_INTERVAL_MS,
-  RESUME_SNAPSHOT_WAIT_STATUSES,
-} from '../workflows/utils';
+import { RESUME_SNAPSHOT_POLL_INTERVAL_MS, RESUME_SNAPSHOT_WAIT_STATUSES } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
@@ -234,6 +227,7 @@ import {
 import type { DurableAgent } from './durable/durable-agent';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable/durable-stream-until-idle';
 import { DefaultAgentExecutionEngine, EventedAgentExecutionEngine } from './durable/execution-engine';
+import type { ExecutionCompletion } from './durable/execution-engine';
 import type { ExecutionFence, UntrackedRunLiveness } from './durable/execution-fence';
 import {
   assertExecutionOwned,
@@ -305,6 +299,7 @@ import {
   loadMessageListStateForResume,
   latestMessageListState,
 } from './durable/workflows/shared/message-list-state';
+import type { AgentRunLog, AgentRunOwner } from './execution-engine';
 import {
   beginGoalActivity,
   stopGoalActivity,
@@ -327,6 +322,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { MessageList } from './message-list';
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
+import { PlainAgentExecutionEngine } from './plain-execution-engine';
 import { throwAgentRequestContextValidationError } from './request-context-validation';
 import { buildResumeSpanInput } from './resume-span-input';
 import { whenRunStepsSettle } from './run-lease-fence';
@@ -352,12 +348,9 @@ import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
 import { ExecutionEnginePolicy } from './streams/execution-policy';
 import type { ExecutionEngineDefaults } from './streams/execution-policy';
-import type { AgentStreamPublisher } from './streams/publisher';
-import { createAgentStreamPublisher } from './streams/publisher';
 import type { ResponseMessagesReplay } from './streams/response-messages';
 import { replayResponseMessages, withRebuiltResponseMessages } from './streams/response-messages';
 import type { AgentRunRecord } from './streams/run-records';
-import { durableReplayOwnerKey, readAgentRunRecord, readDurableReplayOwner } from './streams/run-records';
 import type { AgentStreamStepFinishPayload } from './streams/wire';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import type { ActiveThreadRun, AgentThreadRunRegistration } from './thread-stream-runtime';
@@ -501,10 +494,8 @@ function rebindRecoveredModelList(
 
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
-// `class DurableAgent extends Agent` with a TDZ error. The constructor is read
-// from `mastraCtorHolder` (populated by `mastra/index.ts` at load), with an
-// `await import('../mastra')` fallback for the standalone-agent case where the
-// Mastra module was never loaded. See `#getOrCreateEphemeralMastra`.
+// `class DurableAgent extends Agent` with a TDZ error. The plain engine builds
+// its standalone fallback Mastra from `mastraCtorHolder` instead.
 
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
@@ -530,6 +521,19 @@ type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<O
   toolCallId?: string;
 };
 
+type StartRunOptions = AgentExecutionOptionsBase<any> & {
+  structuredOutput?: PublicStructuredOutputOptions<any>;
+} & { model?: DynamicArgument<MastraModelConfig> };
+
+type ResumeRunOptions = StartRunOptions & { toolCallId?: string };
+
+type ResumeGenerateRequest<TOutput> = {
+  method: 'resumeGenerate';
+  args: [resumeData: unknown, options?: ResumeRunOptions, legacyOptions?: DurableAgentResumeOptions<TOutput>];
+};
+type ResumeStreamRequest = { method: 'resumeStream'; resumeData: unknown; options: ResumeRunOptions | undefined };
+type RecoverResumeRequest = { method: 'recoverResume'; options: ResumeRunOptions & { runId: string } };
+
 export type MastraLLM = MastraLLMV1 | MastraLLMVNext;
 
 /**
@@ -543,22 +547,7 @@ const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
 /** Upper bound for the exponential poll backoff inside that wait. */
 const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
 
-/**
- * Agentic-loop runs currently being resumed in this process, for stores that
- * cannot claim a run atomically. Keyed by runId.
- */
-const inFlightUnclaimedResumes = new Set<string>();
-
-/**
- * How long a resume claim may go without a sign of life before a later resume treats it as
- * abandoned by a process that died, and takes the suspension over: a `pending` claim (claimed but
- * not started) since it was claimed, a `running` claim (on stores with run fencing) since its
- * lease was last renewed.
- */
-export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
-
-/** How often a running resume renews its claim lease. Several renewals fit in one stale window. */
-const AGENT_RESUME_CLAIM_RENEW_MS = AGENT_RESUME_CLAIM_STALE_MS / 4;
+export { AGENT_RESUME_CLAIM_STALE_MS } from './plain-execution-engine';
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -991,36 +980,6 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
   return hasConfiguredProcessor(processors, processor => processor.providesSkillDiscovery === 'on-demand');
 }
 
-function runIdAlreadyClaimedError({ agentName, runId }: { agentName: string; runId: string }): MastraError {
-  return new MastraError({
-    id: 'AGENT_RUN_ID_ALREADY_CLAIMED',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    text: `Agent "${agentName}" cannot start a run with id "${runId}" because another run already owns it.`,
-    details: { agentName, runId },
-  });
-}
-
-function alreadyClaimedResumeError({
-  agentName,
-  method,
-  runId,
-  toolCallId,
-}: {
-  agentName: string;
-  method: string;
-  runId: string;
-  toolCallId?: string;
-}): MastraError {
-  return new MastraError({
-    id: 'AGENT_RESUME_ALREADY_CLAIMED',
-    domain: ErrorDomain.AGENT,
-    category: ErrorCategory.USER,
-    text: `Agent "${agentName}" ${method}() cannot resume run "${runId}" because another resume of it already claimed it.`,
-    details: { agentName, method, runId, ...(toolCallId !== undefined ? { toolCallId } : {}) },
-  });
-}
-
 /**
  * Run-level tool hooks with every non-function entry dropped. A request body can
  * carry `hooks: { beforeToolCall: null }`; that must not unset configured hooks.
@@ -1122,14 +1081,6 @@ export class Agent<
   maxRetries?: number;
   readonly #maxRetriesConfigured: boolean;
   #mastra?: Mastra;
-  /**
-   * Lazily-built in-memory Mastra used when the agent isn't wired into one.
-   * Provides a workflow storage backend for internal snapshot lookups
-   * (loadAgenticLoopSnapshotOrThrow, assertToolCallSuspended,
-   * listSuspendedRuns) so `new Agent(...)` works standalone. Cleared when
-   * `__registerMastra` attaches a real Mastra later.
-   */
-  #ephemeralMastra?: Mastra;
 
   /**
    * True when this instance is a fork produced by resolving a stored agent
@@ -1240,10 +1191,32 @@ export class Agent<
   }
 
   #executionEngine?: DefaultAgentExecutionEngine;
+  #plainExecutionEngine?: PlainAgentExecutionEngine;
 
   /** @internal One execution owner per Agent, initialized without starting a workflow. */
   protected get executionEngine(): DefaultAgentExecutionEngine {
-    return this.#resolveExecutionEngine() ?? this.#requireDurableExecution('execution');
+    return this.#requireDurableEngine('execution');
+  }
+
+  /** The durable engine, for methods only durable agents have. Throws when no durable engine is selected. */
+  #requireDurableEngine(method: string): DefaultAgentExecutionEngine {
+    return this.#resolveExecutionEngine() ?? this.#requireDurableExecution(method);
+  }
+
+  /**
+   * The engine runs of this agent execute on. A durable engine when the policy selects one,
+   * else the plain engine, which holds no configuration and so never freezes the policy.
+   */
+  #engine(): PlainAgentExecutionEngine | DefaultAgentExecutionEngine {
+    return this.#resolveExecutionEngine() ?? this.#plainEngine();
+  }
+
+  /**
+   * The plain engine, for plain runs and the plain run state a durable agent can still reach
+   * (for example `recoverResume()` on a legacy wrapper).
+   */
+  #plainEngine(): PlainAgentExecutionEngine {
+    return (this.#plainExecutionEngine ??= new PlainAgentExecutionEngine(this.id, this.#mastra));
   }
 
   /**
@@ -1281,8 +1254,6 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Forks share the fallback transport without making it override Mastra registration. */
   #defaultStreamPubsub?: PubSub;
-  /** Published runs executing in this process, with the owner the abort route checks. */
-  #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -1753,42 +1724,13 @@ export class Agent<
 
   /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
   async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
-    const executionEngine = this.#resolveExecutionEngine();
-    if (executionEngine) {
-      if (!this.#mastra) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires the agent to be registered on a Mastra instance.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-
-      const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
-      if (!workflowsStore) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" __getSuspendedRunRequestContextValue() requires persistent storage to load the run snapshot.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-
-      return executionEngine.loadSuspendedRequestContextValue(workflowsStore, runId, this, key);
-    }
-
-    try {
-      const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-        runId,
-        method: '__getSuspendedRunRequestContextValue',
-      });
-      return snapshot.requestContext?.[key];
-    } catch (error) {
-      if (error instanceof MastraError && error.id === 'AGENT_RESUME_NO_SNAPSHOT_FOUND') return undefined;
-      throw error;
-    }
+    return this.#engine().getSuspendedRequestContextValue({
+      mastra: this.#mastra,
+      pubsub: this.getPubSub(),
+      agent: this,
+      runId,
+      key,
+    });
   }
 
   /**
@@ -2161,26 +2103,13 @@ export class Agent<
 
   /** Whether run frames are published by workers on Mastra's shared log. @internal */
   __usesSharedRunLog(): boolean {
-    return (
-      !!this.#mastra &&
-      this.__hasDurableExecution() &&
-      this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented'
-    );
+    // Unregistered agents never ask the engine: resolving the workflow engine before registration
+    // would pin the evented engine's hostless fallback.
+    return !!this.#mastra && this.#engine().usesSharedRunLog(this.logger);
   }
 
-  /** Whether this class executes through the plain Agent publisher. @internal */
-  protected __ownsPlainStreamPublisher(): boolean {
-    return !this.__hasDurableExecution();
-  }
-
-  // Sharing transport does not opt durable execution into plain run records or abort checks.
-  #ownStreamBus(): AgentStreamBus | undefined {
-    if (
-      !this.__ownsPlainStreamPublisher() ||
-      !areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)
-    )
-      return undefined;
-    return this.__getStreamBus();
+  #runLog(): AgentRunLog {
+    return { bus: this.__getStreamBus(), usesSharedRunLog: this.__usesSharedRunLog() };
   }
 
   /**
@@ -2193,79 +2122,10 @@ export class Agent<
     return !!this.#executionEnginePolicy.durable || !!this.__getStreamBus();
   }
 
-  /**
-   * A published run's id identifies exactly one run: its stream topic and its
-   * ownership record are both keyed by it. A caller-supplied `runId` is only a
-   * claim, so this refuses one that another run already holds — otherwise a
-   * second caller would take over that run's topic and record, and be treated
-   * as its owner by `observe()` and the server's run routes.
-   *
-   * A `running` record means another process is executing that run and listening
-   * for its abort requests, so it is refused even to the same owner: two
-   * publishers on one topic would cross their chunks and abort requests. A
-   * `suspended` or `finished` record keeps the id until it expires, so the same
-   * owner can still reuse it (a resume, or a retry after the run finished).
-   * Runs without a resourceId own nothing to protect.
-   *
-   * A resume is the one caller that may continue a `running` record, because it
-   * already validated and claimed the suspended run (`resumeContext.claim`).
-   * The record can still say `running` there: the suspension is written to the
-   * record after the snapshot, so a slow snapshot write leaves the previous
-   * `running` record in place for the whole resume handoff.
-   *
-   * Reading the record and writing our own is not atomic, so two processes
-   * starting the same id within one cache round-trip of each other can still
-   * overlap. The cache has no compare-and-set to close that.
-   *
-   * Returns the record it accepted, so the caller can tell a fresh id from a
-   * reused one.
-   */
-  async #assertRunIdAvailable(
-    runId: string,
-    resourceId: string | undefined,
-    { resuming }: { resuming: boolean },
-  ): Promise<AgentRunRecord | undefined> {
+  /** The stream bus plain runs claim their id and publish on, or undefined when streams are off. */
+  #plainRunStreamBus(): AgentStreamBus | undefined {
     if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
-    const bus = this.__getStreamBus();
-    if (!bus) return undefined;
-
-    // A resume may still find its own finishing publisher here: the suspension is
-    // persisted before the publisher ends, so the entry outlives the handoff.
-    if (!resuming && this.#publishedRuns.has(runId)) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-
-    const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
-    if (!record) return undefined;
-    if (record.resourceId && record.resourceId !== resourceId) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-    if (record.status === 'running' && !resuming) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-    return record;
-  }
-
-  #createStreamPublisher(
-    runId: string,
-    owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
-  ): AgentStreamPublisher | undefined {
-    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
-    const bus = this.__getStreamBus();
-    if (!bus) return undefined;
-    const publisher = createAgentStreamPublisher({
-      pubsub: bus.pubsub,
-      runId,
-      cleanupTimeoutMs: bus.cleanupTimeoutMs,
-      logger: this.logger,
-      abortSignal: owner.abortSignal,
-      onEnd: () => {
-        if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
-      },
-      record: { cache: bus.runRecordCache, agentId: this.id, resourceId: owner.resourceId, threadId: owner.threadId },
-    });
-    this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
-    return publisher;
+    return this.__getStreamBus();
   }
 
   /**
@@ -2273,30 +2133,19 @@ export class Agent<
    * the run registry until auto-cleanup clears their replay history.
    * @internal
    */
-  __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
-    if (!this.__hasDurableExecution()) return this.__getPublishedRunOwner(runId);
-    if (!this.executionRunRegistry.has(runId)) return undefined;
-    return { ...this.executionRunRegistry.getMemoryInfo(runId) };
+  __getRunOwner(runId: string): AgentRunOwner | undefined {
+    return this.#engine().getRunOwner(runId, this.executionRunRegistry);
   }
 
   /**
    * Owner of an engine run whose replay history is still retained: the local owner,
    * else the shared record, including legacy records without stream status.
-   * Undefined once the run's topic is cleared or when no engine is selected. Only used
+   * Undefined once the run's topic is cleared, and always for plain runs. Only used
    * for replay access. Rejects when the shared cache cannot be read.
    * @internal
    */
-  async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
-    if (!this.__hasDurableExecution()) return undefined;
-    const local = this.__getRunOwner(runId);
-    if (local) return local;
-    const shared = await readDurableReplayOwner(
-      this.__getStreamBus(true)!.getRunRecordCache(this.__usesSharedRunLog()),
-      this.id,
-      runId,
-    );
-    if (!shared) return undefined;
-    return { resourceId: shared.resourceId, threadId: shared.threadId };
+  async __getReplayOwner(runId: string): Promise<AgentRunOwner | undefined> {
+    return this.#engine().getReplayOwner(this.id, runId, this.__getRunOwner(runId), this.#runLog());
   }
 
   /**
@@ -2308,22 +2157,7 @@ export class Agent<
    * @internal Used by the server's observe and run abort routes.
    */
   async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
-    if (this.__hasDurableExecution()) {
-      return readAgentRunRecord(
-        this.__getStreamBus(true)!.getRunRecordCache(this.__usesSharedRunLog()),
-        this.id,
-        runId,
-        durableReplayOwnerKey(this.id, runId),
-      );
-    }
-    const local = this.#publishedRuns.get(runId);
-    if (local) {
-      const { resourceId, threadId } = local;
-      return { agentId: this.id, runId, resourceId, threadId, status: 'running', updatedAt: Date.now() };
-    }
-    const bus = this.__getStreamBus();
-    if (!bus) return undefined;
-    return readAgentRunRecord(bus.runRecordCache, this.id, runId);
+    return this.#engine().getRunRecord(this.id, runId, this.#runLog());
   }
 
   /**
@@ -2332,9 +2166,8 @@ export class Agent<
    * agents without durable run storage.
    * @internal
    */
-  __getPublishedRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
-    const run = this.#publishedRuns.get(runId);
-    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
+  __getPublishedRunOwner(runId: string): AgentRunOwner | undefined {
+    return this.#plainEngine().getPublishedRunOwner(runId);
   }
 
   /**
@@ -2345,7 +2178,7 @@ export class Agent<
   protected async requestRemoteAbort(runId: string, bus = this.__getStreamBus()): Promise<void> {
     if (!bus) return;
     try {
-      this.#resolveExecutionEngine();
+      this.#engine();
       await publishAbortRequest(bus.forRun(this.__usesSharedRunLog()).pubsub, runId);
     } catch (error) {
       this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
@@ -4763,12 +4596,7 @@ export class Agent<
   __registerMastra(mastra: Mastra) {
     this.#mastra = mastra;
     this.#executionEngine?.registerMastra(mastra);
-
-    // Drop any ephemeral Mastra now that a real one is attached; we no longer
-    // need the storage fallback.
-    if (this.#ephemeralMastra) {
-      this.#ephemeralMastra = undefined;
-    }
+    this.#plainExecutionEngine?.registerMastra(mastra);
 
     this.#streamBus?.registerMastra(mastra.pubsub);
 
@@ -8418,7 +8246,7 @@ export class Agent<
 
     for (const [_id, scorerObject] of Object.entries(scorers)) {
       runScorer({
-        mastra: this.#mastra ?? this.#ephemeralMastra,
+        mastra: this.#mastra ?? this.#plainExecutionEngine?.ephemeralMastra,
         scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId,
@@ -8600,56 +8428,15 @@ export class Agent<
   /**
    * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
-   * @internal
    */
-  #throwIfRunAborted(runId: string) {
-    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
-      throw new MastraError({
-        id: 'AGENT_RESUME_ABORTED_RUN',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" cannot resume aborted run "${runId}".`,
-        details: { agentName: this.name, runId },
-      });
-    }
-  }
-
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
-    this.#throwIfRunAborted(runId);
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    let claimedThenFinished = false;
-    const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId, {
-      missingSnapshotGraceReads: 3,
-      onClaimedRunFinished: () => {
-        claimedThenFinished = true;
-      },
+    const engine = this.#plainEngine();
+    engine.assertNotAborted(this.getPubSub(), { agentName: this.name, runId });
+    return engine.loadSuspendedSnapshot(await engine.workflowsStore(this.#mastra), {
+      agentName: this.name,
+      runId,
+      method,
     });
-
-    // The run was claimed by another resume while we waited, then finished and was cleaned up.
-    if (claimedThenFinished) throw alreadyClaimedResumeError({ agentName: this.name, method, runId });
-
-    if (!existingSnapshot) {
-      const hasStorage = !!workflowsStore;
-      throw new MastraError({
-        id: 'AGENT_RESUME_NO_SNAPSHOT_FOUND',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          `Agent "${this.name}" ${method}() could not find a suspended run for runId "${runId}". ` +
-          (hasStorage
-            ? `The run has already finished (for example, an earlier approval or resume already handled it), never suspended, or the runId is invalid. `
-            : `No storage is configured on this Mastra instance, so workflow snapshots can't be persisted. Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL). See https://mastra.ai/docs/storage. `) +
-          `Ensure you are calling ${method}() only with a runId from a currently-suspended run.`,
-        details: {
-          runId,
-          agentName: this.name,
-          hasStorage,
-        },
-      });
-    }
-
-    return existingSnapshot;
   }
 
   #getSnapshotMemoryInfo(existingSnapshot: WorkflowRunState | null | undefined): AgentSnapshotMemoryInfo | undefined {
@@ -8808,8 +8595,7 @@ export class Agent<
     // the target suspended, or either row is still running), and reject early only
     // when the target is not suspended anywhere AND either a different tool call is
     // suspended (a stale toolCallId, see #19377) or the run has settled.
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#plainEngine().workflowsStore(this.#mastra);
 
     // `timedOut` marks a run that may still suspend on the target once its snapshot is durable,
     // so callers can retry it instead of treating the tool call as answered.
@@ -8950,48 +8736,8 @@ export class Agent<
     });
   }
 
-  /**
-   * Claims a suspended agentic-loop run for one resume before the resumed loop starts, so
-   * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
-   * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
-   *
-   * Stores that support atomic updates get compare-and-set transitions that hold across
-   * processes, and the resumed run starts from the claimed snapshot. Other stores only get an
-   * in-process guard. The `agentic-loop` row moves:
-   *
-   * - `suspended -> pending` when claimed, stamped with `resumeClaimedAt`.
-   * - `pending -> running` in `claim.start()`, right before the resumed run executes. Only one
-   *   caller can make this move, so only one resume executes the tool.
-   * - back to `suspended` in `claim.release()` when the resume fails before the run executes.
-   *
-   * A `pending` claim (claimed, never started or released) is abandoned once it was claimed
-   * `AGENT_RESUME_CLAIM_STALE_MS` ago. A later resume takes it over and claims the suspension
-   * again; a live claimant that loses it this way fails in `start()`.
-   *
-   * On stores with run fencing, the claim is also held as a run-ownership lease, renewed every
-   * `AGENT_RESUME_CLAIM_RENEW_MS` while the resumed run executes. A `running` claim whose lease
-   * lapsed (its process died mid-run) is abandoned too, and a later resume takes it over and
-   * resumes from the suspended snapshot, so the tool that was in flight runs again. A takeover is
-   * one ownership claim on the generation the taker read, so only one taker wins, and the row never
-   * goes back to `suspended` while someone may still run it. Without run fencing a `running` claim
-   * is never taken over: nothing can tell a dead claimant from a slow one.
-   *
-   * Every claim write also persists what the resume resumes the run with (`resumeClaimIntent`), so
-   * `recoverResume()` can finish a resume whose process died. A recovery passes the `claimedAt` of
-   * the intent it replays as `recoverClaimedAt`, and only takes over that exact claim.
-   *
-   * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
-   * also call it on any failure before or after handing the claim to the loop. It hands the
-   * suspension back to later callers only if the resumed run never started executing.
-   */
-  async #claimSuspendedAgenticLoopRun({
-    snapshot,
-    runId,
-    toolCallId,
-    resumeData,
-    recoverClaimedAt,
-    method,
-  }: {
+  /** Claims a suspended agentic-loop run for one resume; see `PlainAgentExecutionEngine.claimSuspendedRun`. */
+  async #claimSuspendedAgenticLoopRun(args: {
     snapshot: WorkflowRunState;
     runId: string;
     toolCallId: string | undefined;
@@ -8999,245 +8745,15 @@ export class Agent<
     recoverClaimedAt?: number;
     method: string;
   }): Promise<AgentLoopResumeClaim> {
-    const throwAlreadyClaimed = (): never => {
-      throw alreadyClaimedResumeError({ agentName: this.name, method, runId, toolCallId });
-    };
-
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const engine = this.#plainEngine();
+    const workflowsStore = await engine.workflowsStore(this.#mastra);
     // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
-    this.#throwIfRunAborted(runId);
-
-    if (!workflowsStore?.supportsConcurrentUpdates()) {
-      if (workflowsStore) {
-        this.logger.warn(
-          `[Agent:${this.name}] - The configured workflow storage does not support concurrent updates, so concurrent ${method}() calls for run ${runId} are only de-duplicated within this process. Resumes arriving at other processes may execute the suspended tool more than once.`,
-        );
-      }
-      if (inFlightUnclaimedResumes.has(runId)) throwAlreadyClaimed();
-      inFlightUnclaimedResumes.add(runId);
-      return {
-        release: async () => {
-          inFlightUnclaimedResumes.delete(runId);
-        },
-      };
-    }
-
-    const claimFrom = (expectedStatus: WorkflowRunStatus | undefined) => {
-      const claimedAt = Date.now();
-      return workflowsStore.updateWorkflowState({
-        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-        runId,
-        opts: {
-          status: 'pending',
-          expectedStatus,
-          resumeClaimedAt: claimedAt,
-          resumeClaimIntent: { claimedAt, toolCallId, resumeData },
-        },
-      });
-    };
-    const claim = () => claimFrom('suspended');
-    // A recovery replays one dead claim's intent, so it must not take over any other claim.
-    const throwIfNotRecoveredClaim = (current: WorkflowRunState | null | undefined) => {
-      if (recoverClaimedAt !== undefined && current?.resumeClaimedAt !== recoverClaimedAt) throwAlreadyClaimed();
-    };
-
-    // A probe that fails leaves the claim unleased, which is how a store without fencing behaves.
-    const leased = await Promise.resolve()
-      .then(() => workflowsStore.supportsRunFencing())
-      .catch(() => false);
-    // Keyed apart from the run's own id, which workflow and durable-agent executions may fence.
-    const ownershipRunId = `${AGENTIC_LOOP_WORKFLOW_ID}:resume-claim:${runId}`;
-    let fence: RunFence | undefined;
-    const acquireLease = async (opts: { force?: boolean; expectedGeneration?: number }) => {
-      const ownerId = globalThis.crypto.randomUUID();
-      const result = await workflowsStore.claimRunOwnership({
-        runId: ownershipRunId,
-        ownerId,
-        leaseMs: AGENT_RESUME_CLAIM_STALE_MS,
-        ...opts,
-      });
-      if (result.acquired) fence = { runId: ownershipRunId, generation: result.record.generation, ownerId };
-      return result.acquired;
-    };
-    const renewLease = async () =>
-      !!fence && (await workflowsStore.renewRunOwnership({ ...fence, leaseMs: AGENT_RESUME_CLAIM_STALE_MS })).renewed;
-    let leaseReleased = false;
-    const releaseLease = async () => {
-      if (!fence || leaseReleased) return;
-      leaseReleased = true;
-      try {
-        await workflowsStore.releaseRunOwnership(fence);
-      } catch (error) {
-        this.logger.warn(`[Agent ${this.name}] Failed to release resume claim lease for run ${runId}`, { error });
-      }
-    };
-
-    let claimed = await claim();
-    if (claimed && leased) {
-      // Only this caller moved the row out of `suspended`, so the claim is ours: replace whatever
-      // lease an earlier resume of this run left behind.
-      await acquireLease({ force: true });
-    } else if (!claimed && leased) {
-      const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-      const claimStatus = current?.status;
-      const abandoned =
-        current?.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        (claimStatus === 'running'
-          ? current.resumeLeasedClaimAt === current.resumeClaimedAt
-          : claimStatus === 'pending' && Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS);
-      if (!abandoned) throwAlreadyClaimed();
-      throwIfNotRecoveredClaim(current);
-      const owner = await workflowsStore.getRunOwnership({ runId: ownershipRunId });
-      if (owner?.live) throwAlreadyClaimed();
-      // Racing takers read the same generation, so only one of them gets the lease.
-      if (!(await acquireLease({ expectedGeneration: owner?.generation ?? 0 }))) throwAlreadyClaimed();
-      if (recoverClaimedAt !== undefined) {
-        // Another resume may have claimed the run between the read above and taking the lease. Holding
-        // the lease, no other resume can claim it now, so this read settles which claim is recovered.
-        const held = await workflowsStore
-          .loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId })
-          .catch(async error => {
-            await releaseLease();
-            throw error;
-          });
-        if (held?.status !== claimStatus || held?.resumeClaimedAt !== recoverClaimedAt) {
-          await releaseLease();
-          throwAlreadyClaimed();
-        }
-      }
-
-      this.logger.warn(
-        claimStatus === 'running'
-          ? `[Agent:${this.name}] - Taking over resume claim for run ${runId} whose lease lapsed; the suspended tool call runs again.`
-          : `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
-      );
-      claimed = await claimFrom(claimStatus);
-      if (!claimed) {
-        await releaseLease();
-        throwAlreadyClaimed();
-      }
-    } else if (!claimed) {
-      const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-      const abandoned =
-        current?.status === 'pending' &&
-        current.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
-      if (!abandoned) throwAlreadyClaimed();
-      throwIfNotRecoveredClaim(current);
-
-      // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
-      // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
-      // single `pending -> running` move still lets at most one resume execute.
-      this.logger.warn(
-        `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
-      );
-      await workflowsStore.updateWorkflowState({
-        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-        runId,
-        opts: { status: 'suspended', expectedStatus: 'pending' },
-      });
-      if (recoverClaimedAt !== undefined) {
-        // The hand-back cannot tell claims apart, so it may have knocked back a newer claim taken
-        // since the read above. Recover only if the run still carries the claim that was read.
-        const handedBack = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-        throwIfNotRecoveredClaim(handedBack);
-      }
-      claimed = await claim();
-      if (!claimed) throwAlreadyClaimed();
-    }
-
-    const claimedAt = claimed!.resumeClaimedAt;
-    let claimStatus: 'pending' | 'running' = 'pending';
-    let started = false;
-    let released = false;
-
-    // Renew the lease while the resumed run executes, so later resumes can tell this live claimant
-    // from one whose process died. Stops once the lease is no longer this claim's.
-    let renewTimer: ReturnType<typeof setInterval> | undefined;
-    let renewing = false;
-    const stopRenewing = () => {
-      if (renewTimer) clearInterval(renewTimer);
-      renewTimer = undefined;
-    };
-    const renew = async () => {
-      if (renewing) return;
-      renewing = true;
-      try {
-        if (!(await renewLease())) stopRenewing();
-      } catch (error) {
-        this.logger.warn(`[Agent ${this.name}] Failed to renew resume claim lease for run ${runId}`, { error });
-      } finally {
-        renewing = false;
-      }
-    };
-
-    const release = async () => {
-      stopRenewing();
-      if (started || released) {
-        await releaseLease();
-        return;
-      }
-      released = true;
-      try {
-        // Skip when a later resume took this claim over: the suspension is no longer ours.
-        const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-        if (current?.resumeClaimedAt !== claimedAt) return;
-        if (fence && !matchesRunFence(await workflowsStore.getRunOwnership({ runId: ownershipRunId }), fence)) return;
-        await workflowsStore.updateWorkflowState({
-          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-          runId,
-          opts: { status: 'suspended', expectedStatus: claimStatus },
-        });
-      } catch (error) {
-        this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
-      } finally {
-        await releaseLease();
-      }
-    };
-
-    // Another resume can claim, run, and re-suspend the run between the validation read and this
-    // claim. Every suspend persist rewrites the snapshot timestamp, so a different timestamp means
-    // this caller claimed a newer suspension than the one it validated.
-    if (claimed!.timestamp !== snapshot.timestamp) {
-      await release();
-      throwAlreadyClaimed();
-    }
-
-    return {
-      snapshot,
-      start: async () => {
-        // A claim whose lease lapsed before it started may have been taken over already.
-        if (fence && !(await renewLease())) {
-          released = true;
-          throwAlreadyClaimed();
-        }
-        const running = await workflowsStore.updateWorkflowState({
-          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-          runId,
-          opts: fence
-            ? { status: 'running', expectedStatus: 'pending', resumeLeasedClaimAt: claimedAt }
-            : { status: 'running', expectedStatus: 'pending' },
-        });
-        if (!running) {
-          // A later resume took this claim over as abandoned; it owns the suspension now.
-          released = true;
-          await releaseLease();
-          throwAlreadyClaimed();
-        }
-        claimStatus = 'running';
-        if (fence && !released) {
-          renewTimer = setInterval(() => void renew(), AGENT_RESUME_CLAIM_RENEW_MS);
-          renewTimer.unref?.();
-        }
-      },
-      onExecutionStarted: () => {
-        started = true;
-      },
-      release,
-    };
+    engine.assertNotAborted(this.getPubSub(), { agentName: this.name, runId: args.runId });
+    return engine.claimSuspendedRun(workflowsStore, {
+      ...args,
+      agentName: this.name,
+      logger: this.logger,
+    });
   }
 
   /**
@@ -9450,36 +8966,6 @@ export class Agent<
         executionResourceId,
       },
     });
-  }
-
-  /**
-   * Lazily build (and cache) an ephemeral in-memory Mastra. A `new Agent(...)`
-   * that isn't wired into a Mastra still needs *some* storage for internal
-   * snapshot lookups (agentic-loop resume, suspended-run discovery). Reused
-   * for every subsequent call on this agent; `__registerMastra(real)` clears
-   * it.
-   */
-  async #getOrCreateEphemeralMastra(): Promise<Mastra> {
-    if (this.#ephemeralMastra) {
-      return this.#ephemeralMastra;
-    }
-    // Resolve the Mastra constructor without a static `agent → mastra` runtime
-    // edge (see the type-only import at the top of this file). In any app that
-    // constructed a Mastra, the holder is already populated and no dynamic
-    // import runs; the `await import` is a fallback for standalone agents that
-    // never loaded the Mastra module.
-    const MastraClass = mastraCtorHolder.ctor ?? (await import('../mastra')).Mastra;
-    const ephemeral = new MastraClass({
-      logger: false,
-      storage: new InMemoryStore(),
-      pubsub: new EventEmitterPubSub(),
-      // Skip module-level scorer-hook registration: the hook can never resolve
-      // a scorer on this registry-less instance, and it would pin the whole
-      // ephemeral graph against GC for the process lifetime (#19404).
-      __ephemeral: true,
-    });
-    this.#ephemeralMastra = ephemeral;
-    return ephemeral;
   }
 
   /**
@@ -9846,7 +9332,11 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
+    const priorRunRecord = await this.#plainEngine().assertRunIdAvailable(this.#plainRunStreamBus(), {
+      agentId: this.id,
+      agentName: this.name,
+      runId,
+      resourceId,
       resuming: Boolean(resumeContext?.claim),
     });
 
@@ -9858,7 +9348,10 @@ export class Agent<
       await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
     }
 
-    const streamPublisher = this.#createStreamPublisher(runId, {
+    const streamPublisher = this.#plainEngine().createStreamPublisher(this.#plainRunStreamBus(), {
+      agentId: this.id,
+      runId,
+      logger: this.logger,
       resourceId,
       threadId: threadFromArgs?.id,
       abortSignal: options.abortSignal,
@@ -10772,15 +10265,7 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    // Extract and forward any client observability data attached to
-    // tool-result messages before they reach the loop/model.
-    this.#extractClientObservability(messages);
-    this.#beginExecutionPolicy();
-    if (this.#resolveExecutionEngine())
-      return this.#generateDurable(messages, options as DurableAgentStreamOptions<TOutput>);
-
-    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
-    return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
+    return this.#dispatchStart<OUTPUT>(messages, options, 'generate');
   }
 
   subscribeToThread<OUTPUT = TOutput>(
@@ -10919,8 +10404,7 @@ export class Agent<
       });
     }
 
-    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    const workflowsStore = await this.#plainEngine().workflowsStore(this.#mastra);
 
     if (!workflowsStore) {
       throw new MastraError({
@@ -11121,7 +10605,7 @@ export class Agent<
   abortThreadStream(options: AgentAbortThreadOptions): boolean {
     const aborted = this.#abortThreadStreamLocally(options);
     // The synchronous API cannot report the asynchronous lease-owner lookup.
-    if (this.__hasDurableExecution() && !aborted && !options.localOnly) {
+    if (!aborted && !options.localOnly && this.#engine().abortsRemoteExecutors) {
       void this.#abortThreadLeaseOwner(options).catch(error => {
         this.#mastra?.getLogger?.()?.warn?.('Failed to abort durable agent thread run on another process', {
           agentId: this.id,
@@ -11145,16 +10629,19 @@ export class Agent<
     const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
     if (aborted && parked && !options.localOnly) void this.#deleteAbortedSuspendedRun(runId);
-    if (this.__hasDurableExecution() && aborted && runId && !options.localOnly) {
-      this.#abortLocalController(runId);
-      void this.requestRemoteAbort(runId);
+    if (aborted && runId && !options.localOnly) {
+      const engine = this.#engine();
+      if (engine.abortsRemoteExecutors) {
+        engine.abortLocalExecution(runId, this.executionRunRegistry, this.#mastra);
+        void this.requestRemoteAbort(runId);
+      }
     }
     return aborted;
   }
 
   /** @internal Abort the thread's run even when another process executes it, reporting whether one was asked to stop. */
   async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
-    if (!this.#resolveExecutionEngine()) return this.abortThreadStream(options);
+    if (!this.#engine().abortsRemoteExecutors) return this.abortThreadStream(options);
     const aborted = this.#abortThreadStreamLocally(options);
     if (aborted || options.localOnly) return aborted;
     return this.#abortThreadLeaseOwner(options);
@@ -11162,7 +10649,6 @@ export class Agent<
 
   /** Stop the lease owner even when this process has no thread subscription. */
   async #abortThreadLeaseOwner(options: AgentAbortThreadOptions): Promise<boolean> {
-    this.#resolveExecutionEngine();
     const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(this.getPubSub(), options);
     if (!runId) return false;
     // Never stop a successor run the caller didn't mean (#24422).
@@ -11183,7 +10669,7 @@ export class Agent<
     // control topic.
     void this.requestRemoteAbort(runId);
     return (
-      this.__hasDurableExecution() &&
+      this.#engine().abortsRemoteExecutors &&
       (this.executionRunRegistry.has(runId) ||
         getRunRegistryEntry(runId, this.#mastra) !== undefined ||
         agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub()))
@@ -11198,20 +10684,9 @@ export class Agent<
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
-    const engine = this.#resolveExecutionEngine();
-    if (!engine) return aborted;
-    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
-      ?.abortController;
-    this.#abortLocalController(runId);
-    // An evented caller's controller does not confirm that its executor stopped.
-    return aborted || (engine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'default' && !!controller);
-  }
-
-  /** Flip the controller this process holds for `runId`, if it holds one. */
-  #abortLocalController(runId: string): void {
-    const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
-      ?.abortController;
-    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+    const engine = this.#engine();
+    const heldController = engine.abortLocalExecution(runId, this.executionRunRegistry, this.#mastra);
+    return aborted || (engine.confirmsLocalAbort(this.logger) && heldController);
   }
 
   /**
@@ -11223,7 +10698,8 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    if (this.#resolveExecutionEngine()) return this.#abortDurableRunAcknowledged(runId);
+    const engine = this.#engine();
+    if (engine.durable) return this.#abortDurableRunAcknowledged(runId, engine);
     if (this.__abortLocalRun(runId)) return true;
     const bus = this.__getStreamBus();
     if (!bus) return false;
@@ -11234,16 +10710,15 @@ export class Agent<
    * A registry entry alone is not confirmation: evented steps may execute elsewhere.
    * Keep the local executor alive until its correlated abort request is answered.
    */
-  async #abortDurableRunAcknowledged(runId: string): Promise<boolean> {
+  async #abortDurableRunAcknowledged(runId: string, engine: DefaultAgentExecutionEngine): Promise<boolean> {
     const wrapperClose = getRunStreamSlot(this.activeStreamUntilIdle, runId);
     if (wrapperClose) {
       wrapperClose();
       return true;
     }
-    const engine = this.executionEngine;
     const pubsub = this.__getStreamBus(true)!.forRun(this.__usesSharedRunLog()).pubsub;
     if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
-      this.#abortLocalController(runId);
+      engine.abortLocalExecution(runId, this.executionRunRegistry, this.#mastra);
       void this.requestRemoteAbort(runId);
       if (await engine.cancelParkedRun(runId)) {
         await engine.announceCanceledRun(runId, pubsub);
@@ -11258,7 +10733,7 @@ export class Agent<
       if (canceled) await releaseRemoteAbortListener(runId, this.#mastra);
       return acknowledged || canceled;
     } finally {
-      this.#abortLocalController(runId);
+      engine.abortLocalExecution(runId, this.executionRunRegistry, this.#mastra);
     }
   }
 
@@ -11267,7 +10742,7 @@ export class Agent<
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
   async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
-    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    const mastra = this.#mastra ?? this.#plainExecutionEngine?.ephemeralMastra;
     if (!mastra) return true;
     const runtimeLoopWorkflowName = (
       this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
@@ -11717,12 +11192,39 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput> | DurableAgentStreamResult<TOutput>> {
+    return this.#dispatchStart<OUTPUT>(messages, streamOptions, 'stream');
+  }
+
+  /** Starts a `stream()` or `generate()` run on the agent's engine. */
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'generate',
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>>;
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'stream',
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput> | DurableAgentStreamResult<TOutput>>;
+  async #dispatchStart<OUTPUT>(
+    messages: MessageListInput,
+    options: StartRunOptions | undefined,
+    methodType: 'generate' | 'stream',
+  ): Promise<
+    | FullOutput<OUTPUT>
+    | FullOutput<TOutput>
+    | MastraModelOutput<OUTPUT>
+    | MastraModelOutput<TOutput>
+    | DurableAgentStreamResult<TOutput>
+  > {
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
     this.#beginExecutionPolicy();
     if (this.#resolveExecutionEngine()) {
-      const result = await this.#streamDurable(messages, streamOptions as DurableAgentStreamOptions<TOutput>);
+      const durableOptions = options as DurableAgentStreamOptions<TOutput>;
+      if (methodType === 'generate') return this.#generateDurable(messages, durableOptions);
+      const result = await this.#streamDurable(messages, durableOptions);
       if (this.returnsDurableStreamResult) return result;
       return Object.assign(result.output, {
         abort: result.abort,
@@ -11732,7 +11234,8 @@ export class Agent<
       });
     }
 
-    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(streamOptions);
+    const { mergedOptions, resolvedScopes } = await this.#resolvePlainRunOptions<OUTPUT>(options);
+    if (methodType === 'generate') return this.#startPlainRun(messages, mergedOptions, resolvedScopes, 'generate');
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -11745,10 +11248,11 @@ export class Agent<
         messages,
         // Continuations re-enter stream() and resolve scopes again, so they get the
         // caller's own request context rather than this call's run-scoped copy.
-        { ...rest, requestContext: streamOptions?.requestContext, maxIdleMs },
+        { ...rest, requestContext: options?.requestContext, maxIdleMs },
         {
           activeStreams: this.activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
+          optionsResolved: true,
         },
       );
     }
@@ -11829,19 +11333,12 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) {
-      const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
-      const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
-      if (structuredOutput) {
-        return this.stream(messages, { ...options, structuredOutput, untilIdle });
-      }
-      return this.stream(messages, { ...options, untilIdle });
+    const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
+    const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
+    if (structuredOutput) {
+      return this.stream(messages, { ...options, structuredOutput, untilIdle });
     }
-
-    return runStreamUntilIdle<OUTPUT>(this, messages, streamOptions, {
-      activeStreams: this.activeStreamUntilIdle,
-      bgManager: this.#mastra?.backgroundTaskManager,
-    });
+    return this.stream(messages, { ...options, untilIdle });
   }
 
   /**
@@ -11905,12 +11402,6 @@ export class Agent<
       maxIdleMs?: number;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<any>> {
-    if (!this.__hasDurableExecution()) {
-      return runResumeStreamUntilIdle(this, resumeData, streamOptions, {
-        activeStreams: this.activeStreamUntilIdle,
-        bgManager: this.#mastra?.backgroundTaskManager,
-      });
-    }
     const { maxIdleMs, structuredOutput, ...options } = streamOptions ?? {};
     const untilIdle = maxIdleMs === undefined ? true : { maxIdleMs };
     if (structuredOutput) {
@@ -11963,9 +11454,42 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
-    if (this.#resolveExecutionEngine())
-      return this.#resumeDurableStream(resumeData, streamOptions as DurableAgentResumeOptions<TOutput>);
-    return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+    return this.#dispatchResume<OUTPUT>({ method: 'resumeStream', resumeData, options: streamOptions });
+  }
+
+  /** Resumes a suspended run on the agent's engine for `resumeStream()`, `resumeGenerate()` or `recoverResume()`. */
+  async #dispatchResume<OUTPUT>(
+    request: ResumeGenerateRequest<TOutput>,
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>>;
+  async #dispatchResume<OUTPUT>(
+    request: ResumeStreamRequest,
+  ): Promise<MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>>;
+  async #dispatchResume<OUTPUT>(request: RecoverResumeRequest): Promise<MastraModelOutput<OUTPUT>>;
+  async #dispatchResume<OUTPUT>(
+    request: ResumeGenerateRequest<TOutput> | ResumeStreamRequest | RecoverResumeRequest,
+  ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput> | MastraModelOutput<OUTPUT> | MastraModelOutput<TOutput>> {
+    // The DurableAgent wrapper recovers a claimed resume through the plain path, without
+    // resolving its engine.
+    const durable =
+      !(request.method === 'recoverResume' && this.returnsDurableStreamResult) && !!this.#resolveExecutionEngine();
+    if (durable) {
+      if (request.method === 'resumeStream')
+        return this.#resumeDurableStream(request.resumeData, request.options as DurableAgentResumeOptions<TOutput>);
+      if (request.method === 'resumeGenerate') return this.#resumeDurableGenerate(request.args);
+      // A durable/evented run keeps its resume intent in the engine's snapshot, not the plain
+      // loop's; refuse before the plain lookup reports the suspension as missing.
+      throw new MastraError({
+        id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
+        details: { agentName: this.name, runId: request.options.runId },
+      });
+    }
+    if (request.method === 'resumeGenerate') return this.#resumePlainGenerate<OUTPUT>(request.args[0], request.args[1]);
+    if (request.method === 'resumeStream')
+      return this.#resumeStream<OUTPUT>(request.resumeData, request.options, false);
+    return this.#resumeStream<OUTPUT>(undefined, request.options, true);
   }
 
   async #resumeDurableStream(
@@ -12031,6 +11555,7 @@ export class Agent<
         {
           activeStreams: this.activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
+          optionsResolved: true,
         },
         recover ? opts => this.#resumeStream<OUTPUT>(undefined, opts, true) : undefined,
       );
@@ -12275,8 +11800,13 @@ export class Agent<
       legacyOptions?: DurableAgentResumeOptions<TOutput>,
     ]
   ): Promise<FullOutput<OUTPUT> | FullOutput<TOutput>> {
-    if (this.#resolveExecutionEngine()) return this.#resumeDurableGenerate(args);
-    const [resumeData, options] = args;
+    return this.#dispatchResume<OUTPUT>({ method: 'resumeGenerate', args });
+  }
+
+  async #resumePlainGenerate<OUTPUT>(
+    resumeData: unknown,
+    options: ResumeRunOptions | undefined,
+  ): Promise<FullOutput<OUTPUT>> {
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
@@ -12454,17 +11984,7 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // A durable/evented run keeps its resume intent in the engine's snapshot, not the plain
-    // loop's; refuse before the plain lookup reports the suspension as missing.
-    if (!this.returnsDurableStreamResult && this.#resolveExecutionEngine())
-      throw new MastraError({
-        id: 'AGENT_RECOVER_RESUME_UNSUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" recoverResume() is not supported when the agent runs on a durable or evented execution engine. Use recover(runId) to continue an interrupted run.`,
-        details: { agentName: this.name, runId: options.runId },
-      });
-    return this.#resumeStream<OUTPUT>(undefined, options, true);
+    return this.#dispatchResume<OUTPUT>({ method: 'recoverResume', options });
   }
 
   /**
@@ -13062,20 +12582,11 @@ export class Agent<
     return this.__getStreamBus() ?? this.#requireDurableExecution('execution');
   }
 
-  /**
-   * Which workflow execution engine the durable agentic loop runs on.
-   * Subclasses override this (EventedAgent → 'evented').
-   * @internal
-   */
-  protected get workflowEngine(): 'default' | 'evented' {
-    return this.#executionEnginePolicy.engine === 'evented' ? 'evented' : 'default';
-  }
   protected getWorkflow(): ReturnType<DefaultAgentExecutionEngine['getWorkflow']> {
     const durable = this.durable;
     const config = typeof durable === 'object' ? durable : undefined;
     return this.executionEngine.getWorkflow({
       maxSteps: config?.maxSteps,
-      workflowEngine: this.workflowEngine,
       storesRunsInJournal: config?.storageVersion === 2,
       shouldPersistSnapshot: config?.shouldPersistSnapshot,
       logger: this.logger,
@@ -13771,11 +13282,9 @@ export class Agent<
    * @internal
    */
   protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
-    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step). Behind a broker
-    // another worker may have ended the open step already, so the worker that handles its failure ends it.
-    const evented = this.executionEngine.resolveWorkflowEngine(this.workflowEngine, this.logger) === 'evented';
+    // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     const bus = this.#mastra?.pubsub ?? this.getPubSub();
-    endRunSpansWithError(runId, error, { endStep: !evented || !bus || !reachesOtherProcesses(bus) });
+    endRunSpansWithError(runId, error, { endStep: this.executionEngine.endsStepOnRunError(bus, this.logger) });
     await runOutsideRunFenceScope(() =>
       emitErrorEvent(
         this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
@@ -13838,13 +13347,7 @@ export class Agent<
     abortController: AbortController | undefined,
     pubsub: PubSub = this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub,
   ): PubSub {
-    return this.executionEngine.fenceRunPubSub(
-      executionFence,
-      abortController,
-      pubsub,
-      this.workflowEngine,
-      this.logger,
-    );
+    return this.executionEngine.fenceRunPubSub(executionFence, abortController, pubsub, this.logger);
   }
 
   /**
@@ -14072,7 +13575,7 @@ export class Agent<
     runId: string,
     options?: DurableAgentRecoverOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('recover');
+    this.#requireDurableEngine('recover');
     const workflowsStore = await this.executionEngine.recoveryStore(runId, this.name, this.guardrailLogger);
 
     // 1. Validate the persisted durable-agent input before claiming ownership
@@ -14286,7 +13789,6 @@ export class Agent<
             workflow,
             executionFence,
             recoveryPubsub,
-            this.workflowEngine,
             this.logger,
             resourceId,
             requestContext,
@@ -14592,27 +14094,30 @@ export class Agent<
   }
 
   /**
-   * Execute the durable workflow.
-   *
-   * Engines select the blocking or background execution path.
-   * Subclasses such as InngestAgent may override execution for an external backend.
+   * Execute the durable workflow on the agent's execution engine, then settle
+   * the run unless the engine hands settlement to its workers.
    *
    * @param runId - The unique run ID
    * @param workflowInput - The serialized workflow input
+   * @returns The workflow result, for engines that return it
    * @internal
    */
   protected async executeWorkflow(
     runId: string,
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<{ status?: string } | void> {
-    if (this.executionEngine.executionMode === 'background') {
-      return this.#executeBackgroundWorkflow(runId, workflowInput);
-    }
-    const workflow = this.getWorkflow();
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment settles.
     const entry = getRunRegistryEntry(runId, this.#mastra);
-    const requestContext = entry?.requestContext;
-    // Captured now: a later resume() replaces the registry's fence.
     const executionFence = entry?.executionFence;
+    const pubsub = this.#mastra?.pubsub ?? this.getPubSub();
+    const { sharedExecution, usesRunPubSub, returnsResult } = this.executionEngine.prepareExecution(
+      pubsub,
+      executionFence,
+      this.logger,
+      this.guardrailLogger,
+    );
+    if (entry) entry.eventedExecution = sharedExecution;
 
     // Populate the run row's resourceId column so storage-level resource
     // filters (listSuspendedRuns / listActiveRuns) can narrow the query,
@@ -14620,127 +14125,51 @@ export class Agent<
     const memoryInfo = (
       workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
     )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
     const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
 
+    const workflow = this.getWorkflow();
+    await this.executionEngine.beforeStart(
+      { runId, pubsub, executionFence, requestContext: entry?.requestContext, threadId, resourceId, sharedExecution },
+      this.logger,
+    );
+    // Evented workers publish on the host bus. A default-engine fallback must
+    // instead publish on this run's transport or the caller's stream hangs.
     const run = await this.executionEngine.createRun(workflow, {
       runId,
       resourceId,
-      pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
+      ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
     });
-    // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
     let result;
     try {
-      result = await this.#withSuspensionAfterPersist(runId, () =>
-        this.executionEngine.startRun(
-          run,
-          workflowInput,
-          requestContext,
-          createObservabilityContext({ currentSpan: entry?.agentSpan }),
-        ),
-      );
-      const outcome = this.executionEngine.finishExecution(runId, executionFence, false, { result });
-      if (outcome.owner === 'agent') await this.settleExecution(runId, executionFence, outcome);
-      return result;
+      let completion: ExecutionCompletion;
+      try {
+        // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
+        result = await this.#withSuspensionAfterPersist(runId, () =>
+          this.executionEngine.startRun(
+            run,
+            workflowInput,
+            entry?.requestContext,
+            createObservabilityContext({ currentSpan: entry?.agentSpan }),
+          ),
+        );
+        completion = { result };
+      } catch (error) {
+        await this.#discardRestartableStart(runId, workflowInput.agentId);
+        completion = { error };
+      }
+      const outcome = this.executionEngine.finishExecution(runId, executionFence, sharedExecution, completion);
+      if (outcome.owner === 'agent') {
+        await this.settleExecution(runId, executionFence, outcome);
+      } else if (outcome.error) {
+        await this.emitError(runId, outcome.error, executionFence?.generation).catch(publishError =>
+          this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
+        );
+      }
     } finally {
       this.executionEngine.releaseRun(workflow, runId, run, result?.status);
     }
-  }
-
-  async #executeBackgroundWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    // Captured now: a later resume() replaces the registry's fence before this
-    // segment's background promise settles.
-    const entry = getRunRegistryEntry(runId, this.#mastra);
-    const executionFence = entry?.executionFence;
-    const pubsub = this.#mastra?.pubsub ?? this.getPubSub();
-    const { sharedExecution, usesRunPubSub } = this.executionEngine.prepareExecution(
-      pubsub,
-      executionFence,
-      this.workflowEngine,
-      this.logger,
-      this.guardrailLogger,
-    );
-    if (entry) entry.eventedExecution = sharedExecution;
-    try {
-      const workflow = this.getWorkflow();
-      await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
-      const memoryInfo = (
-        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
-      )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      const resourceId = workflowInput.state?.resourceId ?? memoryInfo?.resourceId;
-      if (sharedExecution && pubsub && entry?.requestContext && executionFence && threadId) {
-        await agentThreadStreamRuntime.claimDurableThreadLease(
-          pubsub,
-          runId,
-          threadId,
-          resourceId,
-          executionFence.generation,
-          executionFence.executionId,
-          true,
-        );
-        // A takeover can supersede this execution while the thread lease is contended.
-        try {
-          await executionFence.verify();
-        } catch (error) {
-          await agentThreadStreamRuntime
-            .abandonDurableThreadLease(
-              pubsub,
-              runId,
-              threadId,
-              resourceId,
-              executionFence.generation,
-              executionFence.executionId,
-            )
-            .catch(releaseError =>
-              this.logger.warn('Failed to release thread lease after losing execution ownership', {
-                runId,
-                error: releaseError,
-              }),
-            );
-          throw error;
-        }
-        setExecutionClaim(entry.requestContext, runId, {
-          ...executionFence.claim,
-          threadId,
-          resourceId,
-        });
-      }
-      // Evented workers publish on the host bus. A default-engine fallback must
-      // instead publish on this run's transport or the caller's stream hangs.
-      const run = await this.executionEngine.createRun(workflow, {
-        runId,
-        resourceId,
-        ...(usesRunPubSub ? { pubsub: this.fenceRunPubSub(executionFence, entry?.abortController) } : {}),
-      });
-      // Track completion so an immediate resume waits for suspension persistence.
-      await this.executionEngine
-        .startRun(
-          run,
-          workflowInput,
-          entry?.requestContext,
-          createObservabilityContext({ currentSpan: entry?.agentSpan }),
-        )
-        .then(
-          result => this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { result }),
-          async error => {
-            await this.#discardRestartableStart(runId, workflowInput.agentId);
-            return this.executionEngine.finishExecution(runId, executionFence, sharedExecution, { error });
-          },
-        )
-        .then(outcome => {
-          if (outcome.owner === 'agent') return this.settleExecution(runId, executionFence, outcome);
-          if (outcome.error) {
-            return this.emitError(runId, outcome.error, executionFence?.generation).catch(publishError =>
-              this.logger.warn(`Failed to publish error event for run ${runId}`, { runId, error: publishError }),
-            );
-          }
-        });
-    } catch (error) {
-      await this.#discardRestartableStart(runId, workflowInput.agentId);
-      await this.settleExecution(runId, executionFence, {
-        error: this.executionEngine.workflowExecutionError(error, 'Workflow execution failed'),
-      });
-    }
+    return returnsResult ? result : undefined;
   }
 
   /**
@@ -15277,7 +14706,7 @@ export class Agent<
     resumeData: unknown,
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    if (!this.#resolveExecutionEngine()) this.#requireDurableExecution('resume');
+    this.#requireDurableEngine('resume');
     const abortedRunError = () =>
       new MastraError({
         id: 'AGENT_RESUME_ABORTED_RUN',
@@ -15995,7 +15424,7 @@ export class Agent<
           // Evented engine: make sure the workflow event workers are running
           // before resume — a resume in a fresh process (or after shutdown())
           // would otherwise publish events nobody consumes and hang.
-          await this.executionEngine.ensureEngineWorkersStarted(this.workflowEngine, this.logger);
+          await this.executionEngine.ensureEngineWorkersStarted(this.logger);
           const run = await workflow.createRun({
             runId,
             resourceId: memoryInfo?.resourceId,
@@ -16167,8 +15596,7 @@ export class Agent<
    * ```
    */
   async listActiveRuns(options: DurableAgentListActiveRunsOptions = {}): Promise<DurableAgentListActiveRunsResult> {
-    const executionEngine = this.#resolveExecutionEngine();
-    if (!executionEngine) return this.#requireDurableExecution('listActiveRuns');
+    const executionEngine = this.#requireDurableEngine('listActiveRuns');
 
     return executionEngine.listActiveRuns(this.id, this.name, options);
   }
@@ -16215,8 +15643,7 @@ export class Agent<
     options: DurableAgentRecoverActiveRunsOptions = {},
   ): Promise<DurableAgentRecoverActiveRunsResult> {
     // Resolve an existing engine synchronously so discovery starts before a concurrent shutdown can begin.
-    const executionEngine = this.#resolveExecutionEngine();
-    if (!executionEngine) return this.#requireDurableExecution('recoverActiveRuns');
+    const executionEngine = this.#requireDurableEngine('recoverActiveRuns');
     if (this.#mastra?.__shuttingDown) return { recovered: [], succeeded: 0, failed: 0 };
     const { runId, ...discoveryOptions } = options;
 
@@ -17102,7 +16529,7 @@ export class Agent<
     messages: MessageListInput,
     options?: AgentExecutionOptions<TOutput>,
   ): Promise<Omit<PreparationResult<TOutput>, 'messageList'>> {
-    if (!this.#resolveExecutionEngine()) return this.#requireDurableExecution('prepare');
+    this.#requireDurableEngine('prepare');
 
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.agentForExecution as Agent<string, any, TOutput>,

@@ -92,7 +92,7 @@ describe('standalone Agent ephemeral Mastra hook leak (#19404)', () => {
     const baseline = scorerHookCount();
 
     // Title generation runs after #execute() finishes and rebuilds the
-    // ephemeral Mastra (#getOrCreateEphemeralMastra). A teardown-based fix
+    // ephemeral Mastra (the plain engine's storage fallback). A teardown-based fix
     // that only cleans up in #execute()'s finally block misses this rebuild —
     // this test pins the constructor-level guard instead.
     const titleModel = new MockLanguageModelV2({

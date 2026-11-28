@@ -27,7 +27,6 @@ const RUNS_ON_WRAPPER = new Set([
   '__isStoredVersionApplied',
   '__markStoredVersionApplied',
   '__notifyBackgroundTaskFinished',
-  '__ownsPlainStreamPublisher',
   '__registerExecutionEnginePolicy',
   '__registerPrimitives',
   '__runInputProcessors',
@@ -155,7 +154,6 @@ const RUNS_ON_WRAPPER = new Set([
   'subscribeToThread',
   'updateObjectiveOptions',
   'updateThreadPeerAdvertisement',
-  'workflowEngine',
   'wrapToolWithHooks',
   'wrapToolsWithHooks',
 ]);
