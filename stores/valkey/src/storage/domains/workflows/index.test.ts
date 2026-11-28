@@ -4,6 +4,7 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { GlideValkeyClient } from '../../../client';
+import type { ValkeyClient, ValkeyMulti } from '../../../client';
 import { getKey } from '../utils';
 import { WorkflowsValkey } from '.';
 
@@ -22,6 +23,62 @@ const snapshot = (runId: string, status: WorkflowRunState['status'] = 'suspended
     requestContext: {},
     timestamp: Date.now(),
   }) as WorkflowRunState;
+
+/**
+ * Wraps a client so `race()` runs exactly once, immediately before the next write batch executes.
+ * A batch is applied either as a MULTI transaction (no fence, no guards) or as one guarded script
+ * (`eval`), so both are hooked. This reproduces a competing writer landing between a read or a
+ * validation and the write that was based on it.
+ */
+const clientRacingNextWrite = (inner: GlideValkeyClient, race: () => Promise<void>): ValkeyClient => {
+  let armed = true;
+  const fire = async () => {
+    if (!armed) return;
+    armed = false;
+    await race();
+  };
+
+  const multi = (): ValkeyMulti => {
+    const batch = inner.multi();
+    const wrapped: ValkeyMulti = {
+      set: (key, value) => {
+        batch.set(key, value);
+        return wrapped;
+      },
+      del: key => {
+        batch.del(key);
+        return wrapped;
+      },
+      zAdd: (key, value) => {
+        batch.zAdd(key, value);
+        return wrapped;
+      },
+      zRem: (key, value) => {
+        batch.zRem(key, value);
+        return wrapped;
+      },
+      exec: async () => {
+        await fire();
+        return batch.exec();
+      },
+    };
+    return wrapped;
+  };
+
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === 'multi') return multi;
+      if (prop === 'eval') {
+        return async (script: string, options: { keys: string[]; arguments: string[] }) => {
+          await fire();
+          return target.eval(script, options);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as ValkeyClient;
+};
 
 describe('WorkflowsValkey resourceId keying', () => {
   let client: GlideValkeyClient;
@@ -271,12 +328,22 @@ describe('WorkflowsValkey resourceId keying', () => {
     await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
     await store.persistWorkflowSnapshot({ workflowName, runId: 'r', resourceId: 'x', snapshot: snapshot('r') });
 
+    const canonicalBefore = await client.get(canonicalKey('r'));
+    const legacyRaw = await client.get(legacyKey('r', 'x'));
+
     await store.persistWorkflowSnapshot({
       workflowName,
       runId: collidingRunId,
       resourceId: 'other',
       snapshot: snapshot(collidingRunId),
     });
+
+    // The relocation must not push the stale legacy bytes onto the destination that now holds the
+    // run's own newer canonical copy.
+    expect(await client.get(canonicalKey('r'))).toBe(canonicalBefore);
+    expect(await client.get(canonicalKey('r'))).not.toBe(legacyRaw);
+    const after = JSON.parse((await client.get(canonicalKey('r')))!) as { updatedAt: string };
+    expect(after.updatedAt).not.toBe((JSON.parse(legacyRaw!) as { updatedAt: string }).updatedAt);
 
     expect((await store.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.runId).toBe('r');
     expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
@@ -379,6 +446,77 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(await store.getWorkflowRunById({ workflowName, runId: 'r:resourceId:r2' })).toBeNull();
     // The legacy record still answers for the run that owns it.
     expect((await store.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.runId).toBe('r');
+  });
+
+  it('does not clobber a fresh short-run update when a relocation races the persist', async () => {
+    // Run `r`'s stale legacy record sits at the key `r:resourceId:x`'s canonical write will take.
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+
+    const writer = new GlideValkeyClient({
+      addresses: [{ host: 'localhost', port: 6382 }],
+      credentials: { password: 'valkey_password' },
+    });
+    await writer.connect();
+    const writerStore = new WorkflowsValkey({ client: writer });
+    try {
+      const racing = new WorkflowsValkey({
+        client: clientRacingNextWrite(client, async () => {
+          // A fresh canonical copy of run `r` lands after the relocation read its stale legacy
+          // record but before the batch that moves it does.
+          await writerStore.persistWorkflowSnapshot({
+            workflowName,
+            runId: 'r',
+            resourceId: 'x',
+            snapshot: snapshot('r', 'running'),
+          });
+        }),
+      });
+
+      await racing.persistWorkflowSnapshot({
+        workflowName,
+        runId: collidingRunId,
+        resourceId: 'other',
+        snapshot: snapshot(collidingRunId),
+      });
+
+      // The relocation must re-read and see the fresher copy, not overwrite it with the stale one.
+      expect((await store.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.status).toBe('running');
+      expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
+    } finally {
+      await writer.quit();
+    }
+  });
+
+  it('does not delete a run whose fresh snapshot lands after the delete validated its key', async () => {
+    // Run `r`'s record is what the delete validates at the contested key.
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+
+    const writer = new GlideValkeyClient({
+      addresses: [{ host: 'localhost', port: 6382 }],
+      credentials: { password: 'valkey_password' },
+    });
+    await writer.connect();
+    const writerStore = new WorkflowsValkey({ client: writer });
+    try {
+      const racing = new WorkflowsValkey({
+        client: clientRacingNextWrite(client, async () => {
+          // A different run takes the contested key after the delete read it but before its DEL runs.
+          await writerStore.persistWorkflowSnapshot({
+            workflowName,
+            runId: collidingRunId,
+            resourceId: 'other',
+            snapshot: snapshot(collidingRunId),
+          });
+        }),
+      });
+
+      await racing.deleteWorkflowRunById({ workflowName, runId: 'r' });
+
+      // The DEL must not destroy a record the delete never validated: its bytes changed under it.
+      expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
+    } finally {
+      await writer.quit();
+    }
   });
 
   it('treats glob metacharacters in the workflow name literally', async () => {
