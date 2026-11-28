@@ -80,17 +80,16 @@ const { thread, clonedMessages } = await memory.cloneThread({
             isOptional: true,
           },
           {
-            name: 'fullThread',
+            name: 'contextWindowOnly',
             type: 'boolean',
             description:
-              "Clone every message. With Observational Memory configured, the default is the messages after `lastObservedAt`. Can't be combined with `messageLimit` or `messageFilter`.",
+              "Clone only the messages still in the context window. With Observational Memory configured and a source thread it has observed, that is the messages after `lastObservedAt`. Can't be combined with `messageLimit` or `messageFilter`.",
             isOptional: true,
           },
           {
             name: 'messageFilter',
             type: 'MessageFilter',
-            description:
-              'Filter criteria for selecting which messages to clone. A filter replaces the Observational Memory default.',
+            description: 'Filter criteria for selecting which messages to clone.',
             isOptional: true,
             properties: [
               {
@@ -186,7 +185,6 @@ const memory = await agent.getMemory()
 const { thread: fullClone } = await memory.cloneThread({
   sourceThreadId: 'original-thread-123',
   title: 'Alternative Conversation Path',
-  options: { fullThread: true },
 })
 
 // Clone with a custom ID
@@ -284,17 +282,17 @@ When [Observational Memory](/docs/memory/observational-memory) is enabled, `clon
 
 Only the current (most recent) OM generation is cloned. Older history generations aren't copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.
 
-### Messages copied with Observational Memory
+### Copying only the context window
 
-When OM is configured on the `Memory` instance, the source thread has observations, and you pass none of `fullThread`, `messageLimit` or `messageFilter`, `cloneThread()` copies only the messages in the context window: those created after `lastObservedAt` on the OM record the configured scope reads. The observations already carry the earlier messages. The source thread keeps all of its messages. When records exist for both scopes, the clone carries the one the configured scope reads.
+By default `cloneThread()` copies every message. Pass `contextWindowOnly: true` to copy only the messages in the context window. When OM is configured on the `Memory` instance and the source thread has observations, those are the messages created after `lastObservedAt` on the OM record the configured scope reads. The observations already carry the earlier messages. The source thread keeps all of its messages. When records exist for both scopes, the clone carries the one the configured scope reads.
 
 With thread-scoped OM, the clone starts with the same context as the source: the same observations and the same unobserved messages. With resource-scoped OM cloned within the same resource, the clone shares the source's OM record, and the copied messages sit beside the originals in the resource. The resource's context can then hold both copies of each unobserved message. A resource-scoped clone into another resource doesn't carry the unobserved messages of the source resource's other threads.
 
-The clone's stored message history holds only the copied messages, and thread-scoped semantic recall searches only those. Semantic recall with resource scope, the default, searches every thread of the resource. In a clone within the same resource it can still return the source's earlier messages. Without OM configured, or when OM hasn't observed anything yet, every message is still copied. To copy every message from a thread with observations, pass `fullThread: true`:
+The clone's stored message history holds only the copied messages, and thread-scoped semantic recall searches only those. Semantic recall with resource scope, the default, searches every thread of the resource. In a clone within the same resource it can still return the source's earlier messages. Without OM configured, or when OM hasn't observed anything yet, every message is still copied.
 
 ```typescript
 const { thread } = await memory.cloneThread({
   sourceThreadId: 'thread-123',
-  options: { fullThread: true },
+  options: { contextWindowOnly: true },
 })
 ```

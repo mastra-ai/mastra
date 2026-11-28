@@ -80,17 +80,16 @@ const { thread, messageIdMap } = await memory.copyThread({
             isOptional: true,
           },
           {
-            name: 'fullThread',
+            name: 'contextWindowOnly',
             type: 'boolean',
             description:
-              "Copy every message. With Observational Memory configured, the default is the messages after `lastObservedAt`. Can't be combined with `messageLimit` or `messageFilter`.",
+              "Copy only the messages still in the context window. With Observational Memory configured and a source thread it has observed, that is the messages after `lastObservedAt`. Can't be combined with `messageLimit` or `messageFilter`.",
             isOptional: true,
           },
           {
             name: 'messageFilter',
             type: 'MessageFilter',
-            description:
-              'Filter criteria for selecting which messages to copy, by date range or message IDs. A filter replaces the Observational Memory default.',
+            description: 'Filter criteria for selecting which messages to copy, by date range or message IDs.',
             isOptional: true,
           },
         ],
