@@ -24,3 +24,4 @@ export * from './responses';
 export * from './channels';
 export * from './agent-controller';
 export * from './factory';
+export * from './factory-web';

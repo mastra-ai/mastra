@@ -100,6 +100,12 @@ import type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } f
 
 export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
+  OAuthPollResponse,
+  OAuthStartResponse,
+  ProvidersResponse,
+  SaveProviderKeyResponse,
+} from '@internal/factory-contract';
+export type {
   CustomProviderCheckFailedResponse,
   CustomProviderCheckFailure,
   CustomProviderCheckResponse,
@@ -129,12 +135,6 @@ export type {
 export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
-
-export interface ProvidersResponse {
-  providers: ProviderInfo[];
-  /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
-  orgKeyAdmin?: boolean;
-}
 
 export interface CustomProvidersResponse {
   providers: CustomProviderInfo[];
@@ -258,24 +258,6 @@ export interface UpdateOMObserveAttachmentsBody {
 export interface OkResponse {
   ok: true;
 }
-
-export interface SaveProviderKeyResponse {
-  ok: true;
-  provider?: ProviderInfo;
-}
-
-export interface OAuthStartResponse {
-  sessionId: string;
-  kind: 'paste-code' | 'device-code';
-  url: string;
-  userCode?: string;
-  instructions: string;
-  expiresAt: number;
-  nextPollMs?: number;
-}
-
-export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;

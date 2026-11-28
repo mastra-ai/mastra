@@ -180,3 +180,51 @@ export interface SessionModelPolicy extends SessionModelPackSelection {
   personalThinkingLevel: ThinkingLevelSetting | null;
   models: ModelCatalogEntry[];
 }
+
+export interface ProvidersResponse {
+  providers: ProviderInfo[];
+  /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
+  orgKeyAdmin?: boolean;
+}
+
+export interface SaveProviderKeyResponse {
+  ok: true;
+  provider?: ProviderInfo;
+}
+
+export interface OAuthStartResponse {
+  sessionId: string;
+  kind: 'paste-code' | 'device-code';
+  url: string;
+  userCode?: string;
+  instructions: string;
+  expiresAt: number;
+  nextPollMs?: number;
+}
+
+export type OAuthPollResponse =
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
+
+/** `GET /web/config/models` for a scope or Factory project. */
+export interface SettingsModelCatalog {
+  models: ModelCatalogEntry[];
+  /** null when no key in this scope can run the built-in start model */
+  fallbackModelId?: string | null;
+}
+
+/** `GET /web/config/models` for a running session: its models plus the session's model policy. */
+export interface SessionModelCatalog extends Partial<Omit<SessionModelPolicy, 'models'>> {
+  models: ModelCatalogEntry[];
+}
+
+export interface SessionModelTarget {
+  resourceId: string;
+  threadId: string;
+  sessionId: string;
+}
+
+export interface SessionModelResponse {
+  modelSelection: ResolvedModelSelection;
+}
