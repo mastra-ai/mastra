@@ -1,10 +1,10 @@
-import { CardDescription as SharedCardDescription } from '@mastra/playground-ui/domains/factory';
-
 import type { WorkItem } from '@internal/factory-contract';
-import { useCardPanelHost } from '../cardPanelHost';
-import type { CardPanelRepository } from '../cardPanelHost';
 
-export function CardDescription({
+import { CardDescription as SharedCardDescription } from '../session';
+import { useCardPanelHost } from './card-panel-host';
+import type { CardPanelRepository } from './card-panel-host';
+
+export function CardPanelDescription({
   item,
   repository,
   repositoryFailed,

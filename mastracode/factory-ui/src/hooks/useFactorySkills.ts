@@ -33,8 +33,7 @@ async function sendSkillWrite(
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   const json = (await res.json().catch(() => undefined)) as
-    | { skill?: FactorySkillInfo | null; message?: string; error?: string }
-    | undefined;
+    { skill?: FactorySkillInfo | null; message?: string; error?: string } | undefined;
   if (!res.ok || !json || json.skill === undefined) {
     throw new Error(json?.message ?? json?.error ?? `Request failed (${res.status})`);
   }

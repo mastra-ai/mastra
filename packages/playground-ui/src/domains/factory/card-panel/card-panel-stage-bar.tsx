@@ -1,4 +1,8 @@
 import { BUSY_CARD_MOVE_REFUSAL } from '@internal/factory-contract';
+import type { WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo, InstalledPhaseInfo } from '@mastra/client-js';
+import { useCardSessions } from '@mastra/react/hooks/factory';
+
 import {
   CardStageBar as SharedCardStageBar,
   boardCardState,
@@ -7,15 +11,12 @@ import {
   phaseIconKind,
   useItemDecisions,
   useBoardItems,
-} from '@mastra/playground-ui/domains/factory';
-import type { CardStagePhase, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
-import { toast } from '@mastra/playground-ui/components/Toaster';
-
-import type { InstalledBoardInfo, InstalledPhaseInfo } from '@mastra/client-js';
-import { useCardSessions } from '@mastra/react/hooks/factory';
-import { cardStages, elapsedLabel, enteredCurrentStageAt, stageBlockReason, stageDescription } from '../cardStageBar';
-import type { StageStep } from '../cardStageBar';
-import type { WorkItem } from '@internal/factory-contract';
+} from '..';
+import type { CardStagePhase, PullRequestSubscription } from '..';
+import { elapsedLabel } from '../session';
+import { cardStages, enteredCurrentStageAt, stageBlockReason, stageDescription } from './card-stage-bar';
+import type { StageStep } from './card-stage-bar';
+import { toast } from '@/ds/components/Toaster';
 
 export function CardPanelStageBar({
   item,

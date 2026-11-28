@@ -3,8 +3,8 @@ import type { WorkItemSourceRow, WorkItem, WorkItemBoardSource as WorkItemSource
 import { describe, expect, it } from 'vitest';
 
 import { newProjectWorkBoardInfo as work, releaseBoard, workBoardInfo } from '../../../../e2e/ui/board-catalog';
-import { cardStages, stageDescription } from './cardStageBar';
-import type { CardStages } from './cardStageBar';
+import { cardStages, stageDescription } from '@mastra/playground-ui/domains/factory';
+import type { CardStages } from '@mastra/playground-ui/domains/factory';
 
 function card(source: WorkItemSource, stages: string[], board = 'work'): WorkItem {
   return {

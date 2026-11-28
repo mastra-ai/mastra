@@ -8,8 +8,7 @@ import type {
 
 import type { SessionRowWire, SessionRowsResponse } from '../../../../api/types';
 import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
-import { CARD_SOURCES } from '../../factory/cardSources';
-import { CHANGE_REQUEST_TERMS, changeRequestStatus } from '@mastra/playground-ui/domains/factory';
+import { CARD_SOURCES, CHANGE_REQUEST_TERMS, changeRequestStatus } from '@mastra/playground-ui/domains/factory';
 import type { FactoryProject } from './github';
 import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';

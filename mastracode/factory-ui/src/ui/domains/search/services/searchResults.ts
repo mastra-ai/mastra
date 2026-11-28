@@ -9,10 +9,10 @@ import {
   currentItemStageLabel,
   relationshipLabel,
   workItemIdentifier,
+  CARD_SOURCES,
 } from '@mastra/playground-ui/domains/factory';
 import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { CARD_SOURCES } from '../../factory/cardSources';
 import { relationshipPath } from '../../factory/services/relationshipPath';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';

@@ -9,8 +9,8 @@ import { HrefLink } from '../../../ui/HrefLink';
 import { WorkspaceSectionSkeleton } from '../../workspace-viewer/components/WorkspaceSection';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import { cardProjectRepositoryId } from '../boardRepository';
-import { CardPanelHostContext } from '../cardPanelHost';
-import type { CardPanelHost } from '../cardPanelHost';
+import { CardPanelHostContext } from '@mastra/playground-ui/domains/factory';
+import type { CardPanelHost } from '@mastra/playground-ui/domains/factory';
 import { relationshipPath } from '../services/relationshipPath';
 import { useSourceDescription } from './BoardCardDetails';
 

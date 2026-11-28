@@ -1,4 +1,7 @@
 import { cardChangeRequest } from '@internal/factory-contract';
+import type { WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+
 import {
   RelatedCardLink as SharedRelatedCardLink,
   boardOf,
@@ -12,15 +15,12 @@ import {
   BoardStageIcon,
   boardPhaseIconKind,
   stageColorClass,
-} from '@mastra/playground-ui/domains/factory';
-import { cn } from '@mastra/playground-ui/utils/cn';
+} from '..';
+import type { PullRequestSubscription } from '..';
+import { useCardPanelHost } from './card-panel-host';
+import { cn } from '@/utils/cn';
 
-import type { InstalledBoardInfo } from '@mastra/client-js';
-import type { PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
-import { useCardPanelHost } from '../cardPanelHost';
-import type { WorkItem } from '@internal/factory-contract';
-
-export function RelatedCardLink({
+export function CardPanelRelatedCardLink({
   item,
   boards,
   repository,

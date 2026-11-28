@@ -1,11 +1,11 @@
-import type { InstalledBoardInfo } from '@mastra/client-js';
-
-import { useCardPanelHost } from '../cardPanelHost';
-import { PanelHeading } from '../../workspace-viewer/components/PanelHeading';
-import type { PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
-import { CappedRows } from './CappedRows';
-import { RelatedCardLink } from './RelatedCardLink';
+
+import type { InstalledBoardInfo } from '@mastra/client-js';
+import { PanelHeading } from '..';
+import type { PullRequestSubscription } from '..';
+import { CappedRows } from './capped-rows';
+import { useCardPanelHost } from './card-panel-host';
+import { CardPanelRelatedCardLink } from './related-card-link';
 
 export function RelatedCards({
   related,
@@ -27,7 +27,7 @@ export function RelatedCards({
       <CappedRows
         items={related}
         render={item => (
-          <RelatedCardLink
+          <CardPanelRelatedCardLink
             key={item.id}
             item={item}
             boards={boards}

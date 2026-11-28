@@ -1,3 +1,7 @@
+import type { WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+
+import type { PullRequestSubscription } from '..';
 import {
   CardOverview as SharedCardOverview,
   OverviewSkeleton as SharedOverviewSkeleton,
@@ -7,33 +11,27 @@ import {
   sessionChangeRequests,
   relatedWorkItemIndex,
   genericExternalWorkItemUrl,
-} from '@mastra/playground-ui/domains/factory';
-import { useClock } from '@mastra/playground-ui/hooks/use-clock';
+  SectionLoadError,
+} from '..';
 
-import type { InstalledBoardInfo } from '@mastra/client-js';
-import type { PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
+import { CardPanelDescription } from './card-description';
+import { CardPanelMovesGraph } from './card-moves-graph';
+import { useCardPanelHost } from './card-panel-host';
+import type { CardPanelRepository, CardWorkspaceSlot } from './card-panel-host';
+import { CardPanelSourceRow } from './card-source-row';
+import { ChangeRequestBadge } from './change-request-badge';
+import { ChangeRequestLink } from './change-request-link';
+import { ChangeRequestList } from './change-request-list';
+import { RelatedCards } from './related-cards';
+import { toMinute } from './stage-stays';
+import { useClock } from '@/hooks/use-clock';
 
-import { useCardPanelHost } from '../cardPanelHost';
-import type { CardPanelRepository, CardWorkspaceSlot } from '../cardPanelHost';
-import type { WorkItem } from '@internal/factory-contract';
-import { toMinute } from '../stageStays';
-import { CardDescription } from './CardDescription';
-import { CardSourceRow } from './CardSourceRow';
-import { ChangeRequestBadge } from './ChangeRequestBadge';
-import { ChangeRequestLink } from './ChangeRequestLink';
-import { ChangeRequestList } from './ChangeRequestList';
-import { MovesGraph } from './MovesGraph';
-import { RelatedCards } from './RelatedCards';
-import { SectionLoadError } from './SectionLoadError';
-
-export { overviewSectionClass } from '@mastra/playground-ui/domains/factory';
-
-export function OverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
+export function CardPanelOverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
   const host = useCardPanelHost();
   return <SharedOverviewSkeleton workspace={workspace ? (host.workspaceSkeleton ?? null) : null} />;
 }
 
-export function CardOverview({
+export function CardPanelOverview({
   item,
   sessionItems,
   boards,
@@ -76,8 +74,8 @@ export function CardOverview({
           <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
         ) : null
       }
-      source={<CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
-      description={<CardDescription item={item} repository={repository} repositoryFailed={repositoryFailed} />}
+      source={<CardPanelSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
+      description={<CardPanelDescription item={item} repository={repository} repositoryFailed={repositoryFailed} />}
       workspace={workspace?.({
         repository: repository && { slug: repository.slug, provider },
         changeRequest: ownRequest && {
@@ -105,7 +103,7 @@ export function CardOverview({
             {boardsFailed && showsPhases ? (
               <SectionLoadError>Couldn't load the board, so phases aren't shown.</SectionLoadError>
             ) : moved ? (
-              <MovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
+              <CardPanelMovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
             ) : null}
           </>
         ) : null

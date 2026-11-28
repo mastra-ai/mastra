@@ -8,8 +8,8 @@ import {
   boardFiltersFromParams,
   withBoardFilterValues,
   BOARD_SOURCE_OPTIONS,
+  CARD_SOURCES,
 } from '@mastra/playground-ui/domains/factory';
-import { CARD_SOURCES } from './cardSources';
 import type { WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 
 function isCardSource(key: string): key is WorkItemSource {

@@ -1,7 +1,7 @@
 import type { PullRequestStatus, WorkItem } from '@internal/factory-contract';
-import type { BoardNavigation } from '@mastra/playground-ui/domains/factory';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
+import type { BoardNavigation } from '..';
 
 /** The repository a card's session works in. */
 export interface CardPanelRepository {

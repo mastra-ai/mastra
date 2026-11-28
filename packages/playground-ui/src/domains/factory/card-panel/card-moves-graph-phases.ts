@@ -1,13 +1,8 @@
-import {
-  movesGraph as layoutMovesGraph,
-  phaseOf,
-  phaseLabel,
-  boardPhaseIconKind,
-} from '@mastra/playground-ui/domains/factory';
-import type { MovesGraphPhase } from '@mastra/playground-ui/domains/factory';
-
-import type { InstalledBoardInfo } from '@mastra/client-js';
 import type { WorkItemStageEntry } from '@internal/factory-contract';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+
+import { movesGraph as layoutMovesGraph, phaseOf, phaseLabel, boardPhaseIconKind } from '..';
+import type { MovesGraphPhase } from '..';
 
 /**
  * The board's phases as the shared graph reads them, then any stage the card visited that the board no
@@ -30,6 +25,10 @@ export function movesGraphPhases(
   }));
 }
 
-export function movesGraph(history: readonly WorkItemStageEntry[], board: InstalledBoardInfo | undefined, now: number) {
+export function cardMovesGraph(
+  history: readonly WorkItemStageEntry[],
+  board: InstalledBoardInfo | undefined,
+  now: number,
+) {
   return layoutMovesGraph(history, movesGraphPhases(history, board), now);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatDuration } from './formatDuration';
+import { formatDuration } from './format-duration';
 
 describe('formatDuration', () => {
   it('renders an em dash for missing or invalid input', () => {

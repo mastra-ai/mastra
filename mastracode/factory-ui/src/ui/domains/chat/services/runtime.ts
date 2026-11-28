@@ -42,8 +42,7 @@ export const initialChatRuntime: ChatRuntimeState = {
 };
 
 type RuntimeAction =
-  | { type: 'event'; event: AgentControllerEvent }
-  | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
+  { type: 'event'; event: AgentControllerEvent } | { type: 'reset'; threadId?: string; state?: SessionStateSnapshot };
 
 type MessagePart = Extract<AgentControllerEvent, { type: 'message_start' }>['message']['content']['parts'][number];
 

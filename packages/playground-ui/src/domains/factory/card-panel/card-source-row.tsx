@@ -1,3 +1,4 @@
+import type { WorkItem } from '@internal/factory-contract';
 import {
   CardSourceRow as SharedCardSourceRow,
   cardLabels,
@@ -5,12 +6,11 @@ import {
   workItemReference,
   sourceState,
   CardMetadataLabels,
-} from '@mastra/playground-ui/domains/factory';
+} from '..';
 
-import { CARD_SOURCES } from '../cardSources';
-import type { WorkItem } from '@internal/factory-contract';
+import { CARD_SOURCES } from '../board';
 
-export function CardSourceRow({
+export function CardPanelSourceRow({
   item,
   url,
   repository,

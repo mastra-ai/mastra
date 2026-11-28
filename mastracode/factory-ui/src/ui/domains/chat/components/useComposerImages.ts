@@ -40,14 +40,12 @@ export function useComposerImages({ disabled }: { disabled: boolean }) {
     if (accepted.length === 0) return;
 
     const read = await Promise.allSettled(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSequence++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
+      accepted.map(async (file): Promise<PendingImage> => ({
+        id: `pending-image-${pendingImageSequence++}`,
+        data: await readFileAsBase64(file),
+        mediaType: file.type,
+        filename: file.name || undefined,
+      })),
     );
     const additions = read.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
     if (additions.length < read.length) toast.error("Couldn't read an image. Try attaching it again.");

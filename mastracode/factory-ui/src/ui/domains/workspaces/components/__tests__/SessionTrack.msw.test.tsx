@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { shipBoard, workBoardInfo } from '../../../../../../e2e/ui/board-catalog';
-import { layoutSessionTrack, trackMomentLabel, trackStartLabel } from '../../services/sessionTrack';
+import { layoutSessionTrack, trackMomentLabel, trackStartLabel } from '@mastra/playground-ui/domains/factory';
 import { SessionTrack } from '../SessionTrack';
 
 const HOUR = 3_600_000;

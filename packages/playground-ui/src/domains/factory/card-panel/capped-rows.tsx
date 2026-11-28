@@ -1,7 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Button } from '@/ds/components/Button';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 
 const SHOWN_ROWS = 4;
 

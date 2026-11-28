@@ -4,7 +4,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
-import { CardPanelStageBar } from './CardPanelStageBar';
+import { CardPanelStageBar } from '@mastra/playground-ui/domains/factory';
 
 export function CardStageBar({
   item,
