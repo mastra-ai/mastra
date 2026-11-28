@@ -6,7 +6,9 @@ import { unavailableAttachmentPlaceholder } from '../agent/message-list/prompt/u
 import { RequestContext } from '../request-context';
 import {
   cacheOf,
+  currentTurnContents,
   DEFAULT_MAX_FILE_SIZE,
+  hasFileNewToRequest,
   namesByContent,
   promptFiles,
   replaceParts,
@@ -90,7 +92,14 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
     const notes = new Map(
       parts.map(part => [part, unsentNote(part, named.find(file => file.part === part)?.fileName)]),
     );
-    const uploaded = await uploadToSandbox(named, { workspace, requestContext, abortSignal, state });
+    const uploaded = await uploadToSandbox(named, {
+      workspace,
+      requestContext,
+      abortSignal,
+      state,
+      // A stopped sandbox keeps its files: only a file new to this request is worth starting it for.
+      mayStartSandbox: hasFileNewToRequest(named, currentTurnContents(messageList)),
+    });
     uploaded?.forEach((note, part) => notes.set(part, note));
     return { prompt: replaceParts(prompt, notes) };
   }
@@ -99,7 +108,8 @@ export class UnsupportedFileHandler implements Processor<'unsupported-file-handl
 /**
  * The sandbox only improves on the note: a file the model can work on with its
  * tools. Anything that keeps the sandbox out of reach leaves the note, so this
- * processor never stops a turn.
+ * processor never stops a turn. A stopped sandbox is not started to look at a
+ * file of the thread history.
  */
 async function uploadToSandbox(
   files: PromptFile[],
@@ -108,7 +118,11 @@ async function uploadToSandbox(
     requestContext,
     abortSignal,
     state,
-  }: Pick<ProcessLLMRequestArgs, 'workspace' | 'abortSignal' | 'state'> & { requestContext: RequestContext },
+    mayStartSandbox,
+  }: Pick<ProcessLLMRequestArgs, 'workspace' | 'abortSignal' | 'state'> & {
+    requestContext: RequestContext;
+    mayStartSandbox: boolean;
+  },
 ): Promise<Map<PromptFilePart, string> | undefined> {
   if (files.length === 0 || !workspace?.hasSandboxConfig()) return undefined;
   try {
@@ -118,6 +132,7 @@ async function uploadToSandbox(
       maxFileSize: () => DEFAULT_MAX_FILE_SIZE,
       cache: cacheOf(state),
       abortSignal,
+      mayStartSandbox,
     });
   } catch (error) {
     if (error instanceof FileUploadError) return undefined;
