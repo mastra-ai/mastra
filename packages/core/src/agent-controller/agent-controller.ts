@@ -1,5 +1,4 @@
 import { Agent } from '../agent';
-import { DurableStepIds } from '../agent/durable/constants';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
@@ -14,7 +13,6 @@ import { GatewayManager } from '../llm/model/gateways';
 import type { GatewayModel, MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
-import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
@@ -459,18 +457,18 @@ export class AgentController<TState = {}> {
       getAgent: () => this.getCurrentAgent(session),
       getAgents: () => this.backingAgents(),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
-      releaseSuspendedRun: async runId => {
-        const mastra = this.getMastra();
-        if (!mastra) return;
-        mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
-        const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-        await Promise.all(
-          [
-            AGENTIC_LOOP_WORKFLOW_ID,
-            AGENTIC_EXECUTION_WORKFLOW_ID,
-            DurableStepIds.AGENTIC_LOOP,
-            DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+      releaseSuspendedRun: async (runId, releaseInMemory) => {
+        const agents = [...new Set([this.getCurrentAgent(session), ...this.backingAgents()])];
+        if (await this.#releaseParkedRun(runId, agents, releaseInMemory)) return;
+        // A resume overlapped the attempt; decide once it settles, without holding up the session's teardown.
+        void (async () => {
+          do {
+            await Promise.all(agents.map(agent => agent.__resumesSettled(runId)));
+          } while (!(await this.#releaseParkedRun(runId, agents, releaseInMemory)));
+        })().catch(error =>
+          this.getMastra()
+            ?.getLogger()
+            ?.warn(`[AgentController:${this.id}] Failed to delete snapshot of released run ${runId}`, { runId, error }),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -948,6 +946,8 @@ export class AgentController<TState = {}> {
       this.#sessionDeletionPromises.set(session, deletion.tolerantPromise!);
       session.abort({ localOnly: true });
       try {
+        // Denying the parked runs also releases them from memory; finish that first.
+        await session.abortSettled();
         await session.thread.clearAndReleaseLock();
       } finally {
         // Notify inside the finally: even when lock release fails the session
@@ -1802,6 +1802,61 @@ export class AgentController<TState = {}> {
 
     for (const agent of this.backingAgents()) {
       agent.setChannels(channels);
+    }
+  }
+
+  /**
+   * One attempt to release a run from memory and delete its registration and snapshot rows while it is parked.
+   * Resolves `false` when a resume of the run in one of `agents` was in flight at the start or started at any
+   * point before the deletes settled: that resume may have parked the run again (leaving a new hold) or moved it
+   * on, so the run is not decided until it settles. `true` once the run is deleted or a settled resume has moved
+   * it on (the run is that resume's from there).
+   */
+  async #releaseParkedRun(
+    runId: string,
+    agents: Agent<any, any, any, any>[],
+    releaseInMemory: () => Promise<void>,
+  ): Promise<boolean> {
+    // Watching every resume start, not sampling whether one is in flight, so one that starts and settles
+    // between two awaits below is not missed.
+    const watchers = agents.map(agent => agent.__watchResumeStarts(runId));
+    try {
+      if (agents.some(agent => agent.__isResumingRun(runId))) return false;
+      const resumed = () => watchers.some(watcher => watcher.started);
+      try {
+        await releaseInMemory();
+        const workflowNames = new Set(agents.flatMap(agent => [...agent.__suspendedRunWorkflowNames()]));
+        const workflowsStore = await this.getMastra()?.getStorage()?.getStore('workflows');
+        // Every row the delete would remove: a nested workflow stores its child under the parent's run id, and
+        // a lookup without the name and version answers with whichever row is newest.
+        const rows = await Promise.all(
+          [...workflowNames].flatMap(workflowName =>
+            ([1, 2] as const).map(storageVersion =>
+              workflowsStore?.getWorkflowRunById({ runId, workflowName, storageVersion }),
+            ),
+          ),
+        );
+        const statuses = rows.flatMap(run => {
+          const snapshot = typeof run?.snapshot === 'string' ? JSON.parse(run.snapshot) : run?.snapshot;
+          return snapshot ? [snapshot.status] : [];
+        });
+        // Nothing left suspended: a resume moved the run on, here or (a claim in storage) in another process.
+        if (statuses.length > 0 && !statuses.includes('suspended')) return !resumed();
+        // One check and one delete for every agent's names, so no agent deletes after another saw a resume start.
+        const deleted = await agents[0]!.__deleteSuspendedRun(runId, { isResuming: resumed, workflowNames });
+        // A resume that started while the deletes were in flight may have parked the run again; the retry releases
+        // its in-memory state either way. Only keeping the re-parked row, which a delete may erase, needs a storage fence.
+        return deleted && !resumed();
+      } catch (error) {
+        // A resume overlapped the failed attempt: decide once it settles rather than leave what it parks.
+        if (!resumed()) throw error;
+        this.getMastra()
+          ?.getLogger()
+          ?.warn(`[AgentController:${this.id}] Failed to delete snapshot of released run ${runId}`, { runId, error });
+        return false;
+      }
+    } finally {
+      for (const watcher of watchers) watcher.stop();
     }
   }
 

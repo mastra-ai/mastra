@@ -332,6 +332,36 @@ export class DurableAgent<
   }
 
   /**
+   * Releases this process's hold on a run parked at a suspension, keeping its snapshot.
+   *
+   * A stream that stays open across a suspension keeps the run's registry entries (and the
+   * request context, tools and message list they hold) until the run resumes. A host that
+   * drops its only reader for good, such as a deleted AgentController session, calls this
+   * so the parked run stops pinning memory. The run stays resumable: `resume()` rebuilds it
+   * from the stored snapshot, in this process or another.
+   *
+   * Returns `false` (and releases nothing) unless this agent holds the run, its snapshot is
+   * stored as suspended, and no resume took the run over meanwhile.
+   * Rejects, with nothing released, when reading the run's snapshot fails.
+   * If one of the run's stream releases throws, it rejects after the rest of the hold is released, so a
+   * rejection doesn't by itself mean the run is still held.
+   *
+   * Discard any stream or run handle of the parked execution first: a later resume builds a
+   * new run, and a handle kept from before the release does not see it.
+   */
+  releaseParkedRun(runId: string): Promise<boolean> {
+    return this.releaseParkedExecution(runId);
+  }
+
+  /**
+   * @internal {@link releaseParkedRun} for a session deletion, which also deletes the run's snapshot: with no
+   * snapshot left, this process's own state must show the run parked, and a hold it keeps is logged.
+   */
+  __releaseParkedRun(runId: string, options: { forDeletion: boolean }): Promise<boolean> {
+    return this.releaseParkedExecution(runId, options);
+  }
+
+  /**
    * Get the run registry (for testing and advanced usage)
    */
   get runRegistry(): ExtendedRunRegistry {

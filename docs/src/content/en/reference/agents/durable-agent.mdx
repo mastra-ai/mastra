@@ -335,7 +335,7 @@ Returns: [`Promise<DurableAgentStreamResult>`](#durableagentstreamresult)
 
 #### `resume(runId, resumeData, options?)`
 
-Resumes a suspended run, for example after a tool approval. Pass the `runId` from the original stream and the data the run was waiting on. Throws if no registry entry exists for the run. If another execution holds the run, `resume()` waits up to 5 seconds for it to finish, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. See [run ownership](/docs/harness/durable-agents#run-ownership).
+Resumes a suspended run, for example after a tool approval. Pass the `runId` from the original stream and the data the run was waiting on. Without a registry entry for the run in this process (after a restart, an expiry, or `releaseParkedRun()`), it resumes from the stored snapshot. It throws if neither exists for this agent. If another execution holds the run, `resume()` waits up to 5 seconds for it to finish, then throws `DURABLE_AGENT_EXECUTION_CONFLICT`. See [run ownership](/docs/harness/durable-agents#run-ownership).
 
 ```typescript
 const { output, cleanup } = await durableAgent.resume(runId, {
@@ -437,9 +437,22 @@ Returns: `Promise<DurableAgentStreamResult>`
 
 :::warning
 
-The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events.
+The `cleanup()` returned by `observe()` destroys the run's registry entries and cached events. Only call it when you are done with the run. If the run is suspended and you intend to resume later, don't call `cleanup()`. Let the auto-cleanup timer handle it after the run finishes or errors. Auto-cleanup doesn't fire on suspended events. To free a suspended run's memory and keep it resumable, call [`releaseParkedRun()`](#releaseparkedrunrunid) instead.
 
 :::
+
+#### `releaseParkedRun(runId)`
+
+Releases this process's hold on a run parked at a suspension and keeps its stored snapshot. A stream that stays open across a suspension holds the run's registry entries, request context, tools, and message list until the run resumes. Call this after permanently dropping the run's only reader. This releases memory held by the parked run. The run stays resumable: `resume()` rebuilds it from the snapshot, in this process or another. For a run on a memory thread, the thread's warm record of the run goes too, and `subscribeToThread()` readers stop reading it, as when an idle suspended run expires.
+
+```typescript
+// Done with a run parked on an approval, but it may be resumed later.
+const released = await durableAgent.releaseParkedRun(runId)
+```
+
+Returns: `Promise<boolean>`. `true` when the run was released. `false` when it didn't release a parked run this agent owns: this agent doesn't hold the run, the run's snapshot isn't stored as suspended, or a resume of the run is in progress. An agent that only observes the run also returns `false` and leaves its observer attached. Call the observation's `detach()` to stop observing. Rejects, with nothing released, when reading the run's snapshot from storage fails. Also rejects if releasing one of the run's streams throws, after the rest of the run's in-memory state is released (with an `AggregateError` when several throw). Another agent on the same Mastra instance can't release a run this agent parked.
+
+`AgentController` calls this for you when you delete a session that left runs parked. Deleting the session also tries to delete those runs' stored snapshots, so they can't be resumed afterward. This cleanup is best effort and may still be in progress when `deleteSession()` returns: if a resume of the run overlaps it, the snapshot is deleted after that resume settles, or left to that resume when it moved the run on. To keep a run resumable, call `releaseParkedRun()` yourself instead of deleting the session.
 
 #### `prepare(messages, options?)`
 

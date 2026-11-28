@@ -53,7 +53,7 @@ import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { latestMessageListState } from './workflows/shared/message-list-state';
 
 export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
-type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
+export type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
 export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
 
@@ -998,6 +998,26 @@ export class DefaultAgentExecutionEngine {
     }
   }
 
+  /**
+   * Drops a run parked at a suspension from the workflow's run map; resume() rebuilds it from its snapshot.
+   * Returns `false`, leaving the run mapped, unless the run is parked.
+   */
+  releaseParkedRun(
+    workflow: DurableWorkflow,
+    runId: string,
+    run: DurableRun,
+    persistedStatus: WorkflowRunState['status'] | undefined,
+  ): boolean {
+    if (workflow.runs.get(runId) !== run || !this.isRunParked(run, persistedStatus)) return false;
+    workflow.runs.delete(runId);
+    return true;
+  }
+
+  /** Whether a run whose snapshot is stored with `persistedStatus` (`undefined`: none is) sits parked at a suspension. */
+  protected isRunParked(run: DurableRun, _persistedStatus: WorkflowRunState['status'] | undefined): boolean {
+    return run.workflowRunStatus === 'suspended';
+  }
+
   finishExecution(
     _runId: string,
     _executionFence: ExecutionFence | undefined,
@@ -1049,6 +1069,8 @@ export class DefaultAgentExecutionEngine {
  * `extends` never runs while `DefaultAgentExecutionEngine` is still loading:
  * this module's imports lead back to `Agent`, which imports both engines.
  */
+const PARKABLE_LOCAL_STATUSES = new Set<DurableRun['workflowRunStatus']>(['pending', 'running', 'suspended']);
+
 export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   #warnedUnfencedSharedExecution = false;
 
@@ -1059,6 +1081,17 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   // Evented execution can return before the suspended snapshot lands.
   override get suspendPersistedOnReturn(): boolean {
     return false;
+  }
+
+  // The local run learns of a worker's suspension only from the start result, which can trail the
+  // stored snapshot (until then it reads pending or running): it is parked once the snapshot says so.
+  // A stored suspended snapshot is the workers' final write for the segment, so none still uses the run.
+  // Once the start result landed this process is done with the run, which is all a deletion without a snapshot needs.
+  protected override isRunParked(run: DurableRun, persistedStatus: WorkflowRunState['status'] | undefined): boolean {
+    return (
+      run.workflowRunStatus === 'suspended' ||
+      (persistedStatus === 'suspended' && PARKABLE_LOCAL_STATUSES.has(run.workflowRunStatus))
+    );
   }
 
   // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).

@@ -5016,33 +5016,60 @@ export class AgentThreadStreamRuntime {
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
       if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
-      state.threadRunsByStreamId.delete(streamId);
-      state.watchedThreadStreamIds.delete(streamId);
-      // A same-instance resume re-registers the run under a newer streamId, so a
-      // record that is no longer the run's current record is just the superseded
-      // older stream: dropping its stream entry above is enough. Only the current
-      // record (an abandoned suspend) gets the full run-level teardown below.
-      if (state.threadRunsById.get(record.runId) !== record) continue;
-      const staleKey = this.#threadKey(record.resourceId, record.threadId);
-      state.threadRunsById.delete(record.runId);
-      state.threadKeysByRunId.delete(record.runId);
-      this.#clearSuspendedRun(state, record.runId);
-      this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
-      state.sweptLeasedRunIds.set(record.runId, now);
-      state.displacedRecords.set(record, 'moved-on');
-      // A run parked across its suspension keeps its stream open, so subscribers
-      // reading it would never reach the runs queued behind it. Only this record's
-      // stream: a subscriber may be reading another instance's resume of the run.
-      this.#stopReadingDisplacedRun(state, record.runId, streamId);
-      if (
-        state.activeThreadRunIds.get(staleKey) === record.runId &&
-        state.activeThreadStreamIds.get(staleKey) === streamId
-      ) {
-        state.activeThreadRunIds.delete(staleKey);
-        state.activeThreadStreamIds.delete(staleKey);
-      }
-      this.#releaseUnusedThreadControlSubscription(state, staleKey);
+      this.#evictSuspendedRecord(state, pubsub, record, streamId, now);
     }
+  }
+
+  /**
+   * Drops this process's warm state for a parked run segment the way the TTL sweep does, without
+   * waiting out the TTL: the persisted suspension, the lease and any other instance's resume are untouched.
+   * Only a parked record `ownerOutput` owns goes (as {@link closeRunContinuation} matches it), so a resume's running record stays. Returns whether one went.
+   */
+  evictParkedRun<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
+    const state = this.#getState(pubsub);
+    const parked = this.#findParkedRecord(state, ownerOutput);
+    if (!parked) return false;
+    this.#evictSuspendedRecord(state, pubsub, parked.record, parked.streamId, Date.now());
+    return true;
+  }
+
+  #findParkedRecord<OUTPUT>(state: AgentThreadRuntimeState, ownerOutput: MastraModelOutput<OUTPUT>) {
+    for (const [streamId, record] of state.threadRunsByStreamId) {
+      if (record.runId !== ownerOutput.runId || record.lifecycle !== 'suspended') continue;
+      if (record.continuation?.sourceOutput !== ownerOutput && record.currentSegmentOutput !== ownerOutput) continue;
+      return { streamId, record };
+    }
+    return undefined;
+  }
+
+  #evictSuspendedRecord(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    record: AgentThreadRunRecord<any>,
+    streamId: string,
+    now: number,
+  ) {
+    state.threadRunsByStreamId.delete(streamId);
+    state.watchedThreadStreamIds.delete(streamId);
+    // Subscribers reading this parked stream, or with it still queued, would otherwise wait on it forever.
+    // Only this stream's readers stop, since a same-instance resume reads a newer stream.
+    state.displacedRecords.set(record, 'moved-on');
+    this.#stopReadingDisplacedRun(state, record.runId, streamId);
+    if (state.threadRunsById.get(record.runId) !== record) return;
+    const staleKey = this.#threadKey(record.resourceId, record.threadId);
+    state.threadRunsById.delete(record.runId);
+    state.threadKeysByRunId.delete(record.runId);
+    this.#clearSuspendedRun(state, record.runId);
+    this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+    state.sweptLeasedRunIds.set(record.runId, now);
+    if (
+      state.activeThreadRunIds.get(staleKey) === record.runId &&
+      state.activeThreadStreamIds.get(staleKey) === streamId
+    ) {
+      state.activeThreadRunIds.delete(staleKey);
+      state.activeThreadStreamIds.delete(staleKey);
+    }
+    this.#releaseUnusedThreadControlSubscription(state, staleKey);
   }
 
   continueRun<OUTPUT>(
