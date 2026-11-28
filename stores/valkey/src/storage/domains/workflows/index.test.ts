@@ -249,6 +249,34 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(run!.resourceId).toBe('x');
   });
 
+  it('does not delete the legacy run when deleting the colon-named run whose canonical key it occupies', async () => {
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+
+    // The canonical key of `r:resourceId:x` holds run `r`'s legacy record; deleting the colon-named
+    // run must not destroy the run that actually owns the key.
+    await store.deleteWorkflowRunById({ workflowName, runId: collidingRunId });
+
+    expect((await store.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.runId).toBe('r');
+    expect(await client.get(canonicalKey(collidingRunId))).not.toBeNull();
+
+    // Deleting the owning run still removes it.
+    await store.deleteWorkflowRunById({ workflowName, runId: 'r' });
+    expect(await client.get(canonicalKey(collidingRunId))).toBeNull();
+  });
+
+  it('does not inherit createdAt or resourceId from the legacy run whose canonical key the run ID occupies', async () => {
+    const legacyCreatedAt = new Date('2020-01-01T00:00:00Z');
+    await writeLegacy('r', 'x', legacyCreatedAt);
+
+    const before = Date.now();
+    await store.persistWorkflowSnapshot({ workflowName, runId: collidingRunId, snapshot: snapshot(collidingRunId) });
+
+    const run = await store.getWorkflowRunById({ workflowName, runId: collidingRunId });
+    expect(run!.runId).toBe(collidingRunId);
+    expect(run!.createdAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(run!.resourceId).toBeUndefined();
+  });
+
   it('reads the true legacy record when a colliding run shares the scanned key pattern', async () => {
     await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
     await store.persistWorkflowSnapshot({
