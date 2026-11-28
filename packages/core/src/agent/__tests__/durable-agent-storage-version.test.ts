@@ -24,19 +24,27 @@ const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 /** Calls the approval-gated tool, so the run suspends and stays stored. */
 function createModel() {
   let nextCallId = 1;
+  const toolCall = () => ({
+    type: 'tool-call' as const,
+    toolCallId: `call-${nextCallId++}`,
+    toolName: 'approvalTool',
+    input: '{}',
+    providerExecuted: false,
+  });
   return new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [toolCall()],
+      finishReason: 'tool-calls',
+      usage,
+      response: { id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-        {
-          type: 'tool-call',
-          toolCallType: 'function',
-          toolCallId: `call-${nextCallId++}`,
-          toolName: 'approvalTool',
-          input: '{}',
-          providerExecuted: false,
-        },
+        toolCall(),
         { type: 'finish', finishReason: 'tool-calls', usage },
       ] as any),
       rawCall: { rawPrompt: null, rawSettings: {} },
@@ -144,7 +152,7 @@ describe.each(['default', 'evented'] as const)('native %s durable step limit', e
     'makes $expected model requests with the configured step limit',
     async ({ defaultMaxSteps, callMaxSteps, expected }) => {
       const model = createModel();
-      const requests = vi.spyOn(model, 'doStream');
+      const requests = vi.spyOn(model, 'doGenerate');
       const agent = new Agent({
         id: 'limited-agent',
         name: 'Limited Agent',

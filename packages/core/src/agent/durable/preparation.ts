@@ -883,6 +883,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     modelList: modelList ?? undefined,
     scorers,
     options: {
+      modelCallMode: methodType === 'generate' ? 'generate' : 'stream',
       clientTools: serializeClientTools(execOptions?.clientTools, tools),
       toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,

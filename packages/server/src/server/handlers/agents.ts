@@ -1847,14 +1847,14 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       // Propagate draft/published default to sub-agents
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
+      const clientThreadId = typeof memoryOption?.thread === 'string' ? memoryOption.thread : memoryOption?.thread?.id;
+      const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
+
       // Authorization: apply context overrides to memory option if present
       let authorizedMemoryOption = memoryOption;
       if (memoryOption) {
-        const clientThreadId = typeof memoryOption.thread === 'string' ? memoryOption.thread : memoryOption.thread?.id;
-
         const effectiveResourceId = getEffectiveResourceId(serverRequestContext, memoryOption.resource);
         requireEffectiveResourceId(effectiveResourceId);
-        const effectiveThreadId = getEffectiveThreadId(serverRequestContext, clientThreadId);
 
         // Validate thread ownership if accessing an existing thread
         if (effectiveThreadId) {
@@ -1890,7 +1890,10 @@ export const GENERATE_AGENT_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A durable run on a thread outlives a dropped request: the caller finds it
+        // again through the thread and reads the full result with observe(runId).
+        // Without a thread the caller has no way back, so disconnecting still cancels.
+        abortSignal: effectiveThreadId && hasDurableExecution(agent) ? undefined : abortSignal,
       };
 
       const result = structuredOutput

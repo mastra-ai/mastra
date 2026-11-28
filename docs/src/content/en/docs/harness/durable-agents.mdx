@@ -219,6 +219,40 @@ export const durableAgent = createDurableAgent({
 })
 ```
 
+### Reconnect to a `generate()` call
+
+A `generate()` run stays replayable for the same [cleanup](#cleanup) window as a `stream()` run. Any process that shares the replay cache and PubSub transport can rebuild the full result from the run ID, including usage, steps, and structured output:
+
+```typescript title="src/server/reconnect.ts"
+const { output } = await mastra.getAgent('researcher').observe(runId)
+const result = await output.getFullOutput()
+```
+
+Over HTTP, the run ID only arrives with the `/generate` response. When the request names a memory thread, a client disconnect doesn't stop a durable run, and the client finds it again through the thread. Subscribe with `withRunStatus`, take the run ID from the `thread-run-status` chunk, then observe that run. The replayed `finish` chunk carries usage and steps:
+
+```typescript title="src/client/reconnect.ts"
+const agent = client.getAgent('researcher')
+const thread = await agent.subscribeToThread({ threadId, resourceId, withRunStatus: true })
+
+let runId: string | undefined
+await thread.processDataStream({
+  onChunk: chunk => {
+    if (chunk.type !== 'thread-run-status') return
+    runId = chunk.runId
+    thread.unsubscribe()
+  },
+})
+
+const run = await agent.observe({ runId: runId! })
+await run.processDataStream({
+  onChunk: chunk => {
+    // The whole run, from `start` to `finish`
+  },
+})
+```
+
+This works across processes, including after another process [recovers](#crash-recovery) the run. Once the cleanup window passes, the thread can still report how the run ended and `withInitialHistory` returns its saved messages, but `observe()` has nothing left to replay. Without a memory thread, a client disconnect still cancels the run, because the client has no way to find it again. Use `stream()` for those calls: its first chunk carries the run ID.
+
 ## Streaming with background tasks
 
 Durable agents support the same [`untilIdle`](/reference/streaming/agents/stream) option as regular agents. When `untilIdle` is set, `stream()` keeps the connection open across background-task continuations until the agent is idle:
@@ -254,7 +288,7 @@ Background tasks have their own execution lease, stored on each task record, sep
 
 Call `cleanup()` from the process that started the run to release its resources and clear its cached stream events. Wrapper `stream()` and `observe()` handles expose `cleanup()`. On native durable stream output, use the optional `cleanup()` method on [`AgentStreamOutput`](/reference/agents/durable-agent#native-agent-execution).
 
-When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off. The cache's own TTL and eviction still apply.
+When you don't call `cleanup()` yourself, Mastra calls it `cleanupTimeoutMs` after the run finishes, errors, or is aborted. The default is 30 seconds, so completed-run replay is limited to that window unless you configure a different value or call `cleanup()` sooner. Detaching an observer or reaching a plain `idleTimeoutMs` doesn't start this timer. Set `cleanupTimeoutMs: 0` to turn the timer off. The cache's own TTL and eviction still apply. `generate()` returns no `cleanup()` handle, so this timer always releases its run. With `cleanupTimeoutMs: 0`, `generate()` releases the run before it returns.
 
 To stop watching a run from `observe()` without clearing it, call `detach()` or leave the loop.
 

@@ -237,6 +237,8 @@ export interface SerializableClientTool {
  * Options for durable agent execution (serializable subset)
  */
 export interface SerializableDurableOptions {
+  /** Provider call method, pinned across workflow turns and recovery. Absent on older runs means stream. */
+  modelCallMode?: 'generate' | 'stream';
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
   /**

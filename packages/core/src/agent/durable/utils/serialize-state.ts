@@ -289,6 +289,7 @@ export function serializeToolsetToolNames(
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
+  modelCallMode?: SerializableDurableOptions['modelCallMode'];
   clientTools?: SerializableDurableOptions['clientTools'];
   toolsetToolNames?: string[];
   maxSteps?: number;
@@ -333,6 +334,7 @@ export function serializeDurableOptions(options: {
   }
 
   return {
+    modelCallMode: options.modelCallMode,
     clientTools: options.clientTools,
     toolsetToolNames: options.toolsetToolNames,
     maxSteps: options.maxSteps,

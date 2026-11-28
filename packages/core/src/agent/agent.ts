@@ -15183,7 +15183,14 @@ export class Agent<
     // background. Tearing down the reader first would drop it, leaving the
     // output unsettled and the thread busy forever (#25974).
     const cleanup = () => {
-      if (methodType === 'generate' || runCleanup.done || output.status !== 'running') return performCleanup();
+      // Generate's caller only gets the result, never this handle, so its run
+      // stays observable until the auto-cleanup timer, like a stream's. Release
+      // now only when no timer will (`cleanupTimeoutMs: 0`, unverified reader).
+      if (methodType === 'generate') {
+        if (!runCleanup.scheduled) performCleanup();
+        return;
+      }
+      if (runCleanup.done || output.status !== 'running') return performCleanup();
       void Promise.race([workflowExecution, executionFence.whenSettled])
         .then(() => this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub.flush())
         .then(() => waitForEventDelivery())
@@ -15251,7 +15258,7 @@ export class Agent<
       return fullOutput;
     } finally {
       // Keep the registry entry alive on suspend so `resumeGenerate()` can
-      // pick it up. Auto-cleanup is scheduled by FINISH/ERROR/ABORT paths.
+      // pick it up. Otherwise the FINISH/ERROR/ABORT paths armed auto-cleanup.
       if (!suspended) {
         cleanup();
       }
