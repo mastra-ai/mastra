@@ -11,7 +11,7 @@ import { SessionComposer } from '@mastra/playground-ui/domains/chat/transcript';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useContext, useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { useMatch, useNavigate, useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
@@ -56,12 +56,11 @@ function sendTitleFor(state: {
 
 export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
-  const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
+  const { factoryProjectId: factoryId, routeKind, navigate, links } = useSessionHost();
+  const onDraftComposer = routeKind === 'draft';
+  const onUserDraft = routeKind === 'user-draft';
   const draftStart = useContext(DraftSessionStartContext);
   const onDraft = onUserDraft || draftStart !== undefined;
-  const navigate = useNavigate();
   const { status } = useChatConnection();
   const connectionNotice = useComposerConnectionNotice(status);
   const connectionLost = connectionNotice !== undefined;
@@ -163,7 +162,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       await actions.send({ text, files: outgoing });
       clearPendingHandoff(sessionId);
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
+      navigate(links.channelThread(threadId), { replace: true });
       return;
     }
     localUser(text, false, outgoing);

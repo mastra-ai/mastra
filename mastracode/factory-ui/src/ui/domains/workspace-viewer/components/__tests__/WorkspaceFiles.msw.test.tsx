@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../../chat/context/RouterSessionHost';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -158,20 +159,22 @@ function renderPanel({ busy = false }: { busy?: boolean } = {}) {
 
   const { client } = renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/factory-1/workspaces/${WORKSPACE}/threads/thread-1`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={
-            <ChatTranscriptContext.Provider value={transcriptApi(busy)}>
-              <SidebarProvider storageKey="workspace-files-test">
-                <WorkspaceFilesProvider>
-                  <SessionFrame />
-                </WorkspaceFilesProvider>
-              </SidebarProvider>
-            </ChatTranscriptContext.Provider>
-          }
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+            element={
+              <ChatTranscriptContext.Provider value={transcriptApi(busy)}>
+                <SidebarProvider storageKey="workspace-files-test">
+                  <WorkspaceFilesProvider>
+                    <SessionFrame />
+                  </WorkspaceFilesProvider>
+                </SidebarProvider>
+              </ChatTranscriptContext.Provider>
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 
@@ -209,18 +212,20 @@ describe('WorkspaceFiles on a user session route', () => {
     );
     renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/factory-1/user/threads/${sessionId}`]}>
-        <Routes>
-          <Route
-            path="/factories/:factoryId/user/threads/:threadId"
-            element={
-              <SidebarProvider storageKey="workspace-files-test">
-                <WorkspaceFilesProvider>
-                  <SessionFrame />
-                </WorkspaceFilesProvider>
-              </SidebarProvider>
-            }
-          />
-        </Routes>
+        <RouterSessionHost>
+          <Routes>
+            <Route
+              path="/factories/:factoryId/user/threads/:threadId"
+              element={
+                <SidebarProvider storageKey="workspace-files-test">
+                  <WorkspaceFilesProvider>
+                    <SessionFrame />
+                  </WorkspaceFilesProvider>
+                </SidebarProvider>
+              }
+            />
+          </Routes>
+        </RouterSessionHost>
       </MemoryRouter>,
     );
 

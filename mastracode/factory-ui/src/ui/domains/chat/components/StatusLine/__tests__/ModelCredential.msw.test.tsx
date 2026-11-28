@@ -3,6 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../../context/RouterSessionHost';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
@@ -91,20 +92,22 @@ function renderModelCredential({
   const submitComposer = vi.fn((event: { preventDefault: () => void }) => event.preventDefault());
   const view = renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/work']}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/*"
-          element={
-            <ChatSessionContext.Provider value={session}>
-              <ChatModelsContext.Provider value={models}>
-                <form onSubmit={submitComposer}>
-                  <ModelCredential />
-                </form>
-              </ChatModelsContext.Provider>
-            </ChatSessionContext.Provider>
-          }
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/*"
+            element={
+              <ChatSessionContext.Provider value={session}>
+                <ChatModelsContext.Provider value={models}>
+                  <form onSubmit={submitComposer}>
+                    <ModelCredential />
+                  </form>
+                </ChatModelsContext.Provider>
+              </ChatSessionContext.Provider>
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
   return { ...view, submitComposer };

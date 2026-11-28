@@ -37,7 +37,8 @@ export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined)
   return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
 }
 
-export const VOICE_INPUT_ANCHOR = 'voice-input';
+export { VOICE_INPUT_ANCHOR } from '../chat/context/SessionHostContext';
+import type { VOICE_INPUT_ANCHOR } from '../chat/context/SessionHostContext';
 
 type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 

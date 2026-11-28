@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -54,12 +55,14 @@ describe('A notification that a followed card’s phase session waits on someone
   function renderNotice(entry: TimelineEntry) {
     const view = renderWithProviders(
       <MemoryRouter initialEntries={[`/factories/${factoryId}/user/threads/my-session`]}>
-        <Routes>
-          <Route
-            path="/factories/:factoryId/user/threads/:threadId"
-            element={<TranscriptEntries entries={[entry]} onApprove={() => {}} onRespond={() => {}} />}
-          />
-        </Routes>
+        <RouterSessionHost>
+          <Routes>
+            <Route
+              path="/factories/:factoryId/user/threads/:threadId"
+              element={<TranscriptEntries entries={[entry]} onApprove={() => {}} onRespond={() => {}} />}
+            />
+          </Routes>
+        </RouterSessionHost>
       </MemoryRouter>,
     );
     return { ...view, notice: within(screen.getByRole('group', { name: 'Waiting session' })) };

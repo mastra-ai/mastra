@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { addCachedSession } from '../../../../hooks/useWorkspaces';
@@ -23,9 +23,8 @@ import { startPromptHandoff } from './useHandoffPrompt';
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModelId, selection } = useChatModels();
-  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
+  const { factoryProjectId: factoryId, draftSessionId, navigate, links } = useSessionHost();
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   return ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
     const projectRepositoryId = factorySessionState?.projectRepositoryId;
@@ -75,7 +74,7 @@ export function useCreateUserSessionFromDraft() {
       [],
     );
     stashHandoffFiles(draftSessionId, files);
-    void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
+    navigate(links.userThread(draftSessionId), {
       replace: true,
       state: startPromptHandoff(draftSessionId, prompt, { modelSelection: selection }),
     });

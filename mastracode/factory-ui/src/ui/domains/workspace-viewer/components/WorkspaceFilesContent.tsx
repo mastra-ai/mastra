@@ -1,4 +1,4 @@
-import { useParams } from 'react-router';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
@@ -17,7 +17,7 @@ export function WorkspaceFilesContent({
 }) {
   const panel = useWorkspacePanel();
   const { workspacePath, threadId, readsChanges, page } = panel;
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const sessionId = useRouteSessionId();
 
   if (workspacePath && threadId) {

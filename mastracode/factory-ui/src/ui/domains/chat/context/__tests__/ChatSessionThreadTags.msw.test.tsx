@@ -1,6 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -36,16 +37,18 @@ function renderSession(resourceId: string) {
   );
   renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/user/threads/:threadId"
-          element={
-            <ChatSessionConfigProvider threadId={SESSION_ID} userScoped>
-              <SessionAddress />
-            </ChatSessionConfigProvider>
-          }
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <ChatSessionConfigProvider threadId={SESSION_ID} userScoped>
+                <SessionAddress />
+              </ChatSessionConfigProvider>
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

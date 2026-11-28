@@ -3,7 +3,7 @@ import { ChatAnnotationsProvider } from '@mastra/playground-ui/components/ai/ann
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -51,8 +51,7 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
   draftSessionId?: string;
 }) {
-  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const location = useLocation();
+  const { factoryProjectId: factoryId, sessionId, location } = useSessionHost();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const isDraft = Boolean(draftSessionId);
@@ -188,7 +187,7 @@ export function ChatSessionBoundary({
   deferUntilMessagesReady?: boolean;
 }) {
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
-  const location = useLocation();
+  const { location } = useSessionHost();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
   const transcript = useTranscriptKey({ sessionId, threadId });
   const messagesQuery = useAgentControllerThreadMessages({

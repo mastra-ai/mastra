@@ -5,7 +5,7 @@ import {
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import {
   useClearAgentControllerGoalMutation,
@@ -41,10 +41,8 @@ function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId, navigate, links } = useSessionHost();
   const factoryQuery = useFactoryQuery(factoryId);
-  const navigate = useNavigate();
-  const location = useLocation();
   const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
@@ -70,10 +68,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { thinkingDefault, setLevel, resetLevel } = useChatThinking();
 
   const openSessionDefaults = () => {
-    if (factoryId)
-      void navigate(settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope)), {
-        state: { from: location },
-      });
+    if (factoryId) navigate(links.settings('models', sessionDefaultsAnchor(modelScope)), { returnHere: true });
   };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;

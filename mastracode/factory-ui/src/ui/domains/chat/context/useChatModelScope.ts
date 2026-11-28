@@ -1,5 +1,5 @@
 import { useContext } from 'react';
-import { useParams } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
@@ -10,7 +10,7 @@ import { useChatSessionContext } from './useChatSessionContext';
 
 /** Live threads use the same server-resolved owner and billing policy as model invocations. */
 export function useChatModelScope() {
-  const { factoryId: routeFactoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: routeFactoryId } = useSessionHost();
   const { kind, factorySessionState, draftSessionId, sessionId, resourceId, sessionThreadId, resourceReady } =
     useChatSessionContext();
   // The displayed thread decides billing; the session-primary thread is only a fallback.

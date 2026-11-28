@@ -2,6 +2,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -115,12 +116,16 @@ function stubRenderedList(rootPath: string | Record<string, string>, { hold = fa
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/f-1/user/threads/${WORKSPACE}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/user/threads/:threadId"
-          element={<SubmitPlanCard toolCallId="call-1" input={{ toolId: 'submit_plan', path: PLAN_PATH }} {...props} />}
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <SubmitPlanCard toolCallId="call-1" input={{ toolId: 'submit_plan', path: PLAN_PATH }} {...props} />
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

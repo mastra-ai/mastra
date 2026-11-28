@@ -1,12 +1,12 @@
-import { useMatch, useParams } from 'react-router';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 
 import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { DraftSessionCreateError } from '../../workspaces/services/user-sessions';
 
 /** Workspace for the current route — user threads have no `sessionId` segment, so resolve from the thread. */
 export function useThreadWorkspacePath() {
-  const { sessionId, threadId } = useParams<{ sessionId?: string; threadId?: string }>();
-  const isUserThreadRoute = Boolean(useMatch('/factories/:factoryId/user/threads/:threadId'));
+  const { sessionId, threadId, routeKind } = useSessionHost();
+  const isUserThreadRoute = routeKind === 'user-thread';
   const routedSessionId = isUserThreadRoute ? threadId : sessionId;
   const session = useUserSessionQuery(routedSessionId);
   const unavailable = sessionUnavailableError(session);

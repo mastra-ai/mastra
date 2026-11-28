@@ -19,7 +19,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import type { ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
@@ -50,7 +50,7 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
   const url = notificationUrl(entry);
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const waiting = waitingSession(entry);
   const activity = (
     <NotificationActivity
@@ -98,6 +98,7 @@ function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
  * The server decides who may answer; its refusal is shown in place of the buttons.
  */
 function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
+  const { LinkComponent, links } = useSessionHost();
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
@@ -149,7 +150,7 @@ function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; wait
           {outcome}
         </Txt>
       )}
-      <Button size="sm" variant="ghost" render={<Link to={threadPath(factoryId, waiting)} />}>
+      <Button size="sm" variant="ghost" render={<LinkComponent href={links.thread(waiting)} />}>
         Open session
       </Button>
     </div>

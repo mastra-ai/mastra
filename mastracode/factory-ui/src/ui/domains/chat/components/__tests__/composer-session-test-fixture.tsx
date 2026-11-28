@@ -6,6 +6,7 @@ import { screen, waitFor } from '@testing-library/react';
 import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { expect } from 'vitest';
 
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
@@ -294,25 +295,27 @@ function ThreadSurface() {
 export function renderThread() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/user/threads/:threadId"
-          element={
-            <SidebarProvider storageKey="preparing-test">
-              <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
-                <OverlaysProvider>
-                  <ThreadSurface />
-                </OverlaysProvider>
-              </ChatSessionTestProvider>
-            </SidebarProvider>
-          }
-        />
-        <Route
-          path="/away"
-          element={<Link to={`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`}>go-thread</Link>}
-        />
-        <Route path="/factories/:factoryId/settings/:section" element={<LocationProbe />} />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <SidebarProvider storageKey="preparing-test">
+                <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
+                  <OverlaysProvider>
+                    <ThreadSurface />
+                  </OverlaysProvider>
+                </ChatSessionTestProvider>
+              </SidebarProvider>
+            }
+          />
+          <Route
+            path="/away"
+            element={<Link to={`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`}>go-thread</Link>}
+          />
+          <Route path="/factories/:factoryId/settings/:section" element={<LocationProbe />} />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }
@@ -372,13 +375,15 @@ function ChatRouteShell() {
 export function renderDraft() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`]}>
-      <Routes>
-        <Route element={<ChatRouteShell />}>
-          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<DraftRouteSurface />} />
-          <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserThreadRouteSurface />} />
-        </Route>
-      </Routes>
-      <PathnameProbe />
+      <RouterSessionHost>
+        <Routes>
+          <Route element={<ChatRouteShell />}>
+            <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<DraftRouteSurface />} />
+            <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserThreadRouteSurface />} />
+          </Route>
+        </Routes>
+        <PathnameProbe />
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

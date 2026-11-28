@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode, Ref } from 'react';
-import { useLocation } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 const PAGE_TITLES: Record<string, string> = {
   activity: 'Activity',
@@ -30,7 +30,7 @@ export function MobilePageTitle({
   ref?: Ref<HTMLElement>;
   tabIndex?: number;
 }) {
-  const { pathname } = useLocation();
+  const { pathname } = useSessionHost().location;
 
   return (
     <Txt tone="ink" as="h1" variant="heading" ref={ref} tabIndex={tabIndex} className="min-w-0 truncate md:hidden">

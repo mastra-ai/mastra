@@ -2,6 +2,7 @@ import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
@@ -149,19 +150,21 @@ export function OverlayTestProviders({
 }) {
   return (
     <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={
-            <SidebarProvider storageKey="overlay-test">
-              <ChatSessionProvider threadId="thread-test">
-                <OverlaysProvider>{children}</OverlaysProvider>
-              </ChatSessionProvider>
-            </SidebarProvider>
-          }
-        />
-        <Route path="*" element={<NavigatedPath />} />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+            element={
+              <SidebarProvider storageKey="overlay-test">
+                <ChatSessionProvider threadId="thread-test">
+                  <OverlaysProvider>{children}</OverlaysProvider>
+                </ChatSessionProvider>
+              </SidebarProvider>
+            }
+          />
+          <Route path="*" element={<NavigatedPath />} />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>
   );
 }

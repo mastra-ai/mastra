@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link, useLocation } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
@@ -20,7 +20,7 @@ function teammatePayingForSession(
 }
 
 export function ProviderReconnectAction() {
-  const location = useLocation();
+  const { LinkComponent, links } = useSessionHost();
   const { factoryId, modelScope, scopeLoading } = useChatModelScope();
   const { owner } = useChatSessionContext();
   const authQuery = useFactoryAuth();
@@ -34,12 +34,7 @@ export function ProviderReconnectAction() {
     <Button
       variant="ghost"
       size="sm"
-      render={
-        <Link
-          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
-          state={{ from: location }}
-        />
-      }
+      render={<LinkComponent href={links.settings('models', sessionDefaultsAnchor(modelScope))} returnHere />}
       iconEnd={<IconArrowRight aria-hidden="true" />}
     >
       Review credentials

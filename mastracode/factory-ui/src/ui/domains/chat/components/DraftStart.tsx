@@ -6,7 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { traySurface } from '../../../ui/tray';
 import { MODEL_DEFAULTS_LABELS } from '../../settings/components/models/routing/model-routes';
@@ -36,7 +36,7 @@ export function DraftStart({
 }) {
   useGlobalShortcuts();
   const { transcript } = useChatTranscript();
-  const location = useLocation();
+  const { location } = useSessionHost();
   const routeErrorNotice = readRouteErrorNotice(location.state);
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
@@ -132,6 +132,7 @@ function MissingCredentialState({
   anchor: ModelDefaultsAnchor;
   guard: MissingCredentialGuard;
 }) {
+  const { LinkComponent, links } = useSessionHost();
   return (
     <EmptyState
       as="h2"
@@ -139,15 +140,16 @@ function MissingCredentialState({
       titleSlot={`You don't have access to ${providerDisplayName(guard.provider)}`}
       descriptionSlot={missingCredentialDescription(guard, anchor)}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
+        <LinkComponent href={links.settings('models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
-        </Link>
+        </LinkComponent>
       }
     />
   );
 }
 
 function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: ModelDefaultsAnchor }) {
+  const { LinkComponent, links } = useSessionHost();
   return (
     <EmptyState
       as="h2"
@@ -159,9 +161,9 @@ function MissingModelState({ factoryId, anchor }: { factoryId: string; anchor: M
           : `Chats in this Factory run on your own keys. Connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
       }
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
+        <LinkComponent href={links.settings('models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
-        </Link>
+        </LinkComponent>
       }
     />
   );

@@ -1,7 +1,7 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { resolveModel } from '@mastra/playground-ui/utils/model';
-import { Link } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../hooks/useSessionModelCatalog';
@@ -46,6 +46,7 @@ function paidByMessage({ model, modelName }: { model: ModelCatalogEntry; modelNa
 }
 
 export function TakeoverBillingMessage({ factoryId, ownerLabel }: { factoryId: string; ownerLabel: string }) {
+  const { LinkComponent, links } = useSessionHost();
   const { activeModelId } = useChatModels();
   const { modelScope } = useChatModelScope();
   const yourModels = useAvailableModelsQuery({ scope: 'user', enabled: modelScope === 'user' }).data;
@@ -60,12 +61,12 @@ export function TakeoverBillingMessage({ factoryId, ownerLabel }: { factoryId: s
       <>
         You have no {providerDisplayName(billing.provider)} connection, so {billing.modelName} can’t run for you.
         Connect one in{' '}
-        <Link
-          to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.personal)}
+        <LinkComponent
+          href={links.settings('models', MODEL_DEFAULTS_ANCHORS.personal)}
           className="underline underline-offset-2"
         >
           {SETTINGS_SECTION_LABELS.models}
-        </Link>
+        </LinkComponent>
         , or pick another model once it’s yours.
       </>
     );

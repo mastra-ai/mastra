@@ -1,28 +1,29 @@
 import type { ReactNode } from 'react';
-import { useMatch } from 'react-router';
 
-import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
 import { ChatPermissionsProvider } from './context/ChatPermissionsProvider';
+import { ChatSessionConfigProvider } from './context/ChatSessionProvider';
+import { RouterSessionHost } from './context/RouterSessionHost';
+import { useSessionHost } from './context/SessionHostContext';
 
 /**
  * Shared chat session providers, mounted once by `AppLayout` so the sidebar
  * and every routed page (chat or not) share the same session context.
  */
 export function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
-  // `useParams` in a layout can't see descendant params, so match the thread
-  // routes explicitly (params come back already decoded).
-  const userDraftMatch = useMatch('/factories/:factoryId/user/new/:draftSessionId');
-  const cardDraftMatch = useMatch('/factories/:factoryId/cards/:workItemId/new/:draftSessionId');
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
-  const factoryThreadMatch = useMatch('/factories/:factoryId/workspaces/:sessionId/threads/:threadId');
-  const userScoped = userDraftMatch !== null || userThreadMatch !== null;
-  const threadId = userThreadMatch?.params.threadId ?? factoryThreadMatch?.params.threadId;
+  return (
+    <RouterSessionHost>
+      <RoutedChatSession>{children}</RoutedChatSession>
+    </RouterSessionHost>
+  );
+}
 
+function RoutedChatSession({ children }: { children: ReactNode }) {
+  const { routeKind, threadId, draftSessionId } = useSessionHost();
   return (
     <ChatSessionConfigProvider
       threadId={threadId}
-      userScoped={userScoped}
-      draftSessionId={(userDraftMatch ?? cardDraftMatch)?.params.draftSessionId}
+      userScoped={routeKind === 'user-draft' || routeKind === 'user-thread'}
+      draftSessionId={draftSessionId}
     >
       <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
     </ChatSessionConfigProvider>

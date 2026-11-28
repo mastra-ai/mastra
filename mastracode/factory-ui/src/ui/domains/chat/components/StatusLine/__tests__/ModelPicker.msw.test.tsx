@@ -5,6 +5,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../../context/RouterSessionHost';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
@@ -249,12 +250,16 @@ function renderPicker({
   const rendered = renderWithProviders(
     modelScope || inFactory ? (
       <MemoryRouter initialEntries={['/factories/fp-1/work']}>
-        <Routes>
-          <Route path="/factories/:factoryId/*" element={picker} />
-        </Routes>
+        <RouterSessionHost>
+          <Routes>
+            <Route path="/factories/:factoryId/*" element={picker} />
+          </Routes>
+        </RouterSessionHost>
       </MemoryRouter>
     ) : (
-      <MemoryRouter>{picker}</MemoryRouter>
+      <MemoryRouter>
+        <RouterSessionHost>{picker}</RouterSessionHost>
+      </MemoryRouter>
     ),
   );
   return { ...rendered, modelSwitches, stateUpdates };

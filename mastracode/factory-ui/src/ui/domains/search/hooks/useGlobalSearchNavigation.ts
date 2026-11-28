@@ -1,15 +1,10 @@
-import { useLocation, useNavigate } from 'react-router';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 
 export function useGlobalSearchNavigation(closeSearch: () => void) {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { navigate } = useSessionHost();
 
   const selectPath = (path: string, preserveOrigin: boolean) => {
-    if (preserveOrigin) {
-      void navigate(path, { state: { from: location } });
-    } else {
-      void navigate(path);
-    }
+    navigate(path, { returnHere: preserveOrigin });
     closeSearch();
   };
 

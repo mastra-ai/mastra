@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
 import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
@@ -14,7 +14,7 @@ import { useChatSessionContext } from '../context/useChatSessionContext';
 
 /** Tab title for the open thread: the session card's reference (`PR #1567`, `ENG-123`), else the thread title. */
 export function PageTitle() {
-  const { factoryId, threadId } = useParams<{ factoryId?: string; threadId?: string }>();
+  const { factoryProjectId: factoryId, threadId } = useSessionHost();
   const { sessionId: chatSessionId, threadTags, baseUrl, resourceReady } = useChatSessionContext();
   const queryClient = useQueryClient();
   const routeSessionId = useRouteSessionId();

@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -121,10 +122,12 @@ function ErrorSession({
   );
   return (
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<p>New session draft</p>} />
-        <Route path="*" element={session} />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<p>New session draft</p>} />
+          <Route path="*" element={session} />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>
   );
 }

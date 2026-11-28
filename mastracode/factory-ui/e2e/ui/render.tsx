@@ -6,6 +6,8 @@ import type { RenderHookOptions } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
+import { SessionHostContext } from '../../src/ui/domains/chat/context/SessionHostContext';
+import type { SessionHost } from '../../src/ui/domains/chat/context/SessionHostContext';
 import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
 
 /**
@@ -17,6 +19,29 @@ export const TEST_BASE_URL = 'http://localhost:4111';
 
 /** The API config every test renders with, built once like the web entry's. */
 export const TEST_API = createApiConfig({ baseUrl: TEST_BASE_URL });
+
+/**
+ * The host for components rendered without a router: nowhere in particular,
+ * plain links, and navigation that goes nowhere. Tests that render inside a
+ * router mount `RouterSessionHost` there instead, which takes precedence.
+ */
+const STATIC_SESSION_HOST: SessionHost = {
+  factoryProjectId: undefined,
+  sessionId: undefined,
+  threadId: undefined,
+  draftSessionId: undefined,
+  routeKind: 'none',
+  location: { pathname: '/', search: '', state: null },
+  LinkComponent: ({ href, returnHere: _returnHere, ...props }) => <a href={href} {...props} />,
+  navigate: () => {},
+  links: {
+    settings: section => `/settings/${section}`,
+    thread: ({ sessionId, threadId }) => `/workspaces/${sessionId}/threads/${threadId}`,
+    userThread: threadId => `/user/threads/${threadId}`,
+    newUserSession: () => '/user/new',
+    channelThread: threadId => `/threads/${threadId}`,
+  },
+};
 
 function makeQueryClient(): QueryClient {
   return new QueryClient({
@@ -33,7 +58,9 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
           <ApiConfigProvider config={TEST_API}>
-            <FactoryPlatformConnect>{children}</FactoryPlatformConnect>
+            <SessionHostContext.Provider value={STATIC_SESSION_HOST}>
+              <FactoryPlatformConnect>{children}</FactoryPlatformConnect>
+            </SessionHostContext.Provider>
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>

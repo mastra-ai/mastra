@@ -1,6 +1,6 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
@@ -24,7 +24,7 @@ function lockReason(lock: SessionOwnershipLock, organizationKeys: boolean): stri
 }
 
 export function TeammateSessionLine() {
-  const { factoryId } = useParams<{ factoryId?: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const session = useUserSessionQuery(useRouteSessionId()).data;
   const viewerUserId = useFactoryAuth().data?.user?.userId;
   const { modelScope } = useChatModelScope();

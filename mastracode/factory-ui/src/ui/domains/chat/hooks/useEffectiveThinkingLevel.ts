@@ -1,6 +1,6 @@
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
-import { useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
@@ -28,7 +28,7 @@ export function useEffectiveThinkingLevel({
   thinkingDefault: ThinkingDefault | undefined;
   loadError: Error | undefined;
 } {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const factoryDefaultQuery = useFactoryThinkingDefaultQuery(factoryId);
   const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const thinkingDefault = routedThinkingDefault(modelScope, personalDefault, factoryDefaultQuery.data);

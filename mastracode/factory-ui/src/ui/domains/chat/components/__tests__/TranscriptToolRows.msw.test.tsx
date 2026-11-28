@@ -2,6 +2,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -51,15 +52,15 @@ function layOutPanels(): () => void {
       return isViewport(this) ? 2 * ROW_HEIGHT : 0;
     },
   });
-  const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    if (isViewport(this)) return rect(0, 2 * ROW_HEIGHT);
-    const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
-    const index = viewport ? rowsIn(viewport).indexOf(this) : -1;
-    if (!viewport || index < 0) return rect(0, 0);
-    return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
-  });
+  const measure = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      if (isViewport(this)) return rect(0, 2 * ROW_HEIGHT);
+      const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
+      const index = viewport ? rowsIn(viewport).indexOf(this) : -1;
+      if (!viewport || index < 0) return rect(0, 0);
+      return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
+    });
   return () => {
     measure.mockRestore();
     for (const property of ['scrollTop', 'scrollHeight', 'clientHeight']) {
@@ -139,7 +140,9 @@ function entriesView(entries: TimelineEntry[], running = false) {
   // The plan card resolves its workspace from the route, so entries render under a router like in the app.
   return (
     <MemoryRouter>
-      <TranscriptEntries entries={entries} running={running} onApprove={() => {}} onRespond={() => {}} />
+      <RouterSessionHost>
+        <TranscriptEntries entries={entries} running={running} onApprove={() => {}} onRespond={() => {}} />
+      </RouterSessionHost>
     </MemoryRouter>
   );
 }
@@ -541,21 +544,23 @@ describe('TranscriptEntries tool rows', () => {
 
     rerender(
       <MemoryRouter>
-        <TranscriptEntries
-          entries={[
-            assistantMessage('msg-1', parts),
-            {
-              kind: 'suspension',
-              id: 'suspension-call-ask',
-              toolCallId: 'call-ask',
-              toolName: 'ask_user',
-              args: {},
-              suspendPayload: { question: 'Which auth flow?' },
-            },
-          ]}
-          onApprove={() => {}}
-          onRespond={() => {}}
-        />
+        <RouterSessionHost>
+          <TranscriptEntries
+            entries={[
+              assistantMessage('msg-1', parts),
+              {
+                kind: 'suspension',
+                id: 'suspension-call-ask',
+                toolCallId: 'call-ask',
+                toolName: 'ask_user',
+                args: {},
+                suspendPayload: { question: 'Which auth flow?' },
+              },
+            ]}
+            onApprove={() => {}}
+            onRespond={() => {}}
+          />
+        </RouterSessionHost>
       </MemoryRouter>,
     );
 
