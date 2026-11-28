@@ -3966,7 +3966,8 @@ export class Agent<
 
   /**
    * Gets the metadata for this agent, resolving function-based metadata if necessary.
-   * Metadata is a classification bag for clients and is never read by the agent runtime.
+   * Metadata is a classification bag for clients. The agent runtime reads only `metadata.persona`, to mint
+   * Knowledge persona scopes; it reads nothing else in metadata.
    *
    * @example
    * ```typescript
