@@ -390,6 +390,27 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
 }
 
 /**
+ * The model messages the provider produced for the current step, read from the
+ * step output: either directly (`output.response.messages`, a single step
+ * result) or from the latest step of a full inference
+ * (`output.steps.at(-1).response.messages`).
+ *
+ * They carry parts the `{ text, toolCalls }` summary cannot express — reasoning,
+ * provider-executed tool calls and their results — so MODEL_STEP and
+ * MODEL_INFERENCE keep them before `prepareSpanOutput` strips the step history.
+ */
+function extractCurrentStepResponseMessages(output?: {
+  response?: { messages?: unknown };
+  steps?: ReadonlyArray<{ response?: { messages?: unknown } }>;
+}): unknown[] | undefined {
+  const direct = output?.response?.messages;
+  if (Array.isArray(direct) && direct.length > 0) return direct;
+
+  const fromLatestStep = output?.steps?.at(-1)?.response?.messages;
+  return Array.isArray(fromLatestStep) && fromLatestStep.length > 0 ? fromLatestStep : undefined;
+}
+
+/**
  * Chunks that come from the model provider. The first one marks the response's
  * first chunk, matching OTel's `gen_ai.response.time_to_first_chunk`. Everything
  * else, such as lifecycle markers or `data-*` parts a processor writes before the
@@ -746,7 +767,11 @@ export class ModelSpanTracker {
 
     const pending = this.#pendingInferenceFinish;
     const { usage: _usage, ...stepOutput } = payload.output ?? {};
-    const output = 'text' in stepOutput || 'toolCalls' in stepOutput ? stepOutput : this.#inferenceContent;
+    const responseMessages = extractCurrentStepResponseMessages(payload.output);
+    // Keep the existing choice between the step summary and the streamed content,
+    // then attach the current step's messages without changing either.
+    const summary = 'text' in stepOutput || 'toolCalls' in stepOutput ? stepOutput : this.#inferenceContent;
+    const output = responseMessages ? { ...summary, responseMessages } : summary;
     this.#closeInference(pending?.payload ?? payload, {
       output,
       endTime: pending?.endTime,
@@ -971,6 +996,7 @@ export class ModelSpanTracker {
     // Extract all data from step-finish chunk
     const output = payload.output;
     const { usage: rawUsage, ...otherOutput } = output;
+    const responseMessages = extractCurrentStepResponseMessages(output);
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
 
@@ -996,6 +1022,10 @@ export class ModelSpanTracker {
     // execution). Close it here for the non-deferred path.
     this.#endInferenceSpan(payload);
 
+    // Attach the step's messages alongside the existing summary. `responseMessages`
+    // is an additive field: older consumers of the step output are unaffected.
+    const stepSpanOutput = responseMessages ? { ...otherOutput, responseMessages } : otherOutput;
+
     this.#currentStepSpan.end({
       ...(termination ??
         coreObservability.agentLoopTermination?.({
@@ -1003,7 +1033,7 @@ export class ModelSpanTracker {
           finishReason: stepResult.reason,
           tripwire: output.steps?.at(-1)?.tripwire,
         })),
-      output: otherOutput,
+      output: stepSpanOutput,
       attributes: {
         usage,
         isContinued: stepResult.isContinued,

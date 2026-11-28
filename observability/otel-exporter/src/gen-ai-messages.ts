@@ -24,6 +24,10 @@ type GenAIMessagePart =
       id: string;
       name: string;
       response: string;
+    }
+  | {
+      type: 'reasoning';
+      content: string;
     };
 
 /**
@@ -45,7 +49,8 @@ type MastraMessagePart =
       text: string;
     }
   | { type: 'tool-call'; toolCallId: string; toolName: string; input: unknown }
-  | { type: 'tool-result'; toolCallId: string; toolName: string; output: { value: unknown } };
+  | { type: 'tool-result'; toolCallId: string; toolName: string; output: { value: unknown } }
+  | { type: 'reasoning'; text: string };
 
 /**
  * Assumed type representation of a Mastra message
@@ -60,8 +65,9 @@ const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
     typeof p === 'object' &&
     p != null &&
     'type' in p &&
-    (p.type === 'text' || p.type === 'tool-call' || p.type === 'tool-result') &&
+    (p.type === 'text' || p.type === 'tool-call' || p.type === 'tool-result' || p.type === 'reasoning') &&
     ((p.type === 'text' && 'text' in p) ||
+      (p.type === 'reasoning' && 'text' in p) ||
       (p.type === 'tool-call' && 'toolCallId' in p && 'toolName' in p && 'input' in p) ||
       (p.type === 'tool-result' && 'toolCallId' in p && 'toolName' in p && 'output' in p))
   );
@@ -110,6 +116,8 @@ const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage =
               name: c.toolName,
               response: JSON.stringify(c.output.value),
             };
+          case 'reasoning':
+            return { type: 'reasoning', content: c.text };
         }
       })
     : [{ type: 'text', content: m.content }];
@@ -117,12 +125,14 @@ const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage =
 };
 
 /**
- * Model output as recorded on MODEL_STEP / MODEL_INFERENCE spans: `{ text, toolCalls }`.
- * A tool-only step has `text: ''` and one or more tool calls.
+ * Model output as recorded on MODEL_STEP / MODEL_INFERENCE spans: `{ text, toolCalls }`
+ * (a tool-only step has `text: ''`), plus `responseMessages` when the span kept the
+ * provider messages for the step.
  */
 type MastraModelOutput = {
   text?: unknown;
   toolCalls?: unknown;
+  responseMessages?: unknown;
 };
 
 const toGenAIOutputMessage = (output: MastraModelOutput, finishReason?: string): GenAIMessage => {
@@ -162,6 +172,15 @@ const convert = (inputOutputString: string, finishReason?: string): string | und
       return parsedIO.every(isMastraMessage)
         ? JSON.stringify(parsedIO.map(m => toGenAIMessage(m, finishReason)))
         : undefined;
+    }
+    // The provider messages the step produced, when the span kept them: they carry
+    // reasoning and provider-executed tool results the `{ text, toolCalls }` summary
+    // drops, so they win. Anything unusable falls through to the summary below.
+    if ('responseMessages' in parsedIO) {
+      const responseMessages = (parsedIO as MastraModelOutput).responseMessages;
+      if (Array.isArray(responseMessages) && responseMessages.length > 0 && responseMessages.every(isMastraMessage)) {
+        return JSON.stringify(responseMessages.map(m => toGenAIMessage(m, finishReason)));
+      }
     }
     // Model output `{ text, toolCalls }` becomes one assistant message with a
     // text part and a tool_call part per tool call.

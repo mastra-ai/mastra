@@ -599,6 +599,96 @@ describe('getAttributes - one span per model call', () => {
     expect(outputMessages(undefined)[0].finish_reason).toBe('unknown');
   });
 
+  // What the provider returned for the step: reasoning, a provider-executed tool call and its
+  // result, then a client tool call that has no model-side result yet.
+  const responseMessages = [
+    {
+      role: 'assistant',
+      content: [
+        { type: 'reasoning', text: 'Search first.' },
+        {
+          type: 'tool-call',
+          toolCallId: 'ws_1',
+          toolName: 'web_search',
+          input: { query: 'Paris weather' },
+          providerExecuted: true,
+        },
+        {
+          type: 'tool-result',
+          toolCallId: 'ws_1',
+          toolName: 'web_search',
+          output: { type: 'json', value: { results: ['Sunny'] } },
+        },
+        { type: 'tool-call', toolCallId: 'call_1', toolName: 'lookup', input: { city: 'Paris' } },
+      ],
+    },
+  ];
+
+  it('exports the response messages with reasoning and provider-executed tool results', () => {
+    const outputMessages = (output: Record<string, unknown>) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'tool-calls' }),
+          output,
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    expect(
+      outputMessages({
+        text: '',
+        toolCalls: [
+          { toolCallId: 'ws_1', toolName: 'web_search', args: { query: 'Paris weather' } },
+          { toolCallId: 'call_1', toolName: 'lookup', args: { city: 'Paris' } },
+        ],
+        responseMessages,
+      }),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', content: 'Search first.' },
+          { type: 'tool_call', id: 'ws_1', name: 'web_search', arguments: JSON.stringify({ query: 'Paris weather' }) },
+          {
+            type: 'tool_call_response',
+            id: 'ws_1',
+            name: 'web_search',
+            response: JSON.stringify({ results: ['Sunny'] }),
+          },
+          { type: 'tool_call', id: 'call_1', name: 'lookup', arguments: JSON.stringify({ city: 'Paris' }) },
+        ],
+        finish_reason: 'tool_call',
+      },
+    ]);
+  });
+
+  it('falls back to the output summary when the response messages are unusable', () => {
+    const outputMessages = (sent: unknown) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'stop' }),
+          output: {
+            text: 'Checking.',
+            toolCalls: [{ toolCallId: 'call-1', toolName: 'get_weather', args: {} }],
+            responseMessages: sent,
+          },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    const summary = [
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'text', content: 'Checking.' },
+          { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: '{}' },
+        ],
+        finish_reason: 'stop',
+      },
+    ];
+    expect(outputMessages('nope')).toEqual(summary);
+    expect(outputMessages([])).toEqual(summary);
+    expect(outputMessages([{ role: 'assistant', content: [{ type: 'unknown-part' }] }])).toEqual(summary);
+  });
+
   it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {
     const attrs = getAttributes(
       span(SpanType.MODEL_GENERATION, { model: 'gpt-4o', provider: 'openai', finishReason: 'stop', usage }),
@@ -674,6 +764,28 @@ describe('convertMastraMessagesToGenAIMessages', () => {
         parts: [
           { type: 'text', content: 'Let me check.' },
           { type: 'tool_call', id: 'call-1', name: 'get_weather', arguments: JSON.stringify({ city: 'Paris' }) },
+        ],
+      },
+    ]);
+  });
+
+  it('converts reasoning parts as reasoning parts', () => {
+    expect(
+      convert([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'Let me think.' },
+            { type: 'text', text: 'Done.' },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', content: 'Let me think.' },
+          { type: 'text', content: 'Done.' },
         ],
       },
     ]);

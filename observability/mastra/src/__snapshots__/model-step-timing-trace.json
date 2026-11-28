@@ -176,7 +176,22 @@
                 ],
                 "output": {
                   "text": "Hello world",
-                  "toolCalls": []
+                  "toolCalls": [],
+                  "responseMessages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Hello "
+                        },
+                        {
+                          "type": "text",
+                          "text": "world"
+                        }
+                      ]
+                    }
+                  ]
                 }
               },
               "children": [
@@ -323,7 +338,22 @@
                     ],
                     "output": {
                       "text": "Hello world",
-                      "toolCalls": []
+                      "toolCalls": [],
+                      "responseMessages": [
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Hello "
+                            },
+                            {
+                              "type": "text",
+                              "text": "world"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   }
                 },

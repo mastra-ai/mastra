@@ -219,6 +219,25 @@
                         "input": "some data"
                       }
                     }
+                  ],
+                  "responseMessages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call-metadata-1",
+                          "toolName": "metadataTool",
+                          "input": {
+                            "input": "some data"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": []
+                    }
                   ]
                 }
               },
@@ -393,6 +412,25 @@
                             "input": "some data"
                           }
                         }
+                      ],
+                      "responseMessages": [
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-metadata-1",
+                              "toolName": "metadataTool",
+                              "input": {
+                                "input": "some data"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": []
+                        }
                       ]
                     }
                   }
@@ -547,7 +585,50 @@
                 ],
                 "output": {
                   "text": "Mock V2 stream response",
-                  "toolCalls": []
+                  "toolCalls": [],
+                  "responseMessages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "tool-call",
+                          "toolCallId": "call-metadata-1",
+                          "toolName": "metadataTool",
+                          "input": {
+                            "input": "some data"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "tool",
+                      "content": [
+                        {
+                          "type": "tool-result",
+                          "toolCallId": "call-metadata-1",
+                          "toolName": "metadataTool",
+                          "output": {
+                            "type": "json",
+                            "value": {
+                              "output": "Processed: some data"
+                            }
+                          },
+                          "input": {
+                            "input": "some data"
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Mock V2 stream response"
+                        }
+                      ]
+                    }
+                  ]
                 }
               },
               "children": [
@@ -785,7 +866,50 @@
                     ],
                     "output": {
                       "text": "Mock V2 stream response",
-                      "toolCalls": []
+                      "toolCalls": [],
+                      "responseMessages": [
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-metadata-1",
+                              "toolName": "metadataTool",
+                              "input": {
+                                "input": "some data"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-metadata-1",
+                              "toolName": "metadataTool",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "output": "Processed: some data"
+                                }
+                              },
+                              "input": {
+                                "input": "some data"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Mock V2 stream response"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   }
                 },

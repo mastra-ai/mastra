@@ -261,7 +261,18 @@
                         ],
                         "output": {
                           "text": "Test response from agent",
-                          "toolCalls": []
+                          "toolCalls": [],
+                          "responseMessages": [
+                            {
+                              "role": "assistant",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "Test response from agent"
+                                }
+                              ]
+                            }
+                          ]
                         }
                       },
                       "children": [
@@ -408,7 +419,18 @@
                             ],
                             "output": {
                               "text": "Test response from agent",
-                              "toolCalls": []
+                              "toolCalls": [],
+                              "responseMessages": [
+                                {
+                                  "role": "assistant",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Test response from agent"
+                                    }
+                                  ]
+                                }
+                              ]
                             }
                           }
                         },

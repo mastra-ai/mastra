@@ -824,7 +824,15 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
         toolCalls: [{ toolCallId: 'call-1', toolName: 'lookup', args: { q: 'answer' } }],
       });
       expect(inferences[1].output).toMatchObject({ text: 'The answer is [REDACTED].', toolCalls: [] });
-      expect(JSON.stringify(inferences.map(i => i.output))).not.toContain('42');
+      // The processed summary must never leak the raw value (issue #29818). The provider
+      // messages issue #31439 now promotes are the model's own input and are expected to
+      // still carry the provider's tool result verbatim, so assert on the summary only.
+      const summaryOutput = inferences.map(i => {
+        const output = { ...(i.output as Record<string, unknown>) };
+        delete output.responseMessages;
+        return output;
+      });
+      expect(JSON.stringify(summaryOutput)).not.toContain('42');
       expect(inferences[0].attributes).toMatchObject({ finishReason: 'tool-calls', usage: { inputTokens: 10 } });
 
       const [toolCall] = testExporter.getSpansByType('tool_call' as any) as any[];

@@ -2058,6 +2058,236 @@ describe('ModelSpanTracker', () => {
       expect(stepSpan!.metadata).toEqual({ keep: 'metadata' });
     });
 
+    // The model messages the provider produced for the step: reasoning, a provider-executed
+    // tool call and its result, then a client tool call with no model-side result.
+    const mixedResponseMessages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Search first.' },
+          { type: 'text', text: 'Checking the weather.' },
+          {
+            type: 'tool-call',
+            toolCallId: 'ws_1',
+            toolName: 'web_search',
+            input: { query: 'Paris weather' },
+            providerExecuted: true,
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'ws_1',
+            toolName: 'web_search',
+            output: { type: 'json', value: { results: ['Sunny'] } },
+          },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'lookup', input: { city: 'Paris' } },
+        ],
+      },
+    ];
+
+    it('promotes the current step response messages onto MODEL_STEP and MODEL_INFERENCE outputs', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'hi',
+              toolCalls: [
+                {
+                  toolCallId: 'ws_1',
+                  toolName: 'web_search',
+                  args: { query: 'Paris weather' },
+                  providerExecuted: true,
+                },
+                { toolCallId: 'call_1', toolName: 'lookup', args: { city: 'Paris' } },
+              ],
+              usage: { promptTokens: 4, completionTokens: 6, totalTokens: 10 },
+              steps: [{ response: { messages: mixedResponseMessages } }],
+            },
+            stepResult: { reason: 'tool-calls', warnings: [], isContinued: true },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        // The response messages are kept whole, and the small summary still describes the call.
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual(mixedResponseMessages);
+        expect(span.output).toMatchObject({ text: 'hi' });
+        expect((span.output as { toolCalls: unknown[] }).toolCalls).toHaveLength(2);
+        // The step history itself is still stripped.
+        expect(span.output).not.toHaveProperty('steps');
+        expect(span.output).not.toHaveProperty('usage');
+      }
+    });
+
+    it('promotes only the latest step response messages from a multi-step inference', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const firstStepMessages = [{ role: 'assistant', content: [{ type: 'text', text: 'first step' }] }];
+      const currentStepMessages = [{ role: 'assistant', content: [{ type: 'text', text: 'current step' }] }];
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'current step' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'current step',
+              usage: { totalTokens: 10 },
+              steps: [{ response: { messages: firstStepMessages } }, { response: { messages: currentStepMessages } }],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual(currentStepMessages);
+      }
+    });
+
+    it('promotes response messages given directly on the step output', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'hi',
+              usage: { totalTokens: 10 },
+              response: { messages: mixedResponseMessages },
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual(mixedResponseMessages);
+        expect(span.output).toMatchObject({ text: 'hi' });
+        expect(span.output).not.toHaveProperty('steps');
+      }
+    });
+
+    it('leaves output without response messages unchanged', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { text: 'hi', usage: { totalTokens: 10 }, steps: [{}] },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect(span.output).toEqual({ text: 'hi' });
+      }
+    });
+
+    it('uses the direct response messages when present and the latest step when they are empty', async () => {
+      const run = async (output: Record<string, unknown>) => {
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+          attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+        });
+        const tracker = new ModelSpanTracker(modelSpan);
+        await consumeStream(
+          tracker.wrapStream(
+            createMockStream([
+              { type: 'step-start', payload: { messageId: 'msg-1' } },
+              {
+                type: 'step-finish',
+                payload: {
+                  output: { text: 'hi', usage: { totalTokens: 10 }, ...output },
+                  stepResult: { reason: 'stop', warnings: [], isContinued: false },
+                  metadata: {},
+                },
+              },
+            ]),
+          ),
+        );
+        modelSpan.end();
+        // The exporter accumulates spans across the two runs in this test.
+        return testExporter.getSpansByType(SpanType.MODEL_STEP).at(-1)!.output as Record<string, unknown>;
+      };
+
+      const direct = [{ role: 'assistant', content: [{ type: 'text', text: 'direct' }] }];
+      const fromStep = [{ role: 'assistant', content: [{ type: 'text', text: 'from step' }] }];
+
+      // An earlier attempt on the same step wins over the accumulated step history.
+      expect(
+        await run({ response: { messages: direct }, steps: [{ response: { messages: fromStep } }] }),
+      ).toMatchObject({ responseMessages: direct });
+      // Nothing usable directly: fall back to the latest step of the accumulated history.
+      expect(await run({ response: { messages: [] }, steps: [{ response: { messages: fromStep } }] })).toMatchObject({
+        responseMessages: fromStep,
+      });
+    });
+
     it('preserves the provider response model on MODEL_INFERENCE', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

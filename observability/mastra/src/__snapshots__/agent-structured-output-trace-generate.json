@@ -192,7 +192,18 @@
                   "toolCalls": [],
                   "object": {
                     "items": "test structured output"
-                  }
+                  },
+                  "responseMessages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Mock V2 generate response"
+                        }
+                      ]
+                    }
+                  ]
                 }
               },
               "children": [
@@ -344,7 +355,18 @@
                       "toolCalls": [],
                       "object": {
                         "items": "test structured output"
-                      }
+                      },
+                      "responseMessages": [
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Mock V2 generate response"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   }
                 },

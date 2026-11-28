@@ -177,7 +177,18 @@
                 ],
                 "output": {
                   "text": "Mock V2 stream response",
-                  "toolCalls": []
+                  "toolCalls": [],
+                  "responseMessages": [
+                    {
+                      "role": "assistant",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Mock V2 stream response"
+                        }
+                      ]
+                    }
+                  ]
                 }
               },
               "children": [
@@ -325,7 +336,18 @@
                     ],
                     "output": {
                       "text": "Mock V2 stream response",
-                      "toolCalls": []
+                      "toolCalls": [],
+                      "responseMessages": [
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Mock V2 stream response"
+                            }
+                          ]
+                        }
+                      ]
                     }
                   }
                 },
