@@ -31,12 +31,13 @@ import {
   claimRunOwnership,
   getRunOwnership,
   getRunOwnerships,
+  guardedWriteBatch,
   releaseRunOwnership,
   renewRunOwnership,
   runClaimKey,
-  writeBatch,
+  WritePreconditionError,
 } from '../run-fencing';
-import type { RunFenceCheck } from '../run-fencing';
+import type { RunFenceCheck, WriteBatch } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
 function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
@@ -86,6 +87,62 @@ function summarizeWorkflowRun(run: WorkflowRun): WorkflowRun {
   return { ...run, snapshot: snapshot as unknown as WorkflowRunState };
 }
 
+type SnapshotRecord = {
+  namespace: string;
+  workflow_name: string;
+  run_id: string;
+  resourceId?: string;
+  snapshot: WorkflowRunState;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+function escapeGlob(value: string): string {
+  return value.replace(/[*?[\]\\]/g, '\\$&');
+}
+
+/**
+ * How many times a read-decide-write plan is rebuilt when a guarded key changed under it. A key
+ * updated on every attempt is a conflict the caller should see, not a lost update.
+ */
+const WRITE_RETRY_LIMIT = 5;
+
+/**
+ * Raised when a persist that read the run as absent finds a record for it. The caller's snapshot was
+ * built from a stale miss, so writing it would replace the live snapshot with a default; the update
+ * paths catch this, re-read the run and rebuild before retrying.
+ */
+export class SnapshotConflictError extends Error {
+  constructor(runId: string) {
+    super(`A snapshot for run ${runId} appeared after it was read as absent`);
+    this.name = 'SnapshotConflictError';
+  }
+}
+
+function snapshotKey(namespace: string, workflowName: string, runId: string): string {
+  return getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace, workflow_name: workflowName, run_id: runId });
+}
+
+/**
+ * Earlier versions appended `:resourceId:<id>` to snapshot keys. Matches those keys for a run.
+ *
+ * The pattern is only a cheap candidate filter. Both `run_id` and `resourceId` are free-form, so a
+ * canonical key whose run ID contains `:` is byte-identical to a legacy key of a shorter run ID
+ * (`run_id:r:resourceId:x` is both the legacy key of run `r` with resource `x` and the canonical key
+ * of run `r:resourceId:x`). Existing legacy keys cannot be rewritten to a stricter delimiter, so
+ * every candidate is confirmed with {@link recordMatchesRun} before it is read or deleted.
+ */
+function legacySnapshotKeyPattern(namespace: string, workflowName: string, runId: string): string {
+  return `${escapeGlob(snapshotKey(namespace, workflowName, runId))}:resourceId:*`;
+}
+
+/** Whether a stored record belongs to the run being read, updated or deleted. */
+function recordMatchesRun(record: SnapshotRecord, namespace: string, workflowName: string, runId: string): boolean {
+  return (
+    record.run_id === runId && record.workflow_name === workflowName && (record.namespace ?? 'workflows') === namespace
+  );
+}
+
 export class WorkflowsValkey extends WorkflowsStorage {
   private client: ValkeyClient;
   private db: ValkeyDB;
@@ -94,6 +151,92 @@ export class WorkflowsValkey extends WorkflowsStorage {
     super();
     this.client = config.client;
     this.db = new ValkeyDB({ client: config.client });
+  }
+
+  /**
+   * Reads a run's snapshot record by its canonical key, falling back to legacy
+   * `:resourceId:`-suffixed keys only when the canonical key is missing. Legacy candidates are
+   * matched on the run identity stored in the record, not on the key shape alone.
+   */
+  private async getSnapshotRecord(
+    namespace: string,
+    workflowName: string,
+    runId: string,
+  ): Promise<SnapshotRecord | null> {
+    const own = (data: string | null): SnapshotRecord | null => {
+      if (!data) return null;
+      const record = JSON.parse(data) as SnapshotRecord;
+      // The canonical key can hold a legacy record of a shorter run ID whose key is byte-identical
+      // (`run_id:r:resourceId:x`); only the record naming this run may be returned.
+      return recordMatchesRun(record, namespace, workflowName, runId) ? record : null;
+    };
+    const canonicalKey = snapshotKey(namespace, workflowName, runId);
+
+    const canonical = own(await this.client.get(canonicalKey));
+    if (canonical) return canonical;
+
+    const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern(namespace, workflowName, runId));
+    if (legacyKeys.length > 0) {
+      const legacyRecords = await this.client.mGet(legacyKeys);
+      for (const legacyData of legacyRecords) {
+        const record = own(legacyData);
+        if (record) return record;
+      }
+    }
+
+    // The canonical key can gain this run's record while the legacy candidates are read: persisting a
+    // colliding run relocates the occupant onto its canonical key and writes itself to the legacy
+    // key (see {@link displaceForeignOccupant}). Re-read the canonical key before reporting a miss,
+    // or a load that raced that relocation returns null while the snapshot is already present.
+    return own(await this.client.get(canonicalKey));
+  }
+
+  /**
+   * Moves a foreign record off a canonical key before this run is written there, so the other
+   * run's snapshot survives (see {@link snapshotKey} and {@link legacySnapshotKeyPattern}). A
+   * canonical key is not unique per run — it is built from free-form parts, so it can hold another
+   * run's record when a component carries a reserved marker: run `r` with resource `x` and run
+   * `r:resourceId:x` share a key, and so do (`sales`, `daily:run_id:close`) and
+   * (`sales:run_id:daily`, `close`). The move rides in the caller's batch, guarded on the
+   * destination still being free, so it is applied atomically with this run's write and never lands
+   * on a record written there since it was read. When the occupant's own canonical key is already
+   * taken by another run, or is this very key, the collision is unresolvable and this throws without
+   * mutating rather than destroy a snapshot.
+   */
+  private async displaceForeignOccupant(
+    batch: WriteBatch,
+    namespace: string,
+    workflowName: string,
+    runId: string,
+    canonicalKey: string,
+    data: string | null,
+  ): Promise<void> {
+    if (!data) return;
+
+    const occupant = JSON.parse(data) as SnapshotRecord;
+    if (recordMatchesRun(occupant, namespace, workflowName, runId)) return;
+    if (typeof occupant.workflow_name !== 'string' || typeof occupant.run_id !== 'string') {
+      throw new Error(`Cannot place run ${runId}: the snapshot key holds a record with no run identity`);
+    }
+
+    const occupantNamespace = occupant.namespace ?? namespace;
+    const destination = snapshotKey(occupantNamespace, occupant.workflow_name, occupant.run_id);
+    if (destination === canonicalKey) {
+      throw new Error(`Cannot place run ${runId}: run ${occupant.run_id} resolves to the same snapshot key`);
+    }
+
+    const destinationData = await this.client.get(destination);
+    if (destinationData) {
+      const existing = JSON.parse(destinationData) as SnapshotRecord;
+      // The occupant already has a canonical copy, so this run may take the contested key.
+      if (recordMatchesRun(existing, occupantNamespace, occupant.workflow_name, occupant.run_id)) return;
+      throw new Error(`Cannot place run ${runId}: run ${occupant.run_id}'s snapshot key is occupied by another run`);
+    }
+
+    // The destination must still be free when the batch runs: a record written there since it was
+    // read (a fresher copy of the occupant) must not be overwritten by this stale relocation.
+    batch.expect(destination, null);
+    batch.set(destination, data);
   }
 
   public supportsConcurrentUpdates(): boolean {
@@ -112,6 +255,22 @@ export class WorkflowsValkey extends WorkflowsStorage {
   #runFenceCheck(fence: RunFence | undefined, runId: string, operation: string): RunFenceCheck | undefined {
     const resolved = resolveRunFence(this, fence, runId);
     return resolved && { claims: TABLE_WORKFLOW_RUN_OWNERS, fence: resolved, operation };
+  }
+
+  /**
+   * Runs a read-decide-write plan, rebuilding it from a fresh read when a guarded key changed under
+   * the batch ({@link WritePreconditionError}). Bounded so a key updated on every attempt cannot
+   * spin forever; once the budget is spent the conflict escapes rather than being silently dropped.
+   */
+  async #writeWithRetry(plan: () => Promise<void>): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await plan();
+        return;
+      } catch (error) {
+        if (!(error instanceof WritePreconditionError) || attempt >= WRITE_RETRY_LIMIT) throw error;
+      }
+    }
   }
 
   #ownershipError(operation: string, runId: string, error: unknown): MastraError {
@@ -196,58 +355,54 @@ export class WorkflowsValkey extends WorkflowsStorage {
   }): Promise<Record<string, StepResult<unknown, unknown, unknown, unknown>>> {
     const resolvedFence = resolveRunFence(this, fence, runId);
     try {
-      const existingRecord = await this.db.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-        createdAt: string | Date;
-        updatedAt: string | Date;
-      }>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      // A read miss is written as a default snapshot. If the run actually exists (it was created
+      // between the read and the write) the persist refuses with {@link SnapshotConflictError}, so
+      // rebuild from a fresh read instead of replacing the live snapshot with a default.
+      for (let attempt = 0; ; attempt += 1) {
+        const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
-      const existingSnapshot = existingRecord?.snapshot;
-      let snapshot = existingSnapshot;
+        const existingSnapshot = existingRecord?.snapshot;
+        let snapshot = existingSnapshot;
 
-      if (!snapshot) {
-        snapshot = {
-          context: {},
-          activePaths: [],
-          timestamp: Date.now(),
-          suspendedPaths: {},
-          activeStepsPath: {},
-          resumeLabels: {},
-          serializedStepGraph: [],
-          status: 'pending',
-          value: {},
-          waitingPaths: {},
-          runId,
-          requestContext: {},
-        } as WorkflowRunState;
+        if (!snapshot) {
+          snapshot = {
+            context: {},
+            activePaths: [],
+            timestamp: Date.now(),
+            suspendedPaths: {},
+            activeStepsPath: {},
+            resumeLabels: {},
+            serializedStepGraph: [],
+            status: 'pending',
+            value: {},
+            waitingPaths: {},
+            runId,
+            requestContext: {},
+          } as WorkflowRunState;
+        }
+
+        snapshot.context[stepId] = result;
+        if (state !== undefined) {
+          (snapshot.context as Record<string, unknown>).__state = state;
+        }
+        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+
+        try {
+          await this.persistWorkflowSnapshot({
+            namespace: 'workflows',
+            workflowName,
+            runId,
+            resourceId: existingRecord?.resourceId,
+            snapshot,
+            createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
+            expectedAbsent: !existingRecord,
+            fence: resolvedFence,
+          });
+          return snapshot.context;
+        } catch (error) {
+          if (!(error instanceof SnapshotConflictError) || attempt >= WRITE_RETRY_LIMIT) throw error;
+        }
       }
-
-      snapshot.context[stepId] = result;
-      if (state !== undefined) {
-        (snapshot.context as Record<string, unknown>).__state = state;
-      }
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
-
-      await this.persistWorkflowSnapshot({
-        namespace: 'workflows',
-        workflowName,
-        runId,
-        snapshot,
-        createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
-        fence: resolvedFence,
-      });
-
-      return snapshot.context;
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -277,21 +432,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
   }): Promise<WorkflowRunState | undefined> {
     const resolvedFence = resolveRunFence(this, fence, runId);
     try {
-      const existingRecord = await this.db.get<{
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-        createdAt: string | Date;
-        updatedAt: string | Date;
-      }>({
-        tableName: TABLE_WORKFLOW_SNAPSHOT,
-        keys: {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: runId,
-        },
-      });
+      const existingRecord = await this.getSnapshotRecord('workflows', workflowName, runId);
 
       const existingSnapshot = existingRecord?.snapshot;
 
@@ -312,6 +453,7 @@ export class WorkflowsValkey extends WorkflowsStorage {
         namespace: 'workflows',
         workflowName,
         runId,
+        resourceId: existingRecord.resourceId,
         snapshot: updatedSnapshot,
         createdAt: existingRecord?.createdAt ? ensureDate(existingRecord.createdAt) : undefined,
         fence: resolvedFence,
@@ -343,44 +485,78 @@ export class WorkflowsValkey extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
+    /**
+     * Set by callers that read the run and saw no snapshot. If a record naming this run is then found
+     * while the write is prepared, the run was created under the caller: the write is refused with
+     * {@link SnapshotConflictError} rather than overwriting the new snapshot with a default, and the
+     * caller re-reads and rebuilds. Undefined keeps the best-effort update behavior.
+     */
+    expectedAbsent?: boolean;
   }): Promise<void> {
     const { namespace = 'workflows', workflowName, runId, resourceId, snapshot, createdAt, updatedAt } = params;
     const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
-      let finalCreatedAt = createdAt;
-      if (!finalCreatedAt) {
-        const existing = await this.db.get<{
-          namespace: string;
-          workflow_name: string;
-          run_id: string;
-          snapshot: WorkflowRunState;
-          createdAt: string | Date;
-          updatedAt: string | Date;
-        }>({
-          tableName: TABLE_WORKFLOW_SNAPSHOT,
-          keys: {
-            namespace,
-            workflow_name: workflowName,
-            run_id: runId,
-          },
-        });
-        finalCreatedAt = existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
-      }
+      // A read-decide-write: `createdAt`/`resourceId` come from an existing record and a colliding
+      // occupant is relocated, so the whole plan is rebuilt if a guarded key changes under it.
+      await this.#writeWithRetry(async () => {
+        const canonicalKey = snapshotKey(namespace, workflowName, runId);
+        // The metadata donor and the precondition must be the same bytes: read every donor once here
+        // and guard those exact bytes below, so a concurrent write cannot land between the
+        // `createdAt`/`resourceId` decision and the batch. No SCAN: a legacy key is only reachable
+        // when `resourceId` is known.
+        const canonicalData = await this.client.get(canonicalKey);
+        const donorKey = resourceId ? `${canonicalKey}:resourceId:${resourceId}` : undefined;
+        let donorData: string | null = null;
+        let donorRead = false;
 
-      const { key, processedRecord } = processRecord(TABLE_WORKFLOW_SNAPSHOT, {
-        namespace,
-        workflow_name: workflowName,
-        run_id: runId,
-        resourceId,
-        snapshot,
-        createdAt: finalCreatedAt,
-        updatedAt: updatedAt ?? new Date(),
+        // Either key can hold a colliding run's record (see `legacySnapshotKeyPattern`), so only a
+        // record naming this run may donate its `createdAt` or `resourceId`.
+        const ownRecord = (data: string | null): SnapshotRecord | null => {
+          if (!data) return null;
+          const record = JSON.parse(data) as SnapshotRecord;
+          return recordMatchesRun(record, namespace, workflowName, runId) ? record : null;
+        };
+        let existing = ownRecord(canonicalData);
+        if (!existing && donorKey && (!createdAt || !resourceId)) {
+          donorRead = true;
+          donorData = await this.client.get(donorKey);
+          existing = ownRecord(donorData);
+        }
+        if (params.expectedAbsent && existing) {
+          throw new SnapshotConflictError(runId);
+        }
+
+        const { processedRecord } = processRecord(TABLE_WORKFLOW_SNAPSHOT, {
+          namespace,
+          workflow_name: workflowName,
+          run_id: runId,
+          resourceId: resourceId ?? existing?.resourceId,
+          snapshot,
+          createdAt: createdAt ?? (existing?.createdAt ? ensureDate(existing.createdAt) : new Date()),
+          updatedAt: updatedAt ?? new Date(),
+        });
+        const batch = guardedWriteBatch(this.client, check);
+        // Guard the records the decision above read, so a record that changes under the batch rebuilds
+        // the decision instead of donating stale metadata.
+        batch.expect(canonicalKey, canonicalData);
+        if (donorRead && donorKey) batch.expect(donorKey, donorData);
+        // A canonical key can hold a *different* run's record. Run IDs and workflow names are
+        // free-form, so keys collide whenever a component carries a reserved marker: run `r` with
+        // resource `x` and run `r:resourceId:x` share a key, and `workflow_name:sales:run_id:daily:`
+        // `run_id:close` names both (`sales`, `daily:run_id:close`) and (`sales:run_id:daily`,
+        // `close`). Writing this run there would destroy the occupant's snapshot, so move it to its
+        // own canonical key in the same batch. This is not gated on the key's shape, because a key
+        // that merely *looks* canonical can still hold a foreign record; a collision that cannot be
+        // resolved throws without mutating. An absent or own record returns immediately, so ordinary
+        // persists pay only the one read the guard already needs.
+        await this.displaceForeignOccupant(batch, namespace, workflowName, runId, canonicalKey, canonicalData);
+        batch.set(canonicalKey, JSON.stringify(processedRecord));
+        await batch.exec();
       });
-      const batch = writeBatch(this.client, check);
-      batch.set(key, JSON.stringify(processedRecord));
-      await batch.exec();
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      // Both are caller-visible conflicts carrying their own type: the caller rebuilds from a fresh
+      // read, so they must not be flattened into a generic storage failure.
+      if (isRunFenceConflictError(error) || error instanceof SnapshotConflictError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('VALKEY', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
@@ -403,23 +579,9 @@ export class WorkflowsValkey extends WorkflowsStorage {
     runId: string;
   }): Promise<WorkflowRunState | null> {
     const { namespace = 'workflows', workflowName, runId } = params;
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-      namespace,
-      workflow_name: workflowName,
-      run_id: runId,
-    });
     try {
-      const data = await this.client.get(key);
-      if (!data) {
-        return null;
-      }
-      const parsed = JSON.parse(data) as {
-        namespace: string;
-        workflow_name: string;
-        run_id: string;
-        snapshot: WorkflowRunState;
-      };
-      return parsed.snapshot;
+      const record = await this.getSnapshotRecord(namespace, workflowName, runId);
+      return record?.snapshot ?? null;
     } catch (error) {
       throw new MastraError(
         {
@@ -445,9 +607,12 @@ export class WorkflowsValkey extends WorkflowsStorage {
     workflowName?: string;
   }): Promise<WorkflowRun | null> {
     try {
-      const key =
-        getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId }) + '*';
-      const keys = await this.db.scanKeys(key);
+      const workflowNamePattern = workflowName ? escapeGlob(workflowName) : '*';
+      const canonicalPattern = `${escapeGlob(getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }))}:workflow_name:${workflowNamePattern}:run_id:${escapeGlob(runId)}`;
+      const keys = [
+        ...(await this.db.scanKeys(canonicalPattern)),
+        ...(await this.db.scanKeys(`${canonicalPattern}:resourceId:*`)),
+      ];
 
       if (keys.length === 0) {
         return null;
@@ -465,11 +630,18 @@ export class WorkflowsValkey extends WorkflowsStorage {
               createdAt: string | Date;
               updatedAt: string | Date;
               resourceId: string;
+              namespace?: string;
             },
         );
 
       const data = workflows.find(workflow => {
         if (!workflow) {
+          return false;
+        }
+
+        // The `…:resourceId:*` scan can match a record in a namespace that merely starts with
+        // `workflows` (e.g. `workflows:archive`), so only this store's default namespace counts.
+        if ((workflow.namespace ?? 'workflows') !== 'workflows') {
           return false;
         }
 
@@ -513,12 +685,30 @@ export class WorkflowsValkey extends WorkflowsStorage {
     workflowName: string;
     fence?: RunFence;
   }): Promise<void> {
-    const key = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName, run_id: runId });
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
-      const batch = writeBatch(this.client, check);
-      batch.del(key);
-      await batch.exec();
+      // The keys to delete are chosen from record bodies, so the choice is rebuilt if a key changes
+      // under the batch: the delete destroys exactly the records it validated, not what later lands.
+      await this.#writeWithRetry(async () => {
+        const canonicalKey = snapshotKey('workflows', workflowName, runId);
+        const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern('workflows', workflowName, runId));
+        // Neither key is this run's by shape: the canonical key can hold a colliding shorter run's
+        // legacy record, and a scanned candidate can hold a longer run's canonical record. Only the
+        // record body says whose snapshot sits behind a key, so it decides what may be deleted.
+        const candidateKeys = [canonicalKey, ...legacyKeys];
+        const storedRecords = await this.client.mGet(candidateKeys);
+        const batch = guardedWriteBatch(this.client, check);
+        candidateKeys.forEach((key, index) => {
+          const data = storedRecords[index] ?? null;
+          // Guard every candidate, not only the deleted ones: a candidate that stops matching this
+          // run between the read and the batch must be left alone, so the batch remembers its bytes.
+          batch.expect(key, data);
+          if (!data) return;
+          const record = JSON.parse(data) as SnapshotRecord;
+          if (recordMatchesRun(record, 'workflows', workflowName, runId)) batch.del(key);
+        });
+        await batch.exec();
+      });
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -567,24 +757,13 @@ export class WorkflowsValkey extends WorkflowsStorage {
       const normalizedFrom = fromDate ? ensureDate(fromDate) : undefined;
       const normalizedTo = toDate ? ensureDate(toDate) : undefined;
 
-      let pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' }) + ':*';
-      if (workflowName && resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: workflowName,
-          run_id: '*',
-          resourceId,
-        });
-      } else if (workflowName) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }) + ':*';
-      } else if (resourceId) {
-        pattern = getKey(TABLE_WORKFLOW_SNAPSHOT, {
-          namespace: 'workflows',
-          workflow_name: '*',
-          run_id: '*',
-          resourceId,
-        });
-      }
+      // The canonical key carries no `resourceId`, so a resource-scoped call scans the workflow's
+      // keys and filters `resourceId` off the record below; a narrower scan needs a per-resource
+      // index, as no legacy or canonical key shape can be trusted to hold exactly one resource
+      // (a run ID containing `:` makes the shapes collide).
+      const pattern = workflowName
+        ? `${escapeGlob(getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }))}:*`
+        : `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' })}:*`;
       const keys = await this.db.scanKeys(pattern);
 
       if (keys.length === 0) {
@@ -593,14 +772,35 @@ export class WorkflowsValkey extends WorkflowsStorage {
 
       const results = await this.client.mGet(keys);
 
-      let runs = results
-        .filter((data): data is string => data !== null)
-        .map(data => JSON.parse(data) as Record<string, unknown>)
-        .filter(
-          (record): record is Record<string, unknown> =>
-            record !== null && record !== undefined && typeof record === 'object' && 'workflow_name' in record,
-        )
+      // A run can exist under both its canonical key and a legacy `:resourceId:` key; the canonical one wins.
+      const recordsByRun = new Map<string, { record: Record<string, unknown>; legacy: boolean }>();
+      results.forEach((data, index) => {
+        if (data === null) return;
+        const record = JSON.parse(data) as Record<string, unknown>;
+        if (record === null || typeof record !== 'object' || !('workflow_name' in record)) return;
+        // The scan pattern (`…:namespace:workflows:*`) also matches a namespace that merely starts
+        // with `workflows` (e.g. `workflows:archive`), so keep only this store's default namespace.
+        if (((record.namespace as string | undefined) ?? 'workflows') !== 'workflows') return;
+        const legacy =
+          keys[index] !==
+          snapshotKey(
+            (record.namespace as string | undefined) ?? 'workflows',
+            record.workflow_name as string,
+            record.run_id as string,
+          );
+        // A JSON tuple, not a delimited string: `workflow_name` and `run_id` are free-form, so a
+        // `\u0000` join would fold distinct runs (`a\u0000b` + `c` and `a` + `b\u0000c`) into one.
+        const runKey = JSON.stringify([record.workflow_name, record.run_id]);
+        const current = recordsByRun.get(runKey);
+        if (!current || (current.legacy && !legacy)) {
+          recordsByRun.set(runKey, { record, legacy });
+        }
+      });
+
+      let runs = [...recordsByRun.values()]
+        .map(({ record }) => record)
         .filter(record => !workflowName || record.workflow_name === workflowName)
+        .filter(record => !resourceId || record.resourceId === resourceId)
         .map(w => parseWorkflowRun(w))
         .filter(w => {
           if (normalizedFrom && w.createdAt < normalizedFrom) {
