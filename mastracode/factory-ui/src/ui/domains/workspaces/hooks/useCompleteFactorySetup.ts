@@ -46,7 +46,8 @@ function warnIntakeNotApplied() {
 }
 
 export function useCompleteFactorySetup({ local }: { local: boolean }) {
-  const { baseUrl, client } = useApiConfig();
+  const { baseUrl, mastra } = useApiConfig();
+  const web = mastra.getFactoryWeb();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const link = useLinkRepositoryMutation();
@@ -63,11 +64,11 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const codeHostSync = draft.codeHostSync !== false;
       const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
-        queryClient.query({ ...providersQueryOptions(client), staleTime: 0 }),
+        queryClient.query({ ...providersQueryOptions(web), staleTime: 0 }),
         Promise.all(
           plan.checks.map(({ scope }) =>
             queryClient.query({
-              ...availableModelsQueryOptions(baseUrl, { scope }),
+              ...availableModelsQueryOptions(web, { scope }),
               staleTime: 0,
             }),
           ),

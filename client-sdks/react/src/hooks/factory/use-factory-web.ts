@@ -1,4 +1,5 @@
 import type {
+  DirectoryListing,
   FactoryWeb,
   MastraGatewayCredits,
   PersonalModelDefaultsResponse,
@@ -433,7 +434,7 @@ export function normalizePlanPath(
 /** The server lists directories confined to its configured root; an absent `path` lists the root. */
 export function useDirectoryListing(path: string | undefined) {
   const web = useFactoryWeb();
-  return useQuery({
+  return useQuery<DirectoryListing>({
     queryKey: factoryWebKeys.fsList(path),
     placeholderData: previousData => previousData,
     queryFn: ({ signal }) => web.directory(path, { signal }),
