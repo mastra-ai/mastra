@@ -127,6 +127,10 @@ async function requireResponseBody(response: Response, method: string): Promise<
   throw new MastraClientErrorClass(response.status, response.statusText, details);
 }
 
+async function* streamResponseEvents<T = A2AStreamEventData>(response: Response, method: string) {
+  yield* processA2AStream<T>(await requireResponseBody(response, method), response.headers.get('content-type'));
+}
+
 /**
  * Class for interacting with an agent via the A2A protocol
  */
@@ -213,7 +217,7 @@ export class A2A extends BaseResource {
       stream: true,
     });
 
-    yield* processA2AStream(await requireResponseBody(response, 'message/stream'));
+    yield* streamResponseEvents(response, 'message/stream');
   }
 
   /**
@@ -290,7 +294,7 @@ export class A2A extends BaseResource {
       stream: true,
     });
 
-    yield* processA2AStream(await requireResponseBody(response, 'tasks/resubscribe'));
+    yield* streamResponseEvents(response, 'tasks/resubscribe');
   }
 
   /**
@@ -458,7 +462,7 @@ export class A2AV1 extends BaseResource {
       stream: true,
     });
 
-    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'message/stream'))) {
+    for await (const event of streamResponseEvents<unknown>(response, 'message/stream')) {
       yield StreamResponseV1Codec.fromJSON(event);
     }
   }
@@ -491,7 +495,7 @@ export class A2AV1 extends BaseResource {
       stream: true,
     });
 
-    for await (const event of processA2AStream<unknown>(await requireResponseBody(response, 'tasks/resubscribe'))) {
+    for await (const event of streamResponseEvents<unknown>(response, 'tasks/resubscribe')) {
       yield StreamResponseV1Codec.fromJSON(event);
     }
   }
