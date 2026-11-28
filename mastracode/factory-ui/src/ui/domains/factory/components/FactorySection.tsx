@@ -1,13 +1,13 @@
 import { useBoardCatalog, useCanEditBoards } from '@mastra/react/hooks/factory';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { FactoryBoardsNav } from '@mastra/playground-ui/domains/factory';
+import { FactoryBoardsNav, orderedBoards } from '@mastra/playground-ui/domains/factory';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
 import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 import { boardConfigPath, boardIntakePath, newBoardPath } from '../../boardConfig/boardConfigPaths';
-import { boardPath, orderedBoards } from '../boardCatalog';
+import { boardPath } from '../boardCatalog';
 import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { HrefLink } from '../../../ui/HrefLink';

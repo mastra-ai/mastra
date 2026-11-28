@@ -1,9 +1,8 @@
-import { useIntakeRoutesQuery, useIntakeRouteWrites } from '@mastra/react/hooks/factory';
+import { factoryKeys, useIntakeRoutesQuery, useIntakeRouteWrites } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useQueryClient } from '@tanstack/react-query';
 
-import { queryKeys } from '../../../api/keys';
-import type { IntakeRouteInfo, IntakeRouteListResponse } from '../../../api/types';
+import type { IntakeRouteInfo, IntakeRouteListResponse } from '@internal/factory-contract';
 import { FactoryRequestError } from '@mastra/client-js';
 import type { RouteWrite } from '@mastra/react/hooks/factory';
 import { laneRules, reorderWithin } from '@mastra/playground-ui/domains/factory';
@@ -70,7 +69,7 @@ export function useRuleWrites(factoryId: string): RuleWrites {
 
   // The writes reload the routes before they settle, failed or not, so the cache holds the rules as they are now.
   const savedRoutes = () =>
-    queryClient.getQueryData<IntakeRouteListResponse>(queryKeys.intakeRoutes(factoryId))?.intakeRoutes ?? [];
+    queryClient.getQueryData<IntakeRouteListResponse>(factoryKeys.intakeRoutes(factoryId))?.intakeRoutes ?? [];
 
   const run = (changes: RouteWrite[]): Promise<IntakeRouteInfo[] | undefined> =>
     writes.mutateAsync(changes).then(savedRoutes, error => {

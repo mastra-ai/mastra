@@ -4,8 +4,8 @@ import type {
   IntakeRouteInfo,
   IntakeSkippedResponse,
   IntakeTestResponse,
-  StoredPhaseInfo,
-} from '../../../api/types';
+} from '@internal/factory-contract';
+import type { StoredPhaseInfo, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import {
   boardFlow,
   arrivalFallback,
@@ -24,7 +24,6 @@ import {
   exitToolOutcome,
   nextPhasesOf,
 } from '@mastra/playground-ui/domains/factory';
-import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 
 export type RuleSkips = IntakeSkippedResponse['skipped'][number];
 export type BoardFlowParts = NonNullable<InstalledBoardInfo['flow']>;

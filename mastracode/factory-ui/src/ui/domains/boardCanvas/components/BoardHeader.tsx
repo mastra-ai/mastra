@@ -1,7 +1,6 @@
 import { BoardHeader as SharedBoardHeader } from '@mastra/playground-ui/domains/factory';
 
-import type { StoredBoardInfo } from '../../../../api/types';
-import type { BoardDraft } from '@mastra/playground-ui/domains/factory';
+import type { StoredBoardInfo, BoardDraft } from '@mastra/playground-ui/domains/factory';
 import type { BoardActionWrites } from './BoardActions';
 
 interface BoardHeaderProps {

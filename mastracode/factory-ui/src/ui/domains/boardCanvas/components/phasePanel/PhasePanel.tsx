@@ -15,9 +15,9 @@ import {
   CARD_FACTS,
 } from '@mastra/playground-ui/domains/factory';
 
-import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
+import type { StoredPhaseInfo, RuleField } from '@mastra/playground-ui/domains/factory';
+import type { BoardSettingsSkill } from '../../boardSettingsHost';
 import { useBoardSettingsHost } from '../../boardSettingsHost';
-import type { RuleField } from '@mastra/playground-ui/domains/factory';
 import { skillBadges } from './SkillBadges';
 import { ConditionCells } from '../conditions/ConditionCells';
 
@@ -51,7 +51,7 @@ export function PhasePanel({
   /** The first phase, or one Factory's code declares: it keeps its kind. */
   kindLocked: boolean;
   /** The factory's skills; undefined until they load, so a skill is never flagged missing early. */
-  skills: FactorySkillInfo[] | undefined;
+  skills: BoardSettingsSkill[] | undefined;
   /** Whether the user may edit the factory's skills, which is separate from editing the board. */
   skillsEditable: boolean;
   factoryId: string;

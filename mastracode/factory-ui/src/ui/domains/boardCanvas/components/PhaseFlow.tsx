@@ -8,7 +8,8 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import type { PhaseFlowModel } from '@mastra/playground-ui/domains/factory';
 
-import type { FactorySkillInfo, InstalledBoardInfo, IntakeOrderResponse } from '../../../../api/types';
+import type { InstalledBoardInfo, IntakeOrderResponse } from '@internal/factory-contract';
+import type { BoardSettingsSkill } from '../boardSettingsHost';
 import { useBoardSettingsHost } from '../boardSettingsHost';
 import { intakeSentence, movesOnItsOwn, sessionSpans } from '../canvasModel';
 import type { CanvasEmphasis, CanvasModel } from '../canvasModel';
@@ -42,11 +43,11 @@ interface PhaseFlowProps {
   /** Where the board stands in the intake order; unset until it loads. */
   order: IntakeOrderResponse | undefined;
   /** The project's skills; undefined until they load, so no skill is called missing early. */
-  skills: readonly FactorySkillInfo[] | undefined;
+  skills: readonly BoardSettingsSkill[] | undefined;
 }
 
 /** Why a phase's skill can't run: the project has no such skill, or agents can't load it. */
-function skillProblem(name: string | undefined, skills: readonly FactorySkillInfo[] | undefined) {
+function skillProblem(name: string | undefined, skills: readonly BoardSettingsSkill[] | undefined) {
   if (!name || skills === undefined) return undefined;
   const skill = skills.find(candidate => candidate.name === name);
   if (!skill) return 'Skill not found';

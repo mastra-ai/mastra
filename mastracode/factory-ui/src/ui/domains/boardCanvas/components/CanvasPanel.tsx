@@ -1,9 +1,9 @@
 import { PhaseNotFoundPanel, canRemovePhase, kindLocked } from '@mastra/playground-ui/domains/factory';
 
-import type { FactorySkillsResponse, StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
+import type { StoredBoardInfo, StoredPhaseInfo, RuleField } from '@mastra/playground-ui/domains/factory';
+import type { BoardSettingsSkills } from '../boardSettingsHost';
 import { useBoardSettingsHost } from '../boardSettingsHost';
 import type { CanvasFocus } from '../canvasFocus';
-import type { RuleField } from '@mastra/playground-ui/domains/factory';
 import { PhasePanel } from './phasePanel/PhasePanel';
 import { RulePanel } from './rulePanel/RulePanel';
 import { TestPanel } from './testPanel/TestPanel';
@@ -19,7 +19,7 @@ interface CanvasPanelProps {
   phases: StoredPhaseInfo[];
   boardTitle: string;
   codeBehaviour: StoredBoardInfo['codeBehaviour'];
-  skills: FactorySkillsResponse | undefined;
+  skills: BoardSettingsSkills | undefined;
   disabled: boolean;
   totals: ReadonlyMap<string, number>;
   onFocus: (focus: CanvasFocus) => void;

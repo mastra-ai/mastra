@@ -2,7 +2,7 @@ import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { IntakeTestResult, phaseName } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
 
-import type { IntakeTestResponse } from '../../../../../api/types';
+import type { IntakeTestResponse } from '@internal/factory-contract';
 import { useBoardSettingsHost } from '../../boardSettingsHost';
 import { eventLabel, moveRuleVerdictLabel, moveVerdictLabel, ruleVerdictLabel } from '../../../intake/intakeCheckCopy';
 

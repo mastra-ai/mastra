@@ -15,12 +15,12 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { BoardCatalogResponse, StoredBoardResponse, StoredPhaseInfo } from '../../../../api/types';
+import type { BoardCatalogResponse, StoredBoardResponse } from '@internal/factory-contract';
+import type { StoredPhaseInfo, BoardDraft, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { useBoardDraft } from '../../boardConfig/BoardDraftProvider';
 import { useBoardSettingsHost } from '../boardSettingsHost';
 import { readCanvasFocus } from '../canvasFocus';
 import type { CanvasFocus } from '../canvasFocus';
-import type { BoardDraft, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { canvasModel, emphasisOf, orderNote } from '../canvasModel';
 import type { RuleLine } from '../canvasModel';
 import { useCanvasData } from '../useCanvasData';

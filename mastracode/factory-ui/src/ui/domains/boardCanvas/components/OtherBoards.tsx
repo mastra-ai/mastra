@@ -1,7 +1,7 @@
 import { OtherBoards as SharedOtherBoards, boardName, phaseName } from '@mastra/playground-ui/domains/factory';
 import type { FlowRuleLine, OtherBoardMove } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
+import type { InstalledBoardInfo, IntakeRouteInfo } from '@internal/factory-contract';
 import { useBoardSettingsHost } from '../boardSettingsHost';
 import type { Emphasis, RuleLine } from '../canvasModel';
 import { flowIncomingRule, flowRuleLine } from '../flowLines';

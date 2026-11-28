@@ -1,9 +1,9 @@
+import { orderedBoards } from '@mastra/playground-ui/domains/factory';
 import type { UseMutationResult } from '@tanstack/react-query';
 
-import type { InstalledBoardInfo, StoredBoardResponse } from '../../../../api/types';
+import type { InstalledBoardInfo, StoredBoardResponse } from '@internal/factory-contract';
 import { useDeleteBoardMutation, useResetBoardMutation } from '@mastra/react/hooks/factory';
 import type { FactoryRequestError } from '@mastra/client-js';
-import { orderedBoards } from '../../factory/boardCatalog';
 import { useBoardSettingsHost } from '../boardSettingsHost';
 
 /** The board's reset and delete, each sent with the revision it was read at. */

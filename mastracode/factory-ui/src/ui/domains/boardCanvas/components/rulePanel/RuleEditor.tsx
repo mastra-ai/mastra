@@ -13,11 +13,10 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import type { RuleTargetBoard, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { matchesOutsiderPullRequests } from '@internal/factory-contract';
-import type { RuleCondition } from '@internal/factory-contract';
+import type { RuleCondition, InstalledBoardInfo, IntakeRouteInfo } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useEffect, useRef, useState } from 'react';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../../api/types';
 import {
   useIntakeDryRunPreview,
   useIntakeDryRunQuery,

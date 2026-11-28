@@ -1,4 +1,4 @@
-import type { IntakeDryRunResponse, IntakeTestResponse } from '../../../api/types';
+import type { IntakeDryRunResponse, IntakeTestResponse } from '@internal/factory-contract';
 import { fieldLabel } from '@mastra/playground-ui/domains/factory';
 
 type DryRunBoard = IntakeDryRunResponse['boards'][number];

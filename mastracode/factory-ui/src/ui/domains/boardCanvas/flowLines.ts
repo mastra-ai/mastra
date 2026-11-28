@@ -1,7 +1,7 @@
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import type { FlowEmphasis, FlowIncomingRule, FlowRuleLine, RuleEvent } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../api/types';
+import type { InstalledBoardInfo, IntakeRouteInfo } from '@internal/factory-contract';
 import {
   everythingOn,
   isOpenedLane,

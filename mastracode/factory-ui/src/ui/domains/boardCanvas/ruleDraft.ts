@@ -1,7 +1,12 @@
 import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ruleGroupSchema } from '@internal/factory-contract';
-import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
+import type {
+  RuleCondition,
+  RuleGroup,
+  InstalledBoardInfo,
+  IntakeDryRunBody,
+  IntakeRouteInfo,
+} from '@internal/factory-contract';
 
-import type { InstalledBoardInfo, IntakeDryRunBody, IntakeRouteInfo } from '../../../api/types';
 import {
   describeRule,
   LANE_EVENTS,

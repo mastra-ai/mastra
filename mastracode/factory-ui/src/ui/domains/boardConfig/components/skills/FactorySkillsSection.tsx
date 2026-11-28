@@ -17,8 +17,7 @@ import { Link } from 'react-router';
 
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../../api/types';
 import { useFactorySkillsQuery } from '../../../../../hooks/useFactorySkills';
-import { boardName, installedPhaseName } from '@mastra/playground-ui/domains/factory';
-import { orderedBoards } from '../../../factory/boardCatalog';
+import { boardName, installedPhaseName, orderedBoards } from '@mastra/playground-ui/domains/factory';
 import { SettingsSubsection } from '../../../settings/components/SettingsSubsection';
 import { useSettingsLinkState } from '../../../settings/hooks/useSettingsOpen';
 import { newSkillPath, skillPath } from '../../../settings/settingsSections';

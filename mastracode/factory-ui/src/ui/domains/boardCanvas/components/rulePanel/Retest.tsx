@@ -1,6 +1,6 @@
 import type { RuleRetestInfo } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo, IntakeDryRunBody, IntakeTestResponse } from '../../../../../api/types';
+import type { InstalledBoardInfo, IntakeDryRunBody, IntakeTestResponse } from '@internal/factory-contract';
 import { intakeTestBody, useIntakeTest, useIntakeTestQuery } from '@mastra/react/hooks/factory';
 import { boardName, phaseName } from '@mastra/playground-ui/domains/factory';
 
