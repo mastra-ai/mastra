@@ -1,4 +1,5 @@
 import { StorageDomain } from '../storage/domains/base';
+import { isNotificationDue, notificationDueTime } from './due';
 import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
@@ -89,13 +90,6 @@ const valueMatches = <T extends string>(value: T, filter?: T | T[]) => {
   return Array.isArray(filter) ? filter.includes(value) : value === filter;
 };
 
-const dueTime = (record: NotificationRecord): number => {
-  const deliverAt = record.deliverAt?.getTime();
-  const summaryAt = record.summaryAt?.getTime();
-  if (deliverAt !== undefined && summaryAt !== undefined) return Math.min(deliverAt, summaryAt);
-  return deliverAt ?? summaryAt ?? Number.POSITIVE_INFINITY;
-};
-
 export class InMemoryNotificationsStorage extends NotificationsStorage {
   #notifications = new Map<string, NotificationRecord>();
 
@@ -174,13 +168,11 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
   }
 
   async listDueNotifications(input: ListDueNotificationsInput): Promise<NotificationRecord[]> {
-    const now = input.now.getTime();
     const results = [...this.#notifications.values()]
-      .filter(record => record.status === 'pending')
+      .filter(record => isNotificationDue(record, input.now))
       .filter(record => !input.agentId || record.agentId === input.agentId)
       .filter(record => !input.resourceId || record.resourceId === input.resourceId)
-      .filter(record => dueTime(record) <= now)
-      .sort((a, b) => dueTime(a) - dueTime(b) || a.updatedAt.getTime() - b.updatedAt.getTime());
+      .sort((a, b) => notificationDueTime(a) - notificationDueTime(b) || a.updatedAt.getTime() - b.updatedAt.getTime());
     return results.slice(0, input.limit ?? results.length).map(cloneRecord);
   }
 
