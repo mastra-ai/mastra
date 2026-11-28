@@ -1,17 +1,17 @@
-import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
-
-import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
 import {
   defaultModelPack,
   EMPTY_MODEL_PACK_SET,
   LEGACY_MODEL_PACK_ID,
   legacyModelPackSet,
   withDefaultModel,
-} from '../../../model-packs.js';
-import type { ModelPack, ModelPackSet } from '../../../model-packs.js';
+} from '@internal/factory-contract';
+import type { ModelPack, ModelPackSet } from '@internal/factory-contract';
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
+import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+
+import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
 
 export interface ModelDefaultRecord {
   orgId: string;

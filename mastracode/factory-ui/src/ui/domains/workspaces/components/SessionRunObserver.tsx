@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
-import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
 import { playDoneSound } from '../../settings/services/doneSound';
 
 const runningByFactory = new Map<string, ReadonlySet<string>>();

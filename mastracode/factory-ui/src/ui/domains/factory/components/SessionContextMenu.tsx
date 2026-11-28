@@ -3,7 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
-import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
+import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';

@@ -1,8 +1,4 @@
-import {
-  SESSION_ROW_ALL_SOURCES,
-  sessionRowOwnerSchema,
-  sessionRowSourceSchema,
-} from '@mastra/factory/session/session-row-query';
+import { SESSION_ROW_ALL_SOURCES, sessionRowOwnerSchema, sessionRowSourceSchema } from '@internal/factory-contract';
 import { createLocalStorageStore, useLocalStorageStore } from '@mastra/playground-ui/hooks/use-local-storage-store';
 import { z } from 'zod';
 

@@ -1,3 +1,4 @@
+import { MAX_BOARD_IDENTIFIER_LENGTH } from '@internal/factory-contract';
 import type { FactoryRuleDecision } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
@@ -5,7 +6,6 @@ import { boardRegistryOf, createBoardRegistry } from '../boards/registry.js';
 import {
   assertFactoryConfigVersion,
   assertFactoryDecisionTarget,
-  MAX_BOARD_IDENTIFIER_LENGTH,
   FactoryRuleValidationError,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   validateFactoryRuleDecision,

@@ -1,3 +1,4 @@
+import { MODEL_ID_PATTERN } from '@internal/factory-contract';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
@@ -6,7 +7,6 @@ import { useMemo, useState } from 'react';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { MODEL_ID_PATTERN } from '@mastra/factory/model-packs';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 

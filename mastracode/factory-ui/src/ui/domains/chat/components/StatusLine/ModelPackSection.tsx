@@ -1,4 +1,4 @@
-import type { ModelPack } from '@mastra/factory/model-packs';
+import type { ModelPack } from '@internal/factory-contract';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';

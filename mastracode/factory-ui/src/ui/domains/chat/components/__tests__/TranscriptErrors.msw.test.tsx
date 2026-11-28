@@ -1,4 +1,4 @@
-import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

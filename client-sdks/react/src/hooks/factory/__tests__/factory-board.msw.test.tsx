@@ -12,6 +12,7 @@ import { TEST_BASE_URL } from '../../../test/render';
 import { FactoryBasePathProvider } from '../context';
 import { factoryKeys } from '../keys';
 import { moveAnswered } from '../submitted-moves';
+import { useCardSessions, useRecentAuditEvents } from '../use-board-activity';
 import { useRunQueue } from '../use-factory-decisions';
 import { useBoardPhasesQuery, useTransitionWorkItemMutation } from '../use-work-items';
 
@@ -182,5 +183,49 @@ describe('Factory board hooks', () => {
       const { result } = renderHook(() => useRunQueue(FP), { wrapper });
       await waitFor(() => expect(result.current.data).toEqual({ pending: [], running: [] }));
     });
+  });
+});
+
+describe('when the board reads who is working on its cards', () => {
+  it('marks the cards whose sessions run or wait, and holds them', async () => {
+    server.use(
+      http.get(`${API}/session-activity`, () =>
+        HttpResponse.json({
+          runningSessionIds: ['s1'],
+          parkedSessionIds: ['s2'],
+          cardStatuses: { w1: 'working', w2: 'waiting', w3: 'done' },
+          sessionHeldCardIds: ['w1', 'w2'],
+          cards: { working: 1, waiting: 1 },
+        }),
+      ),
+    );
+    const { result } = renderHook(() => useCardSessions('fp-1'), { wrapper: setup().wrapper });
+    await waitFor(() => expect(result.current.current).toBe(true));
+    expect([...result.current.statuses]).toEqual([
+      ['w1', 'working'],
+      ['w2', 'ready'],
+    ]);
+    expect([...result.current.held]).toEqual(['w1', 'w2']);
+  });
+
+  it('reads recent audit events page by page, up to three pages', async () => {
+    const asked: string[] = [];
+    server.use(
+      http.get(`${API}/audit`, ({ request }) => {
+        const before = new URL(request.url).searchParams.get('before');
+        asked.push(before ?? '');
+        return HttpResponse.json({
+          events: [{ id: `e-${asked.length}` }],
+          actors: { u1: { id: 'u1' } },
+          nextCursor: `c${asked.length}`,
+        });
+      }),
+    );
+    const { result } = renderHook(() => useRecentAuditEvents('fp-1', 'board', 200, ['u1']), {
+      wrapper: setup().wrapper,
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(asked).toEqual(['', 'c1', 'c2']);
+    expect(result.current.data?.events).toHaveLength(3);
   });
 });

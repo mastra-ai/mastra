@@ -1,4 +1,4 @@
-import type { ModelPack, ModelSelectionRequest } from '@mastra/factory/model-packs';
+import type { ModelPack, ModelSelectionRequest } from '@internal/factory-contract';
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { ModelPicker as SharedModelPicker } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';

@@ -1,5 +1,5 @@
-import type { ModelPack, ModelPackSet } from '@mastra/factory/model-packs';
-import { MODEL_PACKS_MAX } from '@mastra/factory/model-packs';
+import { MODEL_PACKS_MAX } from '@internal/factory-contract';
+import type { ModelPack, ModelPackSet } from '@internal/factory-contract';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';

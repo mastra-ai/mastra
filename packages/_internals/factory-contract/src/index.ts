@@ -32,3 +32,6 @@ export * from './rules/rule-group.js';
 export * from './wire/board.js';
 export * from './work-items/card.js';
 export * from './wire/decisions.js';
+export * from './model-packs.js';
+export * from './rules/identifiers.js';
+export * from './session/session-row-query.js';

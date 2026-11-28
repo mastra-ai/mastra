@@ -1,3 +1,4 @@
+import type { ModelPackSet, ResolvedModelSelection } from '@internal/factory-contract';
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { listCustomProviderModels, testCustomProviderModel } from '@mastra/code-sdk/agents/custom-provider-check';
 import type {
@@ -35,7 +36,6 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import type { ModelPackSet, ResolvedModelSelection } from '../model-packs.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {

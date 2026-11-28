@@ -140,6 +140,7 @@ export type {
   FactoryRuleStage,
   FactoryTransitionResult,
   RunQueueResponse,
+  SessionActivityResponse,
   SubmittedTransition,
   TransitionOutcome,
   TransitionWorkItemInput,
@@ -153,4 +154,5 @@ export type {
   WorkItemSessionRepositoryResponse,
   WorkItemStageEntry,
   WorkItemStartersResponse,
+  WireAuditPage,
 } from './resources/factory';

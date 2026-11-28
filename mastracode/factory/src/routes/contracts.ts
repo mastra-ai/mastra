@@ -1,33 +1,3 @@
-import type {
-  BoardPhasesFilter,
-  BoardPhasesResponse,
-  CardChangeRequest,
-  RunQueueResponse,
-  WorkItemFilterOptionsResponse,
-} from '@internal/factory-contract';
-import {
-  BOARD_PHASES_SORTS,
-  boardPhasesResponseSchema,
-  cardSchema,
-  cardStampSchema,
-  decisionListResponseSchema,
-  entitySchema,
-  runQueueResponseSchema,
-  workItemActivityResponseSchema,
-  workItemFilterOptionsResponseSchema,
-  workItemListResponseSchema,
-  workItemSessionRepositoryResponseSchema,
-  workItemStartersResponseSchema,
-  cardRuleGroupSchema,
-  CLOSE_REASONS,
-  INTAKE_ROUTE_RULE_FIELDS,
-  PULL_REQUEST_STATUSES,
-  ROUTE_EVENTS,
-  routeEventsProblem,
-  ruleGroupSchema,
-  STATUS_EVENTS,
-} from '@internal/factory-contract';
-
 export {
   BOARD_PHASES_SORTS,
   boardPhasesResponseSchema,
@@ -38,16 +8,28 @@ export {
   workItemStartersResponseSchema,
 };
 export type { BoardPhasesResponse, RunQueueResponse, WorkItemFilterOptionsResponse };
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-
-import { validateSkillContent } from '@mastra/core/skills';
-import { z } from 'zod';
-import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
-import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
-import type { ModelPackSet } from '../model-packs.js';
-import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
+  sessionActivityResponseSchema,
+  BOARD_IDENTIFIER_RE,
+  BOARD_PHASES_SORTS,
+  boardPhasesResponseSchema,
+  cardRuleGroupSchema,
+  cardSchema,
+  cardStampSchema,
+  CLOSE_REASONS,
+  decisionListResponseSchema,
+  entitySchema,
+  INTAKE_ROUTE_RULE_FIELDS,
+  MAX_BOARD_IDENTIFIER_LENGTH,
+  MODEL_PACK_MODELS_MAX,
+  MODEL_PACK_NAME_MAX,
+  MODEL_PACKS_MAX,
+  modelIdSchema,
+  PULL_REQUEST_STATUSES,
+  ROUTE_EVENTS,
+  routeEventsProblem,
+  ruleGroupSchema,
+  runQueueResponseSchema,
   SESSION_ROW_ALL_OWNERS,
   SESSION_ROW_GROUP_BYS,
   SESSION_ROW_PINS_MAX,
@@ -58,7 +40,28 @@ import {
   SESSION_ROW_WINDOWS_MAX,
   sessionRowOwnerSchema,
   sessionRowSourceSchema,
-} from '../session/session-row-query.js';
+  STATUS_EVENTS,
+  workItemActivityResponseSchema,
+  workItemFilterOptionsResponseSchema,
+  workItemListResponseSchema,
+  workItemSessionRepositoryResponseSchema,
+  workItemStartersResponseSchema,
+} from '@internal/factory-contract';
+import type {
+  SessionActivityResponse,
+  BoardPhasesFilter,
+  BoardPhasesResponse,
+  CardChangeRequest,
+  ModelPackSet,
+  RunQueueResponse,
+  WorkItemFilterOptionsResponse,
+} from '@internal/factory-contract';
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
+import { validateSkillContent } from '@mastra/core/skills';
+import { z } from 'zod';
+import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import {
@@ -1078,22 +1081,9 @@ export const sessionRowsResponseSchema = z.object({
   owners: z.array(z.object({ userId: z.string(), name: z.string().optional(), avatarUrl: z.string().optional() })),
 });
 
-export const sessionActivityResponseSchema = z.object({
-  runningSessionIds: z.array(z.string()),
-  /** Sessions of a card, or of the reader, whose run waits on a person's answer. */
-  parkedSessionIds: z.array(z.string()),
-  /** The status of each card's sidebar row, by card id, for the cards neither idle nor done. */
-  cardStatuses: z.record(z.string(), sessionRowStatusSchema),
-  /** Cards one of whose sessions is running or parked on a person: no rival run may start on them. */
-  sessionHeldCardIds: z.array(z.string()),
-  /** Cards in `cardStatuses` working, and waiting on a person. */
-  cards: z.object({ working: countSchema, waiting: countSchema }),
-});
-
 export type SessionRowsQuery = z.output<typeof sessionRowsQuerySchema>;
 export type SessionRow = z.infer<typeof sessionRowSchema>;
 export type SessionRowsResponse = z.infer<typeof sessionRowsResponseSchema>;
-export type SessionActivityResponse = z.infer<typeof sessionActivityResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1943,3 +1933,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
 } as const satisfies Record<string, FactoryRouteContract>;
 
 export type FactoryRouteContractKey = keyof typeof FACTORY_ROUTE_CONTRACTS;
+
+export { sessionActivityResponseSchema };
+export type { SessionActivityResponse };

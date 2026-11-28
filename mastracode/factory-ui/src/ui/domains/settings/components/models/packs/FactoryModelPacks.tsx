@@ -1,5 +1,5 @@
-import { defaultModelPack } from '@mastra/factory/model-packs';
-import type { ModelPackSet } from '@mastra/factory/model-packs';
+import { defaultModelPack } from '@internal/factory-contract';
+import type { ModelPackSet } from '@internal/factory-contract';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useOrgKeyAdminQuery } from '../../../../../../hooks/use-providers';

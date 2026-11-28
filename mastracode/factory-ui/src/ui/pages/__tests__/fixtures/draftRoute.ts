@@ -1,4 +1,4 @@
-import type { ModelSelectionRequest } from '@mastra/factory/model-packs';
+import type { ModelSelectionRequest } from '@internal/factory-contract';
 import { http, HttpResponse } from 'msw';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';

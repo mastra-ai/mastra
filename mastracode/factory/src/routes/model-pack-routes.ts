@@ -1,10 +1,3 @@
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute } from '@mastra/core/server';
-import { registerApiRoute } from '@mastra/core/server';
-import type { Context } from 'hono';
-import { z } from 'zod';
-
 import {
   defaultModelPack,
   EMPTY_MODEL_PACK_SET,
@@ -13,13 +6,20 @@ import {
   modelSelectionRequestSchema,
   parseStoredModelSelection,
   resolveModelSelection,
-} from '../model-packs.js';
+} from '@internal/factory-contract';
 import type {
   ModelPackSet,
   ModelSelectionRequest,
   ResolvedModelSelection,
   StoredModelSelection,
-} from '../model-packs.js';
+} from '@internal/factory-contract';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { RequestContext } from '@mastra/core/request-context';
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
+import type { Context } from 'hono';
+import { z } from 'zod';
+
 import { resolveRoutedModelDefaults } from '../session/routed-model-defaults.js';
 import type { ModelDefaultRecord, ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type {

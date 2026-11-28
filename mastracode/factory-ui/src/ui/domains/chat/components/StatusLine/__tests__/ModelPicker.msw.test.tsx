@@ -1,5 +1,5 @@
+import type { ModelPack, ModelSelectionRequest, ResolvedModelSelection } from '@internal/factory-contract';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import type { ModelPack, ModelSelectionRequest, ResolvedModelSelection } from '@mastra/factory/model-packs';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

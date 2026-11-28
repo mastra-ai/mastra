@@ -18,6 +18,7 @@ import {
   workItemFilterOptionsQueryOptions,
   workItemQueryOptions,
   workItemStartersQueryOptions,
+  sessionActivityQueryOptions,
 } from '@mastra/react/hooks/factory';
 import { factoryProjectQueryOptions } from '../hooks/useFactoryDefaultModel';
 import { gitLabStatusQueryOptions } from '../hooks/useGitLabData';
@@ -29,7 +30,7 @@ import { linearStatusQueryOptions } from '../hooks/useLinearData';
 import { activePlatformConnectionQueryOptions } from '../hooks/usePlatformConnections';
 import { serverFeaturesQueryOptions } from '../hooks/useServerFeatures';
 import { serverStatusQueryOptions } from '../hooks/useServerStatus';
-import { sessionActivityQueryOptions, sessionRowsQueryOptions } from '../hooks/useSessionRows';
+import { sessionRowsQueryOptions } from '../hooks/useSessionRows';
 import { threadMessagesQueryOptions } from '../hooks/useAgentControllerThreadMessages';
 import { userSessionQueryOptions } from '../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from './domains/chat/services/constants';
@@ -106,7 +107,7 @@ export const prefetchFactoryLayout: Prefetch = (services, { params }) => {
   const { queryClient, api } = services;
   whenFactoryListed(services, factoryId, factory => {
     if (!hasLinkedRepository(factory)) return;
-    void queryClient.query(sessionActivityQueryOptions(api.baseUrl, factoryId)).catch(noop);
+    void queryClient.query(sessionActivityQueryOptions(api.mastra.getFactory(factoryId))).catch(noop);
   });
 };
 

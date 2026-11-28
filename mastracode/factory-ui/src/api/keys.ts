@@ -150,15 +150,14 @@ export const queryKeys = {
   factoryDecisions: factoryKeys.decisions,
   /** Under the decision lists, so whatever refreshes them refreshes the queue too. */
   factoryRunQueue: factoryKeys.runQueue,
-  factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
-    ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
+  factoryAudit: factoryKeys.audit,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   // Outside `workItems`: a rewrite of the cached cards must not reach these, which hold no card.
   sessionRowsRoot: factoryKeys.sessionRowsRoot,
   sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
     [...queryKeys.sessionRowsRoot(factoryId), request] as const,
-  sessionActivity: (factoryId: string | undefined) => ['factory', 'session-activity', factoryId ?? null] as const,
+  sessionActivity: factoryKeys.sessionActivity,
   providers: () => ['providers'] as const,
   mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>

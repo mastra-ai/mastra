@@ -6,6 +6,7 @@ import {
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
   FACTORY_LINEAR_EVENTS,
+  IDENTIFIER_RE,
 } from '@internal/factory-contract';
 import type {
   BoardPhaseKind,
@@ -26,7 +27,6 @@ import type {
 } from '@internal/factory-contract';
 import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
 import {
-  IDENTIFIER_RE,
   isBoardIdentifier,
   MAX_ROLE_LENGTH,
   MAX_SKILL_NAME_LENGTH,

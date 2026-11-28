@@ -12,8 +12,10 @@ import type {
   FactoryRuleStage,
   FactoryTransitionResult,
   RunQueueResponse,
+  SessionActivityResponse,
   SubmittedTransition,
   UpdateWorkItemInput,
+  WireAuditPage,
   WireWorkItem,
   WorkItem,
   WorkItemActivityResponse,
@@ -42,8 +44,10 @@ export type {
   FactoryRuleStage,
   FactoryTransitionResult,
   RunQueueResponse,
+  SessionActivityResponse,
   SubmittedTransition,
   TransitionOutcome,
+  WireAuditPage,
   UpdateWorkItemInput,
   WorkItem,
   WorkItemActivityResponse,
@@ -245,5 +249,22 @@ export class Factory extends BaseResource {
   /** The project's automated runs waiting for a run slot, oldest first, and the runs holding one. */
   runQueue({ signal }: Read = {}): Promise<RunQueueResponse> {
     return this.request(`${this.project}/run-queue`, { signal });
+  }
+
+  /** Audit events of the project, newest first; `before` takes the previous page's `nextCursor`. */
+  auditEvents(
+    options: { actorIds?: string[]; before?: string; limit?: number } = {},
+    { signal }: Read = {},
+  ): Promise<WireAuditPage> {
+    const query = new URLSearchParams();
+    if (options.actorIds?.length) query.set('actorIds', options.actorIds.join(','));
+    if (options.before) query.set('before', options.before);
+    if (options.limit) query.set('limit', String(options.limit));
+    return this.request(`${this.project}/audit${query.size > 0 ? `?${query}` : ''}`, { signal });
+  }
+
+  /** Which sessions are running or parked, and which cards they hold. */
+  sessionActivity({ signal }: Read = {}): Promise<SessionActivityResponse> {
+    return this.request(`${this.project}/session-activity`, { signal });
   }
 }

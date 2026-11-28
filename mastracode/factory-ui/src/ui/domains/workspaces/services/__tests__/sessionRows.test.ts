@@ -1,5 +1,5 @@
+import { SESSION_ROW_PINS_MAX } from '@internal/factory-contract';
 import { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
-import { SESSION_ROW_PINS_MAX } from '@mastra/factory/session/session-row-query';
 import { describe, expect, it } from 'vitest';
 
 import type { SessionRowWire } from '../../../../../api/types';
