@@ -19,6 +19,8 @@ The same limits apply to every built-in transport. Captured logs are now bounded
 
 The calling tool's abort signal now cancels the run and aborts in-flight `external_*` calls.
 
+`@mastra/quickjs` and `@mastra/isolated-vm` now require `@mastra/core >=1.87.0-0 <2.0.0-0`, because they consume the shared log collector and the new per-run log-cap options.
+
 ```ts
 const { tool } = createCodeMode({
   tools: { getTopProducts, getProductRatings },
