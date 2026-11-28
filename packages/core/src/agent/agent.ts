@@ -8885,6 +8885,7 @@ export class Agent<
     requestContext,
     toolsets,
     clientTools,
+    executableTools,
     runId,
     method,
   }: {
@@ -8894,6 +8895,8 @@ export class Agent<
     requestContext: RequestContext | undefined;
     toolsets?: Record<string, Record<string, unknown>>;
     clientTools?: Record<string, unknown>;
+    /** The tools the run will execute, keyed by the name the suspended step calls. Replaces the catalog lookup. */
+    executableTools?: Record<string, unknown>;
     runId: string;
     method: string;
   }): Promise<void> {
@@ -8911,13 +8914,16 @@ export class Agent<
           : undefined;
     if (!target?.toolName || target.requiresApproval) return;
 
-    const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
-    const tools: Record<string, any> = {
-      ...assigned,
-      ...Object.assign({}, ...Object.values(toolsets ?? {})),
-      ...clientTools,
-    };
-    const tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    let tool: any = executableTools?.[target.toolName];
+    if (!executableTools) {
+      const assigned = (await this.listTools({ requestContext, resolveWebSearch: false })) as Record<string, any>;
+      const tools: Record<string, any> = {
+        ...assigned,
+        ...Object.assign({}, ...Object.values(toolsets ?? {})),
+        ...clientTools,
+      };
+      tool = tools[target.toolName] ?? Object.values(tools).find(t => t?.id === target.toolName);
+    }
     // Tools resolved elsewhere (workspace, processors) keep the tool-call step's validation.
     if (!tool?.resumeSchema) return;
     const validation = validateToolInput(tool.resumeSchema, resumeData, target.toolName);
@@ -15576,6 +15582,9 @@ export class Agent<
     // The resumed segment always carries its own claim: without a context the
     // engine would restore the previous segment's claim from the snapshot.
     resumeRequestContext ??= new RequestContext();
+    // A warm resume with its own context, delegation or hooks rebuilds its request-built tools below.
+    const rebuildsRequestTools =
+      !coldSnapshot && !!(options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser);
     const resolvedOptions = (await this.#resolveDurableRunOptions(
       {
         ...(options as DurableAgentStreamOptions<TOutput>),
@@ -15685,6 +15694,29 @@ export class Agent<
           details: { agentName: this.name, runId },
         });
       }
+      // Checked against the tools the run registered, which the tool-call step executes. A resume
+      // that rebuilds them for this call below is left to the step.
+      if (current && !rebuildsRequestTools) {
+        try {
+          await this.#validateToolResumeData({
+            snapshot: current,
+            toolCallId: options?.toolCallId,
+            resumeData,
+            requestContext: resumeRequestContext,
+            executableTools: getRunRegistryEntry(runId, this.#mastra)?.tools ?? entry.tools ?? {},
+            runId,
+            method: 'resume',
+          });
+        } catch (error) {
+          // A rejected resume of a run this process never executed (a cold resume, or the idle
+          // loop re-entering one) must not leave behind the entry prepare() registered for it.
+          if (!priorExecution) {
+            this.executionRunRegistry.cleanup(runId);
+            deleteRunRegistryEntry(runId, this.#mastra);
+          }
+          throw error;
+        }
+      }
       if (resumeRequestContext) await this.coverMemory(executionFence, resumeRequestContext);
       ({ toolCalls: initialToolCalls, resumedText } = await this.#loadSuspendedIteration(runId));
       // Skip events already broadcast by the original run (e.g. the SUSPENDED
@@ -15721,7 +15753,7 @@ export class Agent<
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks || droppedStartingUser)) {
+    if (rebuildsRequestTools) {
       try {
         const requestTools = await this.agentForExecution.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
