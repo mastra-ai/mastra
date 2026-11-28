@@ -26891,8 +26891,8 @@
     },
     "packages/playground/src/pages/agents/agent/__tests__/thread-page.msw.test.tsx": {
       "tier": "in",
-      "since": "2026-11-26",
-      "last_failure": "2026-11-26",
+      "since": "2026-11-28",
+      "last_failure": "2026-11-28",
       "reason": "versioning-fail",
       "pr_failures": {
         "135882898948": {
