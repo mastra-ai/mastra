@@ -1,5 +1,14 @@
 # @mastra/daytona
 
+## 0.11.8-alpha.0
+
+### Patch Changes
+
+- Recover automatically when a cached Daytona sandbox has been auto-archived and lost its runner. Commands now fail with a "does not have a runner" validation error instead of the not-found errors we already treated as sandbox-dead, so the retry path never woke the sandbox. That pattern is now classified as a dead-sandbox error, so the existing retry reuses the same sandbox ID and resumes execution transparently. ([#31819](https://github.com/mastra-ai/mastra/pull/31819))
+
+- Updated dependencies [[`384327e`](https://github.com/mastra-ai/mastra/commit/384327ef510713716a5a4d55421a9bd74943336f), [`73b6375`](https://github.com/mastra-ai/mastra/commit/73b6375020f0101aa8d34de03bbb92f693892105), [`7390633`](https://github.com/mastra-ai/mastra/commit/7390633cdbc9069672715259ca3830faab54df89)]:
+  - @mastra/core@1.87.0-alpha.8
+
 ## 0.11.7
 
 ### Patch Changes

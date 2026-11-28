@@ -1,5 +1,16 @@
 # @mastra/memory
 
+## 1.41.4-alpha.1
+
+### Patch Changes
+
+- Fixed resuming a suspended durable agent run with observational memory after the first request's abort signal was aborted. The resume no longer fails with "This operation was aborted"; observational memory now follows the abort signal of the call that is currently running. ([#31535](https://github.com/mastra-ai/mastra/pull/31535))
+
+- Fixed Observational Memory cleanup blocking the event loop on long transcripts. Retention checks now track the remaining token count as messages are removed instead of re-counting the whole transcript for every removal, and the same messages are removed as before. ([#29377](https://github.com/mastra-ai/mastra/pull/29377))
+
+- Updated dependencies [[`384327e`](https://github.com/mastra-ai/mastra/commit/384327ef510713716a5a4d55421a9bd74943336f), [`73b6375`](https://github.com/mastra-ai/mastra/commit/73b6375020f0101aa8d34de03bbb92f693892105), [`7390633`](https://github.com/mastra-ai/mastra/commit/7390633cdbc9069672715259ca3830faab54df89)]:
+  - @mastra/core@1.87.0-alpha.8
+
 ## 1.41.4-alpha.0
 
 ### Patch Changes
