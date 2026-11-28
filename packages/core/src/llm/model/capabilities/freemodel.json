@@ -22,7 +22,17 @@
   ],
   "structuredOutput": ["gpt-5.3-codex", "gpt-5.4", "gpt-5.4-mini", "gpt-5.5"],
   "reasoning": {
-    "gpt-5.4": [
+    "claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "gpt-5.5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
@@ -40,16 +50,16 @@
         "min": 1024
       }
     ],
-    "claude-opus-4-7": [
+    "gpt-5.4": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "claude-opus-4-8": [
+    "gpt-5.3-codex": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "gpt-5.4-mini": [
@@ -58,20 +68,10 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "claude-opus-4-6": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "gpt-5.3-codex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-sonnet-4-6": [
@@ -84,10 +84,10 @@
         "min": 1024
       }
     ],
-    "gpt-5.5": [
+    "claude-opus-4-7": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

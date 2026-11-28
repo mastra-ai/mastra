@@ -30967,8 +30967,8 @@
       },
       "Qwen/Qwen3.5-9B": {
         "cost": {
-          "input": 0.085,
-          "output": 0.125
+          "input": 0.075,
+          "output": 0.11
         }
       },
       "Qwen/Qwen3.6-27B": {
@@ -31129,8 +31129,8 @@
       },
       "deepseek-ai/DeepSeek-V4-Pro": {
         "cost": {
-          "input": 0.53249,
-          "output": 1.5651
+          "input": 0.32969,
+          "output": 1.5086
         }
       },
       "deepseek-ai/DeepSeek-V4-Pro-0813": {
@@ -31255,8 +31255,8 @@
       },
       "meta-llama/Llama-3.3-70B-Instruct": {
         "cost": {
-          "input": 0.22,
-          "output": 0.5
+          "input": 0.1,
+          "output": 0.32
         }
       },
       "meta-llama/Llama-4-Maverick-17B-128E-Instruct": {
@@ -31545,8 +31545,8 @@
       },
       "zai-org/GLM-5.3-Flash": {
         "cost": {
-          "input": 0.042,
-          "output": 0.184
+          "input": 0.0356,
+          "output": 0.0815
         }
       }
     }
@@ -35320,9 +35320,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.51221,
-          "output": 1.5651,
-          "cache_read": 0.22
+          "input": 0.30941,
+          "output": 1.5358,
+          "cache_read": 0.24
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -35693,10 +35693,10 @@
       },
       "humansand/ampersand-v0.1": {
         "cost": {
-          "input": 0,
-          "output": 0,
+          "input": 1,
+          "output": 5.2,
           "reasoning": 0,
-          "cache_read": 0
+          "cache_read": 0.2
         }
       },
       "ibm-granite/granite-4.2-8b": {
@@ -49909,13 +49909,6 @@
           "cache_write": 0.003
         }
       },
-      "celeris-1": {
-        "cost": {
-          "input": 2,
-          "output": 6,
-          "cache_read": 1
-        }
-      },
       "claw-high": {
         "cost": {
           "input": 0.6,
@@ -52797,9 +52790,9 @@
       },
       "tencent/hy4-preview": {
         "cost": {
-          "input": 0.7506,
-          "output": 2.2509,
-          "cache_read": 0.0378
+          "input": 0.834,
+          "output": 2.501,
+          "cache_read": 0.042
         }
       },
       "thinkingmachines/Inkling-Small": {
@@ -60786,9 +60779,9 @@
       },
       "deepseek/deepseek-v4-pro": {
         "cost": {
-          "input": 0.51221,
-          "output": 1.5651,
-          "cache_read": 0.22
+          "input": 0.30941,
+          "output": 1.5358,
+          "cache_read": 0.24
         }
       },
       "deepseek/deepseek-v4-pro-0813": {
@@ -61715,9 +61708,9 @@
       },
       "nvidia/nemotron-3.5-lightning": {
         "cost": {
-          "input": 0.07,
+          "input": 0.05,
           "output": 0.2,
-          "cache_read": 0.04
+          "cache_read": 0.01
         }
       },
       "nvidia/nemotron-3.5-lightning:free": {
@@ -63763,7 +63756,7 @@
       "~moonshotai/kimi-latest": {
         "cost": {
           "input": 0.1824,
-          "output": 11.0055,
+          "output": 12.2894,
           "cache_read": 0.18
         }
       },
@@ -77498,6 +77491,12 @@
           "cache_read": 0.25
         }
       },
+      "nvidia-nemotron-3-5-lightning-30b-a3b": {
+        "cost": {
+          "input": 0.075,
+          "output": 0.3
+        }
+      },
       "nvidia-nemotron-3-5-super-vl-120b-a12b": {
         "cost": {
           "input": 0.2,
@@ -79186,8 +79185,9 @@
       },
       "humansand/ampersand-v0.1": {
         "cost": {
-          "input": 0,
-          "output": 0
+          "input": 1,
+          "output": 5.2,
+          "cache_read": 0.2
         }
       },
       "inception/mercury-3": {

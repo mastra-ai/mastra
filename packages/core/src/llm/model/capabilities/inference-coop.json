@@ -24,11 +24,6 @@
     "tinfoil/gpt-oss-120b"
   ],
   "reasoning": {
-    "regolo/qwen3.5-122b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "greenpt/glm-5.3-flash": [
       {
         "type": "effort",
@@ -63,6 +58,11 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "regolo/qwen3.5-122b": [
+      {
+        "type": "toggle"
       }
     ]
   }

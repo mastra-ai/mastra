@@ -32,11 +32,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -49,12 +44,7 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
@@ -69,6 +59,16 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
       }
     ]
   }

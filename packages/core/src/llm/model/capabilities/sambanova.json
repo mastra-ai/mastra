@@ -9,15 +9,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "gemma-4-31B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
     "MiniMax-M3.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemma-4-31B-it": [
-      {
-        "type": "toggle"
       }
     ],
     "gpt-oss-120b": [

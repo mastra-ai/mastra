@@ -9,6 +9,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "deepseek-v4-1-flash": [
       {
         "type": "toggle"
@@ -28,12 +34,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }
