@@ -60,16 +60,21 @@ export async function readMessageListState(
  * Stores an updated transcript where this run keeps it. Returns the fields to
  * spread into the step output: nothing when it went to workflow state,
  * `{ messageListState }` when the run threads it through step payloads.
+ *
+ * `extraState` goes to workflow state in the same write, for values that must
+ * be saved together with the transcript they describe.
  */
 export async function storeMessageListState(
   params: WritableTranscriptParams,
   messageListState: SerializedMessageListState,
+  extraState?: Record<string, unknown>,
 ): Promise<MessageListStateCarrier> {
   const stored = (await params.getState(['messageListState'])) as StoredMessageListStateCarrier | undefined;
   if (stored?.messageListState === undefined) {
+    if (extraState) await params.setState(extraState);
     return { messageListState };
   }
-  await params.setState({ messageListState: await dehydrateMessageListState(params, messageListState) });
+  await params.setState({ ...extraState, messageListState: await dehydrateMessageListState(params, messageListState) });
   return {};
 }
 
@@ -81,16 +86,24 @@ export async function storeMessageListState(
 export async function openMessageListState(
   params: TranscriptParams,
   stepPayload: MessageListStateCarrier,
-): Promise<{ read(): SerializedMessageListState; write(next: SerializedMessageListState): void }> {
+): Promise<{
+  read(): SerializedMessageListState;
+  /** `extraState` lands in workflow state with the transcript, as in {@link storeMessageListState}. */
+  write(next: SerializedMessageListState, extraState?: Record<string, unknown>): void;
+}> {
   // The predicate can't call setState, so `write` edits the state object itself:
   // only the whole state is that object, a picked key would be a copy.
   const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
+  const writeState = (extraState: Record<string, unknown> | undefined) => {
+    if (extraState && workflowState) Object.assign(workflowState, extraState);
+  };
   if (workflowState?.messageListState === undefined) {
     stepPayload.messageListState = await readMessageListState(params, stepPayload);
     return {
       read: () => stepPayload.messageListState as SerializedMessageListState,
-      write: next => {
+      write: (next, extraState) => {
         stepPayload.messageListState = next;
+        writeState(extraState);
       },
     };
   }
@@ -99,11 +112,12 @@ export async function openMessageListState(
   let current = await hydrateMidRun(run, workflowState.messageListState, params.abortSignal);
   return {
     read: () => current,
-    write: next => {
+    write: (next, extraState) => {
       current = next;
       // The messages the run recalled were restored (or verified) on the way
       // in, and saved ones were recorded when saved, so storing needs no reads.
       workflowState.messageListState = state?.fixedMemory ? run.refs.dehydrate(next) : next;
+      writeState(extraState);
     },
   };
 }

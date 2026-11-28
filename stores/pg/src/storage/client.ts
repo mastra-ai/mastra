@@ -85,6 +85,21 @@ export interface TxOptions {
    * `pool.connect()` is abandoned and its late connection released.
    */
   deadlineAt?: number;
+  /**
+   * Isolation level the transaction starts with, sent in its `BEGIN`. Defaults to the session's
+   * level.
+   */
+  isolationLevel?: 'read committed' | 'repeatable read' | 'serializable';
+}
+
+const ISOLATION_LEVELS = {
+  'read committed': 'READ COMMITTED',
+  'repeatable read': 'REPEATABLE READ',
+  serializable: 'SERIALIZABLE',
+} as const;
+
+function beginStatement(options?: TxOptions): string {
+  return options?.isolationLevel ? `BEGIN ISOLATION LEVEL ${ISOLATION_LEVELS[options.isolationLevel]}` : 'BEGIN';
 }
 
 /** @experimental */
@@ -259,7 +274,7 @@ export class PoolAdapter implements DbClient {
     let destroyClient = false;
     try {
       try {
-        await client.query('BEGIN');
+        await client.query(beginStatement(options));
       } catch (error) {
         destroyClient = true;
         throw error;
@@ -650,7 +665,7 @@ export class PinnedClientAdapter implements DbClient {
         throw new TransactionDeadlineError();
       }
       try {
-        await this.pinnedClient.query('BEGIN');
+        await this.pinnedClient.query(beginStatement(options));
       } catch (error) {
         this.#rollbackError = error;
         throw error;

@@ -466,7 +466,7 @@ const { aborted } = await agent.abortThread({
 ]}
 />
 
-Returns `{ aborted: boolean }`. For a remote active owner, `aborted: true` means the request was sent, not acknowledged. Clear-on-abort affects the receiving server's local queues and is forwarded to the active owner. It isn't a global queue clear. Local pending signals are still cleared if no active run is found and `aborted` is `false`.
+Returns `{ aborted: boolean }`. For a remote active owner, `aborted: true` means the request was sent, not acknowledged. Clear-on-abort affects the receiving server's local queues and is forwarded to the active owner, and the process that holds the run also deletes its [stored signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) that the run hasn't taken. It isn't a global queue clear, and the response doesn't wait for the deletes in storage. Local pending signals are still cleared if no active run is found and `aborted` is `false`.
 
 ### `cancelQueuedMessages()`
 
@@ -492,7 +492,7 @@ const { cancelledSignalIds } = await agent.cancelQueuedMessages({
 ]}
 />
 
-Returns `{ cancelledSignalIds: string[] }` with each ID cancelled on the receiving server process once. The response doesn't include remote acknowledgements. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
+Returns `{ cancelledSignalIds: string[] }` with each ID cancelled on the receiving server process once. For an evented agent whose run keeps its signals in [storage that keeps pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent), the list also includes signals the server process cancelled in storage, in the cases [`Agent.cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) lists. Remote acknowledgements aren't part of the response. Signals already handed to execution or another owner aren't included. Missing, empty, or oversized ID lists return HTTP 400. Thread ownership restrictions apply to both cancellation routes.
 
 The server publishes all requested IDs through its shared PubSub backend, even when none are pending on the receiving process. Other subscribed instances can then remove matching pending input, but this best-effort, asynchronous propagation doesn't confirm remote cancellation. Cancellation doesn't undo saved messages, state updates, notification records, or acceptance acknowledgements. It doesn't cancel continuations from `continueWithMessages()`.
 

@@ -19,7 +19,12 @@ import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import { getRunStreamPublisher } from './run-stream-publisher';
 import type { RunRegistryEntry } from './types';
 
-export { publishAbortRequest, requestAcknowledgedAbort, subscribeToAbortRequests } from '../streams/abort-transport';
+export {
+  publishAbortRequest,
+  publishSignalAvailable,
+  requestAcknowledgedAbort,
+  subscribeToAbortRequests,
+} from '../streams/abort-transport';
 
 /**
  * Make the current process responsive to abort requests for `runId`.
@@ -68,10 +73,15 @@ export async function ensureRemoteAbortListener(
 
   // Set before awaiting: two steps starting concurrently in this process
   // would otherwise both pass the check and install duplicate subscriptions.
-  const listener = getRunStreamPublisher(runId, entry, mastra).listenForAbort(pubsub, () => {
-    const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
-    if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
-  });
+  const listener = getRunStreamPublisher(runId, entry, mastra).listenForAbort(
+    pubsub,
+    () => {
+      const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
+      if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+    },
+    // Only the run's current LLM step listens; between steps a hint is dropped, and the row waits for a drain.
+    signalId => getRunRegistryEntry(runId, mastra)?.onSignalAvailable?.(signalId),
+  );
   entry.remoteAbortListener = listener;
   try {
     await listener.ready;

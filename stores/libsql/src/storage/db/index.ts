@@ -49,6 +49,11 @@ export type LibSQLDomainBaseConfig = {
    */
   embeddedReplica?: boolean;
   /**
+   * Whether every process that opens this database reads and writes the same rows.
+   * @internal Set by `LibSQLStore`, which sees the whole connection config.
+   */
+  sharedAcrossProcesses?: boolean;
+  /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
    */
@@ -295,6 +300,42 @@ export class LibSQLDB {
    */
   public insert(args: { tableName: TABLE_NAMES; record: Record<string, any>; check?: RunFenceCheck }): Promise<void> {
     return this.executeWriteOperationWithRetry(() => this.doInsert(args), `insert into table ${args.tableName}`);
+  }
+
+  /**
+   * `insert` for a table keyed by `id`, except that an existing row keeps its values in the
+   * `preserve` columns. `INSERT OR REPLACE` deletes the old row first, which resets them.
+   * Every other column is written as `insert` writes it, so columns missing from `record`
+   * get their default.
+   */
+  public insertPreserving(args: {
+    tableName: TABLE_NAMES;
+    record: Record<string, any>;
+    preserve: string[];
+    check?: RunFenceCheck;
+  }): Promise<void> {
+    return this.executeWriteOperationWithRetry(async () => {
+      const filteredRecord = await this.filterRecordToKnownColumns(args.tableName, args.record);
+      if (Object.keys(filteredRecord).length === 0) return;
+      const knownColumns = await this.getTableColumns(args.tableName);
+      const columns = knownColumns.size > 0 ? [...knownColumns] : Object.keys(filteredRecord);
+      // Names come from the table's catalog, which can hold columns a user added under any name, so
+      // they are quoted rather than validated.
+      const updates = columns
+        .filter(column => column !== 'id' && !args.preserve.includes(column))
+        .map(column => {
+          const quoted = `"${column.replaceAll('"', '""')}"`;
+          return `${quoted} = excluded.${quoted}`;
+        });
+      const statement = prepareStatement({ tableName: args.tableName, record: filteredRecord });
+      if (!statement.sql.startsWith('INSERT OR REPLACE')) {
+        throw new Error(`Unexpected insert statement generated for table ${args.tableName}`);
+      }
+      statement.sql = `${statement.sql.replace('INSERT OR REPLACE', 'INSERT')} ON CONFLICT(id) DO ${
+        updates.length > 0 ? `UPDATE SET ${updates.join(', ')}` : 'NOTHING'
+      }`;
+      await withRunFence(this.client, args.check, writer => writer.execute(statement));
+    }, `insert into table ${args.tableName}`);
   }
 
   /** Inserts a record without replacing an existing primary key. */

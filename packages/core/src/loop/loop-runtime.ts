@@ -104,5 +104,5 @@ export interface LoopRuntime {
    * `runId` is pre-bound by the resolving engine and the underlying
    * runtime defaults `scope` to `'pending'`.
    */
-  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] | Promise<CreatedAgentSignal[]>;
 }

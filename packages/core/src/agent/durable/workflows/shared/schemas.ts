@@ -163,6 +163,7 @@ export const baseDurableAgenticInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
+  signalsStored: z.boolean().optional(),
   messageListState: z.any(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
@@ -188,6 +189,7 @@ export const baseIterationStateSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
+  signalsStored: z.boolean().optional(),
   // Absent when the run keeps the transcript in workflow state.
   messageListState: z.any().optional(),
   // Immutable untagged system-message baseline captured before the first

@@ -501,6 +501,7 @@ describe('EventedAgent inter-iteration signal drain', () => {
       name: 'evented-inter-iter-drain-agent',
       instructions: 'You are helpful.',
       model,
+      memory: new MockMemory(),
       tools: {
         myTool: {
           description: 'A tool',
@@ -516,34 +517,35 @@ describe('EventedAgent inter-iteration signal drain', () => {
       pubsub,
       agents: { 'evented-inter-iter-drain-agent': eventedAgent as any },
     });
-
-    const originalGet = globalRunRegistry.get.bind(globalRunRegistry);
-    let drainCallCount = 0;
-    let installedDrain = false;
-    vi.spyOn(globalRunRegistry, 'get').mockImplementation((runId: string) => {
-      const entry = originalGet(runId);
-      if (entry && !installedDrain) {
-        installedDrain = true;
-        const originalDrain = entry.drainPendingSignals;
-        entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
-          // The second pending drain is the loop predicate's, after the first iteration.
-          if ((scope ?? 'pending') === 'pending' && ++drainCallCount === 2) {
-            return [createTestSignal('inter-iter signal')];
-          }
-          return originalDrain?.(scope) ?? [];
-        };
+    const scope = { threadId: 'evented-inter-iter-thread', resourceId: 'evented-inter-iter-resource' };
+    // The run's signals are stored in its memory storage. The send lands right before the third claim, which is
+    // the loop predicate's after the first iteration (the first is the first model request's, the second the
+    // signal-drain step's).
+    const memoryStore = (await (await agent.getMemory())!.storage.getStore('memory'))!;
+    const claim = memoryStore.claimPendingSignals.bind(memoryStore);
+    let claims = 0;
+    let sent = false;
+    vi.spyOn(memoryStore, 'claimPendingSignals').mockImplementation(async args => {
+      if (++claims === 3) {
+        const result = eventedAgent.sendSignal({ type: 'user', contents: 'inter-iter signal' }, scope);
+        await expect(result.accepted).resolves.toMatchObject({ action: 'deliver' });
+        sent = true;
       }
-      return entry;
+      return claim(args);
     });
 
     try {
-      const { fullStream, cleanup } = await eventedAgent.stream('Hello', { maxSteps: 5 });
+      const { fullStream, cleanup } = await eventedAgent.stream('Hello', {
+        maxSteps: 5,
+        memory: { thread: scope.threadId, resource: scope.resourceId },
+      });
       for await (const _chunk of fullStream) {
         // drain
       }
       cleanup?.();
 
-      expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('inter-iter signal');
+      expect(sent).toBe(true);
+      expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('inter-iter signal')).toHaveLength(2);
     } finally {
       await mastra.stopWorkers();
       await pubsub.close();

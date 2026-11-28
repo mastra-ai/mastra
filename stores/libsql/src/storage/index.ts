@@ -6,6 +6,7 @@ import { gateIfLocalFile } from '../shared/file-transaction-gate';
 import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import { isRemoteClient } from './db/client';
 import type { SqliteClient as Client } from './db/client';
 import { isTransientNetworkError } from './db/utils';
 import { AgentsLibSQL } from './domains/agents';
@@ -262,6 +263,9 @@ export class LibSQLStore extends MastraCompositeStore {
     const domainConfig = {
       client: this.client,
       embeddedReplica: 'url' in config && !!config.syncUrl,
+      // In-memory databases and embedded replicas are not shared, and a raw client counts only when it is
+      // remote. A wrong `false` only makes senders in other processes forward; a wrong `true` loses signals.
+      sharedAcrossProcesses: 'url' in config ? !isSingleConnectionDatabase(config) : isRemoteClient(config.client),
       maxRetries: this.maxRetries,
       initialBackoffMs: this.initialBackoffMs,
     };

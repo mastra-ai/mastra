@@ -61,6 +61,7 @@ import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { ThreadSignalsStore } from '../stored-signals';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { TripwireData } from '../trip-wire';
 import type { AgentMethodType, GoalConfig, StructuredOutputOptions, ToolsInput } from '../types';
@@ -350,6 +351,14 @@ export interface DurableAgenticWorkflowInput {
   agentId: string;
   /** Agent name for logging/tracing */
   agentName?: string;
+  /**
+   * Whether signals sent to this run are kept in the messages table of its
+   * memory storage rather than in the starting process's memory. Decided once
+   * when the run is prepared, so every process that executes its steps reads
+   * the same place senders write to. Absent on runs that keep them in memory.
+   * @internal
+   */
+  signalsStored?: boolean;
   /**
    * Exact stored version id the run resolved to at start time. A run that
    * suspends while executing a stored version must resume on *that* version —
@@ -1007,6 +1016,28 @@ export interface RunRegistryEntry {
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**
+   * Interrupts the latest LLM step's model request the way its pending-signal
+   * listener does. Set for runs that keep their signals in storage: a signal a
+   * processor stores for such a run reaches no queue listener. Cleared when
+   * that step ends.
+   * @internal
+   */
+  interruptStepForSignals?: PendingSignalListener;
+  /**
+   * Hears `signal-available` hints for the latest LLM step of a run that keeps
+   * its signals in storage, from whichever process stored them. Cleared when
+   * that step ends.
+   * @internal
+   */
+  onSignalAvailable?: (signalId: string) => void;
+  /**
+   * Where this process reads and settles the signals of a run that keeps them
+   * in memory storage, once resolved: set by preparation, or by the first
+   * resolution that succeeded. See `durableRunSignalsStore`.
+   * @internal
+   */
+  pendingSignalsStore?: ThreadSignalsStore;
+  /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
    * (so `memory.options.generateTitle` never fired for durable/evented agents).
@@ -1075,6 +1106,12 @@ export interface RunRegistryEntry {
   timeoutTotalMs?: number;
   /** A late subscriber re-publishes the winning deadline error at most once per segment. */
   deadlineErrorRedelivered?: boolean;
+  /**
+   * Set once this process's total deadline is going to close the run's stored signals with the transcript it saves.
+   * The run's other endings then leave the close to it.
+   * @internal
+   */
+  deadlineClosesStoredSignals?: boolean;
   /**
    * This process's subscription to cross-process abort requests for the run.
    * Set by `ensureRemoteAbortListener`, which every durable step calls on

@@ -952,9 +952,9 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         await queued.accepted;
         await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
         // Isolate this run's cancellation from the existing queued-message follow-up routing.
-        expect(agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] }).cancelledSignalIds).toEqual([
-          queued.signal.id,
-        ]);
+        expect(await agent.cancelQueuedMessages({ ...scope, signalIds: [queued.signal.id] })).toEqual({
+          cancelledSignalIds: [queued.signal.id],
+        });
         if (cancellation === 'caller') controller.abort();
         await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2_500 });
         expect(prompts).toHaveLength(priorAccepted ? 2 : 1);
@@ -1133,6 +1133,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         },
       ],
     });
+    // An evented run takes its signals from its memory storage.
+    const storedSignals = engine !== 'durable';
     const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
     const stream = await agent.stream('initial question', {
       memory: { thread: scope.threadId, resource: scope.resourceId },
@@ -1151,12 +1153,18 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await queued.accepted;
       await vi.waitFor(() => expect(requestSignal?.aborted).toBe(true));
       const drain = vi.fn(entry.drainPendingSignals);
-      entry.drainPendingSignals = drain;
+      if (!storedSignals) entry.drainPendingSignals = drain;
       await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2500 });
       held.release();
       await within(consumption);
       await within(entry.workflowExecution);
       expect(drain).not.toHaveBeenCalled();
+      if (storedSignals) {
+        // The run ended without taking it: the signal still waits for the thread's next run.
+        const memoryStore = (await memory.storage.getStore('memory'))!;
+        const pending = await memoryStore.listPendingSignals({ threadId: scope.threadId });
+        expect(pending.map(row => row.id)).toEqual([queued.signal.id]);
+      }
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
       expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(0);
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(0);
@@ -1164,7 +1172,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(onError).toHaveBeenCalledTimes(1);
       await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
     } finally {
-      if (queuedSignalId) agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
+      if (queuedSignalId) await agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
       held.release();
       stream.abort();
       await settle(consumption);

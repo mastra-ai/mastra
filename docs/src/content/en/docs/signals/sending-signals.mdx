@@ -58,7 +58,7 @@ const result = agent.queueMessage('Also check whether the tests need updates.', 
 await result.accepted
 ```
 
-Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes queued input without stopping the active run. Cancellation is best-effort across processes and doesn't revoke accepted input.
+Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes input that no run has taken yet, without stopping the active run. Its awaited result lists the IDs this process cancelled, including ones it deleted from memory storage when it knows the thread's store: this process started the thread's current run and that run hasn't ended, or the agent's memory is a fixed instance and this process knows the thread's run keeps its signals in storage. Other processes cancel matching input when they get the request, and those IDs aren't in the result. Input a run already took stays delivered.
 
 [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) queues typed context with the same behavior but keeps the signal's `type`, `tagName`, and attributes.
 
@@ -83,7 +83,7 @@ await result.accepted
 
 Mastra passes `contents` as written and XML-escapes attribute values. A closing tag matching the signal's own tag is escaped so content can't end it early; this isn't a prompt-injection defense, so treat forwarded third-party text as untrusted. Use XML-safe `tagName` and attribute names with letters, numbers, periods, hyphens, or the underscore character, starting with a letter or underscore.
 
-Like `sendMessage()`, `sendSignal()` delivers by default. Set `transient: true` to apply context only to the current request; Mastra doesn't store it, and transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
+Like `sendMessage()`, `sendSignal()` delivers by default. Set `transient: true` to apply context only to the current request. Mastra never saves a transient signal as a message, so later turns don't find it in the history. When the run keeps its signals in memory storage, the signal waits there as a row of the messages table under the reserved thread ID `mastra-queue:pending:<threadId>`, and under `mastra-queue:taken:<threadId>` once a run takes it, with no resource ID, and no message read by thread or resource returns it. The row is deleted when the run that took it ends. One no run took waits for the thread's next turn. A run whose failure carries no saved progress, such as a step that runs out of deliveries with `storageVersion: 2`, gives back the signals it took, and the thread's next turn receives them again, so a transient signal can be seen twice. When the step that took a signal crashes before saving its state in a run that never recovers or ends, or when the storage call that settles the run's signals at its end fails, the thread's next run takes the signal again. Transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
 
 ## Input that outlives the conversation
 
@@ -121,7 +121,7 @@ if (action === 'persist') {
 }
 ```
 
-Only idle threads persist here. An active thread still delivers to the running run, so `persisted` is set only when the action is `persist`.
+Only idle threads persist here. An active thread still delivers to the active run, so `persisted` is set only when the action is `persist`.
 
 Message and signal sends return an `accepted` promise. It resolves when Mastra decides what to do, not when a run finishes. `sendNotificationSignal()` includes `accepted` only when its delivery policy emits a signal, so check `decision` first. `sendStateSignal()` omits it when it skips an unchanged snapshot.
 
@@ -131,13 +131,14 @@ The `accepted` promise resolves with one of these actions:
 - `deliver`: the input was sent to a run, or another process accepted responsibility for starting one.
 - `persist`: the input is to be stored without delivery or a new run. Wait for `persisted` to confirm the write.
 - `discard`: the input was dropped.
-- `blocked`: the signal couldn't start or join a run. `reason` is `thread-blocked` when another run, such as a paused or suspended one, owns the thread, or `scope-mismatch` when the signal's `scopes` differ from those of the run active on the thread. Resume or wait for run `runId` to end, then send the signal again.
+- `blocked`: the signal couldn't start or join a run, and Mastra doesn't keep it. `reason` is `thread-blocked` when another run, such as a paused or suspended one, owns the thread, or when run `runId` ended before a process that stores input directly could store it. `reason` is `scope-mismatch` when the signal's `scopes` differ from those of the run active on the thread. Resume or wait for run `runId` to end, then send the signal again.
+  When the action is `wake`, the result carries the run's `output` stream. A run that fails after starting reports the error there. A routing failure rejects `accepted`. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
 
-When the action is `wake`, the result carries the run's `output` stream. A run that fails after starting reports the error there. A routing failure rejects `accepted`. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
+An evented agent on [storage that keeps pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) stores input sent to its active run. When the process that receives the input writes it to storage, `accepted` resolves after the write and rejects when the write fails. A process that forwards the input to the process that holds the run resolves `deliver` before the input is stored. [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) lists the cases.
 
 ## When the agent sees your input
 
-When input arrives during a model request, Mastra can cancel that request and retry it with the new input. The interruption window stays open while the model produces only reasoning or metadata, or waits for its first token. It closes when the model produces text, a tool call, or other content. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. It adds nothing to `maxSteps` and leaves `stepNumber` unchanged. There's no separate interruption limit, so repeated input can restart reasoning until the request completes, the run is cancelled, or its timeout expires.
+When input arrives during a model request, Mastra can cancel that request and retry it with the new input. For an evented agent whose request runs in another process, this needs [storage that shares pending signals across processes](/docs/server/pubsub#signals-sent-to-a-running-evented-agent). The interruption window stays open while the model produces only reasoning or metadata, or waits for its first token. It closes when the model produces text, a tool call, or other content. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. It adds nothing to `maxSteps` and leaves `stepNumber` unchanged. There's no separate interruption limit, so repeated input can restart reasoning until the request completes, the run is cancelled, or its timeout expires.
 
 The window closes once the request produces text, a tool call, or other content. Input then waits for the next loop boundary. Running tools aren't cancelled or repeated, and queued input never jumps ahead. If `maxSteps` is reached first, Mastra may save queued input without a response.
 
@@ -153,7 +154,7 @@ Aborting a run preserves queued input by default. Pass `clearPendingSignals: tru
 subscription.abort({ clearPendingSignals: true })
 ```
 
-Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed and a later message can start a run. With shared PubSub, the clear request reaches the owning process but clears only its local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuations are separate, so aborting the original doesn't cancel them.
+Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed and a later message can start a run. With shared PubSub, the clear request reaches the process that holds the run, which clears its local queue and the signals stored for the run that the run hasn't taken. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes selected input without stopping the run and returns a promise of the cancelled IDs. Neither abort nor cancellation changes an `accepted` result that already resolved, but both can remove input answered with `deliver` that the run hasn't taken yet. Continuations are separate, so aborting the original doesn't cancel them.
 
 ## AgentController and session
 

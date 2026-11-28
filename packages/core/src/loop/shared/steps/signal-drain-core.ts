@@ -16,8 +16,13 @@ export type SignalDrainOutcome = { drained: false } | { drained: true; nextMessa
  * `MessageList` from serialized state only when `rotateResponseMessageId` /
  * `addSignal` are first invoked, preserving its drain-first ordering.
  *
+ * The drain may return the signals or a promise of them. Only a promise is
+ * awaited, so with a synchronous drain no other microtask runs between taking
+ * the signals and the first transcript mutation.
+ *
  * Error policy is per-engine, matching each engine's shipped pre-unification
- * behavior:
+ * behavior. A drain that throws and a drain whose promise rejects are the
+ * same failure:
  *
  * - `'fatal'` (default engine): a drain failure rethrows and fails the run.
  *   The released default loop had no catch around either drain site (the
@@ -27,13 +32,16 @@ export type SignalDrainOutcome = { drained: false } | { drained: true; nextMessa
  * - `'best-effort'` (durable engine): a failure is logged and reported as
  *   `{ drained: false }` rather than failing the run. Durable redelivery
  *   re-runs the drain site, and the drain call is inside the guard, so
- *   signals remain queued for the next site when the drain itself throws.
+ *   signals remain queued for the next site when the drain fails, provided
+ *   a failing drain consumes nothing.
  *   A failure after draining (rotate/append/emit) cannot roll back
  *   transcript mutations already applied; the next drain site simply sees
  *   an empty queue.
  */
 export async function drainSignalsToTranscript(deps: {
-  drainPendingSignals: ((scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]) | undefined;
+  drainPendingSignals:
+    | ((scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] | Promise<CreatedAgentSignal[]>)
+    | undefined;
   rotateResponseMessageId: (sealMessageId?: string) => string;
   addSignal: (signal: CreatedAgentSignal) => { toDataPart(): unknown };
   emitChunk: (chunk: unknown) => void | Promise<void>;
@@ -48,7 +56,8 @@ export async function drainSignalsToTranscript(deps: {
   logger?: IMastraLogger;
 }): Promise<SignalDrainOutcome> {
   try {
-    const pendingSignals = deps.drainPendingSignals?.() ?? [];
+    const drained = deps.drainPendingSignals?.() ?? [];
+    const pendingSignals = Array.isArray(drained) ? drained : ((await drained) ?? []);
     if (pendingSignals.length === 0) {
       return { drained: false };
     }

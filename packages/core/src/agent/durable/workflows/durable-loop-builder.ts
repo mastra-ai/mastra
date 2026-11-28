@@ -28,7 +28,9 @@ import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import { markFrameworkCondition } from '../../../workflows/framework-condition';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
+import type { SerializedMessageListState } from '../../message-list/state';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
+import type { CreatedAgentSignal } from '../../signals';
 import { diffResponseMessages } from '../../streams/response-messages';
 import type { ResponseMessagesCursor } from '../../streams/response-messages';
 import {
@@ -48,6 +50,13 @@ import {
 import { withExecutionStreamProducer } from '../execution-stream-publisher';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { liveSegmentSpan, segmentSpanData } from '../segment-spans';
+import {
+  CONSUMED_SIGNAL_IDS_KEY,
+  closeStoredSignalRun,
+  inputSignalIds,
+  storedSignalDrain,
+} from '../stored-signal-drain';
+import type { StoredSignalDrain } from '../stored-signal-drain';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -180,6 +189,7 @@ const durableAgenticInputSchema = z.object({
   runId: z.string(),
   agentId: z.string(),
   agentName: z.string().optional(),
+  signalsStored: z.boolean().optional(),
   // Exact stored version id the run resolved to at start time; resume()/recover()
   // read it from the persisted workflow input to pin the run to that version
   // (#22128). Absent for purely code-defined agents.
@@ -364,6 +374,42 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
   }
 
   /**
+   * The store-backed drain for a step or the loop predicate, when the run's
+   * signals are read from the store here. `state()` is the consumed set to
+   * save with the transcript once the drain claimed.
+   */
+  #storedSignalDrain(
+    params: { getInitData(): unknown; getState(keys?: readonly string[]): Promise<unknown>; requestContext?: any },
+    rt: DurableLoopRuntime,
+  ) {
+    const claim = storedSignalDrain({
+      mastra: rt.mastra,
+      runId: rt.runId,
+      input: params.getInitData() as Parameters<typeof storedSignalDrain>[0]['input'],
+      requestContext: params.requestContext,
+      getState: keys => params.getState(keys),
+    });
+    if (!claim) return undefined;
+    let drained: StoredSignalDrain | undefined;
+    return {
+      drain: async (): Promise<CreatedAgentSignal[]> => {
+        if (rt.abortSignal?.aborted) return [];
+        drained = await claim();
+        return drained?.signals ?? [];
+      },
+      state: () => drained?.state,
+      /**
+       * Call with the transcript holding what the drain took, before its state is saved, so a total deadline this
+       * process runs from then on saves those signals with the transcript.
+       */
+      captureForDeadline: (messageListState: SerializedMessageListState) => {
+        const entry = getRunRegistryEntry(rt.runId, rt.mastra);
+        if (entry?.timeoutTotalMs) entry.completedStepsState = JSON.parse(JSON.stringify(messageListState));
+      },
+    };
+  }
+
+  /**
    * TODO: always use pubsub, it's better
    * Chunk transport: publish through pubsub instead of enqueueing onto a live
    * stream controller. No-op when the run has no pubsub transport — callers
@@ -416,13 +462,15 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
         const execOutput = stepParams.inputData as Record<string, any>;
         if (execOutput.stepResult?.signalPreempted && !execOutput.stepResult.isContinued) return execOutput;
         const rt = this.resolveRuntime(stepParams);
-        if (!rt.drainPendingSignals) return execOutput;
+        const stored = this.#storedSignalDrain(stepParams, rt);
+        const drainPendingSignals = stored?.drain ?? rt.drainPendingSignals;
+        if (!drainPendingSignals) return execOutput;
         try {
           const messageListState = await readMessageListState(stepParams, execOutput);
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
           const list = () => (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(messageListState));
           const outcome = await drainSignalsToTranscript({
-            drainPendingSignals: rt.drainPendingSignals,
+            drainPendingSignals,
             rotateResponseMessageId: sealMessageId => list().rotateResponseMessageId(sealMessageId),
             addSignal: signal => list().addSignal(signal),
             emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -433,9 +481,11 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             logger: rt.logger,
           });
           if (!outcome.drained || !drainList) return execOutput;
+          const drainedState = drainList.serialize();
+          stored?.captureForDeadline(drainedState);
           return {
             ...execOutput,
-            ...(await storeMessageListState(stepParams, drainList.serialize())),
+            ...(await storeMessageListState(stepParams, drainedState, stored?.state())),
             messageId: outcome.nextMessageId,
             stepResult: {
               ...execOutput.stepResult,
@@ -536,6 +586,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
           ...update,
           ...(await storeAccumulatedSteps(params, accumulatedSteps)),
           agentVersionId: initData.agentVersionId,
+          ...(initData.signalsStored ? { signalsStored: true } : {}),
           modelList: initData.modelList,
         });
       }
@@ -607,6 +658,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               agentId: state.agentId,
               agentVersionId: state.agentVersionId,
               agentName: state.agentName,
+              ...(state.signalsStored ? { signalsStored: true } : {}),
               messageListState: state.messageListState,
               initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
@@ -717,6 +769,7 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               ...baseUpdate,
               ...(await storeAccumulatedSteps(params, accumulatedSteps)),
               agentVersionId: initData.agentVersionId,
+              ...(initData.signalsStored ? { signalsStored: true } : {}),
               modelList: initData.modelList,
             };
 
@@ -848,12 +901,14 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
       // core resolve to `drained: false` and the next iteration runs with the
       // un-drained state.
       let drainForcedContinue = false;
-      if (rt.pubsub && rt.drainPendingSignals) {
+      const stored = this.#storedSignalDrain(params, rt);
+      const drainPendingSignals = stored?.drain ?? rt.drainPendingSignals;
+      if (rt.pubsub && drainPendingSignals) {
         try {
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
           const list = () => (drainList ??= createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.read()));
           const drainOutcome = await drainSignalsToTranscript({
-            drainPendingSignals: rt.drainPendingSignals,
+            drainPendingSignals,
             rotateResponseMessageId: () => list().rotateResponseMessageId(),
             addSignal: signal => list().addSignal(signal),
             emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -862,9 +917,12 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             errorPolicy: 'best-effort',
             logger: rt.logger,
           });
+          const consumed = stored?.state();
           if (drainOutcome.drained && drainList) {
             state.messageId = drainOutcome.nextMessageId;
-            transcript.write(drainList.serialize());
+            const drainedState = drainList.serialize();
+            stored?.captureForDeadline(drainedState);
+            transcript.write(drainedState, consumed);
 
             // Force continuation — the LLM must see the injected signals
             if (state.lastStepResult) {
@@ -1118,6 +1176,10 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             await params.setState({
               accumulatedSteps: [],
               messageListState: await dehydrateMessageListState(params, messageListState),
+              // A follow-up turn starts with its first signal as input. When memory didn't save that
+              // signal's row before the start, the run's first request claims it with the rest, so
+              // listing it here keeps it from being added twice and lets the run's close settle it.
+              ...(input.signalsStored ? { [CONSUMED_SIGNAL_IDS_KEY]: inputSignalIds(initialMessageList) } : {}),
             });
             const iterationState: IterationState = {
               ...input,
@@ -1273,6 +1335,17 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
             // The state carries the facts across workers; the registry is the fallback for
             // runs whose snapshots predate those fields.
             const stopCause = state.tracingStopCause ?? reg?.tracingStopCause;
+
+            // Before FINISH: the process that started the run reacts to it by looking for the thread's
+            // next turn, and a send after the close gets `run-closed` instead of waiting on this run.
+            const closing = closeStoredSignalRun({
+              mastra: mastra as Mastra | undefined,
+              runId: state.runId,
+              input: initData,
+              requestContext,
+              state: () => params.getState([CONSUMED_SIGNAL_IDS_KEY]),
+            });
+            if (closing) await closing;
 
             if (pubsub) {
               await emitFinishEvent(pubsub, state.runId, {

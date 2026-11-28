@@ -38,6 +38,18 @@ export interface StepAgentOptions {
   finalText?: string;
   onToolEvent?: (event: StepToolEvent) => void;
   onModelCall?: (call: number) => void;
+  /** Receives each model call's prompt, so a test can check what the model was actually sent. */
+  onModelPrompt?: (call: number, prompt: unknown) => void;
+  /**
+   * This model call streams reasoning and then holds until its request is aborted, as a model still thinking does,
+   * or until `releaseReasoning` resolves, when it answers. `onReasoning` runs with `reached` once the reasoning is
+   * out, then once with `cut-short` or `answered`, whichever happened first.
+   */
+  reasoningAt?: number;
+  releaseReasoning?: Promise<void>;
+  onReasoning?: (event: { call: number; state: 'reached' | 'cut-short' | 'answered' }) => void;
+  /** Holds a model call's answer until the returned promise resolves. */
+  holdModelCall?: (call: number) => Promise<void> | undefined;
   inputProcessors?: AgentConfig['inputProcessors'];
   outputProcessors?: AgentConfig['outputProcessors'];
 }
@@ -72,18 +84,63 @@ export function createStepAgent({
   memory,
   onToolEvent,
   onModelCall,
+  onModelPrompt,
+  reasoningAt,
+  releaseReasoning,
+  onReasoning,
+  holdModelCall,
   inputProcessors,
   outputProcessors,
 }: StepAgentOptions) {
   let calls = 0;
   const model = new MastraLanguageModelV2Mock({
-    doStream: async () => {
+    doStream: async ({ prompt, abortSignal }) => {
       const call = ++calls;
       onModelCall?.(call);
+      onModelPrompt?.(call, prompt);
+      await holdModelCall?.(call);
       const head = [
         { type: 'stream-start', warnings: [] },
         { type: 'response-metadata', id: `resp-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
       ];
+      if (call === reasoningAt) {
+        return {
+          stream: new ReadableStream<any>({
+            start(controller) {
+              for (const part of head) controller.enqueue(part);
+              controller.enqueue({ type: 'reasoning-start', id: 'thinking' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'thinking', delta: 'thinking' });
+              let settled = false;
+              const cut = () => {
+                if (settled) return;
+                settled = true;
+                onReasoning?.({ call, state: 'cut-short' });
+                controller.error(abortSignal?.reason);
+              };
+              // A signal aborted before the stream started never fires its listener.
+              if (abortSignal?.aborted) cut();
+              else abortSignal?.addEventListener('abort', cut, { once: true });
+              void releaseReasoning?.then(() => {
+                if (settled) return;
+                settled = true;
+                onReasoning?.({ call, state: 'answered' });
+                controller.enqueue({ type: 'reasoning-end', id: 'thinking' });
+                controller.enqueue({ type: 'text-start', id: 'text-thought' });
+                controller.enqueue({ type: 'text-delta', id: 'text-thought', delta: finalText });
+                controller.enqueue({ type: 'text-end', id: 'text-thought' });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              });
+              onReasoning?.({ call, state: 'reached' });
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      }
       if (call <= steps) {
         return {
           stream: chunks([

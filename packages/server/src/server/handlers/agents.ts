@@ -2977,7 +2977,12 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
         effectiveResourceId,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      return agent.cancelQueuedMessages({ resourceId: effectiveResourceId, threadId: effectiveThreadId, signalIds });
+      // Awaited so a failed cancellation in memory storage is reported here.
+      return await agent.cancelQueuedMessages({
+        resourceId: effectiveResourceId,
+        threadId: effectiveThreadId,
+        signalIds,
+      });
     } catch (error) {
       return handleError(error, 'error cancelling pending thread signals');
     }

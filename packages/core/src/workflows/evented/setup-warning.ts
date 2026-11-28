@@ -5,6 +5,7 @@ import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 const DOCS_URL = 'https://mastra.ai/docs/server/pubsub#evented-workflows-and-agents';
 
 const warnedHosts = new WeakSet<Mastra>();
+const warnedSignalHosts = new WeakSet<Mastra>();
 
 /**
  * Evented runs spread over several processes need a pubsub that hands a stopped
@@ -38,5 +39,35 @@ export function warnUnsupportedEventedSetup(mastra: Mastra, workflowsStore?: Wor
     .getLogger()
     ?.warn(
       `Evented workflows and agents aren't supported on several processes with this setup: ${missing}. See ${DOCS_URL}`,
+    );
+}
+
+/** Why the signals of an evented agent's run are not kept where every process reads them. */
+export type UnsharedAgentSignalsReason = 'no-memory-thread' | 'unsupported-memory-storage' | 'unshared-memory-storage';
+
+const UNSHARED_AGENT_SIGNALS_REASONS: Record<UnsharedAgentSignalsReason, string> = {
+  'no-memory-thread': 'the run has no memory, thread or resourceId, so its signals stay in the process that started it',
+  'unsupported-memory-storage': "the agent's memory storage doesn't keep pending signals",
+  'unshared-memory-storage': "the agent's memory storage keeps pending signals in this process only",
+};
+
+/**
+ * Signals sent to a running evented agent reach steps in another process only
+ * through memory storage that every process shares. Logs once per Mastra
+ * instance, apart from {@link warnUnsupportedEventedSetup} so that one does
+ * not hide this, when the pubsub reaches other processes and a run keeps its
+ * signals in this process. Such a signal only reaches the run when the
+ * process holding it runs the step.
+ */
+export function warnUnsharedAgentSignals(mastra: Mastra, reason: UnsharedAgentSignalsReason): void {
+  if (warnedSignalHosts.has(mastra) || process.env.MASTRA_DISABLE_EVENTED_SETUP_WARNING === 'true') return;
+  if (!reachesOtherProcesses(mastra.pubsub)) return;
+  const missing = UNSHARED_AGENT_SIGNALS_REASONS[reason];
+
+  warnedSignalHosts.add(mastra);
+  mastra
+    .getLogger()
+    ?.warn(
+      `Signals sent to running evented agents aren't supported on several processes with this setup: ${missing}. See ${DOCS_URL}`,
     );
 }

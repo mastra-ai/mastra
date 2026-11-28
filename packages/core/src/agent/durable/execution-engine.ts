@@ -35,6 +35,7 @@ import {
 } from './execution-fence';
 import { withExecutionStreamProducer } from './execution-stream-publisher';
 import { openStepsOfCrashedSegment } from './segment-spans';
+import { closeStoredSignalRun } from './stored-signal-drain';
 import { createSupersededEventFilter, emitAbortEvent, newestLogIndex } from './stream-adapter';
 import type {
   DurableAgentActiveRun,
@@ -55,7 +56,15 @@ import { latestMessageListState } from './workflows/shared/message-list-state';
 export type DurableWorkflow = ReturnType<typeof createDurableAgenticWorkflow>;
 type DurableRun = Awaited<ReturnType<DurableWorkflow['createRun']>>;
 export type ExecutionCompletion = { result: Awaited<ReturnType<DurableRun['start']>> } | { error: unknown };
-export type ExecutionOutcome = { owner: 'agent'; status?: string; error?: Error } | { owner: 'workers'; error?: Error };
+export type ExecutionOutcome =
+  | {
+      owner: 'agent';
+      status?: string;
+      error?: Error;
+      /** The run's workflow state when it ended. */
+      state?: unknown;
+    }
+  | { owner: 'workers'; error?: Error };
 
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
@@ -428,6 +437,15 @@ export class DefaultAgentExecutionEngine {
       expectedStatus: 'suspended',
     });
     return written !== false;
+  }
+
+  /**
+   * Close the stored signals of a parked run that was aborted. Call it before
+   * the snapshot is deleted and before the abort terminal is published.
+   * Returns nothing to wait for when this engine's runs never store signals.
+   */
+  closeParkedRunSignals(_runId: string): Promise<void> | undefined {
+    return undefined;
   }
 
   /**
@@ -1010,6 +1028,7 @@ export class DefaultAgentExecutionEngine {
     return {
       owner: 'agent',
       status: completion.result?.status,
+      state: completion.result?.state,
       error:
         completion.result?.status === 'failed'
           ? this.workflowFailureError(completion.result.error, 'Workflow execution failed')
@@ -1027,6 +1046,8 @@ export class DefaultAgentExecutionEngine {
       inputData: workflowInput,
       requestContext,
       actor: workflowInput.options?.actor,
+      // A run that keeps its signals in storage and fails here is closed with the consumed set its state ended with.
+      ...(workflowInput.signalsStored ? { outputOptions: { includeState: true } } : {}),
       ...observabilityContext,
     });
   }
@@ -1059,6 +1080,61 @@ export class EventedAgentExecutionEngine extends DefaultAgentExecutionEngine {
   // Evented execution can return before the suspended snapshot lands.
   override get suspendPersistedOnReturn(): boolean {
     return false;
+  }
+
+  override closeParkedRunSignals(runId: string): Promise<void> | undefined {
+    return this.#closeParkedRunSignals(runId);
+  }
+
+  /**
+   * Closes the run with what it consumed, read from its latest committed
+   * state. When that state can't be determined the run is left open: closing
+   * it with a guessed set would delete a taken signal it never delivered, or
+   * give one it delivered to the next run again. Its taken rows then go to the
+   * thread's next signal run, with the thread's pending rows.
+   */
+  async #closeParkedRunSignals(runId: string): Promise<void> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore
+      ?.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId })
+      .catch(() => null);
+    if (!snapshot) return;
+    const context = snapshot.context as Record<string, any> | undefined;
+    if (!context?.input?.signalsStored) return;
+    const committed = await this.#parkedRunState(workflowsStore!, snapshot);
+    if (!committed) return;
+    await closeStoredSignalRun({
+      mastra: this.mastra,
+      runId,
+      input: context.input,
+      state: committed.state,
+    });
+  }
+
+  /**
+   * The latest committed workflow state of a parked run, or `undefined` when
+   * it can't be determined. Until the loop's snapshot is saved as suspended
+   * (or canceled from there), the suspended iteration's state may not have
+   * reached it. While the run parks inside an iteration, the state is that
+   * iteration's own run: the same run a resume continues.
+   */
+  async #parkedRunState(
+    workflowsStore: WorkflowsStorage,
+    snapshot: WorkflowRunState,
+  ): Promise<{ state: unknown } | undefined> {
+    if (snapshot.status !== 'suspended' && snapshot.status !== 'canceled') return undefined;
+    const context = snapshot.context as Record<string, any>;
+    const suspended = Object.entries(context).find(
+      ([, result]) => result?.status === 'suspended' && result.suspendPayload?.__workflow_meta?.runId,
+    );
+    if (!suspended) return { state: context.__state ?? snapshot.value };
+    const [workflowName, result] = suspended;
+    const nested = await workflowsStore
+      .loadWorkflowSnapshot({ workflowName, runId: result.suspendPayload.__workflow_meta.runId })
+      .catch(() => null);
+    if (!nested) return undefined;
+    const nestedContext = nested.context as Record<string, any> | undefined;
+    return { state: nestedContext?.__state ?? nested.value };
   }
 
   // Workers elsewhere run the steps when this instance runs none (e.g. `MASTRA_WORKERS=false`).

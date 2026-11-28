@@ -194,6 +194,14 @@ The storage implementation handles schema creation and updates automatically. It
 
 `PostgresStore` exposes notification storage through `getStore('notifications')`.
 
+### Pending signals
+
+The memory domain keeps the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of evented agents as rows of the messages table under the reserved thread ID `mastra-queue:pending:<threadId>`, and under `mastra-queue:taken:<threadId>` once a run takes them, without a resource ID, and every process that shares the database sees them. When the run saves its messages, the row moves to its thread and becomes a normal message. Message reads by thread or resource, `updateMessages`, `deleteMessages`, and thread cloning never act on a queued signal, and deleting a thread deletes its queued signals with its messages. Thread IDs that start with `mastra-queue:` are reserved: saving such a thread, cloning to it, or saving or listing its messages fails.
+
+`init()` adds one nullable column, `signalRunId`, to the threads table. `exportSchemas()` includes it. Message reads and saves don't use this column. If you set `disableInit`, run `init()` once or apply the same column with your own migration, as in [separate schema initialization](#separate-schema-initialization), before the store sends or claims pending signals.
+
+`saveMessages`, `updateMessages`, `deleteMessages`, `deleteThread`, and `updateThreadResourceId` run at READ COMMITTED, whatever `default_transaction_isolation` is set to. They lock the thread rows they touch for the whole transaction, so concurrent writes to one thread run one after another. [`prune()`](/reference/storage/retention) takes no thread lock and can deadlock with the end of a run whose signals are in the rows it deletes. Postgres then cancels one of the two transactions. When `prune()` is the one cancelled, it rejects with the deadlock error, and you can call it again. When the end of the run is cancelled, Mastra logs the warning `Could not close the stored signals of an ended run`.
+
 ### Observability
 
 PostgreSQL supports observability and can handle low trace volumes. Throughput capacity depends on deployment factors such as hardware, schema design, indexing, and retention policies, and should be validated for your specific environment. For high-volume production environments, consider:

@@ -251,7 +251,12 @@ import { getExecutionStreamOwner } from './durable/execution-stream-publisher';
 import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { persistDurableRunInput } from './durable/persist-run-input';
 import type { PreparationOptions, PreparationResult } from './durable/preparation';
-import { prepareForDurableExecution, SCOPES_ALREADY_APPLIED, RESUMED_SPAN_DATA } from './durable/preparation';
+import {
+  prepareForDurableExecution,
+  SCOPES_ALREADY_APPLIED,
+  RESUMED_SIGNALS_STORED,
+  RESUMED_SPAN_DATA,
+} from './durable/preparation';
 import { createRunAbortController } from './durable/run-abort';
 import { createRunCleanup } from './durable/run-cleanup';
 import { recordRunSavedMessages } from './durable/run-message-refs';
@@ -265,6 +270,7 @@ import {
 } from './durable/run-registry';
 import { carrySegmentSpans, openedSegment } from './durable/segment-spans';
 import type { SegmentSpanData } from './durable/segment-spans';
+import { CONSUMED_SIGNAL_IDS_KEY, closeStoredSignalRun, durableRunSignalsStore } from './durable/stored-signal-drain';
 import type { DurableStreamAdapterResult, DurableStreamAdapterOptions } from './durable/stream-adapter';
 import {
   createDurableAgentStream,
@@ -299,7 +305,11 @@ import type {
 import { DurableProcessorRebuildError } from './durable/utils/resolve-runtime';
 import { restoreCompletionPolicy } from './durable/utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './durable/utils/resume-generate-args';
-import { deadlineMessageListState, runDurableDeadlineOutputPass } from './durable/workflows/finalize-run';
+import {
+  deadlineMessageListState,
+  runDurableDeadlineOutputPass,
+  transcriptSignalIds,
+} from './durable/workflows/finalize-run';
 import {
   hydrateMessageListState,
   loadMessageListStateForResume,
@@ -11143,8 +11153,13 @@ export class Agent<
     // Aborting releases the lease, so resolve its run first.
     const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
     const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
-    const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
-    if (aborted && parked && !options.localOnly) void this.#deleteAbortedSuspendedRun(runId);
+    let closing: Promise<void> | undefined;
+    const aborted = agentThreadStreamRuntime.abortThread(
+      options,
+      this.getPubSub(),
+      options.localOnly ? undefined : parkedRunId => (closing = this.#closeParkedRunSignals(parkedRunId)),
+    );
+    if (aborted && parked && !options.localOnly) void this.#deleteAbortedSuspendedRun(runId, closing);
     if (this.__hasDurableExecution() && aborted && runId && !options.localOnly) {
       this.#abortLocalController(runId);
       void this.requestRemoteAbort(runId);
@@ -11196,8 +11211,11 @@ export class Agent<
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
-    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
-    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    let closing: Promise<void> | undefined;
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub(), {
+      closeStoredRun: parkedRunId => (closing = this.#closeParkedRunSignals(parkedRunId)),
+    });
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId, closing);
     const engine = this.#resolveExecutionEngine();
     if (!engine) return aborted;
     const controller = (this.executionRunRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))
@@ -11242,10 +11260,16 @@ export class Agent<
     }
     const engine = this.executionEngine;
     const pubsub = this.__getStreamBus(true)!.forRun(this.__usesSharedRunLog()).pubsub;
-    if (agentThreadStreamRuntime.abortRun(runId, this.getPubSub())) {
+    let parkedCancel: Promise<boolean> | undefined;
+    const held = agentThreadStreamRuntime.abortRun(runId, this.getPubSub(), {
+      // A storage-backed parked run is closed once canceled, before its thread is checked for pending work.
+      closeStoredRun: () => (parkedCancel = this.#cancelAndCloseParkedRun(runId)).then(() => undefined),
+    });
+    if (held) {
       this.#abortLocalController(runId);
       void this.requestRemoteAbort(runId);
-      if (await engine.cancelParkedRun(runId)) {
+      // The runtime closes only a storage-backed parked run, through `closeStoredRun`.
+      if (parkedCancel ? await parkedCancel : await engine.cancelParkedRun(runId)) {
         await engine.announceCanceledRun(runId, pubsub);
         await releaseRemoteAbortListener(runId, this.#mastra);
       }
@@ -11253,7 +11277,11 @@ export class Agent<
     }
     try {
       const canceled = await engine.cancelParkedRun(runId);
-      if (canceled) await engine.announceCanceledRun(runId, pubsub);
+      if (canceled) {
+        const closing = this.#closeParkedRunSignals(runId);
+        if (closing) await closing;
+        await engine.announceCanceledRun(runId, pubsub);
+      }
       const acknowledged = await requestAcknowledgedAbort(pubsub, runId);
       if (canceled) await releaseRemoteAbortListener(runId, this.#mastra);
       return acknowledged || canceled;
@@ -11263,10 +11291,34 @@ export class Agent<
   }
 
   /**
+   * Close the stored signals of a parked run being aborted. Reads its snapshot, so it starts before the delete.
+   * Runs of an agent that never stores signals read nothing. Whether a run of an evented agent stored them is in
+   * its snapshot: one without memory of its own stores them when a delegating agent hands it memory.
+   */
+  #closeParkedRunSignals(runId: string): Promise<void> | undefined {
+    if (!this.__usesSharedRunLog()) return undefined;
+    return this.#resolveExecutionEngine()?.closeParkedRunSignals(runId);
+  }
+
+  /** @internal Close the stored signals of a parked run that an abort requested by another process releases here. */
+  __closeParkedRunSignals(runId: string): Promise<void> | undefined {
+    return this.#closeParkedRunSignals(runId);
+  }
+
+  async #cancelAndCloseParkedRun(runId: string): Promise<boolean> {
+    if (!(await this.executionEngine.cancelParkedRun(runId))) return false;
+    const closing = this.#closeParkedRunSignals(runId);
+    if (closing) await closing;
+    return true;
+  }
+
+  /**
    * An aborted suspended run can never be resumed, so drop its workflow
    * registration and snapshot rows; otherwise it stays listed as suspended.
+   * `closing` is the close of its stored signals, which reads those rows and
+   * so settles before they are deleted.
    */
-  async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
+  async #deleteAbortedSuspendedRun(runId: string, closing?: Promise<void>): Promise<boolean> {
     const mastra = this.#mastra ?? this.#ephemeralMastra;
     if (!mastra) return true;
     const runtimeLoopWorkflowName = (
@@ -11279,6 +11331,12 @@ export class Agent<
       DurableStepIds.AGENTIC_EXECUTION,
     ]);
     if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+    // A failed close leaves the run's rows to the thread's next run; the snapshot is deleted either way.
+    if (closing) {
+      await closing.catch(error => {
+        this.logger.warn(`Failed to close the stored signals of aborted suspended run ${runId}`, { runId, error });
+      });
+    }
     try {
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
@@ -11332,7 +11390,14 @@ export class Agent<
     );
   }
 
-  cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): CancelQueuedAgentMessagesResult {
+  /**
+   * Cancels queued input of a thread: signals sent to its active run that no
+   * model request took yet, and messages queued for its next run. Resolves
+   * with every cancelled id once the cancellation settled, including signals
+   * kept in memory storage. A signal a run already took into its transcript is
+   * not cancelled.
+   */
+  async cancelQueuedMessages(target: CancelQueuedAgentMessagesOptions): Promise<CancelQueuedAgentMessagesResult> {
     return agentThreadStreamRuntime.cancelQueuedMessages(this as Agent<any, any, any, any>, target, this.getPubSub());
   }
 
@@ -13362,6 +13427,12 @@ export class Agent<
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
           stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+          signalsStore: workflowInput.signalsStored
+            ? await durableRunSignalsStore({ mastra: this.#mastra, runId, input: workflowInput, requestContext })
+            : undefined,
+          resolveSignalsStore: workflowInput.signalsStored
+            ? () => durableRunSignalsStore({ mastra: this.#mastra, runId, input: workflowInput, requestContext })
+            : undefined,
         },
       );
       this.executionEngine.assertRecoveryActive();
@@ -13735,11 +13806,16 @@ export class Agent<
       outputProcessors,
       errorProcessors,
       processorStates,
-      drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
+      // A run that keeps its signals in storage reads them there from any process.
+      ...(workflowInput.signalsStored
+        ? {}
+        : {
+            drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
+            enqueuePendingSignal: (signalInput: AgentSignalInput) =>
+              wrapped.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
+          }),
       subscribePendingSignals: (listener: PendingSignalListener) =>
         wrapped.__getSubscribePendingSignals()(runId, listener),
-      enqueuePendingSignal: (signalInput: AgentSignalInput) =>
-        wrapped.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
       cleanup: () => {},
     };
     this.installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController, executionFence);
@@ -13857,6 +13933,12 @@ export class Agent<
    * segment that lost its lease without being replaced still reports its error
    * but keeps the snapshots so the run stays recoverable.
    *
+   * A total deadline also closes the stored signals of a run that keeps them in
+   * storage, with the signals of the transcript it saves. When the run's steps
+   * execute in another process, this process holds no transcript of them and
+   * saves only the turn's input, so the signals those steps took and memory
+   * did not save yet are pending again for the thread's next run.
+   *
    * Never rejects: a pubsub that is already closing (for example during
    * shutdown) must not turn a run's own failure into an unhandledRejection.
    *
@@ -13865,7 +13947,7 @@ export class Agent<
   protected async settleExecution(
     runId: string,
     fence: ExecutionFence | undefined,
-    outcome: { status?: string; error?: Error },
+    outcome: { status?: string; error?: Error; state?: unknown },
   ): Promise<void> {
     const { status, error } = outcome;
     if (fence && this.#timedOutExecutions.has(fence)) return;
@@ -13898,6 +13980,10 @@ export class Agent<
         // deadline replaced are rejected; this one writes under the replacement. Saves upsert by ID.
         // Like the finish step, memory is saved before the caller sees the run end.
         this.#runInputs.delete(fence!);
+        // The signals the deadline saves, chosen with the transcript. Nothing is chosen when the save fails before.
+        // When the save itself fails, the turn's unsaved input and response are dropped and the close deletes these
+        // signals with them, as for any failed run: back in pending they would reach a turn after the dropped one.
+        let savedSignalIds: string[] = [];
         deadlineSave = (async () => {
           // A tool the deadline aborted still gets its grace window to return; wait (bounded) so its step can be saved.
           await settledOrElapsed(
@@ -13905,10 +13991,12 @@ export class Agent<
             TOOL_ABORT_GRACE_MS + TOOL_SETTLE_MARGIN_MS,
           );
           const deadlineSpan = runInputEntry.resumeAgentSpan ?? runInputEntry.agentSpan;
+          const saved = deadlineMessageListState(runInputEntry, runInput.messageListState);
+          if (runInput.signalsStored) savedSignalIds = transcriptSignalIds(saved.messageListState);
           await runDurableDeadlineOutputPass({
             runId,
             initData: runInput,
-            ...deadlineMessageListState(runInputEntry, runInput.messageListState),
+            ...saved,
             entry: runInputEntry,
             executionId: fence!.executionId,
             mastra: this.#mastra,
@@ -13918,8 +14006,39 @@ export class Agent<
         })().catch(saveError => {
           this.logger.warn(`Failed to save run ${runId} at its total deadline`, { runId, error: saveError });
         });
+        if (runInput.signalsStored) {
+          // The step the deadline cut off took signals its saved state doesn't list, and steps may still take some
+          // after the transcript is chosen. Only this close knows what reached memory, so the run's other endings
+          // here leave the close to it.
+          runInputEntry.deadlineClosesStoredSignals = true;
+          deadlineSave = deadlineSave.then(() =>
+            closeStoredSignalRun({
+              mastra: this.#mastra,
+              runId,
+              input: runInput,
+              deadline: true,
+              // The signals the save holds are settled, and every other row the run claimed is pending again.
+              state: () => ({ [CONSUMED_SIGNAL_IDS_KEY]: savedSignalIds }),
+            }),
+          );
+        }
         // Saved before the caller sees the run end, unless the store hangs: the deadline must still surface.
         await settledOrElapsed(deadlineSave, DEADLINE_SAVE_WAIT_MS);
+      }
+      // A run that failed or was canceled here never reaches the finish step's close; its workers' settle would
+      // close it with the state it ended with, and so does this one. A run whose start or resume threw, a
+      // recovered segment and a run that workers in other processes settle (none of them passes its state) stay
+      // open here: the workers' settle closes the last, and the thread's pending rows wait for the next run of the
+      // others.
+      const endedInput = fence && outcome.state !== undefined ? this.#runInputs.get(fence) : undefined;
+      if (finished && !totalTimeout && status !== 'success' && endedInput?.signalsStored) {
+        const closing = closeStoredSignalRun({
+          mastra: this.#mastra,
+          runId,
+          input: endedInput,
+          state: outcome.state,
+        });
+        if (closing) await closing;
       }
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
@@ -14824,6 +14943,11 @@ export class Agent<
         return;
       }
       if (snapshot?.status !== 'suspended') return;
+      // Reads the run's consumed signals from the snapshots deleted next.
+      const closing = (snapshot.context as { input?: { signalsStored?: boolean } } | undefined)?.input?.signalsStored
+        ? this.#closeParkedRunSignals(runId)
+        : undefined;
+      if (closing) await closing;
       await this.deleteRunSnapshots(runId);
       await emitAbortEvent(this.#executionStreamBus.forRun(this.__usesSharedRunLog()).pubsub, runId, {
         steps: [],
@@ -14895,8 +15019,8 @@ export class Agent<
 
     const runId = resolveRunId(options?.runId);
     const requestContext = options?.requestContext ?? new RequestContext();
-    return this.#onReservedThread(runId, options, () =>
-      this.#prepareAndStartDurableRun(messages, options, methodType, runId, requestContext),
+    return this.#onReservedThread(runId, options, holdsThread =>
+      this.#prepareAndStartDurableRun(messages, options, methodType, runId, requestContext, holdsThread),
     );
   }
 
@@ -14905,22 +15029,27 @@ export class Agent<
    * second message on a busy thread waits for the run in flight instead of running beside it (#30069).
    * A registered run owns the thread from then on. A run that fails before it registers gives the
    * thread back.
+   *
+   * `start` learns whether the run holds its thread: it reserved it here, the
+   * thread was already held under its run id (a wake, a queued message, a
+   * follow-up or a continuation), or it takes the thread over from a parked
+   * run of this agent.
    */
   async #onReservedThread<T>(
     runId: string,
     options: DurableAgentStreamOptions<TOutput> | undefined,
-    start: () => Promise<T>,
+    start: (holdsThread: boolean) => Promise<T>,
   ): Promise<T> {
     const pubsub = this.getPubSub();
     // The same options registerRun reads, so both name the same thread.
-    const reserved =
-      (await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-        this as unknown as Agent<any, any, any, any>,
-        { memory: options?.memory, requestContext: options?.requestContext, runId },
-        pubsub,
-      )) === 'reserved';
+    const waited = await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as unknown as Agent<any, any, any, any>,
+      { memory: options?.memory, requestContext: options?.requestContext, runId },
+      pubsub,
+    );
+    const reserved = waited === 'reserved';
     try {
-      return await start();
+      return await start(waited !== undefined);
     } catch (error) {
       // A thread already held under this run id belongs to whoever started the run: a signal wake,
       // a queued message, or an earlier call with the same run id. It stays theirs to release.
@@ -14935,6 +15064,7 @@ export class Agent<
     methodType: 'stream' | 'generate',
     runId: string,
     requestContext: RequestContext,
+    holdsThread: boolean,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
@@ -14962,6 +15092,8 @@ export class Agent<
         mastra: this.#mastra,
         methodType,
         durableAgentId: this.id,
+        // A run that holds no thread runs beside the thread's run and leaves its signals to it.
+        signalsStored: holdsThread && this.__usesSharedRunLog(),
         durableAgentName: this.name,
       });
     } catch (error) {
@@ -15113,6 +15245,7 @@ export class Agent<
         generation: executionFence.generation,
         ownershipLost: () => executionFence.isLost(),
         stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+        signalsStore: registryEntry.pendingSignalsStore,
       },
     );
 
@@ -15144,6 +15277,13 @@ export class Agent<
           }
           let result: { status?: string } | void;
           try {
+            // The run's registration moved the signals sent while it was only reserved into its store. Once those
+            // inserts committed, the run's first model request claims them.
+            const signalsStore = registryEntry.pendingSignalsStore;
+            const moved = signalsStore
+              ? agentThreadStreamRuntime.storedSignalWritesSettled(signalsStore, this.getPubSub())
+              : undefined;
+            if (moved) await moved;
             await this.#persistInitialInput(runId, workflowInput);
             result = await this.executeWorkflow(runId, workflowInput);
           } catch (error) {
@@ -15505,6 +15645,7 @@ export class Agent<
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
         [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
+        [RESUMED_SIGNALS_STORED]: workflowInput.signalsStored === true,
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -16010,6 +16151,17 @@ export class Agent<
               requestContext,
             });
           }
+          // A run that keeps its signals in storage and fails here is closed with the consumed set its state ended
+          // with, unless workers in other processes settle it: their settle closes it.
+          const closesStoredSignals =
+            persistedInput?.signalsStored === true &&
+            !this.executionEngine.prepareExecution(
+              this.#mastra?.pubsub ?? this.getPubSub(),
+              executionFence,
+              this.workflowEngine,
+              this.logger,
+              this.guardrailLogger,
+            ).sharedExecution;
           let result;
           try {
             result = await this.#withSuspensionAfterPersist(runId, () =>
@@ -16019,6 +16171,7 @@ export class Agent<
                 requestContext,
                 actor: resolvedOptions.actor,
                 ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+                ...(closesStoredSignals ? { outputOptions: { includeState: true } } : {}),
               }),
             );
           } catch (error) {
@@ -16058,6 +16211,7 @@ export class Agent<
               result?.status === 'failed'
                 ? this.executionEngine.workflowFailureError((result as any).error, 'Workflow resume failed')
                 : undefined,
+            ...(closesStoredSignals ? { state: (result as { state?: unknown } | undefined)?.state } : {}),
           });
           if (result?.status === 'suspended' && closeOnSuspend) {
             // The workflow result is the authoritative persisted suspension boundary.
@@ -16106,6 +16260,12 @@ export class Agent<
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
           stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
+          signalsStore: persistedInput?.signalsStored
+            ? await durableRunSignalsStore({ mastra: this.#mastra, runId, input: persistedInput })
+            : undefined,
+          resolveSignalsStore: persistedInput?.signalsStored
+            ? () => durableRunSignalsStore({ mastra: this.#mastra, runId, input: persistedInput })
+            : undefined,
         },
       );
     }
@@ -17121,6 +17281,9 @@ export class Agent<
       ],
       mastra: this.#mastra,
       durableAgentId: this.id,
+      // A run prepared here holds no thread, so only a run rebuilt from storage keeps its signals there, as it
+      // decided when it started.
+      resumedSignalsStored: (options as { [RESUMED_SIGNALS_STORED]?: boolean } | undefined)?.[RESUMED_SIGNALS_STORED],
       durableAgentName: this.name,
     });
 

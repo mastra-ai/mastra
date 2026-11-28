@@ -41,6 +41,7 @@ import {
 } from '../../utils';
 import type { InMemoryDB } from '../inmemory-db';
 import { MemoryStorage } from './base';
+import type { PendingSignalEnqueueResult } from './base';
 import {
   assertActiveObservationsApplied,
   compareObservationalMemoryHeadOrder,
@@ -50,11 +51,33 @@ import {
   maxObservationCursor,
   planReflectionGenerationText,
 } from './observational-memory-lifecycle';
+import { assertNotQueueThreadId, isQueueThreadId, pendingQueueThreadId, takenQueueThreadId } from './queue-thread';
+
+type MessageRow = InMemoryDB['messages'] extends Map<string, infer Row> ? Row : never;
+
+function compareSignalRows(a: MessageRow, b: MessageRow): number {
+  const byCreatedAt = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  if (byCreatedAt !== 0) return byCreatedAt;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+function toStorageMessage(message: MastraDBMessage): StorageMessageType {
+  return {
+    id: message.id,
+    thread_id: message.threadId || '',
+    content: JSON.stringify(message.content),
+    role: message.role || 'user',
+    type: message.type || 'text',
+    createdAt: message.createdAt,
+    resourceId: message.resourceId || null,
+  };
+}
 
 export class InMemoryMemory extends MemoryStorage {
   override readonly supportsPartialThreadUpdate: boolean = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
+  override readonly supportsPendingSignals: boolean = true;
   private db: InMemoryDB;
 
   constructor({ db }: { db: InMemoryDB }) {
@@ -62,9 +85,14 @@ export class InMemoryMemory extends MemoryStorage {
     this.db = db;
   }
 
+  override get pendingSignalsSharedAcrossProcesses(): boolean {
+    return false;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.threads.clear();
     this.db.messages.clear();
+    this.db.signalRunIds.clear();
     this.db.resources.clear();
     this.db.observationalMemory.clear();
     this.db.runFences.clear();
@@ -112,6 +140,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    assertNotQueueThreadId(thread.id, 'saveThread');
     this.assertFence(fence, 'saveThread');
     const key = thread.id;
     this.db.threads.set(key, thread);
@@ -145,10 +174,15 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
+    // No thread has a reserved id; deleting by it would remove another thread's queued signals.
+    if (isQueueThreadId(threadId)) return;
     this.db.threads.delete(threadId);
+    this.db.signalRunIds.delete(threadId);
 
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
     this.db.messages.forEach((msg, key) => {
-      if (msg.thread_id === threadId) {
+      if (msg.thread_id === threadId || msg.thread_id === pendingThreadId || msg.thread_id === takenThreadId) {
         this.db.messages.delete(key);
       }
     });
@@ -170,6 +204,7 @@ export class InMemoryMemory extends MemoryStorage {
     if (threadIds.length === 0 || threadIds.some(id => !id.trim())) {
       throw new Error('threadId must be a non-empty string or array of non-empty strings');
     }
+    for (const id of threadIds) assertNotQueueThreadId(id, 'listMessages');
 
     const threadIdSet = new Set(threadIds);
 
@@ -197,7 +232,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     // Step 1: Get messages matching threadId(s) and optionally resourceId
-    let threadMessages = Array.from(this.db.messages.values()).filter((msg: any) => {
+    let threadMessages = Array.from(this.db.messages.values()).filter(msg => {
       // Message must be in one of the specified threads
       if (threadIdSet && !threadIdSet.has(msg.thread_id)) return false;
       // If optionalResourceId provided, message must match it
@@ -314,6 +349,7 @@ export class InMemoryMemory extends MemoryStorage {
     const hasResourceScope = resourceId !== undefined;
 
     for (const includeItem of include) {
+      // Found by message id, so without a resource scope a queued row named here is returned as stored.
       const targetMessage = this.db.messages.get(includeItem.id);
       if (!targetMessage) continue;
       if (hasResourceScope && targetMessage.resourceId !== resourceId) continue;
@@ -367,7 +403,7 @@ export class InMemoryMemory extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     // Get all messages matching the resourceId (across all threads)
-    let messages = Array.from(this.db.messages.values()).filter((msg: any) => msg.resourceId === resourceId);
+    let messages = Array.from(this.db.messages.values()).filter(msg => msg.resourceId === resourceId);
 
     // Apply date filtering
     messages = filterByDateRange(messages, (msg: any) => new Date(msg.createdAt), filter?.dateRange);
@@ -456,7 +492,10 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }> {
-    const rawMessages = messageIds.map(id => this.db.messages.get(id)).filter(message => !!message);
+    // Queued rows come back too, with their reserved `threadId`; no read by id filters them.
+    const rawMessages = messageIds
+      .map(id => this.db.messages.get(id))
+      .filter((message): message is MessageRow => !!message);
 
     const list = new MessageList().add(
       rawMessages.map(m => this.parseStoredMessage(m)),
@@ -470,6 +509,7 @@ export class InMemoryMemory extends MemoryStorage {
     fence?: RunFence;
   }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
+    for (const message of messages) assertNotQueueThreadId(message.threadId, 'saveMessages');
     this.assertFence(args.fence, 'saveMessages');
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
@@ -486,18 +526,7 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     for (const message of messages) {
-      const key = message.id;
-      // Convert MastraDBMessage to StorageMessageType
-      const storageMessage: StorageMessageType = {
-        id: message.id,
-        thread_id: message.threadId || '',
-        content: JSON.stringify(message.content),
-        role: message.role || 'user',
-        type: message.type || 'text',
-        createdAt: message.createdAt,
-        resourceId: message.resourceId || null,
-      };
-      this.db.messages.set(key, storageMessage);
+      this.db.messages.set(message.id, toStorageMessage(message));
     }
 
     const list = new MessageList().add(messages, 'memory');
@@ -508,11 +537,12 @@ export class InMemoryMemory extends MemoryStorage {
     messages: (Partial<MastraDBMessage> & { id: string })[];
     fence?: RunFence;
   }): Promise<MastraDBMessage[]> {
+    for (const update of args.messages) assertNotQueueThreadId(update.threadId, 'updateMessages');
     this.assertFence(args.fence, 'updateMessages');
     const updatedMessages: MastraDBMessage[] = [];
     for (const update of args.messages) {
       const storageMsg = this.db.messages.get(update.id);
-      if (!storageMsg) continue;
+      if (!storageMsg || isQueueThreadId(storageMsg.thread_id)) continue;
 
       // Track old threadId for possible move
       const oldThreadId = storageMsg.thread_id;
@@ -598,6 +628,8 @@ export class InMemoryMemory extends MemoryStorage {
 
     for (const messageId of messageIds) {
       const message = this.db.messages.get(messageId);
+      // A queued signal is not a message; `cancelPendingSignals` removes a pending one.
+      if (message && isQueueThreadId(message.thread_id)) continue;
       if (message && message.thread_id) {
         threadIds.add(message.thread_id);
       }
@@ -723,6 +755,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Use provided ID or generate a new one
     const newThreadId = providedThreadId || crypto.randomUUID();
+    assertNotQueueThreadId(newThreadId, 'copyThread');
 
     // Check if the new thread ID already exists
     if (this.db.threads.has(newThreadId)) {
@@ -731,7 +764,7 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Get messages from the source thread
     let sourceMessages = Array.from(this.db.messages.values())
-      .filter((msg: StorageMessageType) => msg.thread_id === sourceThreadId)
+      .filter(msg => msg.thread_id === sourceThreadId)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
     // Apply message filters if provided
@@ -803,6 +836,141 @@ export class InMemoryMemory extends MemoryStorage {
     }
 
     return { thread: newThread, messageIdMap };
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  // Each method checks and writes without awaiting in between, so concurrent
+  // calls are serialized on the single JS thread.
+  // ============================================
+
+  async setSignalRun({ threadId, runId }: { threadId: string; runId: string }): Promise<void> {
+    assertNotQueueThreadId(threadId, 'setSignalRun');
+    if (this.db.threads.has(threadId)) this.db.signalRunIds.set(threadId, runId);
+  }
+
+  async getSignalRun({ threadId }: { threadId: string }): Promise<string | null> {
+    assertNotQueueThreadId(threadId, 'getSignalRun');
+    if (!this.db.threads.has(threadId)) return null;
+    return this.db.signalRunIds.get(threadId) ?? null;
+  }
+
+  async enqueuePendingSignal({
+    message,
+    toRunId,
+  }: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<PendingSignalEnqueueResult> {
+    if (!message.threadId) throw new Error('Thread ID is required');
+    if (!message.resourceId) throw new Error('Resource ID is required');
+    assertNotQueueThreadId(message.threadId, 'enqueuePendingSignal');
+
+    if (toRunId !== undefined) {
+      const thread = this.db.threads.get(message.threadId);
+      if (!thread || thread.resourceId !== message.resourceId) return 'thread-not-found';
+      if (this.db.signalRunIds.get(message.threadId) !== toRunId) return 'run-closed';
+    }
+    if (this.db.messages.has(message.id)) return 'accepted';
+
+    this.db.messages.set(message.id, {
+      ...toStorageMessage(message),
+      thread_id: pendingQueueThreadId(message.threadId),
+      resourceId: null,
+    });
+    return 'accepted';
+  }
+
+  async claimPendingSignals({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    assertNotQueueThreadId(threadId, 'claimPendingSignals');
+    if (!this.db.threads.has(threadId) || this.db.signalRunIds.get(threadId) !== runId) return [];
+
+    // Taken rows belong to the thread, not to a run. A second live run taking on this thread is a
+    // bug outside storage; this does not guard against it. Rows of a run that ended without its
+    // close come back here, consumed ones included, instead of staying out of reach.
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
+    const consumed = new Set(consumedIds);
+    const claimed: MessageRow[] = [];
+    for (const row of this.signalRowsOf(threadId)) {
+      if (row.thread_id === pendingThreadId) row.thread_id = takenThreadId;
+      if (!consumed.has(row.id)) claimed.push(row);
+    }
+    return this.toSignalMessages(threadId, claimed);
+  }
+
+  async closeSignalRun({
+    threadId,
+    runId,
+    consumedIds,
+  }: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<void> {
+    assertNotQueueThreadId(threadId, 'closeSignalRun');
+    // Taken rows belong to the thread. Only its signal run gives them back to pending; a later
+    // close of an earlier run deletes what that run consumed. A second live run taking on this
+    // thread is a bug outside storage; this does not guard against it. The delete goes by id;
+    // ids are assumed unique.
+    const current = this.db.signalRunIds.get(threadId) === runId;
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
+    const consumed = new Set(consumedIds);
+    for (const row of this.signalRowsOf(threadId)) {
+      if (row.thread_id !== takenThreadId) continue;
+      if (consumed.has(row.id)) this.db.messages.delete(row.id);
+      else if (current) row.thread_id = pendingThreadId;
+    }
+    if (current) this.db.signalRunIds.delete(threadId);
+  }
+
+  async cancelPendingSignals({ threadId, ids }: { threadId: string; ids: string[] }): Promise<string[]> {
+    assertNotQueueThreadId(threadId, 'cancelPendingSignals');
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    const cancelled: string[] = [];
+    for (const id of ids) {
+      const row = this.db.messages.get(id);
+      if (row?.thread_id !== pendingThreadId) continue;
+      this.db.messages.delete(id);
+      cancelled.push(id);
+    }
+    return cancelled;
+  }
+
+  async listPendingSignals({ threadId }: { threadId: string }): Promise<MastraDBMessage[]> {
+    assertNotQueueThreadId(threadId, 'listPendingSignals');
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    return this.toSignalMessages(
+      threadId,
+      this.signalRowsOf(threadId).filter(row => row.thread_id === pendingThreadId),
+    );
+  }
+
+  /** The rows under the thread's pending and taken ids. */
+  private signalRowsOf(threadId: string): MessageRow[] {
+    const pendingThreadId = pendingQueueThreadId(threadId);
+    const takenThreadId = takenQueueThreadId(threadId);
+    return Array.from(this.db.messages.values()).filter(
+      row => row.thread_id === pendingThreadId || row.thread_id === takenThreadId,
+    );
+  }
+
+  /** Rows as the thread's messages, carrying the thread's current resource. */
+  private toSignalMessages(threadId: string, rows: MessageRow[]): MastraDBMessage[] {
+    const resourceId = this.db.threads.get(threadId)?.resourceId;
+    return rows.sort(compareSignalRows).map(row => {
+      const { resourceId: _stored, ...message } = this.parseStoredMessage(row);
+      return { ...message, threadId, ...(resourceId && { resourceId }) };
+    });
   }
 
   private sortThreads(threads: any[], field: ThreadOrderBy, direction: ThreadSortDirection): any[] {

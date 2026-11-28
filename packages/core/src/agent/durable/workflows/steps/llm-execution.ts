@@ -78,13 +78,15 @@ import { createStep } from '../../../../workflows/workflow';
 import { isDownloadAssetsError } from '../../../message-list/prompt/download-assets';
 import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
+import type { AgentSignalInput } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
-import { ensureRemoteAbortListener, readRunDeadline } from '../../abort-transport';
+import { ensureRemoteAbortListener, publishSignalAvailable, readRunDeadline } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getLiveRunRequestContext, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { segmentSpanData } from '../../segment-spans';
+import { CONSUMED_SIGNAL_IDS_KEY, durableRunSignalsStore, storedSignalDrain } from '../../stored-signal-drain';
 import {
   createStepStartChunk,
   emitChunkEvent,
@@ -139,6 +141,7 @@ const durableLLMInputSchema = z.object({
   agentId: z.string(),
   agentVersionId: z.string().optional(),
   agentName: z.string().optional(),
+  signalsStored: z.boolean().optional(),
   messageListState: z.any(), // SerializedMessageListState
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
@@ -267,16 +270,17 @@ type LLMExecutionParams = ExecuteFunctionParams<
   DefaultEngineType
 >;
 
-type StepLifetime = { closed: boolean };
+type StepLifetime = { closed: boolean; onClose?: () => void };
 
 /** Close on failure too, so retained callbacks never write to an abandoned step. */
 function withStepLifetime<Params, Result>(execute: (params: Params, lifetime: StepLifetime) => Promise<Result>) {
   return async (params: Params): Promise<Result> => {
-    const lifetime = { closed: false };
+    const lifetime: StepLifetime = { closed: false };
     try {
       return await execute(params, lifetime);
     } finally {
       lifetime.closed = true;
+      lifetime.onClose?.();
     }
   };
 }
@@ -348,35 +352,84 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Serialization ends this list's writable lifetime, before asynchronous
       // storage begins. Later sends must use the run queue, whose drain owns
       // transcript insertion, message rotation and the single stream echo.
+      // Set once this step took signals from the store, so they are saved with the transcript holding them.
+      let consumedSignalsState: Record<string, unknown> | undefined;
       const storeStepTranscript = () => {
         stepLifetime.closed = true;
-        return storeMessageListState(params, messageList.serialize());
+        return storeMessageListState(params, messageList.serialize(), consumedSignalsState);
       };
       const signalOwner = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-      const enqueuePendingSignal = signalOwner?.enqueuePendingSignal;
-      const lateSignalSink: ProcessorLateSignalSink | undefined = enqueuePendingSignal
-        ? {
-            isClosed: () => stepLifetime.closed,
-            send: async signalInput => {
-              // Threadless runs have no thread-runtime queue. Keep their signals
-              // on the live run entry; the next LLM step drains it identically.
-              if (
-                !signalOwner ||
-                getRunRegistryEntry(runId, mastra as Mastra | undefined) !== signalOwner ||
-                (signalOwner.executionFence &&
-                  (ExecutionFence.getLocalActive(runId) !== signalOwner.executionFence ||
-                    signalOwner.executionFence.isLost())) ||
-                signalOwner.abortSignal?.aborted
-              ) {
-                throw new Error(`Cannot send processor signal: run ${runId} is no longer active`);
+      // A run that keeps its signals in storage stores them itself, from whichever process runs this step. The ids
+      // depend only on this step's input, so a redelivered step that sends the same signals finds their rows
+      // instead of adding new ones. A redelivered step whose processors send different signals keeps the rows of
+      // the first attempt under those ids.
+      const storedLateSignals =
+        !signalOwner?.enqueuePendingSignal && typedInput.state?.threadId && typedInput.state?.resourceId
+          ? durableRunSignalsStore({ mastra: mastra as Mastra | undefined, runId, input: typedInput, requestContext })
+          : undefined;
+      let lateSignalIndex = 0;
+      const enqueuePendingSignal =
+        signalOwner?.enqueuePendingSignal ??
+        (storedLateSignals
+          ? async (signalInput: AgentSignalInput) => {
+              const signal = createSignal({
+                ...signalInput,
+                id: signalInput.id ?? `${runId}:${inputData.stepIndex ?? 0}:${messageId}:late-${lateSignalIndex++}`,
+              });
+              const queue = await storedLateSignals;
+              if (!queue) throw new Error(`Processor signal was not delivered to run ${runId}`);
+              const written = await queue.store.enqueuePendingSignal({
+                message: signal.toDBMessage({ threadId: queue.threadId, resourceId: queue.resourceId }),
+                toRunId: runId,
+              });
+              if (written !== 'accepted') throw new Error(`Processor signal was not delivered to run ${runId}`);
+              // No queue listener hears a row stored here. The processor that sent it outlived its step, so the
+              // request to interrupt is the latest step's in this process, as a queued signal's listener does.
+              getRunRegistryEntry(runId, mastra as Mastra | undefined)?.interruptStepForSignals?.([
+                signal.toDataPart().data,
+              ]);
+              // The run's next request may execute in another process.
+              if (pubsub) {
+                void publishSignalAvailable(pubsub, runId, signal.id).catch(error =>
+                  logger?.warn?.('Could not announce a stored signal to the run executing it', {
+                    runId,
+                    signalId: signal.id,
+                    error,
+                  }),
+                );
               }
-              if (typedInput.state?.threadId && typedInput.state?.resourceId) return enqueuePendingSignal(signalInput);
-              const signal = createSignal(signalInput);
-              (signalOwner.pendingProcessorSignals ??= []).push(signal);
               return signal;
-            },
-          }
-        : undefined;
+            }
+          : undefined);
+      // A storage-backed run's live entry carries no queue of its own; threadless runs still keep theirs on it.
+      const lateSignalSink: ProcessorLateSignalSink | undefined =
+        enqueuePendingSignal || (signalOwner && typedInput.signalsStored)
+          ? {
+              isClosed: () => stepLifetime.closed,
+              send: async signalInput => {
+                // A step without the run's live entry here sends only to storage, which rejects a closed run.
+                if (!signalOwner && enqueuePendingSignal) return enqueuePendingSignal(signalInput);
+                // Threadless runs have no thread-runtime queue. Keep their signals
+                // on the live run entry; the next LLM step drains it identically.
+                if (
+                  !signalOwner ||
+                  getRunRegistryEntry(runId, mastra as Mastra | undefined) !== signalOwner ||
+                  (signalOwner.executionFence &&
+                    (ExecutionFence.getLocalActive(runId) !== signalOwner.executionFence ||
+                      signalOwner.executionFence.isLost())) ||
+                  signalOwner.abortSignal?.aborted
+                ) {
+                  throw new Error(`Cannot send processor signal: run ${runId} is no longer active`);
+                }
+                if (enqueuePendingSignal && typedInput.state?.threadId && typedInput.state?.resourceId) {
+                  return enqueuePendingSignal(signalInput);
+                }
+                const signal = createSignal(signalInput);
+                (signalOwner.pendingProcessorSignals ??= []).push(signal);
+                return signal;
+              },
+            }
+          : undefined;
 
       // 1a-bis. Become responsive to abort requests from other processes. The
       // caller that owns `abort()` may live on a different pod entirely, so
@@ -626,7 +679,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       let interruptionOutcome: SpanTermination = { outcome: 'interrupted', stopReason: 'signal_received' };
       let interruptible = false;
       signalRegistry?.stopStepSignalListener?.();
-      const stopListening = signalRegistry?.subscribePendingSignals?.(signals => {
+      const interruptForSignals = (signals?: Parameters<typeof snapshotSignalOutcome>[0]) => {
         if (interruptible && !executionAbortSignalEarly?.aborted && !interruption.signal.aborted) {
           interruptionOutcome = {
             outcome: 'interrupted',
@@ -635,8 +688,42 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           };
           interruption.abort(new Error('Interrupted by a queued signal'));
         }
+      };
+      const isInTranscript = (signalId: string) => messageList.get.all.db().some(message => message.id === signalId);
+      // A storage-backed run's sender notifies after its insert committed, so this request's claim may already hold
+      // every signal it names.
+      const stopListening = signalRegistry?.subscribePendingSignals?.(signals => {
+        if (signals?.length && signals.every(signal => isInTranscript(signal.id))) return;
+        interruptForSignals(signals);
       });
       if (signalRegistry) signalRegistry.stopStepSignalListener = stopListening;
+      // Ids announced on the run's control topic before this step's request starts. Their rows committed before the
+      // announcement, so a claim that missed one only ran too early.
+      const hintedSignalIds = new Set<string>();
+      // A worker has no queue listener, but hints and late processor signals still reach a storage-backed run's step.
+      const listensForSignals = !!stopListening || (!!signalRegistry && typedInput.signalsStored === true);
+      if (signalRegistry && typedInput.signalsStored) {
+        signalRegistry.interruptStepForSignals = interruptForSignals;
+        // The hint carries only the id: the next request's claim reads the row itself.
+        const onSignalAvailable = (signalId: string) => {
+          if (!interruptible) {
+            hintedSignalIds.add(signalId);
+            return;
+          }
+          // The subscription is live, so a hint can arrive after its signal already reached this request. A signal
+          // re-sent with an id the transcript already holds (a transient signal, or a caller reusing an id) is
+          // taken at the next drain point instead of cutting the request.
+          if (!isInTranscript(signalId)) interruptForSignals([{ id: signalId }]);
+        };
+        signalRegistry.onSignalAvailable = onSignalAvailable;
+        // A signal stored after this step ended must not interrupt a request it no longer makes.
+        stepLifetime.onClose = () => {
+          if (signalRegistry.interruptStepForSignals === interruptForSignals) {
+            delete signalRegistry.interruptStepForSignals;
+          }
+          if (signalRegistry.onSignalAvailable === onSignalAvailable) delete signalRegistry.onSignalAvailable;
+        };
+      }
       const throwIfInterrupted = () => {
         ownership?.throwIfLost();
         if (interruption.signal.aborted) throw interruption.signal.reason;
@@ -714,11 +801,46 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
       const initialEchoes = signalRegistry?.initialSignalEchoes?.splice(0) ?? [];
-      // Pre-run signals join the first request, as before. Later requests also take signals
+      // Pre-run signals join the first request. Later requests also take signals
       // queued since the loop's last drain: they arrived before this step subscribed, so they
       // could not interrupt it, and this is the request they would restart.
       const isFirstRequest = (inputData.stepIndex ?? 0) === 0 && !inputData.signalPreempted;
+      // A run that keeps its signals in storage takes every signal waiting for it, whatever the request.
+      const storedRead = executionAbortSignalEarly?.aborted
+        ? undefined
+        : storedSignalDrain({
+            mastra: mastra as Mastra | undefined,
+            runId,
+            input: typedInput,
+            requestContext,
+            getState: keys => params.getState(keys),
+          });
+      let storedSignals = storedRead ? await storedRead() : undefined;
+      // Hints the one more claim below looked for. A row it didn't find was cancelled, or the hint was a duplicate or
+      // named an unknown id, so waiting for the next step changes nothing for it.
+      const soughtSignalIds = new Set<string>();
+      // A signal announced while the claim ran may have committed after the claim read the store. One more claim
+      // takes it into this request. Its rows join the first claim's, which a run closed in between no longer returns.
+      if (
+        storedRead &&
+        storedSignals &&
+        [...hintedSignalIds].some(
+          id => !storedSignals!.state[CONSUMED_SIGNAL_IDS_KEY].includes(id) && !isInTranscript(id),
+        )
+      ) {
+        for (const id of hintedSignalIds) soughtSignalIds.add(id);
+        const first = storedSignals;
+        const second = await storedRead();
+        const taken = new Set(first.state[CONSUMED_SIGNAL_IDS_KEY]);
+        const added = (second?.signals ?? []).filter(signal => !taken.has(signal.id));
+        storedSignals = {
+          signals: [...first.signals, ...added],
+          state: { [CONSUMED_SIGNAL_IDS_KEY]: [...taken, ...added.map(signal => signal.id)] },
+        };
+      }
+      if (storedSignals) consumedSignalsState = storedSignals.state;
       const queuedSignals = [
+        ...(storedSignals?.signals ?? []),
         ...((inputData.stepIndex ?? 0) === 0 ? (signalRegistry?.drainPendingSignals?.('pre-run') ?? []) : []),
         ...(isFirstRequest ? [] : (signalRegistry?.drainPendingSignals?.('pending') ?? [])),
         ...(signalRegistry?.pendingProcessorSignals?.splice(0) ?? []),
@@ -727,6 +849,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const admittedSignals = queuedSignals.map(signal => messageList.addSignal(signal));
       // Subscribed before the drain above, so nothing queued in between is missed.
       interruptible = true;
+      // A hint no claim above looked for, such as one heard during the one more claim, names a row they may have
+      // missed. Cutting this request short lets the next step claim it, as a hint during the request would.
+      const missedHint = [...hintedSignalIds].find(id => !soughtSignalIds.has(id) && !isInTranscript(id));
+      if (missedHint) interruptForSignals([{ id: missedHint }]);
       const processorPartCounts = new Map<ProcessorState, number>(
         [...(signalRegistry?.processorStates?.values() ?? [])].map(state => [state, state.streamParts.length]),
       );
@@ -987,7 +1113,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (selectedRunAbortSignal.aborted) endAbortedAttempt();
             }
             const runAbortSignal = ownership?.composeSignal(selectedRunAbortSignal) ?? selectedRunAbortSignal;
-            const executionAbortSignal = stopListening
+            const executionAbortSignal = listensForSignals
               ? runAbortSignal
                 ? AbortSignal.any([runAbortSignal, interruption.signal])
                 : interruption.signal
@@ -1786,7 +1912,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
 
             const providerStream =
-              stopListening && !cachedResponse
+              listensForSignals && !cachedResponse
                 ? watchInterruptibleStream(
                     modelResult as unknown as NodeReadableStream<ChunkType>,
                     interruption.signal,

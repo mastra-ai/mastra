@@ -35,6 +35,12 @@ function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+export type PendingSignalEnqueueResult = 'accepted' | 'run-closed' | 'thread-not-found';
+
+function pendingSignalsNotSupportedError(adapterName: string): Error {
+  return new Error(`Pending agent signals are not supported by this storage adapter (${adapterName}).`);
+}
+
 // Constants for metadata key validation
 const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 const MAX_METADATA_KEY_LENGTH = 128;
@@ -70,6 +76,26 @@ export abstract class MemoryStorage extends StorageDomain {
    * read-merge-write that is safe across processes.
    */
   readonly supportsAtomicWorkingMemoryMerge?: boolean = false;
+
+  /**
+   * Whether this adapter keeps pending agent signals in the messages table and
+   * implements `setSignalRun`, `getSignalRun`, `enqueuePendingSignal`,
+   * `claimPendingSignals`, `closeSignalRun`, `cancelPendingSignals` and
+   * `listPendingSignals`. Adapters that set it must pass the pending-signals
+   * conformance suite.
+   * @experimental
+   */
+  readonly supportsPendingSignals?: boolean = false;
+
+  /**
+   * Whether every process of a deployment reads and writes the same pending
+   * signal rows. Defaults to `supportsPendingSignals`. An adapter whose rows
+   * live in one process must override it to return false.
+   * @experimental
+   */
+  get pendingSignalsSharedAcrossProcesses(): boolean {
+    return !!this.supportsPendingSignals;
+  }
 
   private threadMetadataUpdateQueues = new Map<string, Promise<void>>();
 
@@ -278,6 +304,176 @@ export abstract class MemoryStorage extends StorageDomain {
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
         `The deleteMessages method needs to be implemented in the storage adapter.`,
     );
+  }
+
+  // ============================================
+  // Pending Agent Signals
+  //
+  // A queued signal is the signal's message row, stored with no `resourceId`
+  // under a reserved thread id (see `queue-thread.ts`). The thread id is the
+  // row's state. For a thread T:
+  // - pending: under `pendingQueueThreadId(T)`, sent and not taken.
+  // - taken: under `takenQueueThreadId(T)`, taken by a run of T and not yet
+  //   saved or given back by a close of T's signal run.
+  // - message: under T, saved like any other message.
+  // Taken rows belong to T, not to the run that took them. The thread lease
+  // lets one run of T take signals at a time; a second live run taking on T
+  // is a bug outside storage, and nothing here guards against it. So a claim
+  // by T's signal run also returns rows that an earlier run took and never
+  // closed. The thread row records T's signal run, the only run allowed to
+  // insert for a run or claim. A signal sent to T belongs to T whatever
+  // resource its message named.
+  //
+  // Rules for the existing methods:
+  // - `saveMessages` saves an existing id under the given thread, as for any
+  //   message. A row moved from one of T's reserved ids into T takes the saved
+  //   message's `createdAt`.
+  // - Reads by thread or by resource never match a queued row. Reads by
+  //   message id, `listMessages` include targets among them, return whatever
+  //   row has the id; an include without a resource also returns the other
+  //   rows under the same reserved id as its neighbors.
+  // - `updateMessages` treats a queued row as a missing id.
+  // - `deleteMessages` deletes nothing for a queued row's id;
+  //   `cancelPendingSignals` removes a pending signal.
+  // - `copyThread` and `cloneThread` copy only T's rows. The copy has no
+  //   signal run.
+  // - `updateThreadResourceId` moves T's rows; queued rows carry no resource.
+  // - `deleteThread` deletes T's pending and taken rows and its signal run.
+  // - `saveThread`, `copyThread` and `cloneThread` (target id),
+  //   `saveMessages`, `updateMessages` (a `threadId` in an update) and
+  //   `listMessages` reject a thread id that starts with
+  //   `QUEUE_THREAD_PREFIX` (`assertNotQueueThreadId`). `deleteThread` given
+  //   such an id changes nothing, as for a thread that does not exist.
+  // - The signal run survives `saveThread` and `updateThread`.
+  //
+  // Every method below rejects a reserved thread id and changes no thread's
+  // `updatedAt`. Each change to a row is an update of its thread id or its
+  // delete, so a store needs no transaction across rows for it.
+  //
+  // `enqueuePendingSignal` with `toRunId`, `claimPendingSignals` and
+  // `closeSignalRun` are linearizable with respect to the thread's signal run:
+  // each takes effect at one instant between its call and its return. An
+  // insert accepted for a run is visible to every close or list that starts
+  // after the insert or that run's close returned, and a claim never takes
+  // rows for a run whose close has completed.
+  //
+  // Rows are returned ordered by `createdAt`, then by `id` in code unit order,
+  // in the shape message reads return. Their `threadId` is T and their
+  // `resourceId` is the thread's current one.
+  //
+  // Deliberate limits of this layout:
+  // - Delivery after an unsettled end is at least once. A run whose close
+  //   failed or never ran leaves its taken rows, and the next claim by T's
+  //   signal run returns them, including a transient signal or a failed
+  //   turn's signal that the ended run already gave to its model. A row marked
+  //   with its run would stay out of reach until T is deleted when that run
+  //   never closes.
+  // - A signal saved inside a step whose state write then fails is a message
+  //   of T, so the retried step's claim does not return it and history holds
+  //   it once. Telling it apart needs a per-run mark on a saved message row.
+  // - Message and signal ids are assumed unique. A close deletes taken rows by
+  //   the ids in `consumedIds`, and `deleteMessages` and `updateMessages`
+  //   decide from a read and then write by id. When an id is deleted and sent
+  //   again as a signal, a late repeated close of the earlier run, or a delete
+  //   or update between its read and its write, can act on the new row. The
+  //   close's delete would need a per-run mark on the row or a prefix test in
+  //   SQL to tell them apart, and the layout has neither. A delete or update
+  //   could test the thread id it read, but would then skip a write that races
+  //   an ordinary move of the message to another thread, so it writes by id.
+  // - No store filters queued rows out of reads by message id. A caller that
+  //   must not treat one as a message checks
+  //   `isQueueThreadId(message.threadId)`, as `dbMessagesToStateSignals` does.
+  // ============================================
+
+  /**
+   * Record `runId` as the thread's signal run, replacing any previous one.
+   * Changes no message. Records nothing when the thread does not exist.
+   * @experimental
+   */
+  async setSignalRun(_args: { threadId: string; runId: string }): Promise<void> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The thread's signal run, or null when it has none or the thread does not exist.
+   * @experimental
+   */
+  async getSignalRun(_args: { threadId: string }): Promise<string | null> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Insert `message` as a pending row. `message` needs a `threadId` and a
+   * `resourceId`; without either the call rejects.
+   *
+   * With `toRunId`, in this order:
+   * - `thread-not-found` when the thread does not exist or its `resourceId`
+   *   differs from the message's;
+   * - `run-closed` when the thread's signal run is not `toRunId`.
+   *
+   * Without `toRunId` the thread is not read and need not exist. The row
+   * belongs to whichever run becomes the signal run of a thread with that id.
+   *
+   * Then, when a row with the message's id exists under any thread id,
+   * nothing is written. Otherwise the row is inserted as pending with the
+   * message's `createdAt` and without its `resourceId`. Both cases answer
+   * `accepted`.
+   * @experimental
+   */
+  async enqueuePendingSignal(_args: {
+    message: MastraDBMessage;
+    toRunId?: string;
+  }): Promise<PendingSignalEnqueueResult> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * When the thread's signal run is `runId`: move the thread's pending rows
+   * to taken, then return every taken row of the thread except the ids in
+   * `consumedIds`. Taken rows belong to the thread, so this includes rows an
+   * earlier run took and never closed, those it consumed among them. Saved
+   * rows are messages and are not returned.
+   * Otherwise, including for a missing thread, return nothing and change
+   * nothing. Does not change any `createdAt`.
+   * @experimental
+   */
+  async claimPendingSignals(_args: {
+    threadId: string;
+    runId: string;
+    consumedIds: string[];
+  }): Promise<MastraDBMessage[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Delete the thread's taken rows whose id is in `consumedIds`. Then, if the
+   * thread's signal run is still `runId`, move its other taken rows back to
+   * pending and clear the signal run. A close that comes after another run
+   * became the signal run deletes only what it consumed and leaves the other
+   * taken rows to that run. Pending rows and messages are untouched. The
+   * delete goes by id, so repeating a close changes nothing while no consumed
+   * id is sent again.
+   * @experimental
+   */
+  async closeSignalRun(_args: { threadId: string; runId: string; consumedIds: string[] }): Promise<void> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Delete the thread's pending rows named in `ids`. Taken rows, messages and
+   * unknown ids are skipped. Returns the ids deleted, in the order given.
+   * @experimental
+   */
+  async cancelPendingSignals(_args: { threadId: string; ids: string[] }): Promise<string[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * The thread's pending rows. Without a thread row, they carry no `resourceId`.
+   * @experimental
+   */
+  async listPendingSignals(_args: { threadId: string }): Promise<MastraDBMessage[]> {
+    throw pendingSignalsNotSupportedError(this.constructor.name);
   }
 
   /**

@@ -21,7 +21,7 @@ Several built-in systems publish and subscribe to events through the same pub/su
 - **Workflow execution**: The scheduler publishes a `workflow.start` event, and a long-lived worker consumes it to run the workflow. Step and lifecycle events flow over pub/sub during execution.
 - **Scheduled workflows**: The scheduler dispatches due runs by publishing to the workflow topic. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
 - **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/harness/background-tasks#subscribe-to-all-task-events).
-- **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic, so a run executing in another process receives the signal.
+- **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic. The event reaches the process that holds the run. A step of an evented run that executes in a different process gets the signal only through [storage that shares pending signals across processes](#signals-sent-to-a-running-evented-agent).
 - **Resumable streams**: Stream chunks are published per run, so a client that reconnects can replay what it missed.
 
 Because these systems run on one bus, the backend you choose applies to all of them at once.
@@ -125,12 +125,32 @@ The backends that redeliver are marked **Yes** in the [Choosing a backend](#choo
 - `EventEmitterPubSub` delivers inside one process. An event never reaches another instance, and each instance that boots restarts the active evented workflow runs of the others.
 - `UnixSocketPubSub` reaches the other processes on the host, but no other process picks up the step of a process that stopped, and each process that boots restarts the active evented workflow runs of the others.
 
+### Signals sent to a running evented agent
+
+Messages and other signals sent to an evented agent's active run wait until a model request of the run takes them. Where they wait depends on the storage of the agent's [memory](/docs/memory/overview):
+
+- **Storage that keeps pending signals**: Each signal waits as a row of the memory messages table under the reserved thread ID `mastra-queue:pending:<threadId>`, and under `mastra-queue:taken:<threadId>` once a run takes it, with no resource ID. No read by thread or resource returns it. When the run saves its messages, the row becomes the message the signal would have been. A transient signal is deleted instead. `@mastra/pg`, `@mastra/libsql`, and `InMemoryStore` from `@mastra/core/storage` keep pending signals.
+- **Storage that shares pending signals across processes**: Every process of the deployment reads and writes the same pending signals. A stored signal then reaches the run's next model request in whichever process executes it.
+
+| Storage adapter | Keeps pending signals | Shares them across processes |
+| - | - | - |
+| `@mastra/pg` | Yes | Yes |
+| `@mastra/libsql` | Yes | [Depends on the connection](/integrations/databases/libsql#pending-signals) |
+| `InMemoryStore` | Yes | No |
+
+A run keeps its signals in storage when the agent's memory uses storage that keeps pending signals and the run is the thread's active run, with a thread and a `resourceId`. A run started with `prepare()` and a run with `readOnly` memory aren't the thread's active run. Any other evented run keeps its signals in the memory of the process that started it, and they reach the run only when that process executes the run's next step. Otherwise the agent answers them in a new turn after the run ends. Input from `queueMessage()` and `queueSignal()` always stays in process memory.
+
+A stored signal that the run never takes waits for the thread's next run. The process that started the run starts that next run with the signal when the run ends, if that process is still up. When another run already holds the thread and reads the same storage, that run takes the signal at its next model request, or, if it already made its last one, the signal starts the thread's next turn when that run ends. Otherwise the signal waits for the thread's next run that reads the same storage. A run that fails deletes the signals its failed turn took, whether it fails in the process that started it or on a worker, and the thread's next run receives only the ones it never took. A failure that carries no saved progress is the exception, such as a step that runs out of deliveries with `storageVersion: 2`: the run then puts back the signals it took and never saved, and the thread's next run receives them again. When a run's `modelSettings.timeout.totalMs` deadline fires in the process that started it while another process executes its steps, the starting process saves only the turn's input, and the signals the interrupted step took and never saved go back to pending, so the thread's next run receives them again, also when the run saved earlier progress. A suspended run stops receiving signals once another run uses its thread, and signals sent to it afterwards wait for the thread's next run or are answered `blocked`, as [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) describes. A signal taken by a step that crashes before the run saves its progress is taken again by the thread's next run if the crashed run never recovers or ends.
+
 ### Warning for unsupported setups
 
 Mastra logs a warning the first time an evented run is created in a setup that can't support several processes:
 
 - The PubSub backend delivers to other processes and doesn't redeliver unacknowledged events.
 - The PubSub backend redelivers unacknowledged events and the storage adapter has no workflow step guards.
+- The PubSub backend delivers to other processes and an evented agent's active run keeps its signals in one process.
+
+Mastra logs the last case as a separate warning, the first time such a run starts, beginning with `Signals sent to running evented agents aren't supported on several processes with this setup`. It names the cause: the run has no memory, thread, or `resourceId`, the agent's memory storage doesn't keep pending signals, or that storage keeps them in one process.
 
 The default `EventEmitterPubSub` doesn't trigger the warning, because its events never leave the process. `UnixSocketPubSub` triggers it even when one process uses the socket, because Mastra can't tell how many processes share it.
 

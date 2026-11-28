@@ -125,6 +125,10 @@ export const mastra = new Mastra({
 })
 ```
 
+### Pending signals and the memory domain
+
+Evented agents keep the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of an active run in the `memory` domain, so they live in whichever store provides that domain. When an agent's memory has its own storage, they live in the `memory` domain of that storage instead. The `memory` domains of `@mastra/pg` (`MemoryPG`), `@mastra/libsql` (`MemoryLibSQL`), and `InMemoryStore` keep pending signals. With another memory store, such as `MemoryStorageMongoDB` in the previous example, evented agents keep these signals in process memory, so they don't reach steps that run in another process. To run evented agents on several processes, route `memory` to a store that shares pending signals across processes, such as `MemoryPG`.
+
 ### Disabling a domain
 
 Set a domain to `false` to disable it. A disabled domain doesn't fall back to `default`, so data for that domain isn't persisted:

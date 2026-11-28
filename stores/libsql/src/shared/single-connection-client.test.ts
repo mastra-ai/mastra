@@ -1,7 +1,28 @@
 import { createClient } from '@libsql/client';
 import { describe, expect, it, vi } from 'vitest';
 
-import { gateSingleConnectionClient, isSingleConnectionDatabase } from './single-connection-client';
+import {
+  gateSingleConnectionClient,
+  isInMemoryDatabaseUrl,
+  isSingleConnectionDatabase,
+} from './single-connection-client';
+
+describe('isInMemoryDatabaseUrl', () => {
+  // The forms `@libsql/client` opens as an in-memory database, after decoding the path.
+  it.each([
+    [':memory:', true],
+    ['file::memory:', true],
+    ['file::memory:?cache=shared', true],
+    ['file:%3Amemory%3A', true],
+    ['file::memory:%3Fcache=shared', true],
+    ['file:my%3Amemory%3A.db', false],
+    ['file::memory:x', false],
+    ['file:local.db', false],
+    ['libsql://x.turso.io', false],
+  ])('%s is in memory: %s', (url, inMemory) => {
+    expect(isInMemoryDatabaseUrl(url)).toBe(inMemory);
+  });
+});
 
 describe('isSingleConnectionDatabase', () => {
   it('is true for in-memory urls and embedded replicas only', () => {

@@ -10,7 +10,28 @@ import type { Client, Transaction, TransactionMode } from '@libsql/client';
  * with `TRANSACTION_ACTIVE` instead of waiting for the transaction to settle.
  */
 export function isSingleConnectionDatabase({ url, syncUrl }: { url: string; syncUrl?: string }): boolean {
-  return url.includes(':memory:') || Boolean(syncUrl);
+  return isInMemoryDatabaseUrl(url) || Boolean(syncUrl);
+}
+
+const URL_PARTS = /^(?<scheme>[A-Za-z][A-Za-z.+-]*):(?<authority>\/\/[^/?#]*)?(?<path>[^?#]*)/su;
+
+/**
+ * Whether `@libsql/client` opens `url` as an in-memory database: the url is `:memory:`, or a
+ * `file:` url without an authority whose percent-decoded path, before any query, is `:memory:` or
+ * starts with `:memory:?`. `file::memory:?cache=shared`, `file:%3Amemory%3A` and
+ * `file::memory:%3Fcache=shared` are in memory; `file:my%3Amemory%3A.db` is a file.
+ */
+export function isInMemoryDatabaseUrl(url: string): boolean {
+  if (url === ':memory:') return true;
+  const parts = URL_PARTS.exec(url)?.groups;
+  if (!parts || parts.scheme!.toLowerCase() !== 'file' || parts.authority !== undefined) return false;
+  let path = parts.path!;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // A malformed escape sequence: compare the path as written.
+  }
+  return path === ':memory:' || path.startsWith(':memory:?');
 }
 
 /**

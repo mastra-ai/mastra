@@ -1,6 +1,9 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import type { UserMessageCancelledChunk, UserMessagePendingChunk } from '../../stream/types';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -71,6 +74,85 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
     subscription.unsubscribe();
   });
 
+  it('shows input waiting for a run blocked in a tool to a subscriber that joins afterwards', async () => {
+    let toolStarted!: () => void;
+    const started = new Promise<void>(resolve => (toolStarted = resolve));
+    let releaseTool!: () => void;
+    const released = new Promise<void>(resolve => (releaseTool = resolve));
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(
+          calls++ === 0
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'tool-call', toolCallId: 'blocking-call', toolName: 'blockingTool', input: '{}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'done' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+              ],
+        ),
+      }),
+    });
+    const blockingTool = createTool({
+      id: 'blockingTool',
+      description: 'blocks until released',
+      inputSchema: z.object({}),
+      execute: async () => {
+        toolStarted();
+        await released;
+        return { ok: true };
+      },
+    });
+    const agent = new Agent({
+      id: 'late-subscriber-agent',
+      name: 'Late Subscriber Agent',
+      instructions: 'Test',
+      model,
+      tools: { blockingTool },
+    });
+    const scope = { resourceId: 'user', threadId: 'late-subscriber-thread' };
+
+    const stream = await agent.stream('Hello', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+    try {
+      await started;
+      const steer = agent.sendMessage({ contents: 'also include pricing' }, scope);
+      await expect(steer.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+
+      // Subscribed only after the input was queued, so it can learn of it only from the run's queue.
+      const late = await agent.subscribeToThread(scope);
+      const read = collect(late);
+      try {
+        await waitForCondition(() =>
+          read.parts.some(part => isUserMessagePendingChunk(part) && part.data.id === steer.signal.id),
+        );
+        expect(
+          read.parts.find(part => isUserMessagePendingChunk(part) && part.data.id === steer.signal.id),
+        ).toMatchObject({
+          runId: stream.runId,
+          data: { id: steer.signal.id, contents: 'also include pricing', metadata: { status: 'pending' } },
+        });
+      } finally {
+        late.unsubscribe();
+        await read.finished;
+      }
+    } finally {
+      releaseTool();
+      await stream.text;
+    }
+  });
+
   it('publishes a queued follow-up as a queued chunk, then echoes the same id when its run starts', async () => {
     const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'queued response');
     const agent = new Agent({ id: 'pending-queue-agent', name: 'Pending Queue Agent', instructions: 'Test', model });
@@ -136,7 +218,7 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
       ),
     );
 
-    const result = agent.cancelQueuedMessages({
+    const result = await agent.cancelQueuedMessages({
       resourceId: 'user',
       threadId: 'cancel-queue-thread',
       signalIds: [queued.signal.id],
@@ -186,9 +268,11 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
           );
         }
         // This request receiver owns no queue: only the execution owner can confirm removal.
-        expect(follower.cancelQueuedMessages(agent, { ...scope, signalIds: [result.signal.id] }, pubsub)).toEqual({
-          cancelledSignalIds: [],
-        });
+        expect(await follower.cancelQueuedMessages(agent, { ...scope, signalIds: [result.signal.id] }, pubsub)).toEqual(
+          {
+            cancelledSignalIds: [],
+          },
+        );
         for (const read of [ownRead, remoteRead]) {
           await waitForCondition(() =>
             read.parts.some(part => isUserMessageCancelledChunk(part) && part.data.id === result.signal.id),
@@ -239,7 +323,7 @@ describe('Agent signals: steer shown to subscribers on accept', () => {
           ).toEqual([steer.signal.id, queued.signal.id].sort());
         } else {
           expect(read.parts.filter(isUserMessageCancelledChunk)).toEqual([]);
-          agent.cancelQueuedMessages({ ...scope, signalIds: [steer.signal.id, queued.signal.id] });
+          await agent.cancelQueuedMessages({ ...scope, signalIds: [steer.signal.id, queued.signal.id] });
         }
         releaseFirst();
         await first.text.catch(() => {});

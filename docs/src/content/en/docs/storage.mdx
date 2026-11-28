@@ -40,7 +40,7 @@ Mastra storage is organized into **domains**. A domain owns one type of runtime 
 
 | Domain | What it stores |
 | - | - |
-| `memory` | Threads, messages, resources, working memory, and other agent memory state. |
+| `memory` | Threads, messages, resources, working memory, and other agent memory state, including the [pending signals](/docs/server/pubsub#signals-sent-to-a-running-evented-agent) of evented agents. |
 | `workflows` | Workflow snapshots used to suspend and resume runs. |
 | `observability` | Traces, spans, metrics, logs, and feedback. |
 | `scores` | Eval score records. |
