@@ -312,7 +312,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: 'MCPClientCapabilities',
     isOptional: true,
     description:
-      'Client capabilities to advertise: `elicitation` and `extensions`. `elicitation` is only accepted together with an `inputRequests` handler and defaults to form support when a handler is configured. `extensions` is keyed by extension id: set an entry to `false` or `null` to opt out of an extension Mastra advertises by default (such as `io.modelcontextprotocol/ui` for MCP Apps), or to an object to customise its settings. Roots and sampling are not supported.',
+      "Client capabilities to advertise: `elicitation` and `extensions`. `elicitation` is only accepted together with an `inputRequests` handler and defaults to form support when a handler is configured. `extensions` is keyed by extension id: set an entry to `false` or `null` to opt out of an extension Mastra advertises by default (such as `io.modelcontextprotocol/ui` for MCP Apps), or to an object to customise its settings. One exception: enabling the server's `tasks` option takes precedence and advertises `io.modelcontextprotocol/tasks` as `{}`, overriding any entry set here for that id. Roots and sampling are not supported.",
   },
   {
     name: 'inputRequests',

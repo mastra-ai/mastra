@@ -196,6 +196,10 @@ export type MCPClientCapabilities = Omit<
    * Set an entry to `false` or `null` to opt out of an extension Mastra advertises by default,
    * such as `io.modelcontextprotocol/ui` (MCP Apps). Any other value is sent as-is, so you can
    * customise an extension's settings.
+   *
+   * One exception: enabling the dedicated `tasks` option for the server always advertises the
+   * Tasks extension as `{}`, overriding any `io.modelcontextprotocol/tasks` entry set here
+   * (including `false`, `null` or a custom object).
    */
   extensions?: Record<string, JSONObject | false | null>;
 };
