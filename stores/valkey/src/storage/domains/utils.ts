@@ -36,11 +36,13 @@ export function processRecord(tableName: TABLE_NAMES, record: Record<string, unk
   if (tableName === TABLE_MESSAGES) {
     key = getKey(tableName, { threadId: record.threadId, id: record.id });
   } else if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+    // The canonical key never carries `resourceId`: it lives on the record instead, so a run can
+    // have exactly one key. Earlier versions appended `:resourceId:<id>`; reads still fall back to
+    // those legacy keys (see WorkflowsValkey.getSnapshotRecord).
     key = getKey(tableName, {
       namespace: record.namespace || 'workflows',
       workflow_name: record.workflow_name,
       run_id: record.run_id,
-      ...(record.resourceId ? { resourceId: record.resourceId } : {}),
     });
   } else {
     key = getKey(tableName, { id: record.id });

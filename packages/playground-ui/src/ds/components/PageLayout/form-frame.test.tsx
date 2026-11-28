@@ -98,4 +98,54 @@ describe('PageLayout variant="form"', () => {
     expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('complementary')).toBeNull();
   });
+
+  it('shows breadcrumbs in the header bar instead of a back link', () => {
+    render(
+      <PageLayout
+        variant="form"
+        breadcrumbs={
+          <nav aria-label="Breadcrumb">
+            <a href="/agents">Agents</a>
+          </nav>
+        }
+        title="New agent"
+      >
+        <section>Basics</section>
+      </PageLayout>,
+    );
+
+    const nav = screen.getByRole('navigation', { name: 'Breadcrumb' });
+    const main = screen.getByRole('main');
+    expect(nav.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.contains(nav)).toBe(false);
+    expect(screen.queryByRole('link', { name: /^Back to/ })).toBeNull();
+  });
+
+  it('puts the aside on the start side when asked, before the fields in the markup', () => {
+    render(
+      <PageLayout variant="form" title="New agent" aside={<p>Steps</p>} asidePlacement="start">
+        <label>
+          Name
+          <input />
+        </label>
+      </PageLayout>,
+    );
+
+    const aside = screen.getByText('Steps');
+    const field = screen.getByRole('textbox', { name: 'Name' });
+    expect(aside.closest('[data-slot="form-layout-aside"]')?.getAttribute('data-placement')).toBe('start');
+    expect(aside.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('puts the aside on the end side by default', () => {
+    render(
+      <PageLayout variant="form" title="New alert" aside={<p>Backtest</p>}>
+        <section>Conditions</section>
+      </PageLayout>,
+    );
+
+    expect(
+      screen.getByText('Backtest').closest('[data-slot="form-layout-aside"]')?.getAttribute('data-placement'),
+    ).toBe('end');
+  });
 });

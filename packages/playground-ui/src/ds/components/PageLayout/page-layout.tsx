@@ -45,25 +45,39 @@ export interface PageLayoutSettingsProps {
 }
 
 /**
- * A create or edit form (New alert, New project, Edit destination): a centered 640px column under the title,
- * with an optional back link above it. There is no breadcrumb bar, so a form shows one way back at most.
+ * A create or edit form (New alert, New project, Edit destination): a centered 640px column under the title.
+ * It shows one way back at most: a back link above the title, or the breadcrumb bar for a multi-step create flow.
  */
-export interface PageLayoutFormProps {
+interface PageLayoutFormBaseProps {
   variant: 'form';
-  /** Where the back link goes. Shown with `backLabel`; leave both out when the app's navigation is the way out. */
-  backHref?: string;
-  /** The back link's text, such as the page it returns to. */
-  backLabel?: string;
   title: ReactNode;
   /** Shows a skeleton in place of the title while the page loads. */
   isLoading?: boolean;
   /** The app's router link, so the back link navigates without a reload. It renders an `<a>` otherwise. */
   LinkComponent?: LinkComponent;
-  /** A live preview beside the form when the column is wide enough, above the fields otherwise. */
+  /** Content beside the form when the column is wide enough, above the fields otherwise: a live preview or a step list. */
   aside?: ReactNode;
+  /** Which side of the form `aside` sits on. `end` (default) suits a preview and stacks above the fields on narrow screens; `start` suits a step list and hides there, so show progress in the form instead. */
+  asidePlacement?: 'start' | 'end';
   /** Sections (`SettingsGroup`s), 24px apart. */
   children: ReactNode;
 }
+
+interface PageLayoutFormBackLink {
+  /** Where the back link goes. Shown with `backLabel`; leave both out when the app's navigation is the way out. */
+  backHref?: string;
+  /** The back link's text, such as the page it returns to. */
+  backLabel?: string;
+  breadcrumbs?: never;
+}
+
+interface PageLayoutFormBreadcrumbs {
+  breadcrumbs: ReactNode;
+  backHref?: never;
+  backLabel?: never;
+}
+
+export type PageLayoutFormProps = PageLayoutFormBaseProps & (PageLayoutFormBackLink | PageLayoutFormBreadcrumbs);
 
 export type PageLayoutProps = PageLayoutPageProps | PageLayoutSettingsProps | PageLayoutFormProps;
 
@@ -73,7 +87,7 @@ export type PageLayoutVariant = PageLayoutProps['variant'];
  * The frame of every page: its width, gutter, scrolling and way back. Pick the `variant` that matches the page,
  * and each variant takes only the props that make sense for it.
  *
- * - `variant="form"`: a create or edit form. A title with an optional back link, no breadcrumbs, 640px column.
+ * - `variant="form"`: a create or edit form. A title with a back link or breadcrumbs, 640px column.
  * - `variant="settings"`: a settings page. Breadcrumbs and a title over a 640px column of `SettingsGroup`s.
  * - `variant="page"`: every other page (lists, dashboards, detail pages, explorers). Full width.
  *   Add `body="fixed"` when the body is panels that scroll on their own (chat, board, editor, graph).
