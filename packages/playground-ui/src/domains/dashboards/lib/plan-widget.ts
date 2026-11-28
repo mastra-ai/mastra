@@ -24,8 +24,7 @@ export type WidgetPlan =
 
 /**
  * The queries the page's gates apply to with `state` picked: the kind's `gatedQueries`, or every
- * view's. A kind planning no requests fetches on its own, behind its own `ViewGate`, so the planner
- * never holds it up.
+ * view's. A kind planning no requests fetches on its own, so the planner never holds it up.
  */
 export function plannedQueries({ kind, views }: ReadyPreparedWidget, state: WidgetState) {
   if (!kind.discover && !kind.requests) return [];
