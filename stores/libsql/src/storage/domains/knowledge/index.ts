@@ -29,6 +29,7 @@ import {
   upgradeKnowledgeActivityFeed,
   upgradeKnowledgePinKinds,
 } from './pages';
+import { KNOWLEDGE_SEQUENCE_DDL, LibSQLKnowledgeSequences } from './sequences';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -93,6 +94,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   readonly #pages: LibSQLKnowledgePages;
   readonly #inTransaction?: Transaction;
   readonly #importers?: LibSQLKnowledgeImporters;
+  readonly #sequences?: LibSQLKnowledgeSequences;
   #savepoints = 0;
 
   /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
@@ -115,6 +117,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     this.#pages = new LibSQLKnowledgePages({
       read: this.#inTransaction ?? this.#client,
       transaction: operation => this.#transaction(operation),
+      placed: (tx, pageId, from, options) =>
+        this.#sequences?.pagePlaced(tx, pageId, from, options) ?? Promise.resolve(),
     });
     if (coreFeatures.has('knowledge-importers')) {
       this.#importers = new LibSQLKnowledgeImporters({
@@ -122,6 +126,22 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         transaction: operation => this.#transaction(operation),
       });
     }
+    if (coreFeatures.has('knowledge-sequences')) {
+      this.#sequences = new LibSQLKnowledgeSequences({
+        read: this.#inTransaction ?? this.#client,
+        transaction: operation => this.#transaction(operation),
+        readable: async (id, read) => {
+          // getPage returns a deleted page too; a sequence reads only through a live one.
+          const page = await this.#pages.getPage({ id, read });
+          return !!page && !page.deletedAt;
+        },
+      });
+    }
+  }
+
+  /** Same database as the pages: on a transaction view, the view's write transaction. */
+  override get sequences(): LibSQLKnowledgeSequences | undefined {
+    return this.#sequences;
   }
 
   /** Same database as the pages: on a transaction view, the view's write transaction. */
@@ -143,6 +163,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   override async dangerouslyClearAll(): Promise<void> {
+    await this.#sequences?.clearAll();
     await this.#pages.clearAll();
   }
 
@@ -190,6 +211,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const inspection = await this.#inspectPages(tx);
       if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
       for (const statement of KNOWLEDGE_PAGE_DDL) await tx.execute(statement);
+      if (this.#sequences) for (const statement of KNOWLEDGE_SEQUENCE_DDL) await tx.execute(statement);
       await upgradeKnowledgePinKinds(tx);
       await tx.execute({
         sql: `INSERT OR IGNORE INTO "${TABLE_KNOWLEDGE_PAGES_STATE}" (id, schemaVersion) VALUES ('knowledge', ?)`,
@@ -206,6 +228,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       await this.#client.batch(
         [
           ...importerStatements.map(sql => ({ sql, args: [] })),
+          ...LibSQLKnowledgeSequences.resetStatements().map(sql => ({ sql, args: [] })),
           ...[...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
             table => ({
               sql: `DROP TABLE IF EXISTS "${table}"`,

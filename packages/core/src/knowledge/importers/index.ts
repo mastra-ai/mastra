@@ -1,6 +1,7 @@
 export type * from './types';
 export type { KnowledgeImporterManifest } from './manifest';
 export type {
+  KnowledgeImporterCapabilities,
   KnowledgeImporterHost,
   KnowledgeImporterHostConflictCode,
   KnowledgeImporterRunBinding,

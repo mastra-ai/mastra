@@ -1,3 +1,4 @@
+import { parseKnowledgeSequenceTime } from '../../storage/domains/knowledge/sequences';
 import type {
   KnowledgeImporterErrorCode,
   KnowledgeImporterFinishRequest,
@@ -41,9 +42,19 @@ export type KnowledgeImporterRunStart =
        * whole number.
        */
       maxFlushBytes?: number;
+      /** What this host takes. Absent from hosts older than contract 2: treat as `{ contract: 1, sequences: false }`. */
+      capabilities?: KnowledgeImporterCapabilities;
     }
   /** Another run of the binding is going; the host recorded this one as skipped. */
   | { status: 'skipped'; runId: string };
+
+/** What a host takes, sent with each run start so an importer knows before its first flush. @experimental */
+export interface KnowledgeImporterCapabilities {
+  /** The importer contract version; 2 adds capabilities and the `unsupported` refusal. */
+  contract: number;
+  /** Takes `sequenceItem` and `removeSequenceItem` ops. */
+  sequences: boolean;
+}
 
 /**
  * A run's binding as a host hands it over. The runner picks the definition by `importer`, checks
@@ -78,6 +89,8 @@ export interface KnowledgeImporterRunBinding {
  * - After a run ends (finished, canceled or expired) a new seq is refused, while an exact replay
  *   of a committed seq still returns its receipt.
  * - Run counts are summed from flush receipts.
+ * - A run start carries `capabilities`. A flush with ops the host doesn't take is refused whole as
+ *   `unsupported` before anything applies, so neither its ops nor its state commit and its seq stays free.
  *
  * Refusals throw `KnowledgeImporterHostConflictError`. Any other host failure throws
  * `KnowledgeImporterHostError` with the HTTP status when there is one: the runner resends the same
@@ -108,7 +121,9 @@ export type KnowledgeImporterHostConflictCode =
   /** The run has ended, been canceled, expired or never started. */
   | 'run_not_active'
   /** A finish replay that differs from the recorded finish. */
-  | 'finish_mismatch';
+  | 'finish_mismatch'
+  /** The flush holds ops this host doesn't take (sequence ops on a host without sequences). Nothing was applied. */
+  | 'unsupported';
 
 /** A host refused a flush or a finish (409 over HTTP). Retrying the same request won't help. @experimental */
 export class KnowledgeImporterHostConflictError extends Error {
@@ -188,35 +203,69 @@ export function normalizeKnowledgeImporterFinish(
  * §3.2.2.2).
  */
 export function canonicalJson(value: unknown): string {
-  if (value === null) return 'null';
-  switch (typeof value) {
-    case 'boolean':
-      return value ? 'true' : 'false';
-    case 'number':
-      if (!Number.isFinite(value)) throw new TypeError('Canonical JSON has no NaN or Infinity.');
-      return JSON.stringify(value);
-    case 'string':
-      return JSON.stringify(wellFormed(value));
-    case 'object': {
-      if (Array.isArray(value)) {
-        // Index every slot, as JSON.stringify does: a hole or undefined is null on the wire.
-        const items: string[] = [];
-        for (let index = 0; index < value.length; index++) {
-          const item: unknown = value[index];
-          items.push(item === undefined ? 'null' : canonicalJson(item));
-        }
-        return `[${items.join(',')}]`;
-      }
-      const record = value as Record<string, unknown>;
-      const members = Object.keys(record)
-        .filter(key => record[key] !== undefined)
-        .sort()
-        .map(key => `${JSON.stringify(wellFormed(key))}:${canonicalJson(record[key])}`);
-      return `{${members.join(',')}}`;
+  // An explicit stack instead of recursion, so any depth JSON.parse can produce serializes.
+  const out: string[] = [];
+  const open = new Set<object>();
+  const stack: Array<{ value: unknown } | { text: string } | { leave: object }> = [{ value }];
+  while (stack.length) {
+    const task = stack.pop()!;
+    if ('text' in task) {
+      out.push(task.text);
+      continue;
     }
-    default:
-      throw new TypeError(`Canonical JSON can't hold a ${typeof value}.`);
+    if ('leave' in task) {
+      open.delete(task.leave);
+      continue;
+    }
+    const current = task.value;
+    if (current === null) {
+      out.push('null');
+      continue;
+    }
+    switch (typeof current) {
+      case 'boolean':
+        out.push(current ? 'true' : 'false');
+        continue;
+      case 'number':
+        if (!Number.isFinite(current)) throw new TypeError('Canonical JSON has no NaN or Infinity.');
+        out.push(JSON.stringify(current));
+        continue;
+      case 'string':
+        out.push(JSON.stringify(wellFormed(current)));
+        continue;
+      case 'object': {
+        if (open.has(current)) throw new TypeError("Canonical JSON can't hold a cycle.");
+        open.add(current);
+        const next: Array<{ value: unknown } | { text: string } | { leave: object }> = [];
+        if (Array.isArray(current)) {
+          // Index every slot, as JSON.stringify does: a hole or undefined is null on the wire.
+          next.push({ text: '[' });
+          for (let index = 0; index < current.length; index++) {
+            if (index) next.push({ text: ',' });
+            const item: unknown = current[index];
+            next.push(item === undefined ? { text: 'null' } : { value: item });
+          }
+          next.push({ text: ']' });
+        } else {
+          const record = current as Record<string, unknown>;
+          const keys = Object.keys(record)
+            .filter(key => record[key] !== undefined)
+            .sort();
+          next.push({ text: '{' });
+          keys.forEach((key, index) => {
+            next.push({ text: `${index ? ',' : ''}${JSON.stringify(wellFormed(key))}:` }, { value: record[key] });
+          });
+          next.push({ text: '}' });
+        }
+        next.push({ leave: current });
+        for (let index = next.length - 1; index >= 0; index--) stack.push(next[index]!);
+        continue;
+      }
+      default:
+        throw new TypeError(`Canonical JSON can't hold a ${typeof current}.`);
+    }
   }
+  return out.join('');
 }
 
 /**
@@ -248,7 +297,17 @@ function wellFormed(value: string): string {
   return value;
 }
 
-type FieldKind = 'string' | 'nonEmpty' | 'nullableString' | 'links' | 'aliases';
+type FieldKind =
+  | 'string'
+  | 'nonEmpty'
+  | 'isoTime'
+  | 'nullableString'
+  | 'links'
+  | 'aliases'
+  | 'author'
+  | 'urlLinks'
+  | 'jsonObject'
+  | 'sequence';
 
 const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
   sourceId: { kind: 'nonEmpty', required: true },
@@ -256,6 +315,30 @@ const DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }
   title: { kind: 'string', required: true },
   parent: { kind: 'nullableString' },
   fallbackParent: { kind: 'nonEmpty' },
+  sequence: { kind: 'sequence' },
+};
+
+// Shape only: the store checks the content rule, limits and schemas when the item is applied.
+const SEQUENCE_ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
+  externalId: { kind: 'nonEmpty', required: true },
+  occurredAt: { kind: 'isoTime' },
+  editedAt: { kind: 'isoTime' },
+  author: { kind: 'author' },
+  externalParentId: { kind: 'nonEmpty' },
+  type: { kind: 'nonEmpty' },
+  title: { kind: 'string' },
+  body: { kind: 'string' },
+  links: { kind: 'urlLinks' },
+  properties: { kind: 'jsonObject' },
+  position: { kind: 'nonEmpty' },
+  after: { kind: 'nonEmpty' },
+  before: { kind: 'nonEmpty' },
+};
+
+const SEQUENCE_DECLARATION_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
+  orderBy: { kind: 'nonEmpty' },
+  propertiesSchema: { kind: 'jsonObject' },
+  itemTypes: { kind: 'jsonObject' },
 };
 
 const ITEM_FIELDS: Record<string, { kind: FieldKind; required?: boolean }> = {
@@ -278,6 +361,87 @@ function checkDenseArray(value: unknown, where: string): unknown[] {
     if (!(index in value)) throw new TypeError(`${where}[${index}] is empty.`);
   }
   return value;
+}
+
+/**
+ * A copy of plain JSON that survives the wire unchanged: dense arrays, plain objects, finite
+ * numbers and well-formed strings. Undefined members are left out, as JSON.stringify leaves them.
+ */
+function checkJson(value: unknown, where: string): unknown {
+  // An explicit stack instead of recursion, so any depth JSON.parse can produce is copied. Paths
+  // are built only for an error, so a deep value costs no path strings.
+  type Frame = { parent?: Frame; key: string | number };
+  const pathOf = (frame: Frame | undefined): string => {
+    const keys: Array<string | number> = [];
+    for (let at = frame; at?.parent; at = at.parent) keys.push(at.key);
+    return (
+      where +
+      keys
+        .reverse()
+        .map(key => (typeof key === 'number' ? `[${key}]` : `.${key}`))
+        .join('')
+    );
+  };
+  const root: Frame = { key: '' };
+  const holder: Record<string, unknown> = {};
+  const open = new Set<object>();
+  const stack: Array<
+    { value: unknown; frame: Frame; set: (copy: unknown) => void } | { leave: object; finish?: () => void }
+  > = [{ value, frame: root, set: copy => (holder.value = copy) }];
+  while (stack.length) {
+    const task = stack.pop()!;
+    if ('leave' in task) {
+      open.delete(task.leave);
+      task.finish?.();
+      continue;
+    }
+    const { value: current, frame, set } = task;
+    if (current === null || typeof current === 'boolean') {
+      set(current);
+      continue;
+    }
+    if (typeof current === 'number') {
+      if (!Number.isFinite(current)) throw new TypeError(`${pathOf(frame)} holds a non-finite number.`);
+      set(current);
+      continue;
+    }
+    if (typeof current === 'string') {
+      set(wellFormed(current));
+      continue;
+    }
+    if (typeof current === 'object' && open.has(current)) throw new TypeError(`${pathOf(frame)} holds a cycle.`);
+    if (Array.isArray(current)) {
+      checkDenseArray(current, pathOf(frame));
+      const copy: unknown[] = new Array(current.length);
+      set(copy);
+      open.add(current);
+      stack.push({ leave: current });
+      for (let index = current.length - 1; index >= 0; index--) {
+        stack.push({
+          value: current[index],
+          frame: { parent: frame, key: index },
+          set: inner => (copy[index] = inner),
+        });
+      }
+      continue;
+    }
+    if (!isPlainObject(current)) throw new TypeError(`${pathOf(frame)} must be plain JSON.`);
+    // Built on a null prototype so a "__proto__" key stays data, then spread to a plain object.
+    const members: Record<string, unknown> = Object.create(null);
+    open.add(current);
+    stack.push({ leave: current, finish: () => set({ ...members }) });
+    const keys = Object.keys(current).filter(key => current[key] !== undefined);
+    for (const key of keys) members[wellFormed(key)] = undefined;
+    for (let index = keys.length - 1; index >= 0; index--) {
+      const key = keys[index]!;
+      stack.push({
+        value: current[key],
+        frame: { parent: frame, key },
+        set: inner => (members[wellFormed(key)] = inner),
+      });
+    }
+  }
+  return holder.value;
 }
 
 function checkFields<T>(
@@ -304,6 +468,15 @@ function checkFields<T>(
       case 'nonEmpty':
         out[key] = checkString(field, at, true);
         break;
+      case 'isoTime': {
+        // Items are ordered by these, so a string that parses wrong would look like data in the wrong place.
+        const time = checkString(field, at, true);
+        if (!parseKnowledgeSequenceTime(time)) {
+          throw new TypeError(`${at} must be an ISO 8601 date-time, got "${time}".`);
+        }
+        out[key] = time;
+        break;
+      }
       case 'nullableString':
         out[key] = field === null ? null : checkString(field, at, true);
         break;
@@ -319,6 +492,30 @@ function checkFields<T>(
           ),
         );
         break;
+      case 'author':
+        out[key] = checkFields(field, { sourceId: { kind: 'nonEmpty', required: true }, name: { kind: 'string' } }, at);
+        break;
+      case 'urlLinks':
+        out[key] = checkDenseArray(field, at).map((link, index) =>
+          checkFields(
+            link,
+            { url: { kind: 'nonEmpty', required: true }, title: { kind: 'string' } },
+            `${at}[${index}]`,
+          ),
+        );
+        break;
+      case 'jsonObject':
+        if (!isPlainObject(field)) throw new TypeError(`${at} must be a JSON object.`);
+        out[key] = checkJson(field, at);
+        break;
+      case 'sequence': {
+        const sequence = checkFields<{ orderBy?: string }>(field, SEQUENCE_DECLARATION_FIELDS, at);
+        if (sequence.orderBy !== undefined && sequence.orderBy !== 'timeline' && sequence.orderBy !== 'position') {
+          throw new TypeError(`${at}.orderBy must be "timeline" or "position".`);
+        }
+        out[key] = sequence;
+        break;
+      }
     }
   }
   return { ...out } as T;
@@ -352,8 +549,28 @@ export function parseKnowledgeImporterFlushBody(body: { ops: unknown; state?: un
         if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
         return { op: 'remove', sourceId: checkString(op.sourceId, `${where}.sourceId`, true) };
       }
+      case 'sequenceItem': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'sequence' && key !== 'sequenceItem');
+        if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
+        return {
+          op: 'sequenceItem',
+          sequence: checkString(op.sequence, `${where}.sequence`, true),
+          sequenceItem: checkFields(op.sequenceItem, SEQUENCE_ITEM_FIELDS, `${where}.sequenceItem`),
+        };
+      }
+      case 'removeSequenceItem': {
+        const extra = Object.keys(op).find(key => key !== 'op' && key !== 'sequence' && key !== 'externalId');
+        if (extra) throw new TypeError(`${where} has unknown field "${extra}".`);
+        return {
+          op: 'removeSequenceItem',
+          sequence: checkString(op.sequence, `${where}.sequence`, true),
+          externalId: checkString(op.externalId, `${where}.externalId`, true),
+        };
+      }
       default:
-        throw new TypeError(`${where}.op must be "upsert", "declare" or "remove".`);
+        throw new TypeError(
+          `${where}.op must be "upsert", "declare", "remove", "sequenceItem" or "removeSequenceItem".`,
+        );
     }
   });
   if (body.state === undefined || body.state === null) return { ops };

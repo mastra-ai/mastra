@@ -15,6 +15,7 @@ import {
   createKnowledgeHeldScopeTests,
   createKnowledgeHostWriteTests,
   createKnowledgePageStoreTests,
+  createKnowledgeSequenceTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
@@ -30,6 +31,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import { withClientWriteLock } from '../../db/write-lock';
 import { LibSQLStore } from '../../index';
+import { LIBSQL_KNOWLEDGE_SEQUENCE_TABLES } from './sequences';
 import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL, libsqlKnowledgeTransaction } from '.';
 
 const COMPAT_CONSTANTS = [
@@ -58,6 +60,14 @@ describe('Knowledge Core compatibility', () => {
 createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHostWriteTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 createKnowledgeHeldScopeTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+
+// One shared database, emptied before each case by the reset that must also empty the sequence tables.
+createKnowledgeSequenceTests(async () => {
+  const store = new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' });
+  await store.init();
+  await store.dangerouslyReset();
+  return store;
+});
 
 describe('through transaction views', () => {
   createKnowledgePageStoreTests(() =>
@@ -223,7 +233,12 @@ createKnowledgeSchemaResetTests(async () => {
       );
       const names = new Set(tables.rows.map(row => String(row.name)));
       expect(names).toEqual(
-        new Set([...KNOWLEDGE_PAGES_TABLE_NAMES, 'mastra_knowledge_pin_audiences', 'mastra_knowledge_page_links']),
+        new Set([
+          ...KNOWLEDGE_PAGES_TABLE_NAMES,
+          'mastra_knowledge_pin_audiences',
+          'mastra_knowledge_page_links',
+          ...Object.values(LIBSQL_KNOWLEDGE_SEQUENCE_TABLES),
+        ]),
       );
     },
     cleanup: async () => client.close(),

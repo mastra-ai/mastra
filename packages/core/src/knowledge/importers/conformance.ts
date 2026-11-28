@@ -78,6 +78,35 @@ export function importerHostConformance(
       },
     ],
     [
+      'advertises its contract version and whether it takes sequences when a run starts',
+      async t => {
+        const run = await t.start();
+        const caps = run.capabilities;
+        check(caps, 'a run start carries capabilities');
+        check(
+          Number.isInteger(caps.contract) && caps.contract >= 2,
+          `capabilities.contract is 2 or later, got ${caps.contract}`,
+        );
+        check(typeof caps.sequences === 'boolean', 'capabilities.sequences is a boolean');
+      },
+    ],
+    [
+      'refuses a flush with sequence ops whole, as unsupported, when it takes no sequences',
+      async t => {
+        const run = await t.start();
+        if (run.capabilities?.sequences) return;
+        const ops = [upsert('a'), item('a', '1')];
+        await refused(() => t.flush(run, 1, ops, { cursor: 'after-items' }), 409, 'unsupported');
+        await refused(() => t.flush(run, 1, [removeItem('a', '1')]), 409, 'unsupported');
+        // Nothing of the refused flush committed: seq 1 is still free and the state didn't move.
+        const next = await t.flush(run, 1, [upsert('b')]);
+        check(next.seq === 1 && next.created === 1, 'after an unsupported refusal, seq 1 is still the next seq');
+        await t.finish(run, { lastSeq: 1 });
+        const after = await t.start();
+        check(after.state.cursor === undefined, 'state sent with an unsupported flush never commits');
+      },
+    ],
+    [
       'refuses a seq gap',
       async t => {
         const run = await t.start();
@@ -117,6 +146,26 @@ export function importerHostConformance(
           () => t.host.flush({ runId: run.runId, generation: run.generation, seq: 1, digest: '0'.repeat(64), ops }),
           400,
         );
+        await t.flush(run, 1, [upsert('a')]);
+      },
+    ],
+    [
+      'refuses an item whose times are not ISO 8601 date-times, whether or not it takes sequences',
+      async t => {
+        const run = await t.start();
+        const bad = (field: 'occurredAt' | 'editedAt', value: string): KnowledgeImporterOp[] => [
+          {
+            op: 'sequenceItem',
+            sequence: 'a',
+            sequenceItem: { externalId: '1', occurredAt: '2026-11-23T22:13:20Z', body: '', [field]: value },
+          },
+        ];
+        for (const ops of [bad('occurredAt', 'yesterday'), bad('occurredAt', '2026-11-23'), bad('editedAt', 'soon')]) {
+          await refused(
+            () => t.host.flush({ runId: run.runId, generation: run.generation, seq: 1, digest: '0'.repeat(64), ops }),
+            400,
+          );
+        }
         await t.flush(run, 1, [upsert('a')]);
       },
     ],
@@ -273,6 +322,18 @@ function session({ host, bindingId }: KnowledgeImporterHostConformanceFixture): 
 const upsert = (sourceId: string): KnowledgeImporterOp => ({
   op: 'upsert',
   item: { sourceId, title: sourceId.toUpperCase(), body: `body of ${sourceId}` },
+});
+
+const item = (sequence: string, externalId: string): KnowledgeImporterOp => ({
+  op: 'sequenceItem',
+  sequence,
+  sequenceItem: { externalId, occurredAt: '2026-11-23T22:13:20.123Z', body: `item ${externalId}` },
+});
+
+const removeItem = (sequence: string, externalId: string): KnowledgeImporterOp => ({
+  op: 'removeSequenceItem',
+  sequence,
+  externalId,
 });
 
 function check(condition: unknown, message: string): asserts condition {

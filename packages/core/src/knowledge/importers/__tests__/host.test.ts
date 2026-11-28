@@ -95,6 +95,30 @@ describe('knowledgeImporterFlushDigest', () => {
 describe('parseKnowledgeImporterFlushBody', () => {
   const upsert = { op: 'upsert', item: { sourceId: 'a', title: 'A', body: 'x' } };
 
+  it.each(['2026-02-30T00:00Z', '2026-01-01T24:00Z', '2026-04-31T00:00:00+02:00'])(
+    'refuses calendar rollover %s in either item timestamp',
+    time => {
+      for (const field of ['occurredAt', 'editedAt']) {
+        expect(() =>
+          parseKnowledgeImporterFlushBody({
+            ops: [
+              {
+                op: 'sequenceItem',
+                sequence: 'a',
+                sequenceItem: {
+                  externalId: '1',
+                  body: '',
+                  occurredAt: '2026-02-28T00:00Z',
+                  [field]: time,
+                },
+              },
+            ],
+          }),
+        ).toThrow(TypeError);
+      }
+    },
+  );
+
   it.each([
     [
       'a sparse aliases array',
@@ -117,6 +141,134 @@ describe('parseKnowledgeImporterFlushBody', () => {
     ['a non-string state value', { ops: [], state: { cursor: 42 } }],
   ])('refuses %s', (_name, body) => {
     expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(TypeError);
+  });
+
+  describe('sequence items and declarations', () => {
+    const sequenceItem = {
+      externalId: 'step-2',
+      title: 'Roll back',
+      links: [{ url: 'https://example.com/runbook', title: 'Runbook' }, { url: 'https://example.com/raw' }],
+      properties: { owner: 'ops', checks: ['db', { name: 'cache', retries: 2 }], done: false },
+      type: 'step',
+      externalParentId: 'step-1',
+      after: 'step-1',
+    };
+    const declaration = {
+      sourceId: 'runbook',
+      title: 'Runbook',
+      sequence: {
+        orderBy: 'position',
+        propertiesSchema: { type: 'object', properties: { owner: { type: 'string' } } },
+        itemTypes: { step: { label: 'Step' } },
+      },
+    };
+
+    it('takes the whole item envelope, with no time or body on a position item', async () => {
+      const body = { ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem }] };
+      expect(parseKnowledgeImporterFlushBody(body).ops).toEqual(body.ops);
+      expect(await knowledgeImporterFlushDigest(JSON.parse(JSON.stringify(body)))).toBe(
+        await knowledgeImporterFlushDigest(body),
+      );
+    });
+
+    it('takes position and before, and drops undefined property members as the wire does', () => {
+      const [op] = parseKnowledgeImporterFlushBody({
+        ops: [
+          {
+            op: 'sequenceItem',
+            sequence: 'runbook',
+            sequenceItem: { externalId: 'a', title: 'A', position: 'm', properties: { kept: 1, gone: undefined } },
+          },
+          { op: 'sequenceItem', sequence: 'runbook', sequenceItem: { externalId: 'b', title: 'B', before: 'a' } },
+        ],
+      }).ops;
+      expect(op).toEqual({
+        op: 'sequenceItem',
+        sequence: 'runbook',
+        sequenceItem: { externalId: 'a', title: 'A', position: 'm', properties: { kept: 1 } },
+      });
+    });
+
+    // Storage keeps properties at any depth that fits in 16 KB, so the wire and the digest must too.
+    const nest = (depth: number, wrap: (inner: unknown) => unknown) => {
+      let value: unknown = 'leaf';
+      for (let level = 0; level < depth; level++) value = wrap(value);
+      return value;
+    };
+    it.each([
+      ['object', nest(2_500, inner => ({ a: inner }))],
+      ['array', { list: nest(2_500, inner => [inner]) }],
+    ])('carries %s properties nested 2,500 deep through parse and digest', async (_kind, properties) => {
+      const body = {
+        ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem: { externalId: 'd', properties, title: 'D' } }],
+      };
+      const wire = JSON.parse(JSON.stringify(body));
+      expect(JSON.stringify(wire).length).toBeLessThan(16 * 1024);
+      expect(canonicalJson(parseKnowledgeImporterFlushBody(wire).ops)).toBe(JSON.stringify(wire.ops));
+      // Keys are already sorted and one per level, so the canonical form is what JSON.stringify writes.
+      expect(canonicalJson(wire)).toBe(JSON.stringify(wire));
+      await expect(knowledgeImporterFlushDigest(wire)).resolves.toBe(
+        createHash('sha256')
+          .update(JSON.stringify({ ops: wire.ops, state: null }))
+          .digest('hex'),
+      );
+    });
+
+    it('copies a value repeated across properties, which is not a cycle', () => {
+      const shared = { id: 1 };
+      const [op] = parseKnowledgeImporterFlushBody(withItem({ properties: { a: shared, b: [shared, shared] } })).ops;
+      expect(op).toMatchObject({ sequenceItem: { properties: { a: { id: 1 }, b: [{ id: 1 }, { id: 1 }] } } });
+      expect(canonicalJson({ a: shared, b: [shared] })).toBe('{"a":{"id":1},"b":[{"id":1}]}');
+    });
+
+    it('refuses a cycle in canonical JSON with a TypeError', () => {
+      const loop: unknown[] = [];
+      loop.push(loop);
+      expect(() => canonicalJson(loop)).toThrow(TypeError);
+    });
+
+    it('takes a sequence declaration on a declare and on an upsert', () => {
+      const ops = [
+        { op: 'declare', item: declaration },
+        { op: 'upsert', item: { ...declaration, sourceId: 'log', body: 'Deploys.', sequence: {} } },
+      ];
+      expect(parseKnowledgeImporterFlushBody({ ops }).ops).toEqual(ops);
+    });
+
+    const withItem = (patch: Record<string, unknown>) => ({
+      ops: [{ op: 'sequenceItem', sequence: 'runbook', sequenceItem: { ...sequenceItem, ...patch } }],
+    });
+    const withSequence = (sequence: unknown) => ({ ops: [{ op: 'declare', item: { ...declaration, sequence } }] });
+
+    it.each([
+      ['the old threadExternalId', withItem({ threadExternalId: 'step-1' })],
+      ['a page link on an item', withItem({ links: [{ sourceId: 'page' }] })],
+      ['a link without a url', withItem({ links: [{ title: 'T' }] })],
+      ['an empty link url', withItem({ links: [{ url: '' }] })],
+      ['array properties', withItem({ properties: ['a'] })],
+      ['a sparse array in properties', withItem({ properties: { list: Array(1) } })],
+      ['a non-finite number in properties', withItem({ properties: { n: Number.NaN } })],
+      ['a lone surrogate in a property key', withItem({ properties: { '\ud800': 1 } })],
+      [
+        'a cycle in properties',
+        withItem({
+          properties: (() => {
+            const loop: Record<string, unknown> = {};
+            loop.self = loop;
+            return loop;
+          })(),
+        }),
+      ],
+      ['an empty type', withItem({ type: '' })],
+      ['an empty position', withItem({ position: '' })],
+      ['an unknown orderBy', withSequence({ orderBy: 'alphabetical' })],
+      ['an unknown sequence field', withSequence({ order: 'position' })],
+      ['a non-object sequence', withSequence('position')],
+      ['an array propertiesSchema', withSequence({ propertiesSchema: [] })],
+      ['a non-object itemTypes', withSequence({ itemTypes: 'step' })],
+    ])('refuses %s', (_name, body) => {
+      expect(() => parseKnowledgeImporterFlushBody(body)).toThrow(TypeError);
+    });
   });
 
   it('keeps a "__proto__" state key from JSON as data, so its value changes the digest', async () => {

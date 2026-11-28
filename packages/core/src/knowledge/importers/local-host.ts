@@ -17,6 +17,7 @@ import {
   parseKnowledgeImporterFlushBody,
 } from './host';
 import type {
+  KnowledgeImporterCapabilities,
   KnowledgeImporterHost,
   KnowledgeImporterRunBinding,
   KnowledgeImporterRunStart,
@@ -30,11 +31,13 @@ import {
   parseKnowledgeImportTarget,
 } from './sink';
 import type { KnowledgeImportEmbedJob } from './sink';
+import { isKnowledgeImporterSequenceOp } from './types';
 import type {
   KnowledgeImportCounts,
   KnowledgeImporterFinishRequest,
   KnowledgeImporterFlush,
   KnowledgeImporterFlushReceipt,
+  KnowledgeImporterPageOp,
   KnowledgeImporterRunReceipt,
 } from './types';
 
@@ -215,6 +218,8 @@ class AdmitRefusal extends Error {
     super('The claim was refused.');
   }
 }
+
+const LOCAL_CAPABILITIES: KnowledgeImporterCapabilities = { contract: 2, sequences: false };
 
 const conflict = (code: KnowledgeImporterHostConflictError['code'], message: string) =>
   new KnowledgeImporterHostConflictError(code, message);
@@ -526,6 +531,7 @@ export function createLocalKnowledgeImporterHost(
           state: result.state,
           lastSeq: result.run.run.lastSeq,
           binding,
+          capabilities: LOCAL_CAPABILITIES,
         };
       } catch (error) {
         if (error instanceof SkippedClaim) return { status: 'skipped', runId: error.runId };
@@ -570,6 +576,14 @@ export function createLocalKnowledgeImporterHost(
       if (replayed) {
         if (replayed.digest !== digest) throw conflict('digest_mismatch', 'This seq was committed with other content.');
         return replayed.receipt as KnowledgeImporterFlushReceipt;
+      }
+      // Sequence items have no store here yet, so the whole flush is refused before anything applies.
+      const pageOps: KnowledgeImporterPageOp[] = [];
+      for (const op of body.ops) {
+        if (isKnowledgeImporterSequenceOp(op)) {
+          throw conflict('unsupported', 'This host takes no sequence items; nothing in the flush was applied.');
+        }
+        pageOps.push(op);
       }
       const [peek, peekRun] = await Promise.all([
         rootImporters.readWriterGuard(),
@@ -650,7 +664,7 @@ export function createLocalKnowledgeImporterHost(
                 binding,
                 scope,
                 runId: run.id,
-                ops: body.ops,
+                ops: pageOps,
                 provenance: { author: resolvedAuthor.author },
                 // After a settle slice timed out, the next uses half as many nodes; after three in a
                 // row the run stops settling (O3 §C″).

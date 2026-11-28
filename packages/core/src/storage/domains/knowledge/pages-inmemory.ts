@@ -97,6 +97,14 @@ export interface InMemoryKnowledgePageSnapshot {
   bodyLinks: Map<string, KnowledgePageBodyLink[]>;
 }
 
+/** How the page store tells the sequences a child page arrived, moved, was renamed, merged or deleted. */
+export interface InMemoryKnowledgePagePlacement {
+  /** Before the page changes: the position a page takes under `parentId`, or undefined to choose as usual. May refuse. */
+  pagePosition(parentId: string, pageId: string, requested: string | undefined): string | undefined;
+  /** After the page changed; `from` is its parent before. Never refuses. */
+  pagePlaced(page: KnowledgePage, from: string | null): void;
+}
+
 export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #pages = new Map<string, KnowledgePage>();
   #notes = new Map<string, KnowledgeNote>();
@@ -203,6 +211,26 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       const mentioned = this.#pages.get(pageId);
       return !!mentioned && this.#pageReadable(mentioned, read);
     });
+  }
+
+  /** For the sequence store beside it: the page, deleted or not, whether it has live children, and whether `read` reaches it. */
+  sequencePage(id: string, read: KnowledgeReadScope = 'all'): { page: KnowledgePage; readable: boolean } | undefined {
+    const page = this.#pages.get(id);
+    if (!page) return undefined;
+    return { page, readable: !page.deletedAt && this.#pageReadable(page, read) };
+  }
+
+  /** Keeps sequence page items in step with child pages; set by the owning store. */
+  placement?: InMemoryKnowledgePagePlacement;
+
+  /** The live non-scope child pages of `parentId`, for marking it a sequence. */
+  sequenceChildren(parentId: string): KnowledgePage[] {
+    return this.#children(parentId).filter(page => !page.isScope);
+  }
+
+  /** Gives a page a new position, without a version bump: marking a sequence settles a missing or repeated key. */
+  repositionForSequence(pageId: string, position: string): void {
+    this.#page(pageId).position = position;
   }
 
   #children(parentId: string | null): KnowledgePage[] {
@@ -614,7 +642,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       if (problem) throw new Error(problem);
       if (this.#childByKey(parent.id, input.key)) throw new KnowledgePageKeyConflictError(input.key, parent.id);
     }
-    const page = this.#newPage({ ...input, id, scopeId, isScope: false });
+    const position = this.placement?.pagePosition(parent.id, id, input.position) ?? input.position;
+    const page = this.#newPage({ ...input, id, scopeId, isScope: false, position });
+    this.placement?.pagePlaced(page, null);
     this.#log('page-created', page, input.provenance);
     return clone(page);
   }
@@ -633,6 +663,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     page.version++;
     page.updatedBy = clone(input.provenance);
     page.updatedAt = this.#now();
+    if (input.name !== undefined) this.placement?.pagePlaced(page, page.parentId);
     this.#log('page-updated', page, input.provenance);
     return clone(page);
   }
@@ -669,13 +700,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const parent = this.#livePage(input.parentId);
     const subtree = this.#subtree(page);
     this.#checkCarry(page.id, subtree, parent, true);
+    const placed = this.placement?.pagePosition(parent.id, page.id, input.position);
     const scopeId = parent.isScope ? parent.id : parent.scopeId;
     for (const { page: carried } of subtree) carried.scopeId = scopeId;
-    page.position = input.position ?? this.#nextPosition(parent.id);
+    const from = page.parentId;
+    page.position = placed ?? input.position ?? this.#nextPosition(parent.id);
     page.parentId = parent.id;
     page.version++;
     page.updatedBy = clone(input.provenance);
     page.updatedAt = this.#now();
+    this.placement?.pagePlaced(page, from);
     this.#log('page-moved', page, input.provenance);
     return clone(page);
   }
@@ -692,7 +726,9 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     for (const child of this.#children(source.id).sort(byPosition)) {
       position = knowledgePositionBetween(position);
       child.parentId = target.id;
-      child.position = position;
+      child.position = this.placement?.pagePosition(target.id, child.id, undefined) ?? position;
+      position = child.position;
+      this.placement?.pagePlaced(child, source.id);
     }
     for (const { page } of subtree) if (page.id !== source.id) page.scopeId = target.scopeId;
     for (const page of this.#pages.values()) {
@@ -724,6 +760,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     source.version++;
     source.updatedBy = clone(input.provenance);
     source.updatedAt = now;
+    this.placement?.pagePlaced(source, source.parentId);
     this.#log('page-merged', source, input.provenance);
     return clone(target);
   }
@@ -738,6 +775,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     page.deletedBy = input.deletedBy;
     page.version++;
     page.updatedAt = now;
+    this.placement?.pagePlaced(page, page.parentId);
     for (const kind of PIN_KINDS) this.#pins.delete(pinKey(page.id, kind));
     this.#log('page-deleted', page, { author: input.deletedBy });
     return clone(page);

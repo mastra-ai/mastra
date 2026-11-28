@@ -208,7 +208,7 @@ function qualifier(schemaName?: string) {
 }
 
 /** Collects bind parameters and hands back their `$n` placeholders. */
-class Params {
+export class Params {
   readonly values: unknown[] = [];
   add(value: unknown): string {
     this.values.push(value);
@@ -221,7 +221,7 @@ class Params {
  * check in it. A large frontier travels as a handful of array parameters (`= ANY($n::text[])`,
  * `unnest`), never as a long `IN (...)` list.
  */
-class ReadFilter {
+export class ReadFilter {
   readonly #all: boolean;
   readonly #pages: string;
   readonly #addresses?: string;
@@ -434,7 +434,7 @@ function toListedPin(row: Row): KnowledgeListedPin {
   return { ...toPin(row), pageName: String(row.pageName) };
 }
 
-function escapeLike(term: string): string {
+export function escapeLike(term: string): string {
   return term.replace(/[\\%_]/g, match => `\\${match}`);
 }
 
@@ -452,17 +452,33 @@ function isUniqueViolation(error: unknown): boolean {
 /** Rounds of lock-and-reread before a move whose subtree keeps changing is refused. */
 const MOVE_LOCK_ROUNDS = 3;
 
+/** Called after a page write that can change its sequence item: `from` is the page's parent before it. */
+export type PgPagePlaced = (
+  tx: TxClient,
+  pageId: string,
+  from: string | null,
+  options?: { reposition?: boolean },
+) => Promise<void>;
+
 export class PgKnowledgePages implements KnowledgePageStore {
   readonly #client: DbClient;
   readonly #schemaName?: string;
   readonly #bounds: () => Promise<PgKnowledgePagesBounds>;
   readonly #q: (table: string) => string;
+  /** Keeps sequence page items in step with a child page, in the page's write transaction. */
+  readonly #placed?: PgPagePlaced;
 
-  constructor(options: { client: DbClient; schemaName?: string; bounds: () => Promise<PgKnowledgePagesBounds> }) {
+  constructor(options: {
+    client: DbClient;
+    schemaName?: string;
+    bounds: () => Promise<PgKnowledgePagesBounds>;
+    placed?: PgPagePlaced;
+  }) {
     this.#client = options.client;
     this.#schemaName = options.schemaName;
     this.#bounds = options.bounds;
     this.#q = qualifier(options.schemaName);
+    this.#placed = options.placed;
   }
 
   get #pages() {
@@ -1074,7 +1090,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     }
     return this.#tx(async tx => {
       const parent = await this.#requireLivePage(tx, input.parentId);
-      return this.#insertPage(tx, {
+      const page = await this.#insertPage(tx, {
         id: input.id,
         parent,
         key: input.key,
@@ -1085,6 +1101,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
         provenance: input.provenance,
         at: new Date(),
       });
+      if (!this.#placed) return page;
+      await this.#placed(tx, page.id, null, { reposition: input.position === undefined });
+      return toPage((await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [page.id]))[0]!);
     });
   }
 
@@ -1177,6 +1196,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `UPDATE ${this.#pages} SET ${sets.join(', ')} WHERE "id" = $1 RETURNING *`,
         params.values,
       );
+      if (input.name !== undefined) await this.#placed?.(tx, input.id, page.parentId);
       await this.#logActivity(tx, {
         action: 'page-updated',
         scopeId: page.scopeId,
@@ -1191,13 +1211,18 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async movePage(input: MoveKnowledgePageInput): Promise<KnowledgePage> {
     const core = await loadPagesCore();
     return this.#tx(async tx => {
+      if (input.parentId === input.id) {
+        throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
+      }
+      // The parent before the page, as marking a sequence, merging and locking a subtree do, so a
+      // move can't hold its page while waiting on a parent that a writer of its children holds.
+      const parent = await this.#requireLivePage(tx, input.parentId);
       const page = await this.#requireLivePage(tx, input.id);
       if (page.version !== input.expectedVersion) throw new KnowledgeConflictError(input.id);
       if (page.isScope) throw new Error(`Knowledge scope page ${input.id} can't be moved`);
-      if (input.parentId === input.id || (await this.#isInSubtree(tx, input.id, input.parentId))) {
+      if (await this.#isInSubtree(tx, input.id, input.parentId)) {
         throw new Error(`Knowledge page ${input.id} can't move under itself or its own subtree`);
       }
-      const parent = await this.#requireLivePage(tx, input.parentId);
       const live = await this.#lockStableSubtree(tx, input.id, core.MAX_KNOWLEDGE_MOVE_PAGES);
       const stats = await this.#subtreeStats(tx, input.id);
       if (stats.live + 1 > core.MAX_KNOWLEDGE_MOVE_PAGES) {
@@ -1235,7 +1260,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
           provenance: input.provenance,
           at: now,
         });
-        return toPage(rows[0]!);
+        if (!this.#placed) return toPage(rows[0]!);
+        await this.#placed(tx, input.id, page.parentId, { reposition: input.position === undefined });
+        return toPage((await this.#rows(tx, `SELECT * FROM ${this.#pages} WHERE "id" = $1`, [input.id]))[0]!);
       } catch (error) {
         if (isUniqueViolation(error))
           throw new KnowledgeConflictError(page.key ? `${newScopeId}#${page.key}` : input.id);
@@ -1279,14 +1306,19 @@ export class PgKnowledgePages implements KnowledgePageStore {
           `${this.#subtree('$1')} UPDATE ${this.#pages} SET "scopeId" = $2, "depth" = "depth" + $3 WHERE "id" IN (SELECT "id" FROM sub)`,
           [source.id, target.scopeId, delta],
         );
-        await tx.query(`UPDATE ${this.#pages} SET "parentId" = $2 WHERE "parentId" = $1 AND NOT "isScope"`, [
-          source.id,
-          target.id,
-        ]);
+        const moved = await this.#rows(
+          tx,
+          `WITH moved AS (UPDATE ${this.#pages} SET "parentId" = $2 WHERE "parentId" = $1 AND NOT "isScope" RETURNING "id", "position", "deletedAt")
+           SELECT "id" FROM moved WHERE "deletedAt" IS NULL ORDER BY "position" COLLATE "C", "id" COLLATE "C"`,
+          [source.id, target.id],
+        );
+        // Live children join the target's sequence, if it is one, after its items in their old order.
+        for (const child of moved) await this.#placed?.(tx, String(child.id), source.id, { reposition: true });
       } catch (error) {
         if (isUniqueViolation(error)) throw new KnowledgeConflictError(source.id);
         throw error;
       }
+      await this.#placed?.(tx, source.id, source.parentId);
       await tx.query(`UPDATE ${this.#notes} SET "pageId" = $2 WHERE "pageId" = $1`, [source.id, target.id]);
       await tx.query(
         `DELETE FROM ${this.#mentions} m WHERE m."pageId" = $1 AND EXISTS (SELECT 1 FROM ${this.#mentions} t WHERE t."noteId" = m."noteId" AND t."pageId" = $2)`,
@@ -1342,6 +1374,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
         `UPDATE ${this.#pages} SET "deletedAt" = $2, "deletedBy" = $3, "version" = "version" + 1, "updatedAt" = $2, "updatedBy" = $4::jsonb WHERE "id" = $1 RETURNING *`,
         [input.id, iso(now), input.deletedBy, JSON.stringify({ author: input.deletedBy })],
       );
+      await this.#placed?.(tx, input.id, page.parentId);
       await tx.query(`DELETE FROM ${this.#pins} WHERE "pageId" = $1`, [input.id]);
       await this.#logActivity(tx, {
         action: 'page-deleted',

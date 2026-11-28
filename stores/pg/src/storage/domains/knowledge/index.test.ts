@@ -8,9 +8,11 @@ import {
   createKnowledgeLegacyUpgradeTests,
   createKnowledgePageStoreTests,
   createKnowledgeSearchSnippetTests,
+  createKnowledgeSequenceTests,
   createKnowledgeTransactionTests,
   knowledgeStoreThroughTransactions,
 } from '@internal/storage-test-utils';
+import { parseKnowledgeSequenceTime } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -30,6 +32,53 @@ afterAll(async () => {
 });
 
 describe('KnowledgePG storage isolation', () => {
+  it('provisions sequence tables and indexes from exported DDL with init disabled', async () => {
+    const schemaName = 'knowledge_sequence_export_test';
+    await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    try {
+      const ddl = KnowledgePG.getExportDDL(schemaName).join('\n');
+      expect(ddl).toContain('mastra_knowledge_sequences');
+      expect(ddl).toContain('mastra_knowledge_sequence_items_order');
+      expect(ddl).toContain('mastra_knowledge_sequence_items_parent');
+      await pool.query(ddl);
+      const store = new PostgresStore({ id: 'sequence-export', pool, schemaName, disableInit: true });
+      const knowledge = await store.getStore('knowledge');
+      const { scope } = await knowledge!.materializeScope({
+        address: 'org:acme',
+        declaration: 'org:$orgId',
+        name: 'Acme',
+        provenance: { author: 'host' },
+      });
+      const page = await knowledge!.createPage({ parentId: scope.id, name: 'Events', provenance: { author: 'host' } });
+      await knowledge!.sequences!.markSequence({ pageId: page.id });
+      const occurredAt = parseKnowledgeSequenceTime('2024-02-29T23:30:00.123-02:00')!;
+      const editedAt = parseKnowledgeSequenceTime('2024-03-01T02:00:00+00:00')!;
+      const written = await knowledge!.sequences!.upsertItem({
+        sequenceId: page.id,
+        externalId: '1',
+        body: 'Leap day',
+        occurredAt,
+        editedAt,
+        writtenBy: 'importer:slack',
+      });
+      const reopened = new PostgresStore({ id: 'sequence-reopened', pool, schemaName, disableInit: true });
+      const read = await (await reopened.getStore('knowledge'))!.sequences!.listItems({
+        sequenceId: page.id,
+        read: 'all',
+        limit: 10,
+      });
+      expect(read.items).toHaveLength(1);
+      expect(read.items[0]).toMatchObject({
+        id: written.item.id,
+        body: 'Leap day',
+        occurredAt: new Date('2024-03-01T01:30:00.123Z'),
+        editedAt,
+      });
+    } finally {
+      await pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
+    }
+  });
   it('lets PostgresStore callers override the isolation key', () => {
     const derived = new PostgresStore({ id: 'derived', pool, schemaName: 'shared' });
     const overridden = new PostgresStore({
@@ -124,6 +173,15 @@ beforeAll(async () => {
 });
 const snippetStorage = new PostgresStore({ id: 'knowledge-snippets', pool, schemaName: 'knowledge_snippet_test' });
 createKnowledgeSearchSnippetTests(() => snippetStorage);
+
+// Reset before each case: the reset must also drop and recreate the sequence tables.
+createKnowledgeSequenceTests(async () => {
+  const store = new KnowledgePG({ pool, schemaName: 'knowledge_sequence_test' });
+  await pool.query('CREATE SCHEMA IF NOT EXISTS "knowledge_sequence_test"');
+  await store.init();
+  await store.dangerouslyReset();
+  return store;
+});
 
 describe('through transaction views', () => {
   beforeAll(async () => {

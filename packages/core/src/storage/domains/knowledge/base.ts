@@ -3,6 +3,7 @@ import { StorageDomain } from '../base';
 import type { KnowledgeImportersStorage } from './importers';
 import { KnowledgeMoveTooLargeError, MAX_KNOWLEDGE_MOVE_PAGES, MAX_KNOWLEDGE_PAGE_DEPTH } from './pages';
 import type { KnowledgePage, KnowledgePageStore, KnowledgeReadScope } from './pages';
+import type { KnowledgeSequencesStorage } from './sequences';
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 4 as const;
@@ -285,6 +286,16 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
    * @experimental
    */
   get importers(): KnowledgeImportersStorage | undefined {
+    return undefined;
+  }
+
+  /**
+   * Sequence items on the same database and namespace as the pages, or undefined when the adapter
+   * has none. On a {@link transaction} view it belongs to that transaction.
+   *
+   * @experimental
+   */
+  get sequences(): KnowledgeSequencesStorage | undefined {
     return undefined;
   }
 

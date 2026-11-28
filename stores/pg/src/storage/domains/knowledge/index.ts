@@ -11,6 +11,7 @@ import { resolvePgConfig } from '../../db';
 import { PgKnowledgeImporters, pgKnowledgeImportersDDL } from './importers';
 import { PgKnowledgePages, pgKnowledgePagesDDL } from './pages';
 import { inspectPgKnowledgePagesSchema, initPgKnowledgePagesSchema, resetPgKnowledgePagesSchema } from './pages-schema';
+import { PgKnowledgeSequences, pgKnowledgeSequencesDDL } from './sequences';
 
 const loadKnowledgePagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import('@mastra/core/storage'));
 
@@ -149,13 +150,16 @@ type PageStoreMethod = {
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class KnowledgePG extends KnowledgeStorage {
   static getExportDDL(schemaName?: string): string[] {
-    return pgKnowledgePagesDDL(schemaName).map(statement => `${statement};`);
+    return [...pgKnowledgePagesDDL(schemaName), ...pgKnowledgeSequencesDDL(schemaName)].map(
+      statement => `${statement};`,
+    );
   }
 
   readonly #client: DbClient;
   readonly #schemaName?: string;
   readonly #pages: PgKnowledgePages;
   readonly #importers?: PgKnowledgeImporters;
+  readonly #sequences?: PgKnowledgeSequences;
 
   /** The importer tables' DDL, for provisioning them ahead of time when storage init is disabled. */
   static getImportersExportDDL(schemaName?: string): string[] {
@@ -178,7 +182,20 @@ export class KnowledgePG extends KnowledgeStorage {
           assertKnowledgeNoteTextWithinBound: core.assertKnowledgeNoteTextWithinBound,
         };
       },
+      placed: (tx, pageId, from, options) =>
+        this.#sequences?.pagePlaced(tx, pageId, from, options) ?? Promise.resolve(),
     });
+    if (coreFeatures.has('knowledge-sequences')) {
+      this.#sequences = new PgKnowledgeSequences({
+        client,
+        schemaName,
+        readable: async (id, read) => {
+          // getPage returns a deleted page too; a sequence reads only through a live one.
+          const page = await this.#pages.getPage({ id, read });
+          return !!page && !page.deletedAt;
+        },
+      });
+    }
   }
 
   override getCapabilities() {
@@ -196,12 +213,18 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   /** Same client and schema as the pages: on a transaction view, the view's transaction. */
+  override get sequences(): PgKnowledgeSequences | undefined {
+    return this.#sequences;
+  }
+
+  /** Same client and schema as the pages: on a transaction view, the view's transaction. */
   override get importers(): PgKnowledgeImporters | undefined {
     return this.#importers;
   }
 
   async init(): Promise<void> {
     await initPgKnowledgePagesSchema(this.#client, this.#schemaName);
+    await this.#sequences?.init();
   }
 
   override async transaction<T>(
@@ -244,11 +267,17 @@ export class KnowledgePG extends KnowledgeStorage {
     await this.#client.tx(async tx => {
       const client = new TransactionDbClient(tx);
       if (this.#importers) await new PgKnowledgeImporters({ client, schemaName: this.#schemaName }).clearOnReset();
+      const sequences = this.#sequences
+        ? new PgKnowledgeSequences({ client, schemaName: this.#schemaName, readable: async () => false })
+        : undefined;
+      await sequences?.dropOnReset();
       await resetPgKnowledgePagesSchema(client, this.#schemaName);
+      await sequences?.init();
     });
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.#sequences?.clearAll();
     await this.#pages.clearAll();
   }
 

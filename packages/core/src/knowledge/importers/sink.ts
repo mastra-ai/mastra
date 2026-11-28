@@ -23,7 +23,7 @@ import type {
   KnowledgeImportItem,
   KnowledgeImportRefusal,
   KnowledgeImportRefusalReason,
-  KnowledgeImporterOp,
+  KnowledgeImporterPageOp,
 } from './types';
 
 /**
@@ -199,8 +199,8 @@ async function syncLinks(work: () => Promise<void>): Promise<void> {
 }
 
 /** The ops as the sink applies them: the last op per sourceId, upserts parent-first, then removes. */
-function order(ops: KnowledgeImporterOp[]): KnowledgeImporterOp[] {
-  const last = new Map<string, KnowledgeImporterOp>();
+function order(ops: KnowledgeImporterPageOp[]): KnowledgeImporterPageOp[] {
+  const last = new Map<string, KnowledgeImporterPageOp>();
   for (const op of ops) {
     const id = op.op === 'remove' ? op.sourceId : op.item.sourceId;
     const before = last.get(id);
@@ -214,13 +214,13 @@ function order(ops: KnowledgeImporterOp[]): KnowledgeImporterOp[] {
     last.set(id, op);
   }
   const writes = [...last.values()].filter(op => op.op !== 'remove') as Exclude<
-    KnowledgeImporterOp,
+    KnowledgeImporterPageOp,
     { op: 'remove' }
   >[];
   const removes = [...last.values()].filter(op => op.op === 'remove');
   const pending = new Map(writes.map(op => [op.item.sourceId, op]));
-  const sorted: KnowledgeImporterOp[] = [];
-  const visit = (op: Exclude<KnowledgeImporterOp, { op: 'remove' }>, seen: Set<string>) => {
+  const sorted: KnowledgeImporterPageOp[] = [];
+  const visit = (op: Exclude<KnowledgeImporterPageOp, { op: 'remove' }>, seen: Set<string>) => {
     if (!pending.has(op.item.sourceId) || seen.has(op.item.sourceId)) return;
     seen.add(op.item.sourceId);
     for (const dep of [op.item.parent, op.item.fallbackParent]) {
@@ -242,7 +242,7 @@ export interface KnowledgeImportSinkInput {
   /** The scope page of the binding's target, materialized before the flush. */
   scope: KnowledgePage;
   runId: string;
-  ops: KnowledgeImporterOp[];
+  ops: KnowledgeImporterPageOp[];
   provenance: KnowledgeProvenance;
   /** Run one settle slice after the ops. */
   settle?: KnowledgeImportSettleBudget;
@@ -776,7 +776,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   }
   const writes = ops.filter(op => op.op !== 'remove');
   const removes = ops
-    .filter((op): op is Extract<KnowledgeImporterOp, { op: 'remove' }> => op.op === 'remove')
+    .filter((op): op is Extract<KnowledgeImporterPageOp, { op: 'remove' }> => op.op === 'remove')
     .sort((a, b) => depth.get(b.sourceId)! - depth.get(a.sourceId)!);
 
   for (const op of [...writes, ...removes]) {

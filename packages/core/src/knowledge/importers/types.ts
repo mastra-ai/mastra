@@ -20,6 +20,22 @@ export interface KnowledgeImportDeclaration {
   parent?: string | null;
   /** Where the item waits while `parent` hasn't arrived: a holding item's `sourceId`. */
   fallbackParent?: string;
+  /**
+   * Makes the page a sequence, with this order and these schemas. Importers send it on every run;
+   * the same declaration writes nothing, a changed schema replaces the old one, and a different
+   * `orderBy` is refused.
+   */
+  sequence?: KnowledgeImportSequenceDeclaration;
+}
+
+/** A sequence page's declaration, as `markSequence` takes it. Schemas are checked when applied. */
+export interface KnowledgeImportSequenceDeclaration {
+  /** `timeline` (by `occurredAt`, the default) or `position`. Fixed once the page is a sequence. */
+  orderBy?: 'timeline' | 'position';
+  /** The schema for untyped items' properties. */
+  propertiesSchema?: Record<string, unknown>;
+  /** Item types by key, each with an optional label, description and properties schema. */
+  itemTypes?: Record<string, unknown>;
 }
 
 /**
@@ -34,12 +50,59 @@ export interface KnowledgeImportItem extends KnowledgeImportDeclaration {
   aliases?: string[];
 }
 
-/** A buffered importer call, as sent in a flush. */
-export type KnowledgeImporterOp =
+/** A buffered importer call that writes a page, as sent in a flush. */
+export type KnowledgeImporterPageOp =
   | { op: 'upsert'; item: KnowledgeImportItem }
   | { op: 'declare'; item: KnowledgeImportDeclaration }
   /** Only on a positive signal from the source (archived, trashed); never because an item was missing. */
   | { op: 'remove'; sourceId: string };
+
+/**
+ * One item of a sequence page (a chat message, a deploy, a runbook step), keyed by the source's
+ * own ID. It needs at least one of `title`, `body`, `links` and `properties`. Times are ISO 8601
+ * strings so a flush survives a JSON round trip unchanged.
+ */
+export interface KnowledgeImportSequenceItem {
+  /** The source's own ID for the item, unique within its sequence. */
+  externalId: string;
+  /** When it happened at the source. Required on a timeline sequence, which orders by it. */
+  occurredAt?: string;
+  /** When the source last edited it. */
+  editedAt?: string;
+  /** Who wrote it at the source. */
+  author?: { sourceId: string; name?: string };
+  /** The `externalId` of the root item it sits under, such as a reply's message. */
+  externalParentId?: string;
+  /** Its kind, e.g. `deploy`, matching the sequence's `itemTypes` when declared. */
+  type?: string;
+  /** One line. */
+  title?: string;
+  body?: string;
+  /** Up to 10 http(s) links. */
+  links?: { url: string; title?: string }[];
+  /** Plain JSON, up to 16 KB; checked against the item's schema when the sequence declares one. */
+  properties?: Record<string, unknown>;
+  /** On a position sequence: an explicit position key, or the item to go `after` or `before`; else last. */
+  position?: string;
+  after?: string;
+  before?: string;
+}
+
+/**
+ * A buffered importer call that writes sequence items. Only hosts whose run start advertises
+ * `capabilities.sequences` take these; any other refuses the whole flush as `unsupported`.
+ */
+export type KnowledgeImporterSequenceOp =
+  | { op: 'sequenceItem'; sequence: string; sequenceItem: KnowledgeImportSequenceItem }
+  /** Only on a positive signal from the source (deleted); never because an item was missing. */
+  | { op: 'removeSequenceItem'; sequence: string; externalId: string };
+
+/** A buffered importer call, as sent in a flush. */
+export type KnowledgeImporterOp = KnowledgeImporterPageOp | KnowledgeImporterSequenceOp;
+
+export function isKnowledgeImporterSequenceOp(op: KnowledgeImporterOp): op is KnowledgeImporterSequenceOp {
+  return op.op === 'sequenceItem' || op.op === 'removeSequenceItem';
+}
 
 /** Staged `ctx.state.set` values. They commit with the ops of the same flush, or not at all. */
 export type KnowledgeImporterState = Record<string, string>;
