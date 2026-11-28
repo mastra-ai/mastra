@@ -1381,14 +1381,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
       }
       // When every claimed step had saved its result, the header's cursor is left as it is: the
-      // finished-step check reads from it whether the run already went past those steps. Only the
-      // restart's request context is written, which the continuation from those results reads.
+      // finished-step check reads from it whether the run already went past those steps. The
+      // restart's request context is written for the continuation from those results, only while
+      // the run is still where the restart's caller read it; past that, the stored one is a later
+      // step's.
       if (claim.outcome === 'all saved') {
-        await runStorage.updateHeader({
-          status: header.status,
-          requestContext: withoutAuthToken(requestContext),
-          expectedStatus: header.status,
-        });
+        if (samePath(header.activePaths, restart.activePaths)) {
+          await runStorage.updateHeader({
+            status: header.status,
+            requestContext: withoutAuthToken(requestContext),
+            expectedStatus: header.status,
+          });
+        }
       } else if (!applied) {
         const updated = await runStorage.updateHeader({
           status: 'running',
