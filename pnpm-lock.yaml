@@ -1557,8 +1557,8 @@ importers:
         specifier: workspace:^
         version: link:../../packages/deployer
       '@rollup/plugin-virtual':
-        specifier: 3.0.2
-        version: 3.0.2(rollup@4.67.4)
+        specifier: 3.0.3
+        version: 3.0.3(rollup@4.67.4)
       cloudflare:
         specifier: ^5.2.0
         version: 5.2.0(encoding@0.1.14)
@@ -5092,8 +5092,8 @@ importers:
         specifier: 16.0.3
         version: 16.0.3(rollup@4.67.4)
       '@rollup/plugin-virtual':
-        specifier: 3.0.2
-        version: 3.0.2(rollup@4.67.4)
+        specifier: 3.0.3
+        version: 3.0.3(rollup@4.67.4)
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -19748,8 +19748,8 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-virtual@3.0.2':
-    resolution: {integrity: sha512-10monEYsBp3scM4/ND4LNH5Rxvh3e/cVeL3jWTgZ2SrQ+BmUoQcopVQvnaMcOnykb1VkxUFuDAN+0FnpTFRy2A==}
+  '@rollup/plugin-virtual@3.0.3':
+    resolution: {integrity: sha512-zmawyN/1iOy7KaY/HhYwOjEVCQs7OuCAA92PTz3IPHkg7syKjO5n2QpIhrcMPc6M7qhr9M7nwNNsQ7YCada4tw==}
     engines: {node: '>=14.0.0'}
     peerDependencies:
       rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
@@ -43670,7 +43670,7 @@ snapshots:
     optionalDependencies:
       rollup: 4.67.4
 
-  '@rollup/plugin-virtual@3.0.2(rollup@4.67.4)':
+  '@rollup/plugin-virtual@3.0.3(rollup@4.67.4)':
     optionalDependencies:
       rollup: 4.67.4
 
