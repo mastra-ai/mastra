@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import type { ComponentProps } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
@@ -236,20 +236,23 @@ const ThreadContent = ({
                           className="gap-4"
                         >
                           {group.entries.map(message => (
-                            <MessageScrollerItem
-                              key={getClientMessageKey(message)}
-                              messageId={message.id}
-                              scrollAnchor={threadRailAnchorIds.has(message.id)}
-                            >
-                              <MessageRow
-                                message={message}
-                                hasModelList={hasModelList}
-                                isSpeaking={readAloud?.isSpeaking ?? false}
-                                onReadAloud={readAloud?.readAloud}
-                                onStopSpeaking={readAloud?.stop}
-                                mcpAppTools={mcpAppTools ?? features.mcpAppTools}
-                              />
-                            </MessageScrollerItem>
+                            <Fragment key={getClientMessageKey(message)}>
+                              <MessageScrollerItem
+                                messageId={message.id}
+                                scrollAnchor={threadRailAnchorIds.has(message.id)}
+                              >
+                                <MessageRow
+                                  message={message}
+                                  hasModelList={hasModelList}
+                                  isSpeaking={readAloud?.isSpeaking ?? false}
+                                  onReadAloud={readAloud?.readAloud}
+                                  onStopSpeaking={readAloud?.stop}
+                                  mcpAppTools={mcpAppTools ?? features.mcpAppTools}
+                                  footer={features.slots?.messageFooter?.(message)}
+                                />
+                              </MessageScrollerItem>
+                              {features.slots?.afterMessage?.(message)}
+                            </Fragment>
                           ))}
                           {isLiveTurn && showPending && (
                             <PendingIndicator className="animate-in delay-300 duration-200 fade-in-0 fill-mode-backwards" />

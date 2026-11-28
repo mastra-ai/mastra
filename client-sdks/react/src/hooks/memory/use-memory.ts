@@ -1,4 +1,12 @@
-import type { GetObservationalMemoryResponse, GetMemoryStatusResponse, MastraClient } from '@mastra/client-js';
+import { MastraClientError } from '@mastra/client-js';
+import type {
+  BranchMemoryThreadResponse,
+  GetMemoryThreadBranchHistoryResponse,
+  GetMemoryStatusResponse,
+  GetObservationalMemoryResponse,
+  ListMemoryThreadBranchesResponse,
+  MastraClient,
+} from '@mastra/client-js';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { UseMutationResult, UseQueryResult } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
@@ -219,6 +227,151 @@ export const useCloneThread = ({
       const { agentId } = variables;
       if (agentId) {
         void queryClient.invalidateQueries({ queryKey: ['memory', 'threads', agentId, agentId] });
+      }
+    },
+    ...queryOptions,
+  });
+};
+
+type BranchHistoryEntry = GetMemoryThreadBranchHistoryResponse['history'][number];
+
+export interface ThreadBranchesInfo {
+  isSupported: boolean;
+  parentThread: BranchHistoryEntry['thread'] | null;
+  fork: BranchHistoryEntry['branch'];
+  branches: ListMemoryThreadBranchesResponse['branches'];
+  /** True when the thread has more direct branches than the first page returned. */
+  hasMoreBranches: boolean;
+}
+
+/** Direct child branches loaded per thread view; matches the server's default page size. */
+export const THREAD_BRANCHES_PAGE_SIZE = 100;
+
+const NO_BRANCHING: ThreadBranchesInfo = {
+  isSupported: false,
+  parentThread: null,
+  fork: null,
+  branches: [],
+  hasMoreBranches: false,
+};
+
+/**
+ * Extracts the server error code from a client error. client-js keeps the
+ * parsed error envelope on `MastraClientError.body` (`{error:{code}}`), which
+ * is more durable than matching the stringified message.
+ */
+const getServerErrorCode = (error: unknown): string | undefined => {
+  if (error instanceof MastraClientError) {
+    const body = error.body;
+    if (body && typeof body === 'object' && 'error' in body) {
+      const code = (body as { error?: { code?: unknown } }).error?.code;
+      if (typeof code === 'string') return code;
+    }
+  }
+  return undefined;
+};
+
+const isBranchingUnsupportedError = (error: unknown): boolean => {
+  const code = getServerErrorCode(error);
+  if (code) return code === 'BRANCHING_UNSUPPORTED';
+  return error instanceof Error && error.message.includes('BRANCHING_UNSUPPORTED');
+};
+
+const isBranchThreadNotFoundError = (error: unknown): boolean => {
+  const code = getServerErrorCode(error);
+  if (code) return code === 'BRANCH_NOT_FOUND';
+  return error instanceof Error && error.message.includes('BRANCH_NOT_FOUND');
+};
+
+/**
+ * Loads the shared-history lineage of a thread: its parent + own fork metadata
+ * (from the root-to-current branch history) and the first page of its direct child branches.
+ * Reports `isSupported: false` instead of erroring when the configured memory
+ * has no branch support, so branch UI simply stays hidden for custom Memory.
+ */
+export const useThreadBranches = ({
+  threadId,
+  agentId,
+  requestContext,
+  queryOptions,
+}: {
+  threadId?: string;
+  agentId?: string;
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraQueryOptions<ThreadBranchesInfo | null>;
+} = {}) => {
+  const client = useMastraClient();
+
+  return useQuery({
+    queryKey: ['memory', 'thread-branches', threadId, agentId, requestContext],
+    queryFn: async (): Promise<ThreadBranchesInfo | null> => {
+      if (!threadId || !agentId) return null;
+      const thread = client.getMemoryThread({ threadId, agentId });
+      try {
+        const [historyResult, childrenResult] = await Promise.all([
+          thread.getBranchHistory({ requestContext }),
+          thread.listBranches({ page: 0, perPage: THREAD_BRANCHES_PAGE_SIZE, requestContext }),
+        ]);
+        const own = historyResult.history[historyResult.history.length - 1];
+        const parentThread = own?.branch
+          ? (historyResult.history[historyResult.history.length - 2]?.thread ?? null)
+          : null;
+        return {
+          isSupported: true,
+          parentThread,
+          fork: own?.branch ?? null,
+          branches: childrenResult.branches,
+          hasMoreBranches: childrenResult.hasMore,
+        };
+      } catch (error) {
+        if (isBranchingUnsupportedError(error)) return NO_BRANCHING;
+        throw error;
+      }
+    },
+    enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId),
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
+    // The thread row may not be persisted yet right after navigating away from
+    // /threads/new — retry the not-found window, but never retry hard failures.
+    retry: (failureCount, error) => isBranchThreadNotFoundError(error) && failureCount < 5,
+    refetchOnWindowFocus: false,
+    ...queryOptions,
+  });
+};
+
+export const useBranchThread = ({
+  requestContext,
+  queryOptions,
+}: {
+  requestContext?: Record<string, any>;
+  queryOptions?: MastraMutationOptions<
+    BranchMemoryThreadResponse,
+    ThreadVariables & { branchPointMessageId: string; title?: string }
+  >;
+} = {}) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      agentId,
+      branchPointMessageId,
+      title,
+    }: {
+      threadId: string;
+      agentId: string;
+      branchPointMessageId: string;
+      title?: string;
+    }) => {
+      const thread = client.getMemoryThread({ threadId, agentId });
+      return thread.branch({ branchPointMessageId, title, requestContext });
+    },
+    onSuccess: (_, variables) => {
+      const { agentId } = variables;
+      if (agentId) {
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'threads'] });
+        void queryClient.invalidateQueries({ queryKey: ['memory', 'thread-branches'] });
       }
     },
     ...queryOptions,

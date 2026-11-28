@@ -18,6 +18,7 @@ import {
   useThread,
 } from '@mastra/react/hooks/memory';
 import { useCallback } from 'react';
+import { AgentMemoryBranches } from './agent-memory-branches';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
 import { MemorySearch } from '@/lib/ai-ui/memory-search';
@@ -129,6 +130,9 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   return (
     <div className="flex min-w-0 flex-col">
       {threadId && <CloneThreadControl isCloning={isCloning} onClone={handleCloneThread} />}
+
+      {/* Shared-history Branches Section */}
+      {threadId && <AgentMemoryBranches agentId={agentId} threadId={threadId} />}
 
       <div className="border-b border-border p-4">
         <Txt as="h3" variant="subheading" tone="ink">
