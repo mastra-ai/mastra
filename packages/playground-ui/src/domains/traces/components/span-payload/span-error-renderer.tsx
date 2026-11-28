@@ -4,7 +4,6 @@ import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadCollapsible } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { Notice } from '@/ds/components/Notice';
 import { cn } from '@/lib/utils';
 
 export interface SpanErrorRendererProps {
@@ -47,21 +46,6 @@ function SpanErrorFacts({ error }: { error: SpanError }) {
         </SpanPayloadCollapsible>
       )}
     </>
-  );
-}
-
-/** The error a span recorded, as a banner; `null` when the span succeeded. */
-export function SpanErrorRenderer({ span, className }: SpanErrorRendererProps) {
-  const error = describeSpanError(asCoreSpan(span));
-  if (!error) return null;
-
-  return (
-    <div data-slot="span-error" className={className}>
-      <Notice variant="destructive" title={error.name ?? 'Error'}>
-        <Notice.Message>{error.message}</Notice.Message>
-        <SpanErrorFacts error={error} />
-      </Notice>
-    </div>
   );
 }
 

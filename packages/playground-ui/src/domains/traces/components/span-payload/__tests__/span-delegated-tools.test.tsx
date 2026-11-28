@@ -5,7 +5,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
-import { SpanDetailsView } from '../../span-details-view';
 import type { TraceNavigation } from '../../trace-navigation';
 import { makeSpan, traceWithoutToolCalls } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
@@ -37,25 +36,6 @@ const LAYOUTS = [
     // What the span got sits in the Input tab, what it produced in the Output tab.
     open: (tab: 'input' | 'output') => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${tab}`, 'i') })),
     toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
-  },
-  {
-    layout: 'details',
-    renderSpan: (span: SpanRecord, navigation?: TraceNavigation) => (
-      <SpanDetailsView
-        traceId="t"
-        spanId="s"
-        span={span}
-        traceSpans={traceWithoutToolCalls.spans}
-        registeredTools={registeredTools}
-        navigation={navigation}
-      />
-    ),
-    open: () => {},
-    toolsSection: () => {
-      const found = screen.getByText('Available tools (2)').closest('[data-slot="span-payload-section"]');
-      if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
-      return found;
-    },
   },
 ] as const;
 

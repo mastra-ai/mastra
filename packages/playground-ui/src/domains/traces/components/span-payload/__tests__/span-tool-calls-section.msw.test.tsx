@@ -8,7 +8,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 
 import type { SpanRecord, SpanTab } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
-import { SpanDetailsView } from '../../span-details-view';
 import {
   noToolCallsGenerationSpan,
   TOOL_CALLS_TRACE_ID,
@@ -28,14 +27,6 @@ afterAll(() => vi.unstubAllGlobals());
 beforeEach(() => {
   server.use(http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })));
 });
-
-const payloadSectionStartingWith = (label: string) => () => {
-  const found = [...document.querySelectorAll('[data-slot="span-payload-section"]')].find(section =>
-    section.textContent?.startsWith(label),
-  );
-  if (!(found instanceof HTMLElement)) throw new Error(`Missing ${label} section`);
-  return found;
-};
 
 // Opens on the Output tab, where the calls the span produced sit, and still lets the user switch tabs.
 function DataPanelOnOutput({ span }: { span: SpanRecord }) {
@@ -68,29 +59,6 @@ const LAYOUTS = [
     outputSection: () => screen.getByRole('group', { name: 'Output' }),
     viewToggle: (output: HTMLElement) => within(output).queryByRole('button', { name: /^Show output/ }),
   },
-  {
-    layout: 'details',
-    renderSpan: (span: SpanRecord) => (
-      <SpanDetailsView
-        traceId={TOOL_CALLS_TRACE_ID}
-        spanId={span.spanId}
-        span={span}
-        traceSpans={toolCallsTrace.spans}
-        registeredTools={registeredTools}
-      />
-    ),
-    toolCallsSection: () => {
-      const found = document
-        .querySelector('[data-slot="span-tool-calls"]')
-        ?.closest('[data-slot="span-payload-section"]');
-      if (!(found instanceof HTMLElement)) throw new Error('Missing Tool calls section');
-      return found;
-    },
-    showOfferedTools: () => {},
-    offeredToolsHeading: (count: number) => screen.getByText(`Available tools (${count})`),
-    outputSection: payloadSectionStartingWith('Output'),
-    viewToggle: (output: HTMLElement) => output.querySelector('[data-slot="span-payload-view-toggle"]'),
-  },
 ] as const;
 
 describe('Tool calls in the data panel', () => {
@@ -113,25 +81,6 @@ describe('Tool calls in the data panel', () => {
     const heading = within(section).getByText('Tool calls');
     expect(within(heading).getByText('3')).toBeTruthy();
     expect(document.querySelectorAll('[data-slot="span-tool-calls"]')).toHaveLength(1);
-  });
-});
-
-describe('Tool calls in the details layout', () => {
-  it('keep their own section, counting only the calls the chat draws', async () => {
-    const { queryClient } = renderWithProviders(
-      <TestLinkProvider>
-        <SpanDetailsView
-          traceId={TOOL_CALLS_TRACE_ID}
-          spanId="generation"
-          span={toolCallsGenerationSpan}
-          traceSpans={toolCallsTrace.spans}
-          registeredTools={registeredTools}
-        />
-      </TestLinkProvider>,
-    );
-    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-
-    expect(within(LAYOUTS[1].toolCallsSection()).getByText('Tool calls (3)')).toBeTruthy();
   });
 });
 

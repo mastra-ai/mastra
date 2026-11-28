@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
-import { SpanDetailsView } from '../../span-details-view';
 import type { TraceNavigation } from '../../trace-navigation';
 import { makeSpan, modelToolsSpan, processorToolsSpan } from './fixtures/span-payloads';
 import { registeredTools } from './fixtures/tools';
@@ -12,12 +11,6 @@ import { registeredTools } from './fixtures/tools';
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
 afterAll(() => vi.unstubAllGlobals());
-
-const section = (selector: string, name: string) => () => {
-  const found = screen.getByText(name).closest(selector);
-  if (!(found instanceof HTMLElement)) throw new Error(`Missing ${name} section`);
-  return found;
-};
 
 const LAYOUTS = [
   {
@@ -39,19 +32,6 @@ const LAYOUTS = [
       return within(heading).getByText(String(count));
     },
     inputSection: () => screen.getByRole('tabpanel', { name: 'Input' }),
-  },
-  {
-    layout: 'details',
-    renderSpan: (span: SpanRecord, navigation?: TraceNavigation) => (
-      <SpanDetailsView traceId="t" spanId="s" span={span} registeredTools={registeredTools} navigation={navigation} />
-    ),
-    toolsSection: () => {
-      const found = screen.getByText(/^Available tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
-      if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
-      return found;
-    },
-    toolsHeading: (tools: HTMLElement, count: number) => within(tools).getByText(`Available tools (${count})`),
-    inputSection: section('[data-slot="span-payload-section"]', 'Input'),
   },
 ] as const;
 

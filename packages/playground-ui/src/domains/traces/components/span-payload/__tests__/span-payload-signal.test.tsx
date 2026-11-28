@@ -4,7 +4,6 @@ import { SpanType } from '@mastra/core/observability';
 import { cleanup, render, screen } from '@testing-library/react';
 
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { SpanDetailsView } from '../../span-details-view';
 import { SpanInputRenderer } from '../span-input-renderers';
 import {
   agentRunLegacySignalSpan,
@@ -95,15 +94,6 @@ describe('Agent run started by a signal', () => {
     );
     expect(slot('span-signal')).toBeNull();
     expect(slot('span-payload-json')).not.toBeNull();
-  });
-
-  it('offers the preview / JSON toggle for the signal input in the span details', () => {
-    const span = agentRunSkillSignalSpan;
-    render(<SpanDetailsView span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
-
-    const section = screen.getByText('Input').closest('[data-slot="span-payload-section"]');
-    expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).not.toBeNull();
-    expect(section?.querySelector('[data-slot="span-signal"]')).not.toBeNull();
   });
 });
 
