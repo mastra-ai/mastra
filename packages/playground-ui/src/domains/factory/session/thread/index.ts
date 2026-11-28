@@ -24,3 +24,4 @@ export * from './chat/context/useChatModels';
 export * from './chat/context/useChatThinking';
 export * from './chat/context/useChatPermissions';
 export * from './chat/overlays';
+export { ManagedAgentSessionProvider } from './managed-agent/ManagedAgentSessionProvider';
