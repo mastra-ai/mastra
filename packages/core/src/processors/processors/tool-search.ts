@@ -91,9 +91,9 @@ export interface ToolSearchProcessorOptions {
      * When true, tools returned by `search_tools` are activated immediately as a
      * side effect of the search — there is no separate `load_tool` step and the
      * `load_tool` meta-tool is not exposed. The discovered tools become available
-     * on the model's next turn.
+     * on the model's next step.
      *
-     * This collapses the two-turn `search -> load -> use` flow into a single
+     * This collapses the `search -> load -> use` flow into a single
      * `search -> use` flow, mirroring native provider tool-search features that
      * auto-expand the discovered tool references. Discovery stays model-driven;
      * only the explicit load decision is removed.
@@ -588,7 +588,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const catalog = this.catalogForStep(tools);
     const storeContext = this.makeStoreContext(args);
     // Snapshot of names already loaded as of this step. Newly activated tools are
-    // recorded via the store and become available on the model's next turn.
+    // recorded via the store and become available on the model's next step.
     const loadedToolNames = await this.store.getLoadedNames(storeContext);
 
     const autoLoad = this.searchConfig.autoLoad;
@@ -597,8 +597,8 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     messageList.addSystem(
       autoLoad
         ? 'To discover available tools, call search_tools with a keyword query. ' +
-            'Matching tools are loaded automatically and become available on your next turn — ' +
-            'there is no separate load step. After searching, use the tool directly.'
+            'Matching tools are loaded automatically — there is no separate load step. ' +
+            'After searching, call the tool directly.'
         : 'To discover available tools, call search_tools with a keyword query. ' +
             'To add one or more tools to the conversation, call load_tool with a toolName or toolNames array. ' +
             'Tools must be loaded before they can be used.',
@@ -612,7 +612,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         messageList.addSystem(
           (autoLoad
             ? 'The following tools are available. Call search_tools with a keyword to load one — ' +
-              'matching tools are loaded automatically and become available on your next turn.'
+              'matching tools are loaded automatically and can be called now.'
             : 'The following tools are available to load. Call load_tool with a toolName or toolNames array ' +
               'to add one or more before using them — no search step is required. ' +
               'search_tools is also available if you need to rediscover tools by keyword.') +
@@ -629,7 +629,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         ? 'Search for available tools by keyword. ' +
           "Use this when you need a capability you don't currently have. " +
           'Returns a list of matching tools, which are loaded automatically and ' +
-          'become available on your next turn — no separate load step is required.'
+          'can be called now — no separate load step is required.'
         : 'Search for available tools by keyword. ' +
           "Use this when you need a capability you don't currently have. " +
           'Returns a list of matching tools with their names and descriptions. ' +
@@ -660,7 +660,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
         }
 
         if (autoLoad) {
-          // Activate the matches immediately. They become usable on the next turn —
+          // Activate the matches immediately. They become usable on the next step —
           // no explicit load_tool call needed. The store records the activation;
           // for the context store this result in the conversation messages is the durable record.
           const newlyLoaded: string[] = [];
@@ -677,7 +677,7 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
             loaded: results.map(r => r.name),
             message:
               `Found and loaded ${results.length} tool(s): ${results.map(r => r.name).join(', ')}. ` +
-              `They are available on your next turn — call them directly.` +
+              `Call them now.` +
               (newlyLoaded.length < results.length ? ' Some were already loaded.' : ''),
           };
         }
@@ -795,14 +795,14 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
           }
           return {
             success: true,
-            message: `Tool "${loaded[0]}" loaded successfully. It will be available on your next turn.`,
+            message: `Tool "${loaded[0]}" loaded successfully. You can call it now.`,
             toolName: loaded[0],
           };
         }
 
         // Multi-tool response
         const parts: string[] = [];
-        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')} — available on your next turn`);
+        if (loaded.length > 0) parts.push(`Loaded: ${loaded.join(', ')} — call them now`);
         if (alreadyLoaded.length > 0) parts.push(`Already loaded: ${alreadyLoaded.join(', ')}`);
         if (notFound.length > 0) parts.push(`Not found: ${notFound.join(', ')}`);
 
