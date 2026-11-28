@@ -633,6 +633,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
         { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },
         { type: 'doc', id: 'processors/processor-interface', label: 'Processor Interface' },
+        { type: 'doc', id: 'processors/prompt-cache-processor', label: 'PromptCacheProcessor' },
         {
           type: 'doc',
           id: 'processors/prompt-injection-detector',
