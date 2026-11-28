@@ -3,11 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/core/agent/durable', () => ({
-  createDurableAgent: vi.fn(),
-  createEventedAgent: vi.fn(),
-  isDurableAgent: (agent: { experimentalAgent?: string }) =>
-    agent.experimentalAgent === 'durable' || agent.experimentalAgent === 'evented',
-  isEventedAgent: (agent: { experimentalAgent?: string }) => agent.experimentalAgent === 'evented',
+  isDurableAgent: (agent: { experimentalAgent?: string }) => agent.experimentalAgent === 'durable',
 }));
 
 import {
@@ -19,6 +15,7 @@ import {
 function createAgent(selection: 'durable' | 'evented' | null, engineType: string, mastra?: Mastra): Agent {
   return {
     experimentalAgent: selection ?? undefined,
+    durable: selection === 'evented' ? { executionEngine: 'evented' } : undefined,
     getMastraInstance: () => mastra,
     getWorkflow: () => ({ engineType }),
   } as unknown as Agent;
@@ -86,7 +83,7 @@ describe('experimental agent validation', () => {
     const report = vi.fn();
     const mastra = createMastra(true);
     validateExperimentalAgent(createAgent('evented', 'evented', mastra), mastra, report);
-    expect(report).toHaveBeenCalledWith('Experimental agent: evented (workflow engine: evented)');
+    expect(report).toHaveBeenCalledWith('Experimental agent: native evented (workflow engine policy: evented)');
   });
 
   it('rejects an evented agent without a Mastra host', () => {
@@ -109,10 +106,10 @@ describe('experimental agent validation', () => {
     );
   });
 
-  it('rejects a silent evented fallback', () => {
+  it('rejects a durable wrapper using the wrong workflow engine', () => {
     const mastra = createMastra(true);
-    expect(() => validateExperimentalAgent(createAgent('evented', 'default', mastra), mastra)).toThrow(
-      'resolved workflow engine "default" instead of "evented"',
+    expect(() => validateExperimentalAgent(createAgent('durable', 'evented', mastra), mastra)).toThrow(
+      'resolved workflow engine "evented" instead of "default"',
     );
   });
 });

@@ -5,6 +5,7 @@ import { homedir, hostname } from 'node:os';
 import path from 'node:path';
 
 import type { Agent } from '@mastra/core/agent';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 import { AgentController, migratePersistedModelSelection } from '@mastra/core/agent-controller';
 import type {
   IntervalHandler,
@@ -97,12 +98,7 @@ import {
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
-import {
-  resolveAgentStreamsOff,
-  resolveExperimentalAgent,
-  validateExperimentalAgent,
-  wrapExperimentalAgent,
-} from './experimental-agent.js';
+import { resolveAgentStreamsOff, resolveExperimentalAgent, validateExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -1414,7 +1410,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
-    ...(agentStreamsOff ? { durable: false } : {}),
+    ...(experimentalAgent === 'evented'
+      ? { durable: { executionEngine: 'evented' } }
+      : agentStreamsOff
+        ? { durable: false }
+        : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a
@@ -1647,7 +1647,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // ceiling for custom/plugin processors that might retry indefinitely.
     maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
   });
-  const codeAgent = wrapExperimentalAgent(baseCodeAgent, experimentalAgent);
+  const codeAgent =
+    experimentalAgent === 'durable'
+      ? (createDurableAgent({ agent: baseCodeAgent }) as unknown as Agent)
+      : baseCodeAgent;
 
   const planMode = createPlanMode(!disabledBuiltinTools.has('submit_plan'));
   const defaultModes: AgentControllerMode[] = [
