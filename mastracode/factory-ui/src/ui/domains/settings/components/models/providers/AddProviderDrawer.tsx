@@ -37,8 +37,9 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
   );
 }
 
+/** The Mastra Gateway, offered here even where the deployment's own key already serves it. */
 function isGateway(provider: ProviderInfo): boolean {
-  return provider.connectWithMastraAccount === true;
+  return provider.connectWithMastraAccount === true || provider.connectOwnAccount === true;
 }
 
 function takesApiKey(provider: ProviderInfo): boolean {
@@ -103,7 +104,8 @@ export function AddProviderDrawer({
 
   const connectGateway = () => {
     startOAuthMutation.reset();
-    connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
+    // Connecting here is always a deliberate choice, so it creates a key on the person's own account.
+    connectGatewayMutation.mutate({ scope: requestScope, ownAccount: true }, { onSuccess: onClose });
   };
 
   const closeUnlessStarting = (nextOpen: boolean) => {

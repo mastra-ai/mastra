@@ -160,6 +160,11 @@ export interface ProviderInfo {
    * credential that wins for the caller.
    */
   serverKey?: true;
+  /**
+   * Tenant mode, beside `serverKey`: the caller can still mint a key on their own Mastra account
+   * (connect with `ownAccount`), so that account rather than the deployment's is billed.
+   */
+  connectOwnAccount?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -346,6 +351,9 @@ export async function listProviders({
         ? { connectWithMastraAccount: true as const }
         : {}),
       ...(tenantCredentials && serverGatewayKey ? { serverKey: true as const } : {}),
+      ...(tenantCredentials && connectWithMastraAccount && serverGatewayKey
+        ? { connectOwnAccount: true as const }
+        : {}),
     });
   }
 
@@ -1519,7 +1527,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
           if (ctx.mode !== 'tenant') return c.json({ error: MASTRA_SIGN_IN_REQUIRED }, 400);
-          let body: { scope?: unknown };
+          let body: { scope?: unknown; ownAccount?: unknown };
           try {
             body = await c.req.json();
           } catch {
@@ -1531,10 +1539,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
           try {
-            // A server with its own gateway key does not offer this connect. Never mint a
-            // second key there, even for a client that still calls the route.
+            // A server with its own gateway key already serves setup, so a plain connect (setup,
+            // or an older client) mints no second key there. Someone who chooses to bill their
+            // own Mastra account instead asks for it with `ownAccount`.
             const serverHasKey = Boolean(MastraCodeGateway.getMastraGatewayApiKey());
-            if (!serverHasKey && !(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
+            const mint = !serverHasKey || body.ownAccount === true;
+            if (mint && !(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
               const apiKey = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
               await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key: apiKey });
               onCredentialsChanged(tenant);
