@@ -1189,6 +1189,10 @@ export function describeResumeOccurrenceCases({
                 return publish(topic, event, options);
               });
               await redeliverInBody(driver, finishing);
+              // The duplicate's next step must be the one held before the original copy goes on.
+              if (order === 'the slower copy completes first') {
+                await expect.poll(() => heldNext, { timeout: 10_000 }).toBeDefined();
+              }
               held.resolve();
               await settleSecondCompletion(
                 driver,
