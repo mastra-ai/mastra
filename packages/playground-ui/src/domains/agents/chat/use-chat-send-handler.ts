@@ -3,7 +3,7 @@ import { RequestContext } from '@mastra/core/di';
 import { useMastraClient } from '@mastra/react';
 import {
   memoryStatusQueryKey,
-  memoryThreadMessagesQueryKey,
+  memoryThreadMessagesQueryKeyPrefix,
   observationalMemoryQueryKey,
 } from '@mastra/react/hooks/memory';
 import { useQueryClient } from '@tanstack/react-query';
@@ -195,7 +195,7 @@ export const useChatSendHandler = ({
     (currentThreadId?: string) => {
       if (!currentThreadId) return;
       void queryClient.refetchQueries({ queryKey: observationalMemoryQueryKey(agentId, currentThreadId) });
-      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKey(currentThreadId) });
+      void queryClient.refetchQueries({ queryKey: memoryThreadMessagesQueryKeyPrefix(currentThreadId, agentId) });
       void queryClient.refetchQueries({ queryKey: memoryStatusQueryKey(agentId, currentThreadId) });
       // Also poke the timeline panel directly. The panel resolves its own thread id
       // from the route, so it stays correct even for brand-new threads where
