@@ -30,22 +30,16 @@
     "xai.grok-4.7"
   ],
   "reasoning": {
-    "xai.grok-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "xai.grok-4.6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "xai.grok-4.3": [
+    "openai.gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "openai.gpt-oss-20b": [
@@ -54,10 +48,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai.gpt-oss-120b": [
+    "xai.grok-4.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "xai.grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ]
   }
