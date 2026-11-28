@@ -39,6 +39,8 @@ Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: 
 
 OM performs thresholding with fast local token estimation. Text uses `tokenx`, and image-like inputs use provider-aware heuristics plus deterministic fallbacks when metadata is incomplete.
 
+By default, live date hints follow the observation block rather than changing its absolute-date prefix. The complete hint suffix is limited to 8,000 characters and 64 date cues, including its tags, current-day explanation, and any omission notice. Set `observationalMemory: { liveDateHints: false }` to omit the suffix. Unchanged observations then produce the same OM context across days. Other context sections or messages can still change.
+
 <PropertiesTable
   content={[
   {
@@ -46,6 +48,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     type: 'boolean',
     description:
       'Enable or disable Observational Memory. When omitted from a config object, defaults to `true`. Only `enabled: false` explicitly disables it.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'liveDateHints',
+    type: 'boolean',
+    description:
+      'Append current-day and relative-date cues after the observations, using their recorded time zone. Set to `false` to keep date hints out of the Actor context. Absolute dates and static date gaps remain unchanged.',
     isOptional: true,
     defaultValue: 'true',
   },

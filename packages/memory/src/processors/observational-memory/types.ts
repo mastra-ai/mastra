@@ -1025,6 +1025,12 @@ export interface ObservationalMemoryConfig {
   memory?: Memory;
 
   /**
+   * Append live relative-date cues after observations. Set false to omit the cues.
+   * @default true
+   */
+  liveDateHints?: boolean;
+
+  /**
    * Enable retrieval-mode observation group metadata.
    * When true, observation groups are treated as durable pointers to raw
    * message history and a `recall` tool is registered so the actor can

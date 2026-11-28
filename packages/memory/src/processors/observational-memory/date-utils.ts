@@ -355,8 +355,11 @@ export function isFutureIntentObservation(line: string): boolean {
  * and expands them to "(meaning May 30, 2023 - 3 weeks ago)". Notes without a year are left alone.
  */
 export function expandInlineEstimatedDates(observations: string, currentDate: Date, timeZone?: string): string {
+  return expandInlineEstimatedDatesForDay(observations, calendarDayIn(currentDate, timeZone));
+}
+
+function expandInlineEstimatedDatesForDay(observations: string, today: number): string {
   const inlineDateRegex = /\((estimated|meaning)\s([^()]*)\)/gi;
-  const today = calendarDayIn(currentDate, timeZone);
 
   return observations.replace(inlineDateRegex, (match, prefix: string, noteText: string, offset: number) => {
     const dateContent = noteText.trimStart();
@@ -382,11 +385,14 @@ export function expandInlineEstimatedDates(observations: string, currentDate: Da
  * "Date:" headers and "(meaning/estimated …)" notes are handled separately and skipped here.
  */
 export function annotateObservationTextDates(observations: string, currentDate: Date, timeZone?: string): string {
+  return annotateObservationTextDatesForDay(observations, calendarDayIn(currentDate, timeZone));
+}
+
+function annotateObservationTextDatesForDay(observations: string, today: number): string {
   const regex = new RegExp(
     String.raw`^Date:.*$|\((?:[Ee]stimated|[Mm]eaning)\b[^()]*\)|${FREE_TEXT_DATE.source}`,
     'gm',
   );
-  const today = calendarDayIn(currentDate, timeZone);
   return observations.replace(regex, (match, offset: number) => {
     if (match.startsWith('Date:') || match.startsWith('(')) return match;
     const span = parseDateSpan(match);
@@ -406,13 +412,23 @@ export function annotateObservationTextDates(observations: string, currentDate: 
  * `currentDate`'s calendar date in that zone, so the result doesn't depend on the zone of the process rendering it.
  */
 export function addRelativeTimeToObservations(observations: string, currentDate: Date, timeZone?: string): string {
-  const today = calendarDayIn(currentDate, timeZone);
-  const withInlineDates = annotateObservationTextDates(
-    expandInlineEstimatedDates(observations, currentDate, timeZone),
-    currentDate,
-    timeZone,
-  );
+  return addRelativeTimeForDay(observations, calendarDayIn(currentDate, timeZone));
+}
 
+function addRelativeTimeForDay(observations: string, today: number): string {
+  const withInlineDates = annotateObservationTextDatesForDay(
+    expandInlineEstimatedDatesForDay(observations, today),
+    today,
+  );
+  return formatObservationDateHeaders(withInlineDates, today);
+}
+
+/** Preserve only clock-independent gaps in the cacheable observation text. */
+export function addObservationDateGaps(observations: string): string {
+  return formatObservationDateHeaders(observations);
+}
+
+function formatObservationDateHeaders(withInlineDates: string, today?: number): string {
   const dateHeaderRegex = /^(Date:[ \t]*)(.*)$/gm;
 
   // First pass: collect every header that parses as a date or range, in order
@@ -448,7 +464,7 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
       }
     }
 
-    result += `${curr.prefix}${curr.dateStr} (${relativeSpan(curr.span, today)})`;
+    result += today === undefined ? curr.match : `${curr.prefix}${curr.dateStr} (${relativeSpan(curr.span, today)})`;
 
     lastIndex = curr.index + curr.match.length;
   }
@@ -456,6 +472,38 @@ export function addRelativeTimeToObservations(observations: string, currentDate:
   result += withInlineDates.slice(lastIndex);
 
   return result;
+}
+
+/** Live cues are bounded and separate from the absolute observation prefix. */
+export function buildObservationDateHints(
+  observations: string,
+  currentDate: Date,
+  timeZone?: string,
+): string | undefined {
+  const today = calendarDayIn(currentDate, timeZone);
+  const todayLabel = new Date(today * DAY_MS).toISOString().slice(0, 10);
+  const opening = `<observation-date-hints>\nToday is ${todayLabel} in the observation time zone (${resolveTimeZone(timeZone) ?? 'process local'}). These live annotations refer to the absolute observations above; they are not additional observations.`;
+  const closing = '\n</observation-date-hints>';
+  const omission =
+    '\nAdditional date cues omitted. Interpret remaining absolute dates against today; past planned actions likely already happened.';
+  const lines: string[] = [];
+  // Reserve all wrapper text and the optional omission notice within the finished suffix's 8,000-character limit.
+  let remaining = 8000 - opening.length - closing.length - omission.length;
+  let omitted = false;
+  for (const line of observations.split('\n')) {
+    // Every supported date form carries a four-digit year; most observation lines carry none.
+    if (!/\d{4}/.test(line)) continue;
+    const annotated = addRelativeTimeForDay(line, today);
+    if (annotated === line) continue;
+    if (lines.length >= 64 || annotated.length + 1 > remaining) {
+      omitted = true;
+      break;
+    }
+    lines.push(annotated);
+    remaining -= annotated.length + 1;
+  }
+  if (!lines.length && !omitted) return undefined;
+  return `${opening}${lines.map(line => `\n${line}`).join('')}${omitted ? omission : ''}${closing}`;
 }
 
 export const MIN_TEMPORAL_GAP_MS = 10 * 60 * 1000;
