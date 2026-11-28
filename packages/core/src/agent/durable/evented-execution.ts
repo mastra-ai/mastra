@@ -274,6 +274,8 @@ export async function settleEventedDurableExecution(mastra: Mastra, event: Event
     // in the order the failure handler resolves the run's final state: a failure published for a delivery that ran
     // out carries it only in `stepResults.__state`. A failure event that carries neither (one for a storage v2 step
     // message, whose state travels as a patch) returns the signals the run consumed but never saved as pending.
+    // The close takes no run fence: one that races a takeover of this run id comes from a run that lost its thread,
+    // which the thread lease and the step guards stop, and storage leaves a second live run on a thread unguarded.
     const data = event.data ?? {};
     const closing = closeStoredSignalRun({
       mastra,

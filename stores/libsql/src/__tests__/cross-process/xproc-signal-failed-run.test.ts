@@ -62,8 +62,10 @@ describe('evented run that fails in the worker process', () => {
         logger: false,
         workers: false,
       });
-      const subscription = await runner.subscribeToThread({ ...scope, withRunStatus: true });
+      let subscription: Awaited<ReturnType<typeof runner.subscribeToThread>> | undefined;
       try {
+        subscription = await runner.subscribeToThread({ ...scope, withRunStatus: true });
+        const threadStream = subscription.stream;
         const view = (await observer.getStore('memory'))!;
         const runId = `signal-failed-run-${randomUUID()}`;
         const peer = await env.spawnPeer(WORKER, { agentId, failRunId: runId } satisfies SignalActiveRunPeerArgs, {
@@ -75,7 +77,7 @@ describe('evented run that fails in the worker process', () => {
         // Run outcomes on the thread, in order: the failed run, then its next turn.
         const statuses: Array<{ runId: string; status: string }> = [];
         const nextTurnEnded = (async () => {
-          for await (const chunk of subscription.stream) {
+          for await (const chunk of threadStream) {
             if (chunk.type !== 'thread-run-status') continue;
             statuses.push({ runId: chunk.runId, status: chunk.payload.status });
             if (chunk.runId !== runId) return;
@@ -157,11 +159,21 @@ describe('evented run that fails in the worker process', () => {
         peer.send('finish');
         await peer.result();
       } finally {
-        subscription.unsubscribe();
-        await mastra.shutdown();
-        await storage.close();
-        await observer.close();
-        await env.cleanup();
+        subscription?.unsubscribe();
+        // Nested so a failed shutdown or close still closes the rest and reaps the peers.
+        try {
+          await mastra.shutdown();
+        } finally {
+          try {
+            await storage.close();
+          } finally {
+            try {
+              await observer.close();
+            } finally {
+              await env.cleanup();
+            }
+          }
+        }
       }
     },
     PEER_TIMEOUT_MS + DEFAULT_HANG_GUARD_MS * 4,

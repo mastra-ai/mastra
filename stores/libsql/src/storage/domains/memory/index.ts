@@ -675,7 +675,7 @@ export class MemoryLibSQL extends MemoryStorage {
         sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
         args: queryParams,
       });
-      const total = Number(countResult.rows?.[0]?.count ?? 0);
+      const countedTotal = Number(countResult.rows?.[0]?.count ?? 0);
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       // Not limited by `total`: a save can move a pending signal into the thread between the count and this read.
@@ -686,6 +686,8 @@ export class MemoryLibSQL extends MemoryStorage {
       });
       const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
       const paginatedCount = messages.length;
+      // An unpaged read returns the rows saved after the count, so its total counts them too.
+      const total = perPageInput === false ? Math.max(countedTotal, offset + paginatedCount) : countedTotal;
 
       // Only return early if there are no messages AND no includes to process
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
@@ -851,7 +853,7 @@ export class MemoryLibSQL extends MemoryStorage {
         sql: `SELECT COUNT(*) as count FROM ${TABLE_MESSAGES} ${whereClause}`,
         args: queryParams,
       });
-      const total = Number(countResult.rows?.[0]?.count ?? 0);
+      const countedTotal = Number(countResult.rows?.[0]?.count ?? 0);
 
       // Step 1: Get paginated messages
       // Not limited by `total`: a save can move a pending signal into the resource between the count and this read.
@@ -861,6 +863,8 @@ export class MemoryLibSQL extends MemoryStorage {
         args: [...queryParams, limitValue, offset],
       });
       const messages: MastraDBMessage[] = (dataResult.rows || []).map((row: any) => this.parseRow(row));
+      // An unpaged read returns the rows saved after the count, so its total counts them too.
+      const total = perPageInput === false ? Math.max(countedTotal, offset + messages.length) : countedTotal;
 
       // Only return early if there are no messages AND no includes to process
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {

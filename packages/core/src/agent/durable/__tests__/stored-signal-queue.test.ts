@@ -16,6 +16,7 @@ import type { MastraMemory } from '../../../memory/memory';
 import { MockMemory } from '../../../memory/mock';
 import type { MastraDBMessage } from '../../../memory/types';
 import type { Processor } from '../../../processors';
+import { MASTRA_INHERITED_MEMORY_KEY, RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import type { PendingSignalEnqueueResult } from '../../../storage/domains/memory/base';
@@ -242,6 +243,23 @@ class HeldReleasePubSub extends BrokerLikePubSub {
   }
 }
 
+/** A pubsub whose first transfer of a thread's lease waits for the test, as a slow lease provider's does. */
+class HeldTransferPubSub extends EventEmitterPubSub {
+  /** The thread whose lease transfer is held. */
+  holdTransferOf?: string;
+  readonly transferReached = gate();
+  readonly transferHeld = gate();
+
+  override async transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number) {
+    if (this.holdTransferOf && key.includes(this.holdTransferOf)) {
+      this.holdTransferOf = undefined;
+      this.transferReached.release();
+      await this.transferHeld.promise;
+    }
+    return super.transferLease(key, fromOwner, toOwner, ttlMs);
+  }
+}
+
 /** Waits until the run a wake started has ended. */
 async function wakeEnded(accepted: { action: string; output?: { getFullOutput: () => Promise<unknown> } }) {
   expect(accepted.action).toBe('wake');
@@ -304,10 +322,12 @@ function setup({
   withMemory = true,
   park = false,
   hangingCall,
+  thinkingCall,
   stopWhen,
   totalMs,
   inputProcessors,
   pubsub = new EventEmitterPubSub(),
+  inheritMemory = false,
   createMemory = storage => new MockMemory({ storage }),
   storage = new InMemoryStore(),
 }: {
@@ -322,11 +342,18 @@ function setup({
   park?: boolean;
   /** This model call streams nothing and ends only when its request is aborted. */
   hangingCall?: number;
+  /** This model call streams reasoning, then answers once `thinkingHeld` is released, unless it was aborted. */
+  thinkingCall?: number;
   stopWhen?: () => boolean;
   /** The run's total deadline. */
   totalMs?: number;
   inputProcessors?: Processor[];
   pubsub?: EventEmitterPubSub;
+  /**
+   * The agent has no memory of its own, and each run's request context hands it the memory, as a supervisor that
+   * delegates to it does.
+   */
+  inheritMemory?: boolean;
 } = {}) {
   const prompts: unknown[] = [];
   const promptWaiters: Array<{ count: number; reached: () => void }> = [];
@@ -338,6 +365,8 @@ function setup({
   const toolGate = gate();
   const toolReached = gate();
   const barrierReached = gate();
+  const thinking = gate();
+  const thinkingHeld = gate();
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt, abortSignal }) => {
       prompts.push(prompt);
@@ -351,6 +380,33 @@ function setup({
             start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
               abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+            },
+          }),
+        };
+      }
+      if (call === thinkingCall) {
+        return {
+          warnings: [],
+          stream: new ReadableStream<LanguageModelV2StreamPart>({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'reasoning-start', id: 'thinking' });
+              controller.enqueue({ type: 'reasoning-delta', id: 'thinking', delta: 'thinking' });
+              abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+              thinking.release();
+              void thinkingHeld.promise.then(() => {
+                if (abortSignal?.aborted) return;
+                controller.enqueue({ type: 'reasoning-end', id: 'thinking' });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}` });
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              });
             },
           }),
         };
@@ -405,7 +461,7 @@ function setup({
       name: 'stored-signals',
       instructions: 'Test',
       model,
-      ...(withMemory ? { memory } : {}),
+      ...(withMemory && !inheritMemory ? { memory } : {}),
       tools: { wait, confirm },
       ...(inputProcessors ? { inputProcessors } : {}),
     }),
@@ -415,7 +471,10 @@ function setup({
   const scope = { resourceId: `resource-${crypto.randomUUID()}`, threadId: `thread-${crypto.randomUUID()}` };
   /** Starts the run, without waiting for anything. */
   const begin = async (memoryOptions: { readOnly?: boolean } = {}) => {
+    const requestContext = inheritMemory ? new RequestContext() : undefined;
+    requestContext?.setRaw(MASTRA_INHERITED_MEMORY_KEY, { agentId: 'stored-signals', memory });
     const stream = await agent.stream('Start', {
+      ...(requestContext ? { requestContext } : {}),
       memory: {
         thread: scope.threadId,
         resource: scope.resourceId,
@@ -463,6 +522,8 @@ function setup({
     promptsReached,
     toolGate,
     toolReached,
+    thinking,
+    thinkingHeld,
     begin,
     start,
     afterFollowUps,
@@ -749,6 +810,51 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
+  it.each(['by id', 'by a stop that clears the thread'] as const)(
+    "cancels a signal the run left while the thread's next turn waits for its lease, and that turn never sees it (%s)",
+    async path => {
+      const memoryStore = new ObservedMemory();
+      const pubsub = new HeldTransferPubSub();
+      const { agent, scope, prompts, toolGate, start, afterFollowUps } = setup({ memoryStore, pubsub });
+      const { stream, done } = await start();
+      // The executing process closed the run before these sends were stored, so they are left for the thread's next
+      // turn: the first is its input, the second waits for its first model request.
+      await memoryStore.closeSignalRun({ threadId: scope.threadId, runId: stream.runId, consumedIds: [] });
+      const input = agent.sendSignal({ type: 'user', contents: 'INPUT_OF_THE_NEXT_TURN' }, scope);
+      await expect(input.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      const cancelled = agent.sendSignal({ type: 'user', contents: 'CANCELLED_WHILE_THE_TURN_WAITS' }, scope);
+      await expect(cancelled.accepted).resolves.toEqual({ action: 'deliver', runId: stream.runId });
+      // The run's end-of-run check chose the next turn's input and waits for the thread's lease.
+      pubsub.holdTransferOf = scope.threadId;
+      toolGate.release();
+      await done;
+      await pubsub.transferReached.promise;
+
+      if (path === 'by id') {
+        await expect(agent.cancelQueuedMessages({ ...scope, signalIds: [cancelled.signal.id] })).resolves.toEqual({
+          cancelledSignalIds: [cancelled.signal.id],
+        });
+        expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([
+          expect.objectContaining({ id: input.signal.id }),
+        ]);
+      } else {
+        agent.abortThreadStream({ ...scope, clearPendingSignals: true });
+        // Queued behind the clear's write for the thread, so it reads what the clear left.
+        await expect(agent.cancelQueuedMessages({ ...scope, signalIds: [cancelled.signal.id] })).resolves.toEqual({
+          cancelledSignalIds: [],
+        });
+        expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+      }
+      pubsub.transferHeld.release();
+      await afterFollowUps();
+
+      const turns = prompts.slice(2).filter(prompt => !textOf(prompt).includes(BARRIER));
+      expect(turns.map(prompt => occurrences(prompt, 'INPUT_OF_THE_NEXT_TURN'))).toEqual(path === 'by id' ? [1] : []);
+      expect(prompts.some(prompt => textOf(prompt).includes('CANCELLED_WHILE_THE_TURN_WAITS'))).toBe(false);
+      expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+    },
+  );
+
   it("reports a forwarded signal it stored for a run to that run's pending-signal listeners once", async () => {
     const memoryStore = new ObservedMemory();
     const { agent, scope, prompts, toolGate, start } = setup({ memoryStore });
@@ -1003,6 +1109,28 @@ describe('signals of a running evented agent kept in memory storage', () => {
     expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
   });
 
+  it('answers both senders of a signal sent twice with one id while a wake starts, and delivers it once', async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, toolGate, savedMessages } = setup({ memoryStore });
+    const id = `retried-${crypto.randomUUID()}`;
+    const wake = agent.sendSignal({ type: 'user', contents: 'WAKES_THE_THREAD' }, scope);
+    // A client retrying its send with the same id before the woken run started.
+    const first = agent.sendSignal({ type: 'user', contents: 'SENT_TWICE', id }, scope);
+    const retry = agent.sendSignal({ type: 'user', contents: 'SENT_TWICE', id }, scope);
+    let firstAnswer: unknown;
+    void first.accepted.then(answer => (firstAnswer = answer));
+    toolGate.release();
+    const woken = await wake.accepted;
+    await expect(retry.accepted).resolves.toEqual({ action: 'deliver', runId: woken.runId });
+    await wakeEnded(woken);
+
+    // Settled long before the woken run ended, with the retry's answer.
+    expect(firstAnswer).toEqual({ action: 'deliver', runId: woken.runId });
+    expect(occurrences(prompts[0], 'SENT_TWICE')).toBe(1);
+    expect((await savedMessages()).filter(message => message.id === id)).toHaveLength(1);
+    expect(await memoryStore.listPendingSignals({ threadId: scope.threadId })).toEqual([]);
+  });
+
   it('rejects a send that joined a wake when its insert for the woken run fails', async () => {
     const memoryStore = new ObservedMemory();
     const { agent, scope, prompts, toolGate } = setup({ memoryStore });
@@ -1068,6 +1196,29 @@ describe('signals of a running evented agent kept in memory storage', () => {
 });
 
 describe('drains of a storage-backed run', () => {
+  it('lets a request that already holds a signal go on thinking when the signal is announced here after its claim', async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, scope, prompts, toolGate, start, thinking, thinkingHeld } = setup({ memoryStore, thinkingCall: 2 });
+    const { done } = await start();
+    // The insert commits; its answer, which announces the signal to the run's listeners here, waits until the
+    // request after the tool claimed the row and thinks.
+    const committed = gate();
+    memoryStore.afterEnqueue = async () => {
+      memoryStore.afterEnqueue = undefined;
+      committed.release();
+      await thinking.promise;
+    };
+    const sent = agent.sendSignal({ type: 'user', contents: 'HELD_BY_THE_REQUEST' }, scope);
+    await committed.promise;
+    toolGate.release();
+    await expect(sent.accepted).resolves.toMatchObject({ action: 'deliver' });
+    thinkingHeld.release();
+    await done;
+
+    expect(occurrences(prompts[1], 'HELD_BY_THE_REQUEST')).toBe(1);
+    expect(prompts).toHaveLength(2);
+  });
+
   it("streams a signal the loop's continuation check takes once, and asks the model once for it", async () => {
     const memoryStore = new ObservedMemory();
     const { agent, scope, prompts, toolGate, start } = setup({ memoryStore });
@@ -1464,7 +1615,7 @@ describe('a run whose total deadline fires in the process that executes its step
 });
 
 describe('a parked run that is aborted', () => {
-  it.each(['acknowledged abort', 'stream abort', 'abort requested by another process'] as const)(
+  it.each(['acknowledged abort', 'stream abort', 'subscription abort', 'abort requested by another process'] as const)(
     "closes it with the signal it took, and a signal pending for it is the thread's next turn (%s)",
     async path => {
       const memoryStore = new ObservedMemory();
@@ -1494,6 +1645,11 @@ describe('a parked run that is aborted', () => {
       await expect(pending.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
       if (path === 'acknowledged abort') await agent.__abortRunAcknowledged(stream.runId);
       else if (path === 'stream abort') expect(agent.abortRunStream(stream.runId)).toBe(true);
+      else if (path === 'subscription abort') {
+        const subscription = await agent.subscribeToThread(scope);
+        expect(subscription.abort()).toBe(true);
+        subscription.unsubscribe();
+      }
       // The request a process that does not hold the run publishes on the thread, as its thread abort does.
       else await agentThreadStreamRuntime.requestThreadRunAbort(agent.getPubSub(), scope, stream.runId);
       await promptsReached(3);
@@ -1513,6 +1669,45 @@ describe('a parked run that is aborted', () => {
       expect(await memoryStore.getSignalRun({ threadId: scope.threadId })).not.toBe(stream.runId);
     },
   );
+
+  it("closes the run of an agent running with a delegating agent's memory with the signal it took", async () => {
+    const memoryStore = new ObservedMemory();
+    const { agent, mastra, scope, prompts, promptsReached, toolGate, start } = setup({
+      memoryStore,
+      park: true,
+      inheritMemory: true,
+    });
+    const suspended = gate();
+    let runId: string | undefined;
+    await mastra.pubsub.subscribe('workflows', event => {
+      if (event.type === 'workflow.suspend' && event.runId === runId) suspended.release();
+    });
+    const { stream } = await start();
+    runId = stream.runId;
+    let taken: ReturnType<typeof agent.sendSignal> | undefined;
+    memoryStore.beforeClaim = async ({ runId: claiming }) => {
+      if (claiming !== stream.runId || memoryStore.claimsBy(claiming) !== 3) return;
+      taken = agent.sendSignal({ type: 'user', contents: 'TAKEN_BEFORE_PARKING', transient: true }, scope);
+      await taken.accepted;
+    };
+    toolGate.release();
+    await stream.output.suspendPayload;
+    await suspended.promise;
+    // Its signals were kept in the store the delegating agent's memory reads.
+    expect(occurrences(prompts[1], 'TAKEN_BEFORE_PARKING')).toBe(1);
+    expect(memoryStore.claimsOf(taken!.signal.id)).toHaveLength(1);
+
+    // The thread's next turn starts with this once the aborted run's close settled.
+    const pending = agent.sendSignal({ type: 'user', contents: 'PENDING_WHILE_PARKED' }, scope);
+    await expect(pending.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+    expect(agent.abortRunStream(stream.runId)).toBe(true);
+    await promptsReached(3);
+
+    expect(memoryStore.calls).toContainEqual({ op: 'close', runId: stream.runId, consumedIds: [taken!.signal.id] });
+    // The close deleted the transient signal the run consumed, so the next turn does not get it again.
+    expect(occurrences(prompts[2], 'PENDING_WHILE_PARKED')).toBe(1);
+    expect(occurrences(prompts[2], 'TAKEN_BEFORE_PARKING')).toBe(0);
+  });
 
   it("starts the thread's next turn with a signal pending for it before its lease release landed", async () => {
     const memoryStore = new SharedObservedMemory();

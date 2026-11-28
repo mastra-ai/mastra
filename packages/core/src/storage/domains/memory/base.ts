@@ -375,9 +375,11 @@ export abstract class MemoryStorage extends StorageDomain {
   //   the ids in `consumedIds`, and `deleteMessages` and `updateMessages`
   //   decide from a read and then write by id. When an id is deleted and sent
   //   again as a signal, a late repeated close of the earlier run, or a delete
-  //   or update between its read and its write, can act on the new row.
-  //   Closing that window needs a per-run mark on the row or a prefix test in
-  //   SQL, and the layout has neither.
+  //   or update between its read and its write, can act on the new row. The
+  //   close's delete would need a per-run mark on the row or a prefix test in
+  //   SQL to tell them apart, and the layout has neither. A delete or update
+  //   could test the thread id it read, but would then skip a write that races
+  //   an ordinary move of the message to another thread, so it writes by id.
   // - No store filters queued rows out of reads by message id. A caller that
   //   must not treat one as a message checks
   //   `isQueueThreadId(message.threadId)`, as `dbMessagesToStateSignals` does.

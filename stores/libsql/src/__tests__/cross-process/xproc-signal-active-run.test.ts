@@ -175,12 +175,28 @@ async function runCase({
     await peer.result();
     return { runId, accepted: accepted.map(stripOutput), calls, stored, pending, instance };
   } finally {
-    await other?.mastra.shutdown();
-    await other?.close();
-    await otherPubsub?.close();
-    await starter.mastra.shutdown();
-    await starter.close();
-    await env.cleanup();
+    // Nested so a failed shutdown or close still closes the rest and reaps the peers.
+    try {
+      await other?.mastra.shutdown();
+    } finally {
+      try {
+        await other?.close();
+      } finally {
+        try {
+          await otherPubsub?.close();
+        } finally {
+          try {
+            await starter.mastra.shutdown();
+          } finally {
+            try {
+              await starter.close();
+            } finally {
+              await env.cleanup();
+            }
+          }
+        }
+      }
+    }
   }
 }
 
@@ -349,12 +365,28 @@ describe('message sent to an evented run whose steps run in another process', ()
         expect(userTexts(calls[1]!.prompt).join('\n').split(contents).length - 1, observed).toBe(1);
         expect(stored.filter(message => JSON.stringify(message.content).includes(contents)).length, observed).toBe(1);
       } finally {
-        await other?.mastra.shutdown();
-        await other?.storage.close();
-        await otherPubsub?.close();
-        await starter.mastra.shutdown();
-        await starter.storage.close();
-        await env.cleanup();
+        // Nested so a failed shutdown or close still closes the rest and reaps the peers.
+        try {
+          await other?.mastra.shutdown();
+        } finally {
+          try {
+            await other?.storage.close();
+          } finally {
+            try {
+              await otherPubsub?.close();
+            } finally {
+              try {
+                await starter.mastra.shutdown();
+              } finally {
+                try {
+                  await starter.storage.close();
+                } finally {
+                  await env.cleanup();
+                }
+              }
+            }
+          }
+        }
       }
     },
     TIMEOUT,

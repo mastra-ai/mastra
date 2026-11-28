@@ -545,9 +545,15 @@ describe('LibSQL pending signals', () => {
             ? await memory.listMessagesByResourceId({ resourceId: thread.resourceId, perPage: false })
             : await memory.listMessages({ threadId: thread.id, perPage: false });
           expect(toSave).toBeUndefined();
-          expect({ byResource, ids: listed.messages.map(row => row.id), hasMore: listed.hasMore }).toEqual({
+          expect({
+            byResource,
+            ids: listed.messages.map(row => row.id),
+            total: listed.total,
+            hasMore: listed.hasMore,
+          }).toEqual({
             byResource,
             ids: [signal.id, message.id],
+            total: 2,
             hasMore: false,
           });
         }

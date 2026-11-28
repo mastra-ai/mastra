@@ -47,10 +47,14 @@ function codesOf(error: unknown): string[] {
   return codes;
 }
 
-/** Runs `calls` at once, starting them in an order that shifts with `iteration`. */
-function startShifted<T>(calls: (() => Promise<T>)[], iteration: number): Promise<PromiseSettledResult<T>[]> {
+/** Runs `calls` at once, starting them in an order that shifts with `iteration`. Results are in the order of `calls`. */
+async function startShifted<T>(calls: (() => Promise<T>)[], iteration: number): Promise<PromiseSettledResult<T>[]> {
   const shift = iteration % calls.length;
-  return Promise.allSettled([...calls.slice(shift), ...calls.slice(0, shift)].map(call => call()));
+  const order = calls.map((_, index) => (index + shift) % calls.length);
+  const settled = await Promise.allSettled(order.map(index => calls[index]!()));
+  const results: PromiseSettledResult<T>[] = [];
+  order.forEach((index, started) => (results[index] = settled[started]!));
+  return results;
 }
 
 /**
@@ -299,16 +303,18 @@ function raceTests(ctx: Ctx) {
 
         // A save that finds the thread already deleted is refused; nothing else may fail. A send
         // after the close or the deletion is refused.
-        for (const result of results) {
+        const save = 5;
+        results.forEach((result, index) => {
           if (result.status === 'fulfilled') {
             if (typeof result.value === 'string') {
               expect(['accepted', 'run-closed', 'thread-not-found']).toContain(result.value);
             }
-            continue;
+            return;
           }
+          expect(index, String(result.reason)).toBe(save);
           expect(codesOf(result.reason)).toEqual([]);
           expect(String(result.reason)).toContain(`Thread ${thread.id} not found`);
-        }
+        });
         expect(await ctx.memory.getThreadById({ threadId: thread.id })).toBeNull();
         expect(await ctx.memory.getSignalRun({ threadId: thread.id })).toBeNull();
         expect(await rowsOf(thread)).toEqual([]);
@@ -358,11 +364,13 @@ function raceTests(ctx: Ctx) {
         );
 
         // A save into the thread that finds it deleted is refused; nothing else may fail.
-        for (const result of results) {
-          if (result.status === 'fulfilled') continue;
+        const saveIntoThread = 0;
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') return;
+          expect(index, String(result.reason)).toBe(saveIntoThread);
           expect(codesOf(result.reason)).toEqual([]);
           expect(String(result.reason)).toContain(`Thread ${thread.id} not found`);
-        }
+        });
         expect(await ctx.memory.getThreadById({ threadId: thread.id })).toBeNull();
         expect(await rowsOf(thread)).toEqual([]);
         // What survives is in the other thread, moved there by the save under it.
@@ -436,6 +444,8 @@ describe('Pending signals on connections that default to REPEATABLE READ', () =>
         expect(await takenIds(thread)).toEqual([]);
         expect(sorted([...cancelled, ...(await pendingIds(thread))])).toEqual(sorted(sent));
         expect(toCancel).toEqual(expect.arrayContaining(cancelled));
+        // A claim takes every pending row at once, so in any serial order both targets are cancelled or neither is.
+        expect([[], sorted(toCancel)]).toContainEqual(sorted(cancelled));
       }
     },
     RACE_TIMEOUT,

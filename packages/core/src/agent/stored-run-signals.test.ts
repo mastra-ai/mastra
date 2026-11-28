@@ -168,6 +168,20 @@ describe('stored run signals', () => {
     await expect(taken).rejects.toThrow('not stored');
   });
 
+  it("a sender repeating a signal id gets the first sender's waiter, so the first copy's insert answers both", async () => {
+    const signals = createStoredRunSignals<never>();
+    const first = signals.preRunInsertWaiter('run', 'signal');
+    const retry = signals.preRunInsertWaiter('run', 'signal');
+
+    const waiters = signals.takePreRunWaiters('run');
+    waiters.take('signal')?.reject(new Error('not stored'));
+    expect(waiters.take('signal')).toBeUndefined();
+
+    expect(await isSettled(first)).toBe(true);
+    await expect(first).rejects.toThrow('not stored');
+    await expect(retry).rejects.toThrow('not stored');
+  });
+
   it('settling a run removes its waiters: a later waiter for the same run is a new one', async () => {
     const signals = createStoredRunSignals<never>();
     void signals.preRunInsertWaiter('run', 'first');
@@ -266,6 +280,35 @@ describe('stored run signals', () => {
     await first;
     await second;
     expect(order).toEqual(['first started', 'second']);
+    expect(errors).toEqual([new Error('check failed')]);
+  });
+
+  it("a thread's later checks still run when a failed check's handler throws, which its caller sees", async () => {
+    const signals = createStoredRunSignals<never>();
+    const errors: unknown[] = [];
+    let ran = false;
+
+    const first = signals.runEndOfRunCheck(
+      key,
+      async () => {
+        throw new Error('check failed');
+      },
+      error => {
+        errors.push(error);
+        throw new Error('handler failed');
+      },
+    );
+    const second = signals.runEndOfRunCheck(
+      key,
+      async () => {
+        ran = true;
+      },
+      error => errors.push(error),
+    );
+
+    await expect(first).rejects.toThrow('handler failed');
+    await second;
+    expect(ran).toBe(true);
     expect(errors).toEqual([new Error('check failed')]);
   });
 

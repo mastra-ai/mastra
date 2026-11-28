@@ -3325,6 +3325,12 @@ function threadLeaseLoss(engine: EngineVariant) {
     expect(requests[0]).not.toContain(wake);
     expect(requests[1].split(wake)).toHaveLength(2);
     expect(requests[1].split(joined)).toHaveLength(2);
+    // No model request outside the owner's run, such as a turn the sender started for its reservation, carries either.
+    const elsewhere = llm
+      .getRequests()
+      .map(request => JSON.stringify(request.body))
+      .filter(request => !request.includes(prompt));
+    expect(elsewhere.filter(request => request.includes(wake) || request.includes(joined))).toEqual([]);
   }, 20_000);
 
   it('tells a sender to a reservation that lost the lease to a retake what it is told without stored signals, and no later run gets its input', async () => {

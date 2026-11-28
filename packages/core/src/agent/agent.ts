@@ -355,7 +355,6 @@ import {
 } from './scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
-import { maySignalsBeStored } from './stored-signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
@@ -11291,10 +11290,11 @@ export class Agent<
 
   /**
    * Close the stored signals of a parked run being aborted. Reads its snapshot, so it starts before the delete.
-   * Runs of an agent that never stores signals read nothing.
+   * Runs of an agent that never stores signals read nothing. Whether a run of an evented agent stored them is in
+   * its snapshot: one without memory of its own stores them when a delegating agent hands it memory.
    */
   #closeParkedRunSignals(runId: string): Promise<void> | undefined {
-    if (!maySignalsBeStored(this)) return undefined;
+    if (!this.__usesSharedRunLog()) return undefined;
     return this.#resolveExecutionEngine()?.closeParkedRunSignals(runId);
   }
 
@@ -13979,6 +13979,8 @@ export class Agent<
         // Like the finish step, memory is saved before the caller sees the run end.
         this.#runInputs.delete(fence!);
         // The signals the deadline saves, chosen with the transcript. Nothing is chosen when the save fails before.
+        // When the save itself fails, the turn's unsaved input and response are dropped and the close deletes these
+        // signals with them, as for any failed run: back in pending they would reach a turn after the dropped one.
         let savedSignalIds: string[] = [];
         deadlineSave = (async () => {
           // A tool the deadline aborted still gets its grace window to return; wait (bounded) so its step can be saved.

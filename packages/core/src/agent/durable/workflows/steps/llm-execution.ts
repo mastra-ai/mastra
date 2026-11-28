@@ -689,12 +689,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           interruption.abort(new Error('Interrupted by a queued signal'));
         }
       };
-      const stopListening = signalRegistry?.subscribePendingSignals?.(interruptForSignals);
+      const isInTranscript = (signalId: string) => messageList.get.all.db().some(message => message.id === signalId);
+      // A storage-backed run's sender notifies after its insert committed, so this request's claim may already hold
+      // every signal it names.
+      const stopListening = signalRegistry?.subscribePendingSignals?.(signals => {
+        if (signals?.length && signals.every(signal => isInTranscript(signal.id))) return;
+        interruptForSignals(signals);
+      });
       if (signalRegistry) signalRegistry.stopStepSignalListener = stopListening;
       // Ids announced on the run's control topic before this step's request starts. Their rows committed before the
       // announcement, so a claim that missed one only ran too early.
       const hintedSignalIds = new Set<string>();
-      const isInTranscript = (signalId: string) => messageList.get.all.db().some(message => message.id === signalId);
       // A worker has no queue listener, but hints and late processor signals still reach a storage-backed run's step.
       const listensForSignals = !!stopListening || (!!signalRegistry && typedInput.signalsStored === true);
       if (signalRegistry && typedInput.signalsStored) {

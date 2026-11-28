@@ -17,9 +17,9 @@ const URL_PARTS = /^(?<scheme>[A-Za-z][A-Za-z.+-]*):(?<authority>\/\/[^/?#]*)?(?
 
 /**
  * Whether `@libsql/client` opens `url` as an in-memory database: the url is `:memory:`, or a
- * `file:` url without an authority whose percent-decoded path, before any query, is `:memory:`.
- * `file::memory:?cache=shared` and `file:%3Amemory%3A` are in memory; `file:my%3Amemory%3A.db`
- * is a file.
+ * `file:` url without an authority whose percent-decoded path, before any query, is `:memory:` or
+ * starts with `:memory:?`. `file::memory:?cache=shared`, `file:%3Amemory%3A` and
+ * `file::memory:%3Fcache=shared` are in memory; `file:my%3Amemory%3A.db` is a file.
  */
 export function isInMemoryDatabaseUrl(url: string): boolean {
   if (url === ':memory:') return true;
@@ -31,7 +31,7 @@ export function isInMemoryDatabaseUrl(url: string): boolean {
   } catch {
     // A malformed escape sequence: compare the path as written.
   }
-  return path === ':memory:';
+  return path === ':memory:' || path.startsWith(':memory:?');
 }
 
 /**

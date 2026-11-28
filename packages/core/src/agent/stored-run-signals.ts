@@ -1,7 +1,7 @@
 import type { CreatedAgentSignal } from './signals';
 
 /** A sender waiting for a reserved run to decide where the signal it queued for that run goes. */
-type PreRunSignalWaiter = { resolve: () => void; reject: (error: unknown) => void };
+type PreRunSignalWaiter = { resolve: () => void; reject: (error: unknown) => void; settled: Promise<void> };
 
 /**
  * What a thread runtime keeps in memory about signals kept in storage: runs
@@ -64,13 +64,23 @@ export function createStoredRunSignals<T>(maxEndedRuns = 1000) {
     /**
      * A promise for a sender that queued `signalId` for the reserved run
      * `runId`, settled through the run's waiters. Rejections are handled, since
-     * a sender whose reservation lost never reads it.
+     * a sender whose reservation lost never reads it. A sender repeating an id
+     * that already waits shares its promise: storage keeps one row per id, so
+     * the first copy's insert answers both.
      */
     preRunInsertWaiter(runId: string, signalId: string): Promise<void> {
       const waiters = preRunSignalWaiters.get(runId) ?? new Map<string, PreRunSignalWaiter>();
       preRunSignalWaiters.set(runId, waiters);
-      const settled = new Promise<void>((resolve, reject) => waiters.set(signalId, { resolve, reject }));
+      const waiting = waiters.get(signalId);
+      if (waiting) return waiting.settled;
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const settled = new Promise<void>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
       void settled.catch(() => {});
+      waiters.set(signalId, { resolve, reject, settled });
       return settled;
     },
 
@@ -138,7 +148,8 @@ export function createStoredRunSignals<T>(maxEndedRuns = 1000) {
       void tail.then(() => {
         if (writes.get(key) !== tail) return;
         writes.delete(key);
-        // A row inserted from now on is stamped later than every row this process inserted before.
+        // Dropped once its time has passed: a row stamped with the current time still sorts after every row this process
+        // inserted, while one sent with an earlier `createdAt` keeps that time and can sort before them.
         if ((rowTimes.get(key) ?? 0) < Date.now()) rowTimes.delete(key);
       });
       return result;
@@ -169,9 +180,11 @@ export function createStoredRunSignals<T>(maxEndedRuns = 1000) {
     runEndOfRunCheck(key: string, check: () => Promise<void>, onError: (error: unknown) => void): Promise<void> {
       const result = (endOfRunChecks.get(key) ?? Promise.resolve()).then(check);
       const tail = result.catch(onError);
-      endOfRunChecks.set(key, tail);
-      void tail.then(() => {
-        if (endOfRunChecks.get(key) === tail) endOfRunChecks.delete(key);
+      // The thread's next check waits on a link that always fulfills, so a throwing `onError` stops no later check.
+      const link = tail.catch(() => {});
+      endOfRunChecks.set(key, link);
+      void link.then(() => {
+        if (endOfRunChecks.get(key) === link) endOfRunChecks.delete(key);
       });
       return tail;
     },

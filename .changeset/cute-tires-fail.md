@@ -8,7 +8,7 @@ A run with `readOnly` memory, or a run started with `prepare()`, keeps its signa
 
 **`sendSignal` resolves `accepted` after the signal is stored**
 
-For these agents, `accepted` resolves once the signal is saved, so a resolved `deliver` means the run will see it. A signal sent to a running run, or one that joined a run being woken, rejects `accepted` when it cannot be saved. A signal sent while a `stream()` call is starting its run waits in the sending process and is saved for the run when the run registers, before its first model call. If that save fails after `accepted` resolved, the signal stays in the sending process, and the end of that run saves it and starts the thread's next turn with it.
+For these agents, `accepted` resolves once the signal is saved, so a resolved `deliver` means the run will see it. A signal sent to a running run, or one that joined a run being woken, rejects `accepted` when it cannot be saved. A signal sent while a `stream()` call is starting its run waits in the sending process and is saved for the run when the run registers, before its first model call. If that save fails after `accepted` resolved, the signal stays in the sending process, and the end of that run saves it and starts the thread's next turn with it. If that save fails too, the signal waits in the sending process for the thread's next run in that process.
 
 **`cancelQueuedMessages` now returns a promise**
 

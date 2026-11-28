@@ -2436,7 +2436,8 @@ export class MemoryPG extends MemoryStorage {
         return 'accepted';
       }
       return await this.#db.client.tx(async t => {
-        // Shared, so sends to one run do not wait for each other, while a close waits for this send.
+        // Shared, so sends to one run do not wait for each other or for a claim, while a close waits
+        // for this send.
         const thread = await t.oneOrNone<{ resourceId: string; signalRunId: string | null }>(
           `SELECT "resourceId", "signalRunId" FROM ${threadsTable} WHERE id = $1 FOR SHARE`,
           [threadId],
@@ -2466,6 +2467,9 @@ export class MemoryPG extends MemoryStorage {
     const takenThreadId = takenQueueThreadId(threadId);
     try {
       const { resourceId, rows } = await this.#db.client.tx(async t => {
+        // Shared with sends: a send that commits after the UPDATE below stays pending for this run's
+        // next claim or, after the close, for the thread's next run. Claims and sends only read the
+        // signal run, so only a write to it (the close or `setSignalRun`) excludes them.
         const thread = await t.oneOrNone<{ resourceId: string; signalRunId: string | null }>(
           `SELECT "resourceId", "signalRunId" FROM ${threadsTable} WHERE id = $1 FOR SHARE`,
           [threadId],

@@ -779,7 +779,11 @@ type AgentThreadRuntimeState = {
   pendingLeaseRenewals: Map<string, number>;
   /** A dequeued idle message retains its cancellation identity until execution begins. */
   drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
-  drainingPendingSignalsByThread: Map<string, { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean }>;
+  /** A follow-up of a storage-backed run also names its run id and the store its leftovers were read from. */
+  drainingPendingSignalsByThread: Map<
+    string,
+    { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean; runId?: string; store?: ThreadSignalsStore }
+  >;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
   /** Idle-start reservations whose execution lease has not resolved yet. */
@@ -5399,12 +5403,14 @@ export class AgentThreadStreamRuntime {
 
   /**
    * The store of the thread's signals as far as this process knows: the
-   * decision of the run it registered there, or, when it holds none, the
-   * calling agent's when its memory is a fixed instance and the thread's run
-   * is known to keep its signals in storage (a run another process announced
-   * so, or, on an idle thread, the storage-backed run that last ended here). A
+   * decision of the run it registered there or of the follow-up turn it is
+   * starting there, or, when it holds none, the calling agent's when its
+   * memory is a fixed instance and the thread's run is known to keep its
+   * signals in storage (a run another process announced so, or, on an idle
+   * thread, the storage-backed run that last ended here). A
    * memory given as a function is never resolved without the run's request
-   * context.
+   * context, so on an idle thread its stored rows wait for the thread's next
+   * run and a cancel reports no id for them.
    */
   #threadSignalsStore(
     state: AgentThreadRuntimeState,
@@ -5414,6 +5420,9 @@ export class AgentThreadStreamRuntime {
     const runId = state.activeThreadRunIds.get(key);
     const record = runId ? state.threadRunsById.get(runId) : undefined;
     if (record) return this.#signalsStoreOf(record);
+    // A follow-up waiting for the thread's lease has no record yet, and its first claim takes every pending row.
+    const draining = state.drainingPendingSignalsByThread.get(key);
+    if (runId && draining?.runId === runId) return draining.store;
     const storageBacked = runId
       ? state.storedSignals.isRemoteRunStored(runId)
       : state.storedSignals.endedRun(key) !== undefined;
@@ -6600,11 +6609,8 @@ export class AgentThreadStreamRuntime {
       );
       const signal = state.storedSignals.takeFollowUpInput(key, leftovers, rows);
       if (!signal || !store) return { next: undefined };
-      const next = {
-        runId: globalThis.crypto.randomUUID(),
-        draining: { signal, cancelled: false, handedOff: false },
-        store,
-      };
+      const runId = globalThis.crypto.randomUUID();
+      const next = { runId, draining: { signal, cancelled: false, handedOff: false, runId, store }, store };
       state.activeThreadRunIds.set(key, next.runId);
       state.threadKeysByRunId.set(next.runId, key);
       state.drainingPendingSignalsByThread.set(key, next.draining);
@@ -8518,7 +8524,17 @@ export class AgentThreadStreamRuntime {
         const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
         return record ? record.streamOptions.requestContext : currentRunRequestContext;
       },
-      abort: abortOptions => this.abortThread({ ...options, ...abortOptions }, resolvedPubSub),
+      abort: abortOptions => {
+        const abort = { ...options, ...abortOptions };
+        // A parked storage-backed run is closed as the agent's own abort closes it.
+        return this.abortThread(
+          abort,
+          resolvedPubSub,
+          abort.localOnly
+            ? undefined
+            : runId => state.threadRunsById.get(runId)?.agent.__closeParkedRunSignals?.(runId),
+        );
+      },
       unsubscribe,
       stream: (async function* () {
         try {
@@ -9378,6 +9394,9 @@ export class AgentThreadStreamRuntime {
           return { signal, accepted };
         }
         if (isLocalReservedRun) {
+          // Answered before it is stored: the reserved run is not yet the thread's signal run and names its store
+          // only when it registers, which then stores the signal (`#moveQueuedSignalsToStore`). An insert that
+          // fails there keeps the signal queued in this process for the thread's next run.
           state.signalQueues.enqueue('pre-run', key, signal);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
