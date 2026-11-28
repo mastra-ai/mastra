@@ -472,6 +472,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       const observabilityContext = getOmObservabilityContext(args);
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
+      this.turn.abortSignal = abortSignal;
       this.turn.actorModelContext = actorModelContext;
       this.turn.responseMessageId = responseMessageId;
 
