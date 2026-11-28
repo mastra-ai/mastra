@@ -5,7 +5,7 @@ import {
   initialChatRuntime,
   runtimeReducer,
   type ChatRuntimeState,
-} from '../../../factory-ui/src/ui/domains/chat/services/runtime';
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/runtime';
 
 type MessageUpdateEvent = Extract<AgentControllerEvent, { type: 'message_update' }>;
 

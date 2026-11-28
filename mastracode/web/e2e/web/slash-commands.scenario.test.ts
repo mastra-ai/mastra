@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-import { transcriptReducer, initialTranscript } from '../../../factory-ui/src/ui/domains/chat/services/transcript';
+import {
+  transcriptReducer,
+  initialTranscript,
+} from '@mastra/playground-ui/domains/chat/transcript/services/transcript';
 
 /**
  * Slash commands are client-side only (they push local notices into the

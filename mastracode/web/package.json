@@ -39,6 +39,7 @@
     "@ai-sdk/openai": "^3.0.135",
     "@copilotkit/aimock": "^1.29.0",
     "@mastra/client-js": "link:../../client-sdks/client-js",
+    "@mastra/playground-ui": "link:../../packages/playground-ui",
     "@mastra/hono": "link:../../server-adapters/hono",
     "@types/node": "22.20.5",
     "hono": "^4.13.18",
