@@ -1,4 +1,4 @@
-import { useBoardCatalog } from '@mastra/react/hooks/factory';
+import { useBoardCatalog, useNotRoutedQuery, useRouteAgain } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import {
   NotRoutedItem,
@@ -8,7 +8,6 @@ import {
 import { useLocation } from 'react-router';
 
 import type { IntakeDecisionInfo } from '../../../../../api/types';
-import { useNotRoutedQuery, useRouteAgain } from '../../../../../hooks/useIntakeOrder';
 import { NOT_ROUTED_ANCHOR } from '../../../boardConfig/boardConfigPaths';
 import type { IntakeProvider } from '@mastra/playground-ui/domains/factory';
 import { SettingsIntegrationIcon } from '../../../settings/components/brand-icons/SettingsIntegrationIcon';

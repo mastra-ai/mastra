@@ -8,7 +8,13 @@
 
 import { DEFAULT_ROUTE_EVENTS, isUpdateEvent } from '@internal/factory-contract';
 
-import type { BoardEventFacts, FactoryCommitDecision, RuleFacts } from '@internal/factory-contract';
+import type {
+  BoardEventFacts,
+  FactoryCommitDecision,
+  intakeDryRunBodySchema,
+  intakeTestBodySchema,
+  RuleFacts,
+} from '@internal/factory-contract';
 import type { z } from 'zod';
 import { cardRuleFacts } from '../boards/card-facts.js';
 import { dryRunIntake, intakeSample } from '../boards/intake-dry-run.js';
@@ -39,7 +45,6 @@ import type {
   StoredIntakeRouteRecord,
 } from '../storage/domains/boards/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { intakeDryRunBodySchema, intakeTestBodySchema } from './contracts.js';
 
 type DryRunBody = z.infer<typeof intakeDryRunBodySchema>;
 type TestBody = z.infer<typeof intakeTestBodySchema>;

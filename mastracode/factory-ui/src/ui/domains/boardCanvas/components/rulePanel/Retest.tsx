@@ -1,7 +1,7 @@
 import type { RuleRetestInfo } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeDryRunBody, IntakeTestResponse } from '../../../../../api/types';
-import { testBody, useIntakeTest, useIntakeTestQuery } from '../../../../../hooks/useIntakeDryRun';
+import { intakeTestBody, useIntakeTest, useIntakeTestQuery } from '@mastra/react/hooks/factory';
 import { boardName, phaseName } from '@mastra/playground-ui/domains/factory';
 
 type DraftBoards = NonNullable<IntakeDryRunBody['boards']>;
@@ -21,7 +21,7 @@ export function useRetest(factoryId: string, subject: string | undefined) {
       now.reset();
       return;
     }
-    now.mutate({ ...testBody(item), boards });
+    now.mutate({ ...intakeTestBody(item), boards });
   };
 
   return { run, reset: now.reset, now: now.data, was: was.data };

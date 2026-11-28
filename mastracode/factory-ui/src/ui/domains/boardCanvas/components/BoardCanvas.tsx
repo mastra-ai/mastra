@@ -1,4 +1,4 @@
-import { useSaveBoardMutation } from '@mastra/react/hooks/factory';
+import { useSaveBoardMutation, useIntakeTestQuery } from '@mastra/react/hooks/factory';
 import {
   CanvasFrame,
   CanvasToolbar,
@@ -20,7 +20,6 @@ import { useBeforeUnload, useBlocker, useNavigate, useSearchParams } from 'react
 import { queryKeys } from '../../../../api/keys';
 import type { BoardCatalogResponse, StoredBoardResponse, StoredPhaseInfo } from '../../../../api/types';
 import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
-import { useIntakeTestQuery } from '../../../../hooks/useIntakeDryRun';
 import { useBoardDraft } from '../../boardConfig/BoardDraftProvider';
 import { boardConfigPath, parseBoardConfigPath, readCanvasFocus } from '../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';

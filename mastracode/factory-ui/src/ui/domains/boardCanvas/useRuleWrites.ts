@@ -1,12 +1,11 @@
-import { useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
+import { useIntakeRoutesQuery, useIntakeRouteWrites } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../api/keys';
 import type { IntakeRouteInfo, IntakeRouteListResponse } from '../../../api/types';
 import { FactoryRequestError } from '@mastra/client-js';
-import { useIntakeRouteWrites } from '../../../hooks/useIntakeRoutes';
-import type { RouteWrite } from '../../../hooks/useIntakeRoutes';
+import type { RouteWrite } from '@mastra/react/hooks/factory';
 import { laneRules, reorderWithin } from '@mastra/playground-ui/domains/factory';
 import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { boardRulesOf } from './canvasModel';

@@ -1,6 +1,6 @@
 import { IntakeTestPanel } from '@mastra/playground-ui/domains/factory';
 
-import { useIntakeTestQuery } from '../../../../../hooks/useIntakeDryRun';
+import { useIntakeTestQuery } from '@mastra/react/hooks/factory';
 import { TestResult } from './TestResult';
 
 export interface TestPanelProps {

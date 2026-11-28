@@ -3,6 +3,7 @@ import {
   useFactory,
   useBoardCatalog,
   useIntakeRoutesQuery,
+  useCreateBoardMutation,
 } from '@mastra/react/hooks/factory';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
@@ -14,7 +15,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
-import { useCreateBoardMutation } from '../../hooks/useBoardEditor';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
 import { draftOf, keyFromName, keyProblem, starterBoard } from '@mastra/playground-ui/domains/factory';
 import type { BoardDraft } from '@mastra/playground-ui/domains/factory';

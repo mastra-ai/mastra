@@ -2,7 +2,7 @@ import type { UseMutationResult } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import type { InstalledBoardInfo, StoredBoardResponse } from '../../../../api/types';
-import { useDeleteBoardMutation, useResetBoardMutation } from '../../../../hooks/useBoardEditor';
+import { useDeleteBoardMutation, useResetBoardMutation } from '@mastra/react/hooks/factory';
 import type { FactoryRequestError } from '@mastra/client-js';
 import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 

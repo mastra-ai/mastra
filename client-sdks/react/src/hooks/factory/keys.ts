@@ -49,6 +49,18 @@ export const factoryKeys = {
   boardWrite: (factoryProjectId: string | undefined, boardKey: string) =>
     ['factory', 'board-write', factoryProjectId ?? null, boardKey] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  /** Under `intakeRoutes`, so a rule change refreshes the dry run, the tests, the skips and the reroute preview. */
+  intakeDryRun: (factoryProjectId: string | undefined) =>
+    [...factoryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
+  intakeTest: (factoryProjectId: string | undefined, subject: string) =>
+    [...factoryKeys.intakeRoutes(factoryProjectId), 'test', subject] as const,
+  intakeSkipped: (factoryProjectId: string | undefined) =>
+    [...factoryKeys.intakeRoutes(factoryProjectId), 'skipped'] as const,
+  intakeReroute: (factoryProjectId: string | undefined) =>
+    [...factoryKeys.intakeRoutes(factoryProjectId), 'reroute'] as const,
+  intakeOrder: (factoryProjectId: string | undefined) => ['intake', 'order', factoryProjectId ?? null] as const,
+  intakeNotRouted: (factoryProjectId: string | undefined) =>
+    ['intake', 'not-routed', factoryProjectId ?? null] as const,
   cardWrite: (factoryProjectId: string | undefined) => ['factory', 'write-work-item', factoryProjectId] as const,
   cardMove: (factoryProjectId: string | undefined) =>
     [...factoryKeys.cardWrite(factoryProjectId), 'transition'] as const,

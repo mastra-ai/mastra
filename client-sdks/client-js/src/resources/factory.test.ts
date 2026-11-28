@@ -167,6 +167,49 @@ describe('Factory resource', () => {
       'http://localhost:4111/web/factory/projects/fp-1/session-activity',
     ]);
   });
+  it('writes boards, intake rules and intake order, and reads what intake did', async () => {
+    const fetchMock = mockFetch({ body: {} });
+    const factory = client.getFactory('fp-1');
+    await factory.createBoard({ key: 'bugs', name: 'Bugs', phases: [] } as never);
+    await factory.resetBoard('work', 2);
+    await factory.deleteBoard('bugs', 4);
+    await factory.updateIntakeRoute('r 1', {} as never);
+    await factory.deleteIntakeRoute('r1', 1);
+    await factory.reorderIntakeRoutes({ routeIds: [] } as never);
+    await factory.reroutePreview();
+    await factory.setIntakeOrder({} as never);
+    await factory.notRouted({ limit: 20, cursor: 'c1' });
+    await factory.routeAgain('d1');
+    await factory.intakeDryRun({} as never);
+    const base = 'http://localhost:4111/web/factory/projects/fp-1';
+    expect(urls(fetchMock)).toEqual([
+      `${base}/boards`,
+      `${base}/boards/work/reset`,
+      `${base}/boards/bugs?expectedRevision=4`,
+      `${base}/intake-routes/r%201`,
+      `${base}/intake-routes/r1?expectedRevision=1`,
+      `${base}/intake-routes/reorder`,
+      `${base}/intake-routes/reroute`,
+      `${base}/intake-order`,
+      `${base}/intake/not-routed?limit=20&cursor=c1`,
+      `${base}/intake/not-routed/d1/route-again`,
+      `${base}/intake/dry-run`,
+    ]);
+    expect(fetchMock.mock.calls.map(call => call[1]?.method ?? 'GET')).toEqual([
+      'POST',
+      'POST',
+      'DELETE',
+      'PATCH',
+      'DELETE',
+      'POST',
+      'GET',
+      'PUT',
+      'GET',
+      'POST',
+      'POST',
+    ]);
+  });
+
   it('reads the board catalog, one board and the intake routes, and saves a board', async () => {
     const fetchMock = mockFetch({ body: {} });
     const factory = client.getFactory('fp-1');

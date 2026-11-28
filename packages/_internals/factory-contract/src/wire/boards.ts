@@ -203,6 +203,7 @@ export const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 export const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
+export type IntakeRouteResponse = z.infer<typeof intakeRouteResponseSchema>;
 export const intakeRouteListResponseSchema = z.object({
   intakeRoutes: z.array(intakeRouteSchema),
   /** Whether the caller may add, edit, reorder, or delete routes. */

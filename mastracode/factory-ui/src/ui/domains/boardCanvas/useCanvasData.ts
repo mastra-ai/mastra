@@ -1,6 +1,11 @@
-import { useIntakeDryRunQuery } from '../../../hooks/useIntakeDryRun';
-import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../hooks/useIntakeOrder';
-import { useBoardCatalog, useBoardPhasesQuery, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
+import {
+  useIntakeDryRunQuery,
+  useIntakeOrderQuery,
+  useSkippedRulesQuery,
+  useBoardCatalog,
+  useBoardPhasesQuery,
+  useIntakeRoutesQuery,
+} from '@mastra/react/hooks/factory';
 import { boardFiltersFromParams, boardPhasesRequest, DEFAULT_BOARD_SORT } from '@mastra/playground-ui/domains/factory';
 import type { RuleSkips } from './canvasModel';
 

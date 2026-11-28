@@ -1,7 +1,7 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
-import { useIntakeOrderQuery, useSaveIntakeOrder } from '../../../../../hooks/useIntakeOrder';
+import { useIntakeOrderQuery, useSaveIntakeOrder } from '@mastra/react/hooks/factory';
 
 /**
  * The project's intake order with any unsaved reordering on top, and saving it. A board added or removed meanwhile

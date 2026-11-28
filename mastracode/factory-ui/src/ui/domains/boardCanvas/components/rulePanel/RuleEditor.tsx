@@ -18,8 +18,12 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useEffect, useRef, useState } from 'react';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../../api/types';
-import { useIntakeDryRunPreview, useIntakeDryRunQuery } from '../../../../../hooks/useIntakeDryRun';
-import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../../hooks/useIntakeOrder';
+import {
+  useIntakeDryRunPreview,
+  useIntakeDryRunQuery,
+  useIntakeOrderQuery,
+  useSkippedRulesQuery,
+} from '@mastra/react/hooks/factory';
 import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
 import { boardRulesOf, ruleLines, ruleNotes, triggerFallback } from '../../canvasModel';
