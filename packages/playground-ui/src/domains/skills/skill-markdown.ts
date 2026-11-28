@@ -8,14 +8,26 @@ export type SkillMarkdownResult = { skill: ParsedSkill; error?: never } | { skil
 
 const FRONTMATTER = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
+const BLOCK_SCALAR = /^[>|][+-]?$/;
+
+function unquote(value: string) {
+  return value.replace(/^(['"])(.*)\1$/, '$2').trim();
+}
+
+/** A top-level frontmatter value, including indented continuation lines and `>` or `|` block scalars. */
 function frontmatterValue(frontmatter: string, key: string) {
-  const line = frontmatter.split(/\r?\n/).find(row => row.startsWith(`${key}:`));
-  if (!line) return '';
-  return line
-    .slice(key.length + 1)
-    .trim()
-    .replace(/^(['"])(.*)\1$/, '$2')
-    .trim();
+  const lines = frontmatter.split(/\r?\n/);
+  const index = lines.findIndex(row => row.startsWith(`${key}:`));
+  if (index === -1) return '';
+  const first = (lines[index] ?? '').slice(key.length + 1).trim();
+  const rest: string[] = [];
+  for (const line of lines.slice(index + 1)) {
+    if (line.trim() && !/^\s/.test(line)) break;
+    rest.push(line.trim());
+  }
+  if (first.startsWith('|') && BLOCK_SCALAR.test(first)) return rest.join('\n').trim();
+  const words = BLOCK_SCALAR.test(first) ? rest : [first, ...rest];
+  return unquote(words.filter(Boolean).join(' '));
 }
 
 /** Reads a SKILL.md: `name` and `description` from its frontmatter, the instructions from the rest. */

@@ -15,6 +15,14 @@ describe('parseSkillMarkdown', () => {
   });
 
   it.each([
+    ['folded', 'description: >-\n  Use when someone\n  asks about a deal', 'Use when someone asks about a deal'],
+    ['literal', 'description: |\n  Use when asked.\n  Answer as a table.', 'Use when asked.\nAnswer as a table.'],
+    ['continued', 'description: Use when someone\n  asks about a deal', 'Use when someone asks about a deal'],
+  ])('reads a %s description over several lines', (_case, line, description) => {
+    expect(parseSkillMarkdown(`---\nname: deal\n${line}\n---\nBody`).skill?.description).toBe(description);
+  });
+
+  it.each([
     ['no frontmatter', 'Answer as a short table.', 'SKILL.md has no frontmatter'],
     ['no name', '---\ndescription: x\n---\nBody', 'SKILL.md has no name'],
     ['no description', '---\nname: x\n---\nBody', 'SKILL.md has no description'],

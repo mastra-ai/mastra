@@ -18,6 +18,7 @@ export function SkillUpload({ onLoad }: SkillUploadProps) {
   const [error, setError] = useState<string>();
   const fileInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
+  const latestRead = useRef(0);
 
   const pick = (input: HTMLInputElement) => {
     const files = [...(input.files ?? [])];
@@ -26,12 +27,20 @@ export function SkillUpload({ onLoad }: SkillUploadProps) {
   };
 
   const read = async (files: File[]) => {
+    const attempt = ++latestRead.current;
     const file = findSkillFile(files);
     if (!file) {
       setError('The files you chose have no SKILL.md. Choose the SKILL.md itself, or the folder that holds it.');
       return;
     }
-    const result = parseSkillMarkdown(await file.text());
+    const text = await file.text().catch(() => undefined);
+    const stale = attempt !== latestRead.current || !fileInput.current;
+    if (stale) return;
+    if (text === undefined) {
+      setError(`Couldn’t open ${file.name}. Choose it again, or use Choose folder for a skill folder.`);
+      return;
+    }
+    const result = parseSkillMarkdown(text);
     if (!result.skill) {
       setError(result.error);
       return;
@@ -44,7 +53,7 @@ export function SkillUpload({ onLoad }: SkillUploadProps) {
     <Field invalid={Boolean(error)} className="flex-1">
       <FileDropBackdrop
         label="Drop to add the skill"
-        description="A SKILL.md file, or the folder that holds it."
+        description="A SKILL.md file. For a skill folder, use Choose folder."
         onFilesDrop={files => void read(files)}
       />
       <div

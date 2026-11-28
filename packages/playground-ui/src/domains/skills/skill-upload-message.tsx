@@ -15,7 +15,7 @@ export function SkillUploadMessage({ error }: { error?: string }) {
   return (
     <div className="flex flex-col gap-1">
       <Txt variant="label" tone="ink">
-        Drop a skill here, or choose one
+        Drop a SKILL.md here, or choose one
       </Txt>
       <Txt variant="caption" tone="muted">
         A SKILL.md with a name and description in its frontmatter, or the folder that holds it.

@@ -6,6 +6,21 @@ import { SkillCreateDialog } from '../skill-create-dialog';
 
 afterEach(cleanup);
 
+class UnreadableFile extends File {
+  override text() {
+    return Promise.reject(new Error('unreadable'));
+  }
+}
+
+class SlowFile extends File {
+  finish = () => {};
+  override text() {
+    return new Promise<string>(resolve => {
+      this.finish = () => void super.text().then(resolve);
+    });
+  }
+}
+
 function Harness({ editing = false }: { editing?: boolean }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -57,6 +72,27 @@ describe('SkillCreateDialog', () => {
     upload('---\nname: deal-summaries\ndescription: Deal questions\n---\nAnswer as a table.');
 
     await waitFor(() => expect(screen.getByDisplayValue('Deal questions')).toBeTruthy());
+  });
+
+  it('says so when the file can’t be opened', async () => {
+    render(<Harness />);
+    fireEvent.change(screen.getByLabelText('SKILL.md file'), {
+      target: { files: [new UnreadableFile([], 'SKILL.md')] },
+    });
+
+    expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t open SKILL.md');
+  });
+
+  it('ignores a read that finishes after switching to Write', async () => {
+    render(<Harness />);
+    const slow = new SlowFile(['---\nname: from-file\ndescription: x\n---\nBody'], 'SKILL.md');
+    fireEvent.change(screen.getByLabelText('SKILL.md file'), { target: { files: [slow] } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Write' }));
+    fireEvent.change(screen.getByPlaceholderText('Skill name'), { target: { value: 'typed' } });
+    slow.finish();
+
+    await waitFor(() => expect(screen.getByDisplayValue('typed')).toBeTruthy());
+    expect(screen.queryByDisplayValue('from-file')).toBeNull();
   });
 
   it('goes straight to the form when editing', () => {
