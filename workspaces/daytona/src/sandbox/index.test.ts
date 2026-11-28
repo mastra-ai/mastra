@@ -2100,6 +2100,41 @@ describe('DaytonaSandbox', () => {
       expect(mockDaytona.create).toHaveBeenCalledTimes(2);
     });
 
+    it('recovers from an auto-archived sandbox that lost its runner', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      const logicalIdBefore = sandbox.id;
+      const handleBefore = (sandbox as any)._sandbox.id;
+
+      // The cached handle still reports ready, but Daytona auto-archived the
+      // sandbox and its runner is gone, so the first session fails with a
+      // "does not have a runner" validation error.
+      mockSandbox.process.createSession.mockRejectedValueOnce(
+        new Error(`DaytonaValidationError: bad request: sandbox ${handleBefore} does not have a runner`),
+      );
+      // Recovery must reuse the SAME sandbox: get() returns the archived handle.
+      mockSandbox.state = 'archived';
+      mockDaytona.get.mockResolvedValue(mockSandbox);
+      // The retried session streams its output.
+      mockSandbox.process.getSessionCommandLogs.mockImplementationOnce(
+        async (_sessionId: string, _cmdId: string, onStdout: (chunk: string) => void) => {
+          onStdout('recovered');
+        },
+      );
+
+      const result = await sandbox.executeCommand('echo', ['test']);
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('recovered');
+      // Same logical sandbox — no duplicate was created.
+      expect(sandbox.id).toBe(logicalIdBefore);
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+      // The existing sandbox was looked up by its Daytona ID and woken.
+      expect(mockDaytona.get).toHaveBeenCalledWith(handleBefore);
+      expect(mockDaytona.start).toHaveBeenCalledTimes(1);
+      expect(await sandbox.isReady()).toBe(true);
+    });
+
     it('does not retry infinitely', async () => {
       const sandbox = new DaytonaSandbox();
       await sandbox._start();
@@ -2133,6 +2168,12 @@ describe('DaytonaSandbox', () => {
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox was not found'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('Sandbox not found'))).toBe(true);
       expect((sandbox as any).isSandboxDeadError(new Error('sandbox abc not found'))).toBe(true);
+      // Auto-archived sandbox whose runner is gone (Daytona returns a bad-request
+      // validation error rather than a not-found error).
+      expect((sandbox as any).isSandboxDeadError(new Error('bad request: sandbox abc does not have a runner'))).toBe(
+        true,
+      );
+      expect((sandbox as any).isSandboxDeadError(new Error('Sandbox does not have a runner'))).toBe(true);
       // Non-dead errors
       expect((sandbox as any).isSandboxDeadError(new Error('timeout'))).toBe(false);
       expect((sandbox as any).isSandboxDeadError(new Error('command failed'))).toBe(false);

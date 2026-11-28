@@ -90,6 +90,10 @@ const SANDBOX_DEAD_PATTERNS: RegExp[] = [
   /sandbox.*not found/i,
   /failed to resolve container IP/i,
   /is the sandbox started/i,
+  // Daytona auto-archives idle sandboxes; a cached handle then reports ready
+  // but its runner is gone, so commands fail with a bad-request validation
+  // error instead of a not-found error.
+  /does not have a runner/i,
 ];
 
 // =============================================================================

@@ -25,10 +25,10 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "infer/gpt-6-astra:official": [
+    "infer/gemini-3.1-pro-preview:low-cost": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "infer/claude-opus-5-5:low-cost": [
@@ -43,25 +43,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "infer/gemini-3.1-pro-preview:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "infer/claude-fable-5-1:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/gpt-6-astra:low-cost": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "infer/gpt-6.1-sol:low-cost": [
+    "infer/claude-sonnet-5-5:low-cost": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -73,7 +55,25 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "infer/claude-sonnet-5-5:low-cost": [
+    "infer/gpt-6.1-sol:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/gpt-6-astra:official": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/gpt-6-astra:low-cost": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "infer/claude-fable-5-1:low-cost": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

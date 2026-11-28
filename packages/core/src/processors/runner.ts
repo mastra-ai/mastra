@@ -112,6 +112,8 @@ function getProcessableResponseMessages(messageList: MessageList): MastraDBMessa
  */
 export class ProcessorState<OUTPUT = undefined> {
   private inputAccumulatedText = '';
+  /** Stream parts that arrived before the current span opened. */
+  private inputChunkOffset = 0;
   private outputAccumulatedText = '';
   private outputChunkCount = 0;
   public customState: Record<string, unknown> = {};
@@ -124,6 +126,8 @@ export class ProcessorState<OUTPUT = undefined> {
    * share of that window.
    */
   public hookDurationMs = 0;
+  /** Set when the run's `finish` chunk ended the span, so no later chunk opens another. */
+  public finished = false;
 
   constructor(
     options?: {
@@ -141,10 +145,30 @@ export class ProcessorState<OUTPUT = undefined> {
       processor?: Pick<Processor, 'id' | 'spanType' | 'spanName' | 'spanAttributes'>;
     } & Partial<ObservabilityContext>,
   ) {
+    this.startSpan(options);
+  }
+
+  /**
+   * Opens the output stream span. A state can be created before there is a
+   * span to parent it (a data chunk sent before the first model step), so the
+   * runner calls this again once the stream has one. The state lives for the
+   * whole run, but each model step's stream ends the span when it closes, so
+   * the runner also opens a new one when a later step's chunks arrive.
+   */
+  startSpan(options?: ConstructorParameters<typeof ProcessorState>[0]): void {
     // Only create span if explicitly requested (legacy processors)
     // Workflow processors handle span creation in workflow.ts
-    if (!options?.createSpan || !options.processorName) {
+    if ((this.span && !this.span.endTime) || this.finished || !options?.createSpan || !options.processorName) {
       return;
+    }
+
+    // A span opened for a later step reports only that step's chunks and hook time.
+    if (this.span) {
+      this.inputChunkOffset = this.streamParts.length;
+      this.inputAccumulatedText = '';
+      this.outputChunkCount = 0;
+      this.outputAccumulatedText = '';
+      this.hookDurationMs = 0;
     }
 
     const processor = options.processor;
@@ -179,7 +203,7 @@ export class ProcessorState<OUTPUT = undefined> {
 
     if (this.span) {
       this.span.input = {
-        totalChunks: this.streamParts.length,
+        totalChunks: this.streamParts.length - this.inputChunkOffset,
         accumulatedText: this.inputAccumulatedText,
       };
     }
@@ -1069,14 +1093,17 @@ export class ProcessorRunner {
             // Get or create state for this processor
             let state = processorStates.get(processor.id);
             if (!state) {
-              state = new ProcessorState<OUTPUT>({
+              state = new ProcessorState<OUTPUT>();
+              processorStates.set(processor.id, state);
+            }
+            if ((!state.span || state.span.endTime) && observabilityContext?.tracingContext?.currentSpan) {
+              state.startSpan({
                 processorName: processor.name ?? processor.id,
                 ...observabilityContext,
                 processorIndex: index,
                 createSpan: true,
                 processor,
               });
-              processorStates.set(processor.id, state);
             }
 
             // Track input chunk (before processor transformation)
@@ -1141,6 +1168,7 @@ export class ProcessorRunner {
       // If this was a finish chunk, end all processor spans AFTER processing
       if (isFinishChunk) {
         for (const state of processorStates.values()) {
+          state.finished = true;
           if (state.span) {
             // Set output with accumulated text and chunk count from processor's output
             state.span.end({ output: state.getFinalOutput(), attributes: state.getFinalAttributes() });

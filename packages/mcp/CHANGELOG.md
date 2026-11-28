@@ -1,5 +1,16 @@
 # @mastra/mcp
 
+## 2.11.1-alpha.1
+
+### Patch Changes
+
+- Mastra MCP clients no longer overwrite the `io.modelcontextprotocol/ui` (MCP Apps) extension capability. A server's `capabilities.extensions` are merged as configured: set `io.modelcontextprotocol/ui` to `false` or `null` to opt out of the extension, or to an object to customise its settings. Other extension entries pass through unchanged, and the `io.modelcontextprotocol/tasks` extension is still added when `tasks` is enabled. Enabling the dedicated `tasks` option takes precedence: it advertises `io.modelcontextprotocol/tasks` as `{}`, overriding any entry set for that id (including `false`, `null` or a custom object). ([#31820](https://github.com/mastra-ai/mastra/pull/31820))
+
+  Fixes #31295.
+
+- Updated dependencies [[`491d9fc`](https://github.com/mastra-ai/mastra/commit/491d9fc1397ea9b691eb293c7b05f0c47f51a051)]:
+  - @mastra/core@1.87.0-alpha.7
+
 ## 2.11.1-alpha.0
 
 ### Patch Changes

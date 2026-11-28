@@ -222,6 +222,10 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   // Fan-out subscribers to one topic share a reader, so several keys can point
   // at the same Subscription record.
   #subscriptions: Map<string, Subscription> = new Map();
+  // Per topic, the teardowns this instance has started. `clearTopic` waits on
+  // these before deleting the stream so a reader still draining does not watch
+  // its group vanish (NOGROUP) and its own XGROUP DESTROY does not race the DEL.
+  #teardowns: Map<string, Set<Promise<void>>> = new Map();
   // The shared fan-out reader per topic, and readers still being opened (so
   // concurrent first subscribers to a topic open only one).
   #fanoutReaders: Map<string, Subscription> = new Map();
@@ -616,6 +620,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     const readClient = createClient(this.#connectOptions) as ValkeyClientType;
     this.#attachErrorLogger(readClient, 'read', { topic });
     await readClient.connect();
+    const readerClientId = await this.#readerClientId(readClient);
 
     return {
       members: new Map([[cb, {}]]),
@@ -628,11 +633,29 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       groupAnchor,
       lastId: undefined,
       readClient,
+      readerClientId,
       stopped: false,
       loop: undefined,
       reclaimTimer: undefined,
       inFlight: new Map(),
     };
+  }
+
+  /**
+   * Best-effort server-side connection id for a dedicated reader, used to
+   * interrupt its blocking XREADGROUP on teardown (CLIENT UNBLOCK). An older
+   * server or a restricted ACL can deny the command; that must not prevent
+   * subscribing, so a failure leaves the id undefined and `#stopSubscription`
+   * falls back to closing the reader.
+   */
+  async #readerClientId(readClient: ValkeyClientType): Promise<number | undefined> {
+    try {
+      const id = Number(await readClient.command(['CLIENT', 'ID']));
+      return Number.isInteger(id) ? id : undefined;
+    } catch (err) {
+      this.#logger?.debug?.('valkey-streams: CLIENT ID failed', { err: errorText(err) });
+      return undefined;
+    }
   }
 
   /**
@@ -783,34 +806,47 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       sub.reclaimTimer = undefined;
     }
     sub.teardown = this.#stopSubscription(sub);
+    this.#trackTeardown(topic, sub.teardown);
     return sub.teardown;
   }
 
   async #stopSubscription(sub: Subscription): Promise<void> {
-    // Cancel the in-flight blocking XREADGROUP by closing the reader.
-    try {
-      await sub.readClient.quit();
-    } catch (err) {
-      this.#logger?.debug?.('valkey-streams: reader quit failed', {
-        topic: sub.topic,
-        err: err instanceof Error ? err.message : err,
-      });
+    // Interrupt the in-flight blocking XREADGROUP on the server side, then let
+    // the loop settle before closing its connection. Closing first (the
+    // previous order) returns before the server releases the blocked read, which
+    // can then observe the group vanish below and log NOGROUP
+    // (mastra-ai/mastra#31465). Never issue commands on the blocked reader itself.
+    const unblocked = await this.#unblockReader(sub);
+
+    // No-hang fallback: an unbounded read (blockMs: 0) never returns on its own,
+    // and a missing/denied CLIENT ID or an UNBLOCK that reported "not blocked"
+    // (0) leaves nothing to interrupt it, so close the reader to break the block.
+    // With a finite blockMs the read returns on its own, so it is left to settle
+    // in the await below rather than risk closing it out from under delivery.
+    let readerClosed = false;
+    if (!unblocked && this.#blockMs === 0) {
+      await this.#quitReader(sub);
+      readerClosed = true;
     }
 
     if (sub.loop) {
       try {
         await sub.loop;
       } catch (err) {
-        // loop exits naturally when readClient closes; surface only at debug.
+        // loop exits naturally when the read is interrupted; surface only at debug.
         this.#logger?.debug?.('valkey-streams: read loop exited with error', {
           topic: sub.topic,
-          err: err instanceof Error ? err.message : err,
+          err: errorText(err),
         });
       }
     }
 
     // Clearing the timer prevents future claims, but an issued claim still owns work.
     await sub.reclaimLoop;
+
+    // Close the reader (the fallback above may already have) before destroying
+    // its private group, so no read is pending against a group we are deleting.
+    if (!readerClosed) await this.#quitReader(sub);
 
     // For fan-out, drop the private group entirely so the stream can be reclaimed.
     if (!sub.isGrouped) {
@@ -820,9 +856,72 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         this.#logger?.debug?.('valkey-streams: xGroupDestroy failed', {
           topic: sub.topic,
           group: sub.group,
-          err: err instanceof Error ? err.message : err,
+          err: errorText(err),
         });
       }
+    }
+  }
+
+  /**
+   * Interrupt the reader's blocking XREADGROUP without touching its connection,
+   * so its read loop settles before the socket closes or its group is dropped.
+   * Best-effort: a missing id (CLIENT ID denied/unsupported) or a denied
+   * UNBLOCK returns false and the caller falls back to closing the reader.
+   */
+  async #unblockReader(sub: Subscription): Promise<boolean> {
+    if (sub.readerClientId === undefined) return false;
+    try {
+      await this.#ensureWriterConnected();
+      const result = await this.#writeClient.command(['CLIENT', 'UNBLOCK', String(sub.readerClientId)]);
+      // 1 = a blocked command was aborted, 0 = the connection was not blocked.
+      return Number(result) > 0;
+    } catch (err) {
+      this.#logger?.debug?.('valkey-streams: CLIENT UNBLOCK failed', { topic: sub.topic, err: errorText(err) });
+      return false;
+    }
+  }
+
+  async #quitReader(sub: Subscription): Promise<void> {
+    try {
+      await sub.readClient.quit();
+    } catch (err) {
+      this.#logger?.debug?.('valkey-streams: reader quit failed', {
+        topic: sub.topic,
+        err: errorText(err),
+      });
+    }
+  }
+
+  /**
+   * Track a subscription teardown so a concurrent `clearTopic(topic)` can wait
+   * for it before deleting the stream. Local to this instance (cross-process
+   * lifecycle ownership stays with the caller). Entries remove themselves when
+   * the teardown settles; `#stopSubscription` swallows its own errors, so a
+   * rejection is not expected but is handled the same as settlement.
+   */
+  #trackTeardown(topic: string, teardown: Promise<void>): void {
+    const existing = this.#teardowns.get(topic);
+    const set = existing ?? new Set<Promise<void>>();
+    if (!existing) this.#teardowns.set(topic, set);
+    set.add(teardown);
+    const forget = () => {
+      set.delete(teardown);
+      if (set.size === 0 && this.#teardowns.get(topic) === set) this.#teardowns.delete(topic);
+    };
+    void teardown.then(forget, forget);
+  }
+
+  /**
+   * Await this instance's in-flight teardowns for `topic`. Snapshot then await,
+   * looping in case another unsubscribe for the topic starts while waiting, so
+   * `clearTopic`'s DEL never races a reader that is still draining its group.
+   * Error-tolerant: a failed teardown must not block the delete.
+   */
+  async #awaitTopicTeardowns(topic: string): Promise<void> {
+    for (;;) {
+      const pending = [...(this.#teardowns.get(topic) ?? [])];
+      if (pending.length === 0) return;
+      await Promise.allSettled(pending);
     }
   }
 
@@ -854,6 +953,10 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     if (this.#closed) return;
     try {
       await this.#ensureWriterConnected();
+      // Let this instance's own in-flight teardowns for the topic finish first.
+      // A reader still draining would otherwise observe NOGROUP once DEL
+      // removes its group, and its own XGROUP DESTROY would race the DEL.
+      await this.#awaitTopicTeardowns(topic);
       await this.#writeClient.del(this.#streamKey(topic));
       // Valkey stream IDs can restart below the last delivered ID after DEL.
       // Attached subscribers therefore recover this known-new stream from its
@@ -1557,6 +1660,9 @@ interface Subscription {
   groupAnchor: '0' | '$';
   lastId: string | undefined;
   readClient: ValkeyClientType;
+  // Server-side connection id of `readClient` (CLIENT ID), when the server
+  // reports one. Used to CLIENT UNBLOCK its blocking XREADGROUP on teardown.
+  readerClientId?: number;
   stopped: boolean;
   loop: Promise<void> | undefined;
   reclaimTimer: ReturnType<typeof setTimeout> | undefined;

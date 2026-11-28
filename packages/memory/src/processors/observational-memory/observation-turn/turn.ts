@@ -90,7 +90,8 @@ export class ObservationTurn {
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 
-  readonly abortSignal?: AbortSignal;
+  /** The current call's abort signal. A durable resume continues the turn under a new call, so the processor updates it before each step. */
+  abortSignal?: AbortSignal;
 
   constructor(opts: {
     abortSignal?: AbortSignal;
