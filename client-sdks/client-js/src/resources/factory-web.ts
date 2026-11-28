@@ -1,5 +1,7 @@
 import type {
   ArtifactListing,
+  ModelCatalogEntry,
+  ProviderInfo,
   DirectoryListing,
   LiveSessionResponse,
   MastraGatewayCredits,
@@ -31,6 +33,10 @@ import { toFactoryRequestError } from './factory';
 
 export type {
   ArtifactListing,
+  ModelCatalogEntry,
+  ModelPackSet,
+  ModelSelectionRequest,
+  ProviderInfo,
   DirectoryListing,
   LiveSessionResponse,
   MastraGatewayCredits,

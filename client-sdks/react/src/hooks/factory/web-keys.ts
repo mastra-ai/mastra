@@ -1,6 +1,6 @@
 import type { WorkspaceChangesScope } from '@mastra/client-js';
 
-export interface ModelCatalogKeyFilter {
+export interface AvailableModelsFilter {
   factoryProjectId?: string;
   scope?: 'org' | 'user';
   sessionId?: string;
@@ -15,7 +15,7 @@ export interface ModelCatalogKeyFilter {
 export const factoryWebKeys = {
   providers: () => ['providers'] as const,
   mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
-  availableModels: (filter?: ModelCatalogKeyFilter) =>
+  availableModels: (filter?: AvailableModelsFilter) =>
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   defaultModel: () => ['default-model'] as const,
   voiceSettingsAll: () => ['voice-settings'] as const,
@@ -33,6 +33,10 @@ export const factoryWebKeys = {
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
+  // Keyed by toolCallId so each plan (re)submission fetches the file fresh.
+  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
+    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
+  sessionModel: (sessionId: string) => ['session-model', sessionId] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
   workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
     ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
