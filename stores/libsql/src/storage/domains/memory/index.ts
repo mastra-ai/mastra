@@ -4,6 +4,7 @@ import {
   isBufferedChunkCoveredByCursor,
   isBufferedReflectionUnchangedSince,
   maxObservationCursor,
+  mergeObservationHistory,
   planReflectionGenerationText,
   withObservationalMemoryLifecycleColumns,
   withBufferedReflectionVerified,
@@ -539,6 +540,53 @@ export class MemoryLibSQL extends MemoryStorage {
         error,
       );
     }
+  }
+
+  readonly supportsObservationHistoryPaging = true;
+  readonly supportsObservationHistoryBootstrap = true;
+
+  async listObservationHistory(input: import('@internal/core/memory').ObservationHistoryPageInput) {
+    if (!input.threadId && !input.resourceId) throw new Error('A thread or resource is required');
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1) throw new Error('limit must be a positive integer');
+    const conditions: string[] = [];
+    const args: InValue[] = [];
+    if (input.threadId) {
+      conditions.push('thread_id = ?');
+      args.push(input.threadId);
+    }
+    if (input.resourceId) {
+      conditions.push(
+        `("resourceId" = ? OR (("resourceId" IS NULL OR "resourceId" = '') AND thread_id IN (SELECT id FROM ${TABLE_THREADS} WHERE "resourceId" = ?)))`,
+      );
+      args.push(input.resourceId, input.resourceId);
+    }
+    if (input.after) {
+      conditions.push('("createdAt" > ? OR ("createdAt" = ? AND id COLLATE BINARY > ?))');
+      args.push(input.after.createdAt, input.after.createdAt, input.after.id);
+    }
+    if (input.before) {
+      conditions.push('("createdAt" < ? OR ("createdAt" = ? AND id COLLATE BINARY < ?))');
+      args.push(input.before.createdAt, input.before.createdAt, input.before.id);
+    }
+    if (input.start) {
+      conditions.push('"createdAt" >= ?');
+      args.push(input.start);
+    }
+    if (input.end) {
+      conditions.push('"createdAt" <= ?');
+      args.push(input.end);
+    }
+    const direction = input.order === 'desc' ? 'DESC' : 'ASC';
+    const result = await this.#client.execute({
+      sql: `SELECT id, content, role, type, "createdAt", "resourceId", thread_id FROM ${TABLE_MESSAGES} WHERE ${conditions.join(' AND ')} ORDER BY "createdAt" ${direction}, id COLLATE BINARY ${direction} LIMIT ?`,
+      args: [...args, input.limit + 1],
+    });
+    return {
+      messages: result.rows
+        .slice(0, input.limit)
+        .flatMap(row => new MessageList().add(this.parseRow(row), 'memory').get.all.db()),
+      hasMore: result.rows.length > input.limit,
+    };
   }
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
@@ -2234,6 +2282,7 @@ export class MemoryLibSQL extends MemoryStorage {
         lastBufferedAtTime: null,
         config: input.config,
         observedTimezone: input.observedTimezone,
+        metadata: input.observationHistory ? { observationHistory: input.observationHistory } : {},
         supersededBy: null,
       };
 
@@ -2249,8 +2298,8 @@ export class MemoryLibSQL extends MemoryStorage {
             "originType", config, "generationCount", "lastObservedAt", "lastReflectionAt",
             "pendingMessageTokens", "totalTokensObserved", "observationTokenCount",
             "isObserving", "isReflecting", "isBufferingObservation", "isBufferingReflection", "lastBufferedAtTokens", "lastBufferedAtTime",
-            "observedTimezone", "createdAt", "updatedAt"
-          ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            "observedTimezone", "createdAt", "updatedAt", metadata
+          ) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
           WHERE NOT EXISTS (SELECT 1 FROM "${OM_TABLE}" WHERE "lookupKey" = ? AND "supersededBy" IS NULL)`,
           args: [
             id,
@@ -2277,6 +2326,7 @@ export class MemoryLibSQL extends MemoryStorage {
             input.observedTimezone || null,
             now.toISOString(),
             now.toISOString(),
+            JSON.stringify(record.metadata),
             lookupKey,
           ],
         });
@@ -2369,7 +2419,11 @@ export class MemoryLibSQL extends MemoryStorage {
     assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
   }
 
-  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
+  async commitActiveObservations(
+    input: UpdateActiveObservationsInput & {
+      observationHistory?: import('@internal/core/memory').ObservationHistoryState;
+    },
+  ): Promise<UpdateActiveObservationsResult> {
     try {
       const now = new Date();
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
@@ -2407,6 +2461,7 @@ export class MemoryLibSQL extends MemoryStorage {
             "observationTokenCount" = ?,
             "totalTokensObserved" = "totalTokensObserved" + ?,
             "observedMessageIds" = ?,
+            "metadata" = ?,
             "updatedAt" = ?
           WHERE id = ? AND ${row.guard.sql}`,
             args: [
@@ -2415,6 +2470,17 @@ export class MemoryLibSQL extends MemoryStorage {
               input.tokenCount,
               input.tokenCount,
               observedMessageIdsJson,
+              JSON.stringify(
+                input.observationHistory
+                  ? {
+                      ...stored.metadata,
+                      observationHistory: mergeObservationHistory(
+                        stored.metadata?.observationHistory,
+                        input.observationHistory,
+                      ),
+                    }
+                  : (stored.metadata ?? {}),
+              ),
               now.toISOString(),
               input.id,
               ...row.guard.args,

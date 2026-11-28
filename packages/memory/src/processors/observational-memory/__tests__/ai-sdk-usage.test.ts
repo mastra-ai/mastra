@@ -850,7 +850,11 @@ describe('AI SDK: multi-turn buffer→activate lifecycle invariants', () => {
     expect(obsResult.record.activeObservations).toBeTruthy();
     expect(obsResult.record.lastObservedAt).toBeTruthy();
 
-    // After observe, pending should be reset
+    // A storage-backed observation drains one token-bounded batch at a time.
+    for (let batch = 0; batch < 20; batch++) {
+      if (!(await cycleOm.getStatus({ threadId: cycleThreadId })).shouldObserve) break;
+      expect((await cycleOm.observe({ threadId: cycleThreadId })).observed).toBe(true);
+    }
     const statusPostObserve = await cycleOm.getStatus({ threadId: cycleThreadId });
     expect(statusPostObserve.pendingTokens).toBe(0);
     expect(statusPostObserve.shouldObserve).toBe(false);
@@ -918,9 +922,12 @@ describe('AI SDK: finalize()', () => {
   it('activates remaining chunks and observes if threshold crossed', async () => {
     // Low threshold so observe triggers
     const om = createOM(storage, { messageTokens: 50, bufferTokens: 0.2 });
+    // This case exercises live buffering, after initial OM setup.
+    await om.getOrCreateRecord(threadId);
 
-    await storage.saveMessages({ messages: createMessagesExceedingThreshold(5, threadId) });
-    await om.buffer({ threadId });
+    const messages = createMessagesExceedingThreshold(5, threadId);
+    await storage.saveMessages({ messages });
+    await om.buffer({ threadId, messages });
 
     // Before finalize: chunks exist, pending tokens > 0
     const before = await om.getStatus({ threadId });

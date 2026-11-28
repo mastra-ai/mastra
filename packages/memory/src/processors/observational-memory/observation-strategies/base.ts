@@ -495,6 +495,7 @@ export abstract class ObservationStrategy {
           tokenCount: processed.observationTokens,
           lastObservedAt: processed.lastObservedAt,
           observedMessageIds: processed.observedMessageIds,
+          observationHistory: this.opts.observationHistory,
           expectedActiveObservations: composedFrom,
         };
         // Cores older than commitActiveObservations only offer the void-returning write.

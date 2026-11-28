@@ -1,4 +1,4 @@
-import { withBufferedReflectionVerified } from '@internal/core/memory';
+import { mergeObservationHistory, withBufferedReflectionVerified } from '@internal/core/memory';
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
@@ -152,6 +152,52 @@ export class InMemoryMemory extends MemoryStorage {
         this.db.messages.delete(key);
       }
     });
+  }
+
+  readonly supportsObservationHistoryPaging = true;
+  readonly supportsObservationHistoryBootstrap = true;
+
+  async listObservationHistory(input: import('@internal/core/memory').ObservationHistoryPageInput) {
+    if (!input.threadId && !input.resourceId) throw new Error('A thread or resource is required');
+    if (!Number.isSafeInteger(input.limit) || input.limit < 1) throw new Error('limit must be a positive integer');
+    const afterTime = input.after ? new Date(input.after.createdAt).getTime() : undefined;
+    const startTime = input.start ? new Date(input.start).getTime() : undefined;
+    const endTime = input.end ? new Date(input.end).getTime() : undefined;
+    const beforeTime = input.before ? new Date(input.before.createdAt).getTime() : undefined;
+    const rows = Array.from(this.db.messages.values()).filter(row => {
+      if (input.threadId && row.thread_id !== input.threadId) return false;
+      if (
+        input.resourceId &&
+        row.resourceId !== input.resourceId &&
+        (row.resourceId || this.db.threads.get(row.thread_id)?.resourceId !== input.resourceId)
+      )
+        return false;
+      const time = new Date(row.createdAt).getTime();
+      if (startTime !== undefined && time < startTime) return false;
+      if (endTime !== undefined && time > endTime) return false;
+      if (
+        beforeTime !== undefined &&
+        (time > beforeTime ||
+          (time === beforeTime && Buffer.compare(Buffer.from(row.id), Buffer.from(input.before!.id)) >= 0))
+      )
+        return false;
+      return (
+        afterTime === undefined ||
+        time > afterTime ||
+        (time === afterTime && Buffer.compare(Buffer.from(row.id), Buffer.from(input.after!.id)) > 0)
+      );
+    });
+    const direction = input.order === 'desc' ? -1 : 1;
+    rows.sort(
+      (left, right) =>
+        direction *
+        (new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime() ||
+          Buffer.compare(Buffer.from(left.id), Buffer.from(right.id))),
+    );
+    return {
+      messages: rows.slice(0, input.limit).map(row => this.parseStoredMessage(row)),
+      hasMore: rows.length > input.limit,
+    };
   }
 
   async listMessages({
@@ -946,7 +992,7 @@ export class InMemoryMemory extends MemoryStorage {
       // Timezone used for observation date formatting
       observedTimezone,
       // Extensible metadata (optional)
-      metadata: {},
+      metadata: input.observationHistory ? { observationHistory: input.observationHistory } : {},
     };
 
     // Add as first record (most recent)
@@ -1004,6 +1050,14 @@ export class InMemoryMemory extends MemoryStorage {
     // Update timestamps (top-level, not in metadata). The cursor never moves backward.
     record.lastObservedAt = maxObservationCursor(record.lastObservedAt, lastObservedAt);
     record.updatedAt = new Date();
+    if (input.observationHistory) {
+      record.metadata = {
+        ...record.metadata,
+        observationHistory: structuredClone(
+          mergeObservationHistory(record.metadata?.observationHistory, input.observationHistory),
+        ),
+      };
+    }
 
     // Store observed message IDs as safeguard against re-observation
     if (observedMessageIds) {

@@ -68,6 +68,8 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { getObservationHistoryState } from './processors/observational-memory/history-loader';
+import { createObservationEndMarker } from './processors/observational-memory/markers';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -2207,7 +2209,10 @@ ${workingMemory}`;
         : undefined;
 
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
-      if (omEngine.scope === 'resource' && resourceId) {
+      const historyWindow = await omEngine.loadHistoryWindow(threadId, resourceId, omRecord);
+      if (historyWindow) {
+        messages = historyWindow.messages;
+      } else if (omEngine.scope === 'resource' && resourceId) {
         const loadMessages = async () => {
           const result = await memoryStore.listMessagesByResourceId({
             resourceId,
@@ -3732,6 +3737,59 @@ Notes:
     // Build source → clone message ID map
     const messageIdMap = result.messageIdMap ?? {};
     const hasher = await this.hasher;
+    const observedIds = new Set(Array.isArray(sourceOM.observedMessageIds) ? sourceOM.observedMessageIds : []);
+    const clonedRecordId = crypto.randomUUID();
+    if (sourceOM.lastObservedAt) {
+      // Preserve inherited coverage at the part boundary, not as a whole-message ID:
+      // more parts may be appended to the cloned message later.
+      const watermark = new Date(sourceOM.lastObservedAt).getTime();
+      const bufferedIds = new Set([
+        ...(Array.isArray(sourceOM.bufferedMessageIds) ? sourceOM.bufferedMessageIds : []),
+        ...(Array.isArray(sourceOM.bufferedObservationChunks)
+          ? sourceOM.bufferedObservationChunks.flatMap(chunk =>
+              Array.isArray(chunk.messageIds) ? chunk.messageIds : [],
+            )
+          : []),
+      ]);
+      const after = getObservationHistoryState(sourceOM)?.after;
+      const boundary = after && new Date(after.createdAt).getTime() === watermark ? after : undefined;
+      const sourceIds = Object.keys(messageIdMap);
+      for (let offset = 0; offset < sourceIds.length; offset += 100) {
+        const { messages } = await memoryStore.listMessagesById({ messageIds: sourceIds.slice(offset, offset + 100) });
+        const covered: string[] = [];
+        for (const message of messages) {
+          if (observedIds.has(message.id) || bufferedIds.has(message.id)) continue;
+          // Copied part-level boundaries must remain able to expose appended content.
+          if (message.content?.parts?.some(part => part.type.startsWith('data-om-observation-'))) continue;
+          const createdAt = new Date(message.createdAt).getTime();
+          if (
+            createdAt < watermark ||
+            (createdAt === watermark &&
+              (!boundary || Buffer.compare(Buffer.from(message.id), Buffer.from(boundary.id)) <= 0))
+          ) {
+            covered.push(messageIdMap[message.id]!);
+          }
+        }
+        if (covered.length) {
+          const { messages: clonedMessages } = await memoryStore.listMessagesById({ messageIds: covered });
+          const boundary = createObservationEndMarker({
+            cycleId: `clone-${clonedRecordId}`,
+            operationType: 'observation',
+            startedAt: new Date().toISOString(),
+            tokensObserved: 0,
+            observationTokens: 0,
+            recordId: clonedRecordId,
+            threadId: clonedThreadId,
+          });
+          await memoryStore.updateMessages({
+            messages: clonedMessages.map(message => ({
+              id: message.id,
+              content: { ...message.content, parts: [...message.content.parts, boundary] },
+            })),
+          });
+        }
+      }
+    }
 
     const cloned = this.remapObservationalMemoryRecord(sourceOM, {
       newThreadId: sourceOM.scope === 'thread' ? clonedThreadId : null,
@@ -3742,7 +3800,7 @@ Notes:
       hasher: resourceChanged ? hasher : undefined,
     });
     const now = new Date();
-    cloned.id = crypto.randomUUID();
+    cloned.id = clonedRecordId;
     cloned.createdAt = now;
     cloned.updatedAt = now;
     // The clone starts live even if the source generation it was read from has since been
@@ -3766,10 +3824,18 @@ Notes:
     },
   ): ObservationalMemoryRecord {
     const { newThreadId, newResourceId, messageIdMap, sourceThreadId, clonedThreadId, hasher } = opts;
-    const cloned: ObservationalMemoryRecord = { ...record };
+    const cloned: ObservationalMemoryRecord = {
+      ...record,
+      metadata: record.metadata ? { ...record.metadata } : undefined,
+    };
 
     cloned.threadId = newThreadId;
     cloned.resourceId = newResourceId;
+    // New IDs reorder timestamp ties. Remapped observed IDs, not the source time/cursor, define the clone's boundary.
+    cloned.lastObservedAt = undefined;
+    if (cloned.metadata?.observationHistory) {
+      delete cloned.metadata.observationHistory;
+    }
 
     // Remap observedMessageIds — drop any IDs not present in the clone's message set
     if (Array.isArray(cloned.observedMessageIds)) {

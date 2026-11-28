@@ -355,8 +355,15 @@ describe('getStatus()', () => {
 
     await om.observe({ threadId });
 
+    const tail = await om.getStatus({ threadId });
+    // The token-bounded bootstrap may retain a second batch below the normal threshold.
+    expect(tail.record.observedMessageIds?.length ?? 0).toBeGreaterThan(0);
+    if (tail.pendingTokens > 0) {
+      expect(tail.shouldObserve).toBe(true);
+      expect(tail.shouldBuffer).toBe(false);
+      await om.observe({ threadId });
+    }
     const after = await om.getStatus({ threadId });
-    // After observation, pending should be 0 or much lower (no new messages added)
     expect(after.pendingTokens).toBe(0);
     expect(after.shouldObserve).toBe(false);
   });
@@ -513,7 +520,9 @@ name: Tyler
       const first = await om.observe({ threadId });
       expect(first.observed).toBe(true);
 
-      // No new messages in storage — should skip
+      // Drain the retained bootstrap tail before checking that no messages are observed twice.
+      const tail = await om.observe({ threadId });
+      expect(tail.observed).toBe(true);
       const second = await om.observe({ threadId });
       expect(second.observed).toBe(false);
     });
@@ -1053,7 +1062,6 @@ name: Tyler
           thread: { id, resourceId, title: id, metadata: {}, createdAt: new Date(), updatedAt: new Date() },
         });
       }
-      await storage.saveMessages({ messages });
       const beforeObservation = vi.fn(() => ({ messages: [] }));
       const observerModel = createMockObserverModel();
       const prompts = capturePrompts(observerModel);
@@ -1064,6 +1072,8 @@ name: Tyler
         hooks: { beforeObservation },
       });
       const record = await resourceOm.getOrCreateRecord(threadId, resourceId);
+      // Exercise active OM history, rather than the initial newest-only bootstrap.
+      await storage.saveMessages({ messages });
       await storage.setPendingMessageTokens(record.id, 600);
       const result = await resourceOm.observe({
         threadId,
@@ -3302,7 +3312,8 @@ describe('full observation lifecycle', () => {
     const history = await om.getHistory(threadId);
     expect(history.length).toBeGreaterThanOrEqual(1);
 
-    // 6. Status after observation — no pending messages
+    // 6. Drain the retained bootstrap tail, then there are no pending messages.
+    expect((await om.observe({ threadId })).observed).toBe(true);
     const afterStatus = await om.getStatus({ threadId });
     expect(afterStatus.shouldObserve).toBe(false);
   });
@@ -3669,6 +3680,8 @@ describe('getStatus → observe interaction', () => {
 
     const result = await om.observe({ threadId });
     expect(result.observed).toBe(true);
+    expect((await om.getStatus({ threadId })).shouldObserve).toBe(true);
+    expect((await om.observe({ threadId })).observed).toBe(true);
 
     const after = await om.getStatus({ threadId });
     expect(after.shouldObserve).toBe(false);
@@ -3688,8 +3701,9 @@ describe('getStatus → observe interaction', () => {
   it('getStatus reflects new messages added after observation', async () => {
     await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
     await om.observe({ threadId });
+    expect((await om.observe({ threadId })).observed).toBe(true);
 
-    // No new messages → shouldObserve false
+    // No new messages and no bootstrap tail → shouldObserve false
     const s1 = await om.getStatus({ threadId });
     expect(s1.shouldObserve).toBe(false);
 
@@ -3799,6 +3813,8 @@ describe('cursor-based observation tracking (lastObservedAt)', () => {
     const r1 = await om.observe({ threadId });
     expect(r1.observed).toBe(true);
 
+    // Drain the retained bootstrap tail before checking the completed cursor.
+    expect((await om.observe({ threadId })).observed).toBe(true);
     // Same messages, no new additions — cursor prevents re-observation
     const r2 = await om.observe({ threadId });
     expect(r2.observed).toBe(false);
@@ -3953,14 +3969,14 @@ describe('getStatus shouldBuffer vs shouldObserve boundary', () => {
     }
   });
 
-  it('shouldObserve=true implies pendingTokens >= threshold', async () => {
+  it('shouldObserve=true below threshold while bounded bootstrap has more history', async () => {
     const om = createOM(storage);
     await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
 
     const status = await om.getStatus({ threadId });
-    if (status.shouldObserve) {
-      expect(status.pendingTokens).toBeGreaterThanOrEqual(status.threshold);
-    }
+    expect(status.shouldObserve).toBe(true);
+    expect(status.pendingTokens).toBeLessThan(status.threshold);
+    expect(status.shouldBuffer).toBe(false);
   });
 
   it('shouldBuffer=false when async buffering is disabled', async () => {
