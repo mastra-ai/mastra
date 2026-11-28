@@ -47,12 +47,7 @@
     "Qwen3.5-397B-A17B"
   ],
   "reasoning": {
-    "Kimi-K3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.1": [
+    "Qwen3.5-122B-A10B": [
       {
         "type": "toggle"
       }
@@ -62,7 +57,7 @@
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "DeepSeek-V4-Flash": [
       {
         "type": "toggle"
       }
@@ -72,17 +67,12 @@
         "type": "toggle"
       }
     ],
-    "Kimi-K2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "Qwen3.5-35B-A3B": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen3.5-122B-A10B": [
+    "Hy3": [
       {
         "type": "toggle"
       }
@@ -92,7 +82,12 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4-Flash": [
+    "GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Kimi-K2.5": [
       {
         "type": "toggle"
       }
@@ -102,7 +97,12 @@
         "type": "toggle"
       }
     ],
-    "Hy3": [
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Kimi-K3": [
       {
         "type": "toggle"
       }

@@ -67,6 +67,12 @@ const { tool, instructions } = createCodeMode(
 ]}
 />
 
+## Execution limits
+
+When you create the transport through [`createCodeMode()`](/reference/tools/create-code-mode), the five [execution limits](/reference/tools/create-code-mode#execution-limits) apply to every run. Core enforces the call, concurrency, and result limits around each `external_*` call. The log caps (`maxLogBytes` and `maxLogLines`) are also passed into the transport, which bounds its captured console output while the program runs, so a chatty program can't grow the transport's memory without bound.
+
+The `memoryLimitMb` runtime budget in the constructor is independent of these limits. A multi-tenant host should set both: `memoryLimitMb` bounds the isolate itself, and the execution limits bound its calls, results, and logs.
+
 ## How it works
 
 Each run creates a fresh isolate with its own heap. TypeScript is stripped on the host with esbuild, then the program is evaluated inside the isolate. Every `external_*` call crosses the isolate boundary as JSON strings in both directions, so no host object references leak into model-authored code. The allow-list, tool validation, request context, and tracing all run on the host, the same as with other transports.

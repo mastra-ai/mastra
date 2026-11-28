@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { SandboxFeatureNotSupportedError } from '../../workspace/errors';
+import { createCodeModeLogCollector } from './log-collector';
 import { buildRunner, buildProgramModule, FRAME_PREFIX } from './runner';
 import { sanitizeToolId } from './stub-generator';
 import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from './types';
@@ -14,7 +15,18 @@ import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from 
  */
 export class StdioCodeModeTransport implements CodeModeTransport {
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
-    const { sandbox, program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
+    const {
+      sandbox,
+      program,
+      toolIds,
+      dispatch,
+      timeout,
+      abortSignal,
+      onExternalCall,
+      onExternalResult,
+      maxLogBytes,
+      maxLogLines,
+    } = opts;
 
     if (!sandbox) {
       throw new Error('StdioCodeModeTransport requires a sandbox');
@@ -37,7 +49,9 @@ export class StdioCodeModeTransport implements CodeModeTransport {
     const runnerPath = join(dir, `runner-${suffix}.mjs`);
     await writeFile(runnerPath, runnerSource, 'utf8');
 
-    const logs: string[] = [];
+    // Bounded in-memory capture: an infinite `console.log` loop cannot grow the
+    // buffer without limit, and truncation is applied before `run` returns.
+    const logs = createCodeModeLogCollector({ maxLogBytes, maxLogLines });
     let done: CodeModeToolResult | undefined;
     let stdoutBuffer = '';
 
@@ -80,8 +94,8 @@ export class StdioCodeModeTransport implements CodeModeTransport {
             return;
           case 'done':
             done = frame.ok
-              ? { success: true, result: frame.result, logs }
-              : { success: false, error: frame.error, logs };
+              ? { success: true, result: frame.result, logs: logs.logs() }
+              : { success: false, error: frame.error, logs: logs.logs() };
             resolveDone();
             return;
           case 'rpc':
@@ -165,7 +179,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
         await handle.kill().catch(() => {});
         return {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: `Code Mode execution timed out after ${timeout}ms`, name: 'TimeoutError' },
         };
       }
@@ -179,7 +193,7 @@ export class StdioCodeModeTransport implements CodeModeTransport {
       return (
         done ?? {
           success: false,
-          logs,
+          logs: logs.logs(),
           error: { message: 'Program exited without returning a result', name: 'NoResultError' },
         }
       );

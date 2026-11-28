@@ -221,4 +221,35 @@ describe('Code Mode e2e (LocalSandbox)', () => {
     expect(seen.sandbox).toBeUndefined();
     expect(resolver).not.toHaveBeenCalled();
   });
+
+  it('enforces maxCalls end to end through the real sandbox transport', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox, maxCalls: 1 });
+    const result = await run(
+      tool,
+      `
+        await external_getTopProducts({ limit: 1 });
+        try {
+          await external_getTopProducts({ limit: 1 });
+        } catch (e) {
+          // The guest may swallow the rejection; the run must still fail.
+        }
+        return 'unreachable';
+      `,
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.name).toBe('CodeModeLimitError');
+    expect(result.error?.message).toContain('maxCalls');
+  }, 30_000);
+
+  it('caps console logs end to end through the real sandbox transport', async () => {
+    const sandbox = new LocalSandbox();
+    const { tool } = createCodeMode({ tools: { getTopProducts }, sandbox, maxLogLines: 3 });
+    const result = await run(tool, `for (let i = 0; i < 20; i++) console.log('line ' + i); return 'done';`);
+
+    expect(result.success).toBe(true);
+    expect(result.result).toBe('done');
+    expect(result.logs.length).toBeLessThanOrEqual(3);
+    expect(result.logs.at(-1)).toBe('[code mode logs truncated]');
+  }, 30_000);
 });

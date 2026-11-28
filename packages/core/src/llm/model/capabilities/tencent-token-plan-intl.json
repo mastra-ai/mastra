@@ -38,35 +38,6 @@
     "mimo-v2.6-flash"
   ],
   "reasoning": {
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "hy4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "minimax-m3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "kimi-k2.6": [
       {
         "type": "toggle"
@@ -93,15 +64,44 @@
         "values": ["high", "max"]
       }
     ],
-    "hy4": [
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-flash": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
+    "minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "mimo-v2.6-flash": [
       {
         "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "deepseek/deepseek-flash": [

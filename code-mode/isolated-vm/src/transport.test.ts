@@ -21,6 +21,8 @@ function run(
     abortSignal: AbortSignal;
     onExternalCall: (tool: string, args: unknown) => void;
     onExternalResult: (tool: string, durationMs: number, error?: unknown) => void;
+    maxLogBytes: number;
+    maxLogLines: number;
     transport: IsolatedVmCodeModeTransport;
   }> = {},
 ): Promise<CodeModeToolResult> {
@@ -33,6 +35,8 @@ function run(
     abortSignal: overrides.abortSignal,
     onExternalCall: overrides.onExternalCall,
     onExternalResult: overrides.onExternalResult,
+    maxLogBytes: overrides.maxLogBytes,
+    maxLogLines: overrides.maxLogLines,
   });
 }
 
@@ -77,6 +81,22 @@ describe('IsolatedVmCodeModeTransport', () => {
     `);
     expect(result.success).toBe(true);
     expect(result.logs).toEqual(['hello {"a":1}', 'careful']);
+  });
+
+  it('bounds captured logs to the configured caps', async () => {
+    const result = await run(`for (let i = 0; i < 20; i++) console.log('line ' + i); return 'done';`, {
+      maxLogLines: 3,
+    });
+    expect(result.success).toBe(true);
+    expect(result.result).toBe('done');
+    expect(result.logs.length).toBeLessThanOrEqual(3);
+    expect(result.logs.at(-1)).toBe('[code mode logs truncated]');
+  });
+
+  it('captures nothing when the line cap is 0', async () => {
+    const result = await run(`console.log('x'); return 1;`, { maxLogLines: 0 });
+    expect(result.success).toBe(true);
+    expect(result.logs).toEqual([]);
   });
 
   it('bridges external_* calls to the host dispatcher', async () => {

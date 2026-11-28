@@ -229,7 +229,7 @@ type HeldScope = { address: string; page?: KnowledgePage; role: KnowledgeRole | 
  * that write would link it under: without it a model sees no scopes on its first turn and concludes it
  * has nowhere to write. A stored scope it can't read keeps only its address.
  */
-async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
+export async function heldScopes(run: KnowledgeRun): Promise<HeldScope[]> {
   const stored = await run.storage.getScopesByAddress(run.principals);
   return Promise.all(
     run.principals.map(async address => {
