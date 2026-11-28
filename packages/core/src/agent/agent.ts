@@ -2542,26 +2542,25 @@ export class Agent<
         }
         return processors;
       }
-      // A throwing metadata function must not cost the turn its pins: fall back to no persona,
-      // which still mints agent:<id>. Store failures in the pin read still propagate.
-      const pinPersona = async () => {
-        try {
-          return (await this.getMetadata({ requestContext }))?.persona;
-        } catch {
-          return undefined;
-        }
-      };
       processors.push(
         new PinnedStateProcessor({
           principalsKey: async context =>
             knowledge.__principalsKey({
               ...context,
-              agent: { ...context.agent, agentId: this.id, persona: await pinPersona() },
+              agent: {
+                ...context.agent,
+                agentId: this.id,
+                persona: await this.resolveKnowledgePersona(knowledge, requestContext),
+              },
             }),
           readPins: async context =>
             knowledge.__deliveredPins({
               ...context,
-              agent: { ...context.agent, agentId: this.id, persona: await pinPersona() },
+              agent: {
+                ...context.agent,
+                agentId: this.id,
+                persona: await this.resolveKnowledgePersona(knowledge, requestContext),
+              },
             }),
           ...knowledge.__toolGroups,
         }),
@@ -5307,10 +5306,10 @@ export class Agent<
         ? {
             ...tool,
             execute: async (input: Parameters<typeof execute>[0], context: Parameters<typeof execute>[1]) => {
-              const metadata = await this.getMetadata({ requestContext });
+              const persona = await this.resolveKnowledgePersona(knowledge, requestContext);
               const runContext = {
                 ...context,
-                agent: context?.agent ? { ...context.agent, agentId: this.id, persona: metadata?.persona } : undefined,
+                agent: context?.agent ? { ...context.agent, agentId: this.id, persona } : undefined,
               };
               return execute(input, runContext);
             },
@@ -5325,6 +5324,16 @@ export class Agent<
       );
     }
     return converted;
+  }
+
+  private async resolveKnowledgePersona(knowledge: Knowledge, requestContext?: RequestContext) {
+    if (!(await knowledge.__needsAgentPersona())) return undefined;
+    // Only metadata failures fall back; declaration and store failures still propagate.
+    try {
+      return (await this.getMetadata({ requestContext }))?.persona;
+    } catch {
+      return undefined;
+    }
   }
 
   /**

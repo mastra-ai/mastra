@@ -12,3 +12,5 @@ const agent = new Agent({ ...config, metadata: { persona: { name: 'Sam', role: '
 `knowledgePersonaScopes()` adds a read-only convention on top: each agent reads its own `#persona` page, and every agent of a role or team reads that scope's `#rules` page, pinned into context. Pass `agent:persona:role:<role>:edit` or `agent:persona:team:<teamId>:edit` in a run's scopes to let a specific agent edit those rules. Pinning to a shared role or team audience now needs editor access there.
 
 `mergeAgentPersona(metadata, persona)` overrides `metadata.persona` field by field for static or function metadata, so a host can set a persona without losing the code's other metadata.
+
+Knowledge reads persona metadata only when a run-identity declaration uses role or team. If metadata fails, tools and pinned context continue without persona scopes; the agent's own identity still applies.

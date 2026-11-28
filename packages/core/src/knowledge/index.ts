@@ -438,6 +438,16 @@ export class Knowledge extends MastraBase {
     return { read, write };
   }
 
+  /** Whether the resolved mint declarations need metadata.persona. @internal */
+  async __needsAgentPersona(): Promise<boolean> {
+    await this.#runtime.resolve();
+    return [...this.#runtime.compiled.declarations.values()].some(
+      declaration =>
+        declaration.declaration.mint === 'run-identity' &&
+        declaration.pattern.params.some(param => param === 'role' || param === 'teamId'),
+    );
+  }
+
   /**
    * The run's principals as a stable key, or `undefined` when the run has no Knowledge view (no scopes,
    * or an undeclared scope). Loads the store's declarations first, so a scope only the store declares

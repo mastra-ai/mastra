@@ -1,5 +1,5 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { MockMemory } from '../../memory/mock';
@@ -64,11 +64,18 @@ describe('knowledgePersonaScopes', () => {
     expect(await pinsFor('lee', {})).toEqual([]);
   });
 
-  it('still delivers the agent pin when the metadata function throws, with no persona', async () => {
+  it.each([true, false])('delivers the agent pin with rejecting metadata (persona declarations: %s)', async persona => {
+    const metadata = vi.fn(async () => {
+      throw new Error('metadata unavailable');
+    });
+    const preset = knowledgePersonaScopes();
     const knowledge = new Knowledge({
       storage: new InMemoryStore(),
       pinnedContext: true,
-      scopes: { ...knowledgeMemoryScopes(), ...knowledgePersonaScopes() },
+      scopes: {
+        ...knowledgeMemoryScopes(),
+        ...(persona ? preset : { 'agent:$agentId': preset['agent:$agentId']! }),
+      },
     });
     await knowledge.upsertPage({ scope: 'agent:sam', path: 'persona', name: 'Persona', body: 'Sam is calm.' });
     let prompt: unknown;
@@ -91,13 +98,13 @@ describe('knowledgePersonaScopes', () => {
       memory: new MockMemory(),
       knowledge,
       scopes: ['org:acme'],
-      metadata: () => {
-        throw new Error('metadata unavailable');
-      },
+      metadata,
     });
     const result = await agent.generate('Hi', { memory: { thread: 'thread-1', resource: 'user-1' } });
     expect(result.text).toBe('Hi.');
     expect(JSON.stringify(prompt)).toContain('Sam is calm.');
+    if (persona) expect(metadata).toHaveBeenCalled();
+    else expect(metadata).not.toHaveBeenCalled();
   });
 
   it('lets a host-passed :edit form write its role rules while a plain role holder only reads', async () => {
