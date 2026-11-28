@@ -416,6 +416,8 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(shortRun).not.toBeNull();
     expect(shortRun?.runId).toBe('r');
     expect((await store.getWorkflowRunById({ workflowName, runId: 'r' }))?.runId).toBe('r');
+    // The persist must also have landed, or a no-op write would satisfy the survival checks above.
+    expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
   });
 
   it('keeps both runs when the colliding legacy run already has its canonical copy', async () => {
@@ -449,6 +451,10 @@ describe('WorkflowsValkey resourceId keying', () => {
     // taken by `a`'s record, so the occupant cannot be moved anywhere safe.
     await writeLegacy('a', 'b', new Date('2025-01-01T00:00:00Z'));
     await writeLegacy('a:resourceId:b', 'c', new Date('2025-01-02T00:00:00Z'));
+    const [legacyABefore, legacyBCBefore] = await Promise.all([
+      client.get(legacyKey('a', 'b')),
+      client.get(legacyKey('a:resourceId:b', 'c')),
+    ]);
 
     await expect(
       store.persistWorkflowSnapshot({
@@ -459,6 +465,9 @@ describe('WorkflowsValkey resourceId keying', () => {
       }),
     ).rejects.toThrow();
 
+    // A rejected write must change nothing: both legacy records keep their exact bytes.
+    expect(await client.get(legacyKey('a', 'b'))).toBe(legacyABefore);
+    expect(await client.get(legacyKey('a:resourceId:b', 'c'))).toBe(legacyBCBefore);
     expect(await client.get(legacyKey('a', 'b'))).not.toBeNull();
     expect(await client.get(legacyKey('a:resourceId:b', 'c'))).not.toBeNull();
     const contested = await client.get(canonicalKey('a:resourceId:b:resourceId:c'));
@@ -647,6 +656,9 @@ describe('WorkflowsValkey resourceId keying', () => {
 
       // The DEL must not destroy a record the delete never validated: its bytes changed under it.
       expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
+      // ... and the delete must still have taken effect for the run it did validate, not silently
+      // dropped its retry.
+      expect(await store.loadWorkflowSnapshot({ workflowName, runId: 'r' })).toBeNull();
     } finally {
       await writer.quit();
     }
