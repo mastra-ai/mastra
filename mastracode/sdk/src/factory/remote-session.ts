@@ -73,6 +73,8 @@ function toThread(
  * Only the surface the TUI drives is implemented. Anything else resolves to a
  * no-op so local-only features (thread locks, grants) degrade instead of crash.
  */
+const FACTORY_BRANCHING_UNAVAILABLE = 'Thread branching is not available when connected to a Factory session';
+
 export class RemoteSession {
   readonly #remote: RemoteHandle;
   readonly #sessionId: string;
@@ -258,6 +260,21 @@ export class RemoteSession {
       },
       rename: async ({ title }: { title: string }) => {
         if (this.#threadId) await remote().renameThread(this.#threadId, title);
+      },
+      // Thread branching exists only in local sessions; a Factory session has no branch endpoints.
+      // Every branch surface reports the missing capability rather than an empty
+      // history, which would read as "this thread has no branches".
+      branch: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
+      getParent: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
+      getBranchInfo: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
+      },
+      listBranches: async (): Promise<never> => {
+        throw new Error(FACTORY_BRANCHING_UNAVAILABLE);
       },
       delete: async ({ threadId }: { threadId: string }) => {
         await remote().deleteThread(threadId);
