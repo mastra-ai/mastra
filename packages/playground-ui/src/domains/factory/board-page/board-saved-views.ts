@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { BOARD_LAYOUTS, DEFAULT_BOARD_LAYOUT } from './boardLayout';
-import { BOARD_SORTS, DEFAULT_BOARD_SORT } from './boardSort';
+import { BOARD_LAYOUTS, DEFAULT_BOARD_LAYOUT } from '../board';
+import { BOARD_SORTS, DEFAULT_BOARD_SORT } from './board-sort';
 
 /** Query parameter holding the selected saved view, so a refresh or a reopen from the sidebar keeps it. */
 export const BOARD_VIEW_QUERY = 'view';
@@ -12,7 +12,7 @@ export const boardViewSettingsSchema = z.object({
   layout: z.enum(BOARD_LAYOUTS).catch(DEFAULT_BOARD_LAYOUT),
 });
 
-export type BoardViewSettings = z.infer<typeof boardViewSettingsSchema>;
+export type FactoryBoardViewSettings = z.infer<typeof boardViewSettingsSchema>;
 
 /** One list of views per factory board; the `mastracode` prefix lets sign-out clear it. */
 export function savedBoardViewsStorageKey(factoryId: string, boardId: string): string {

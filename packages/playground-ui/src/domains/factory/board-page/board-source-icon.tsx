@@ -1,4 +1,4 @@
-import type { BoardSourceOption } from '../boardSourceFilters';
+import type { BoardSourceOption } from './board-source-filters';
 
 /** Brand colors belong to the SVG mark, independent of menu highlight colors. */
 export function BoardSourceIcon({ option: { Icon, color } }: { option: BoardSourceOption }) {

@@ -1,7 +1,7 @@
+import type { WorkItem } from '@mastra/client-js';
 import type { BoardPhasesSnapshot } from '@mastra/react/hooks/factory';
-import { itemAppearsInStage } from '@mastra/playground-ui/domains/factory';
-import type { WorkItem } from '@internal/factory-contract';
-import type { BoardStageId } from '@mastra/playground-ui/domains/factory';
+import type { BoardStageId } from '../board';
+import { itemAppearsInStage } from '../card';
 
 /** What a board column shows of one phase, from one read of its view. */
 export interface ShownPhase {

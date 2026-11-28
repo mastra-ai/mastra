@@ -1,5 +1,5 @@
-import type { WorkItem } from '@internal/factory-contract';
 import { isPullRequestSource } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 
 /**
  * The plain external link a session header shows for a card. Pull and merge

@@ -1,4 +1,4 @@
-import type { CardChangeRequest, PullRequestStatus } from '@internal/factory-contract';
+import type { CardChangeRequest, PullRequestStatus } from '@mastra/client-js';
 
 /** Which source-control provider serves the subscriptions route. */
 export type ChangeRequestProvider = 'github' | 'gitlab';

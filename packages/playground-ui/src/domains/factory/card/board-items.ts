@@ -7,7 +7,7 @@ import {
   workItemBranch,
   workItemThreadTitle,
 } from '@internal/factory-contract';
-import type { WorkItem } from '@internal/factory-contract';
+import type { WorkItem } from '@mastra/client-js';
 
 import { isValid } from 'date-fns';
 

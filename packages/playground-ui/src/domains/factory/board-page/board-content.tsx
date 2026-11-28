@@ -1,5 +1,13 @@
-import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
-import type { ProviderPerson, WorkItem } from '@internal/factory-contract';
+import { BUSY_CARD_MOVE_REFUSAL, DEFAULT_BOARD_ID } from '@internal/factory-contract';
+import type { ProviderPerson, WorkItem, InstalledBoardInfo } from '@mastra/client-js';
+import {
+  useRecentAuditEvents,
+  useRunQueue,
+  useBoardPhasesQuery,
+  useWorkItemFilterOptionsQuery,
+  useCardSessions,
+} from '@mastra/react/hooks/factory';
+import { useMemo, useState } from 'react';
 import {
   BoardPhaseSetup,
   BoardPhaseSetupHoverCard,
@@ -8,51 +16,39 @@ import {
   RunQueueIndicator,
   boardLoop,
   boardLoadingStages,
-  BUSY_CARD_MOVE_REFUSAL,
   canMoveTo,
   relatedWorkItemIndex,
   WorkItemCard,
-} from '@mastra/playground-ui/domains/factory';
-import { createHoverCardHandle } from '@mastra/playground-ui/components/HoverCard';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { useMemo, useState } from 'react';
-import type { InstalledBoardInfo } from '../../../api/types';
-
+} from '..';
+import type { DragPayload } from '../board';
 import {
-  useRecentAuditEvents,
-  useRunQueue,
-  useBoardPhasesQuery,
-  useWorkItemFilterOptionsQuery,
-  useCardSessions,
-} from '@mastra/react/hooks/factory';
-import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
-import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
-import { shownBoardPhases } from '../../domains/factory/boardPhases';
-import type { ShownPhase } from '../../domains/factory/boardPhases';
-import { boardPhasesRequest, deeperPhaseWindow } from '../../domains/factory/boardPhasesRequest';
-import type { BoardKind } from '@mastra/playground-ui/domains/factory';
-import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
-import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
-import { BoardViewControls } from '../../domains/factory/components/BoardViewControls';
-import { LoadMoreSentinel } from '../../domains/factory/components/LoadMoreSentinel';
-import { useBoardComposer } from '../../domains/factory/hooks/useBoardComposer';
-import { useBoardDeepLink } from '../../domains/factory/hooks/useBoardDeepLink';
-import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStages';
-import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
-import { useBoardIntakeSetup } from '../../domains/factory/hooks/useBoardIntakeSetup';
-import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
-import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from '../../domains/factory/boardPeople';
-import { boardFiltersActive } from '../../domains/factory/boardFilters';
-import { useBoardView } from '../../domains/factory/hooks/useBoardView';
-import type { DragPayload } from '../../domains/factory/boardDrag';
-import type { FactoryProject } from '../../domains/workspaces/services/github';
+  BoardItemsSkeleton,
+  BoardStageCards,
+  LoadMoreSentinel,
+  VirtualBoardItems,
+  InlineWorkItemComposer,
+  BoardStages,
+} from '../board';
 
-import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoardItems';
-import { useBoardRepository } from '../../domains/factory/hooks/useBoardRepository';
-import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
-import { BoardStages } from './BoardStages';
+import type { BoardKind } from '../card';
+import type { BoardFilterSources } from './board-filter-fields';
+import { boardFiltersActive } from './board-filters';
+import { boardParticipants, boardPersonIdentity, withPeopleUnfolded } from './board-people';
+import { shownBoardPhases } from './board-phases';
+import type { ShownPhase } from './board-phases';
+import { boardPhasesRequest, deeperPhaseWindow } from './board-phases-request';
+import { FactoryBoardViewControls } from './board-view-controls';
+import { useBoardComposer } from './use-board-composer';
+import { useBoardDecisions } from './use-board-decisions';
+import { useBoardDeepLink } from './use-board-deep-link';
+import { useBoardItems } from './use-board-items';
+import { useBoardView } from './use-board-view';
+import { useCollapsedStages } from './use-collapsed-stages';
+import { createHoverCardHandle } from '@/ds/components/HoverCard';
+
+import { Notice } from '@/ds/components/Notice';
+import { toast } from '@/ds/components/Toaster';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const NO_CARDS: WorkItem[] = [];
 const NO_WINDOWS: Readonly<Record<string, number>> = {};
@@ -64,17 +60,34 @@ const NO_PHASE: ShownPhase = { cards: NO_CARDS, total: 0, listed: 0, listedAll: 
 // One item can sit in several stages; each copy is its own card.
 const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
 
+/** Whether anything files cards onto the board, so its first column can say how to start. */
+export interface BoardIntakeSetup {
+  fed: boolean;
+  unrouted: boolean;
+  failure?: { message: string; retry: () => void };
+  isPending: boolean;
+}
+
+/** What the host app knows that the board can't fetch itself: who is looking, and the project's connections. */
+export interface BoardHost {
+  viewer?: { userId?: string; name?: string; email?: string; githubLogin?: string | null };
+  repository?: string;
+  filterSources: BoardFilterSources;
+  intake: BoardIntakeSetup;
+}
+
 export function BoardContent({
-  factory,
+  factoryProjectId,
   kind,
   definition,
+  host,
 }: {
-  factory: FactoryProject;
+  factoryProjectId: string;
   kind: BoardKind;
   definition: InstalledBoardInfo;
+  host: BoardHost;
 }) {
-  const factoryProjectId = factory.id;
-  const repository = useBoardRepository(factoryProjectId);
+  const { repository, intake, viewer } = host;
   // A board with a pull request loop runs Factory's automation; the default board keeps its own column icons.
   const loop = boardLoop(definition);
   const runsLoop = loop !== undefined;
@@ -82,10 +95,8 @@ export function BoardContent({
   // uses) takes no new cards: its cards come from pull requests.
   const pullRequestsOnly = loop?.pullRequestReview !== undefined && loop.build === undefined;
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
-  const auth = useFactoryAuth();
-  const currentUserId = auth.data?.user?.userId;
-  const githubStatus = useGithubStatusQuery();
-  const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
+  const currentUserId = viewer?.userId;
+  const personId = boardPersonIdentity(currentUserId, viewer?.githubLogin);
   const reviewsPullRequests = boardLoop(definition)?.pullRequestReview !== undefined;
   const boardView = useBoardView({ factoryProjectId, kind, reviewsPullRequests, currentUserId, personId });
   const { searchParams, filters, sort, layout } = boardView;
@@ -126,7 +137,6 @@ export function BoardContent({
     }
     items.handleDrop(payload, stage, cause);
   };
-  const intake = useBoardIntakeSetup({ factoryProjectId, repositories: factory.repositories, definition });
   const relatedItemsFor = useMemo(() => relatedWorkItemIndex(cards), [cards]);
   const cardSessions = useCardSessions(factoryProjectId);
   const decisions = useBoardDecisions(factoryProjectId);
@@ -153,7 +163,7 @@ export function BoardContent({
   const participants = boardParticipants({
     people: filterOptions?.people ?? NO_PEOPLE,
     activityPage,
-    currentUser: auth.data?.user,
+    currentUser: viewer,
     personId,
   });
   const availableLabels = filterOptions?.labels ?? NO_LABELS;
@@ -354,12 +364,13 @@ export function BoardContent({
         totalTaskCount={totalTaskCount}
         onDrop={drop}
         toolbar={
-          <BoardViewControls
+          <FactoryBoardViewControls
             reviewsPullRequests={reviewsPullRequests}
             view={boardView}
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
+            filterSources={host.filterSources}
             aside={
               <div className="flex items-center gap-2">
                 <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />

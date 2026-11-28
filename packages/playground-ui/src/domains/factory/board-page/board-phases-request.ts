@@ -1,9 +1,9 @@
 import { searchQuery } from '@internal/factory-contract';
 
-import type { BoardPhasesRequest } from '../../../api/types';
-import { BOARD_FILTER_FIELDS } from './boardFilters';
-import type { BoardFilterState } from './boardFilters';
-import type { BoardSort } from './boardSort';
+import type { BoardPhasesRequest } from '@mastra/client-js';
+import { BOARD_FILTER_FIELDS } from './board-filters';
+import type { BoardFilterState } from './board-filters';
+import type { BoardSort } from './board-sort';
 
 /** How many cards the server lists in a phase the request names no window for. */
 const PHASE_PAGE = 50;

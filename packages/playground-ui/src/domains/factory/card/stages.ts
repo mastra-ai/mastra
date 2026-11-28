@@ -1,4 +1,4 @@
-import type { FactoryRuleStage } from '@internal/factory-contract';
+import type { FactoryRuleStage } from '@mastra/client-js';
 import type { BoardStage, BoardStageId } from '../board';
 
 /**

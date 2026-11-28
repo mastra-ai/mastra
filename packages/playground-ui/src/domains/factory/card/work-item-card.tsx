@@ -1,5 +1,5 @@
 import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
-import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
+import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@mastra/client-js';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import type { ReactElement } from 'react';
 import { BoardCard, useBoardNavigation } from '../board';

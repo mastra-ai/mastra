@@ -1,13 +1,16 @@
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { NotRoutedItem, NotRoutedCard as SharedNotRoutedCard } from '@mastra/playground-ui/domains/factory';
+import {
+  NotRoutedItem,
+  NotRoutedCard as SharedNotRoutedCard,
+  isIntakeProvider,
+} from '@mastra/playground-ui/domains/factory';
 import { useLocation } from 'react-router';
 
 import type { IntakeDecisionInfo } from '../../../../../api/types';
 import { useNotRoutedQuery, useRouteAgain } from '../../../../../hooks/useIntakeOrder';
 import { NOT_ROUTED_ANCHOR } from '../../../boardConfig/boardConfigPaths';
-import { isIntakeProvider } from '../../../factory/boardSourceFilters';
-import type { IntakeProvider } from '../../../factory/boardSourceFilters';
+import type { IntakeProvider } from '@mastra/playground-ui/domains/factory';
 import { SettingsIntegrationIcon } from '../../../settings/components/brand-icons/SettingsIntegrationIcon';
 
 /**

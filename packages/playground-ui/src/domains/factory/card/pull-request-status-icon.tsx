@@ -1,4 +1,4 @@
-import type { PullRequestStatus } from '@internal/factory-contract';
+import type { PullRequestStatus } from '@mastra/client-js';
 import { CHANGE_REQUEST_TERMS, changeRequestStatusLabel } from './change-request-state';
 
 import type { ChangeRequestProvider } from './change-request-state';

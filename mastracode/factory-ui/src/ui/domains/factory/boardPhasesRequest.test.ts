@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardPhasesRequest, deeperPhaseWindow } from './boardPhasesRequest';
-import { boardFiltersFromParams } from './boardFilters';
+import { boardPhasesRequest, deeperPhaseWindow, boardFiltersFromParams } from '@mastra/playground-ui/domains/factory';
 
 const NO_FILTERS = boardFiltersFromParams(new URLSearchParams(), true);
 const CARD_ID = '3f2c1a9e-5b7d-4c1e-9a2f-0d6e8b4c7a15';

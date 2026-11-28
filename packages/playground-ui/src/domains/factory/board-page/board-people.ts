@@ -1,9 +1,9 @@
 import { BOARD_PERSON_FIELDS, factoryParticipantId, isHumanActorId } from '@internal/factory-contract';
-import type { ProviderPerson } from '@internal/factory-contract';
+import type { ProviderPerson } from '@mastra/client-js';
 
-import type { BoardFilterFieldId, BoardFilterState } from './boardFilters';
-import { githubAvatarUrl } from '@mastra/playground-ui/domains/factory';
-import type { AuditActorProfile, AuditEventPage } from '@mastra/playground-ui/domains/factory';
+import { githubAvatarUrl } from '../card';
+import type { AuditActorProfile, AuditEventPage } from '../card';
+import type { BoardFilterFieldId, BoardFilterState } from './board-filters';
 
 export interface BoardParticipant extends AuditActorProfile {
   source: 'factory' | ProviderPerson['source'];

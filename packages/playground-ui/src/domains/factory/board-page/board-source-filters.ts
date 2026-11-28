@@ -1,8 +1,10 @@
 import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '@internal/factory-contract';
-import type { SourceFilters } from '@internal/factory-contract';
+import type { SourceFilters } from '@mastra/client-js';
 
-import { CARD_SOURCES } from './cardSources';
-import type { SourceGlyph } from './cardSources';
+import { CARD_SOURCES } from '../board';
+import type { CardSourcePresentation } from '../board';
+
+type SourceGlyph = CardSourcePresentation['Icon'];
 
 interface BoardSourceOptionShape {
   /** The key the server filters cards by: `boardSource` of each card's source. */

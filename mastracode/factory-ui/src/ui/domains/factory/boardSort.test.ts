@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { boardSortFromParams, boardSortParams } from './boardSort';
+import { boardSortFromParams, boardSortParams } from '@mastra/playground-ui/domains/factory';
 
 describe('board sort URL state', () => {
   it('defaults unknown or absent values to recent Factory activity', () => {

@@ -1,36 +1,34 @@
-import { useSavedViews } from '@mastra/playground-ui/components/SavedViews';
-import type { SavedViewsController } from '@mastra/playground-ui/components/SavedViews';
+import { useBoardNavigation, boardLayoutFromParams, boardLayoutParams } from '../board';
 
+import type { BoardLayout } from '../board';
+import type { BoardKind } from '../card';
 import {
   boardFilterItems,
   boardFilterParams,
   boardFilterStateFromItems,
   boardFiltersFromParams,
   clearOpenCard,
-} from '../boardFilters';
-import type { BoardFilterState } from '../boardFilters';
-import { useBoardNavigation } from '@mastra/playground-ui/domains/factory';
-import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
-import type { BoardLayout } from '../boardLayout';
-import { withPeopleFolded, withPeopleUnfolded } from '../boardPeople';
-import type { PersonIdentity } from '../boardPeople';
-import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
-import type { BoardViewSettings } from '../boardSavedViews';
-import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
-import type { BoardSort } from '../boardSort';
-import type { BoardKind } from '@mastra/playground-ui/domains/factory';
-import { saveBoardView } from '../services/boardViews';
+} from './board-filters';
+import type { BoardFilterState } from './board-filters';
+import { withPeopleFolded, withPeopleUnfolded } from './board-people';
+import type { PersonIdentity } from './board-people';
+import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from './board-saved-views';
+import type { FactoryBoardViewSettings } from './board-saved-views';
+import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from './board-sort';
+import type { BoardSort } from './board-sort';
+import { useSavedViews } from '@/ds/components/SavedViews';
+import type { SavedViewsController } from '@/ds/components/SavedViews';
 
 export const BOARD_SEARCH_QUERY = 'search';
 
 export interface BoardView {
   searchParams: URLSearchParams;
-  savedViews: SavedViewsController<BoardViewSettings>;
+  savedViews: SavedViewsController<FactoryBoardViewSettings>;
   filters: BoardFilterState;
   search: string;
   sort: BoardSort;
   layout: BoardLayout;
-  newViewSettings: BoardViewSettings;
+  newViewSettings: FactoryBoardViewSettings;
   setFilters: (next: BoardFilterState) => void;
   clearFilters: () => void;
   setSearch: (next: string) => void;
@@ -56,12 +54,9 @@ export function useBoardView({
 }): BoardView {
   const { searchParams, replaceSearchParams } = useBoardNavigation();
 
-  const replaceParams = (params: URLSearchParams) => {
-    saveBoardView(factoryProjectId, kind, params);
-    replaceSearchParams(params);
-  };
+  const replaceParams = replaceSearchParams;
 
-  const savedViews = useSavedViews<BoardViewSettings>({
+  const savedViews = useSavedViews<FactoryBoardViewSettings>({
     storageKey: savedBoardViewsStorageKey(factoryProjectId, kind),
     settingsSchema: boardViewSettingsSchema,
     activeViewId: searchParams.get(BOARD_VIEW_QUERY) ?? undefined,
@@ -76,7 +71,7 @@ export function useBoardView({
   });
 
   const { applied } = savedViews;
-  const pageSettings: BoardViewSettings = {
+  const pageSettings: FactoryBoardViewSettings = {
     sort: boardSortFromParams(searchParams, currentUserId),
     layout: boardLayoutFromParams(searchParams),
   };

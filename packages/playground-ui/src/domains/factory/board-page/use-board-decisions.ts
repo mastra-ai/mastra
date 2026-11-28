@@ -1,12 +1,11 @@
-import { useMemo } from 'react';
+import type { FactoryDecisionStatus, FactoryDecisionSummary, Factory } from '@mastra/client-js';
 
 import {
   factoryDecisionStatusQueryOptions,
   useFactoryDecisionAction,
   useFactoryDecisionStatus,
 } from '@mastra/react/hooks/factory';
-import type { Factory } from '@mastra/client-js';
-import type { FactoryDecisionStatus, FactoryDecisionSummary } from '@internal/factory-contract';
+import { useMemo } from 'react';
 
 const BOARD_STATUSES: FactoryDecisionStatus[] = ['pending', 'proposed', 'leased', 'retry', 'failed'];
 

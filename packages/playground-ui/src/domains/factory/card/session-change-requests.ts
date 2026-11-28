@@ -1,5 +1,5 @@
 import { cardChangeRequest, cardChangeRequests, isPullRequestSource } from '@internal/factory-contract';
-import type { CardChangeRequest, PullRequestStatus, WorkItem } from '@internal/factory-contract';
+import type { CardChangeRequest, PullRequestStatus, WorkItem } from '@mastra/client-js';
 
 import {
   CHANGE_REQUEST_TERMS,

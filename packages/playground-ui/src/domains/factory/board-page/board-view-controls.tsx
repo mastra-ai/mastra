@@ -1,18 +1,19 @@
-import { BoardViewControls as SharedBoardViewControls } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
+import { BoardViewControls as SharedBoardViewControls } from '../board';
+import type { BoardFilterSources } from './board-filter-fields';
 
-import type { BoardParticipant } from '../boardPeople';
-import { useBoardFilterSources } from '../hooks/useBoardFilterSources';
-import type { BoardView } from '../hooks/useBoardView';
-import { boardFilterFields } from './boardFilterFields';
-import { boardPropertiesMenuProps } from './BoardPropertiesMenu';
+import { boardFilterFields } from './board-filter-fields';
+import type { BoardParticipant } from './board-people';
+import { boardPropertiesMenuProps } from './board-properties-menu-props';
+import type { BoardView } from './use-board-view';
 
-export function BoardViewControls({
+export function FactoryBoardViewControls({
   reviewsPullRequests,
   view,
   participants,
   availableLabels,
   currentUserId,
+  filterSources,
   aside,
 }: {
   reviewsPullRequests: boolean;
@@ -20,9 +21,10 @@ export function BoardViewControls({
   participants: readonly BoardParticipant[];
   availableLabels: readonly string[];
   currentUserId?: string;
+  filterSources: BoardFilterSources;
   aside?: ReactNode;
 }) {
-  const { connectedSources, linearProjects } = useBoardFilterSources();
+  const { connectedSources, linearProjects } = filterSources;
   const fields = boardFilterFields({
     reviewsPullRequests,
     filters: view.filters,
