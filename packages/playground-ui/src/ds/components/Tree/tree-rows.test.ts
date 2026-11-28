@@ -33,4 +33,14 @@ describe('flattenTreeRows', () => {
   it('treats a node with an empty child list as a folder, not a file', () => {
     expect(rows(['empty']).find(row => row.id === 'empty')?.expanded).toBe(true);
   });
+
+  it('flattens a folder with hundreds of thousands of children', () => {
+    const huge = [{ name: 'huge', children: Array.from({ length: 300_000 }, (_, index) => ({ name: `f${index}` })) }];
+    const flat = flattenTreeRows(huge, {
+      getId: node => node.name,
+      getChildren: node => node.children,
+      isOpen: () => true,
+    });
+    expect(flat).toHaveLength(300_001);
+  });
 });

@@ -8,14 +8,16 @@ export interface FlattenTreeOptions<Node> {
   isOpen: (id: string) => boolean;
 }
 
-export function flattenTreeRows<Node>(nodes: readonly Node[], options: FlattenTreeOptions<Node>, level = 0) {
+export function flattenTreeRows<Node>(nodes: readonly Node[], options: FlattenTreeOptions<Node>) {
   const rows: FlatTreeRow<Node>[] = [];
-  nodes.forEach((node, index) => {
-    const id = options.getId(node);
-    const children = options.getChildren(node);
-    const expanded = children ? options.isOpen(id) : undefined;
-    rows.push({ id, node, level, posInSet: index + 1, setSize: nodes.length, expanded });
-    if (expanded && children) rows.push(...flattenTreeRows(children, options, level + 1));
-  });
+  const addLevel = (level: readonly Node[], depth: number) =>
+    level.forEach((node, index) => {
+      const id = options.getId(node);
+      const children = options.getChildren(node);
+      const expanded = children ? options.isOpen(id) : undefined;
+      rows.push({ id, node, level: depth, posInSet: index + 1, setSize: level.length, expanded });
+      if (expanded && children) addLevel(children, depth + 1);
+    });
+  addLevel(nodes, 0);
   return rows;
 }

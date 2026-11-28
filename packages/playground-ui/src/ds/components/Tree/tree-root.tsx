@@ -41,14 +41,13 @@ export interface TreeProps<Row extends TreeRow> {
   onExpandedChange: (row: Row, expanded: boolean) => void;
   renderRow: (row: Row) => ReactNode;
   size?: keyof typeof ROW_SIZES;
+  maxHeight?: string;
   className?: string;
   contentClassName?: string;
 }
 
 function isInteractiveTarget(target: EventTarget) {
-  return (
-    target instanceof HTMLElement && !!target.closest('input, textarea, select, button, a, [contenteditable="true"]')
-  );
+  return target instanceof Element && !!target.closest('input, textarea, select, button, a, [contenteditable="true"]');
 }
 
 export function TreeRoot<Row extends TreeRow>({
@@ -60,6 +59,7 @@ export function TreeRoot<Row extends TreeRow>({
   onExpandedChange,
   renderRow,
   size = 'sm',
+  maxHeight,
   className,
   contentClassName,
 }: TreeProps<Row>) {
@@ -73,6 +73,7 @@ export function TreeRoot<Row extends TreeRow>({
   const revealed = useRef<string | undefined>(undefined);
   const activated = useRef<string | undefined>(undefined);
   const userMoved = useRef(false);
+  const smoothReveal = useRef(false);
   const typeahead = useRef({ query: '', at: 0 });
 
   const selectedIndex = selectedId === undefined ? -1 : rows.findIndex(row => row.id === selectedId);
@@ -107,30 +108,33 @@ export function TreeRoot<Row extends TreeRow>({
       revealed.current = undefined;
       return;
     }
-    if (!scrollElement || selectedIndex < 0) return;
-    const first = revealed.current !== selectedId;
-    if (first) {
+    if (revealed.current !== selectedId) {
       revealed.current = selectedId;
       userMoved.current = activated.current === selectedId;
+      smoothReveal.current = true;
     }
-    if (userMoved.current) return;
+    activated.current = undefined;
+    if (!scrollElement || selectedIndex < 0 || userMoved.current) return;
     const height = scrollElement.clientHeight;
     const start = selectedIndex * rowSize.height + scrollMargin;
     const top = start - scrollElement.scrollTop;
     if (height > 0 && top >= height * COMFORT_TOP && top + rowSize.height <= height * COMFORT_BOTTOM) return;
-    const smooth = first && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const smooth = smoothReveal.current && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    smoothReveal.current = false;
     scrollElement.scrollTo({ top: Math.max(0, start - height * REVEAL_AT), behavior: smooth ? 'smooth' : 'auto' });
   }, [scrollElement, selectedId, selectedIndex, scrollMargin, rowSize.height]);
 
   useEffect(() => {
     if (!treeElement) return;
     const onBeforeMatch = (event: Event) => {
-      if (!(event.target instanceof HTMLElement) || event.target.dataset.treeFindIndex === undefined) return;
-      const index = Number(event.target.dataset.treeFindIndex);
+      if (!(event.target instanceof HTMLElement)) return;
+      const id = event.target.dataset.treeFindId;
+      const index = rows.findIndex(row => row.id === id);
+      if (index < 0) return;
       treeElement.querySelectorAll(`${FIND_TEXT}:not([hidden])`).forEach(hideUntilFound);
       event.target.className = FOUND_TEXT_CLASS;
       event.target.style.top = `${index * rowSize.height}px`;
-      setFoundId(rows[index]?.id);
+      setFoundId(id);
     };
     treeElement.addEventListener('beforematch', onBeforeMatch);
     return () => treeElement.removeEventListener('beforematch', onBeforeMatch);
@@ -177,7 +181,7 @@ export function TreeRoot<Row extends TreeRow>({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
     const row = rows[index];
     if (!row || isInteractiveTarget(event.target)) return;
-    const typing = event.timeStamp - typeahead.current.at < TYPEAHEAD_TIMEOUT;
+    const typing = typeahead.current.query !== '' && event.timeStamp - typeahead.current.at < TYPEAHEAD_TIMEOUT;
     switch (event.key) {
       case 'ArrowDown':
         moveTo(index + 1);
@@ -273,7 +277,13 @@ export function TreeRoot<Row extends TreeRow>({
       </div>,
       ...(found
         ? [
-            <div key={`find:${row.id}`} ref={hideUntilFound} aria-hidden data-tree-find-index={index}>
+            <div
+              key={`find:${row.id}`}
+              ref={hideUntilFound}
+              aria-hidden
+              data-tree-find-index={index}
+              data-tree-find-id={row.id}
+            >
               {getRowLabel(row)}
             </div>,
           ]
@@ -281,9 +291,26 @@ export function TreeRoot<Row extends TreeRow>({
     ];
   };
 
+  const findChunk = (from: number, to: number) =>
+    from < to ? (
+      <TreeFindChunk key={`find-chunk:${from}`} rows={rows} from={from} to={to} getRowLabel={getRowLabel} />
+    ) : null;
+  const drawn = [...rendered.keys()].toSorted((a, b) => a - b);
+  const children: ReactNode[] = [];
+  let next = 0;
+  for (let chunk = 0; chunk < rows.length; chunk += FIND_CHUNK_SIZE) {
+    const end = Math.min(rows.length, chunk + FIND_CHUNK_SIZE);
+    for (const index of drawn.filter(at => at >= chunk && at < end)) {
+      children.push(findChunk(Math.max(next, chunk), index), ...(renderRowAt(index) ?? []));
+      next = index + 1;
+    }
+    children.push(findChunk(Math.max(next, chunk), end));
+  }
+
   return (
     <ScrollArea
       className={cn('min-h-0 flex-1', className)}
+      maxHeight={maxHeight}
       onWheel={() => (userMoved.current = true)}
       onTouchMove={() => (userMoved.current = true)}
       onPointerDown={() => (userMoved.current = true)}
@@ -298,22 +325,13 @@ export function TreeRoot<Row extends TreeRow>({
           style={{ height: virtualizer.getTotalSize() }}
           onKeyDownCapture={clearFound}
           onPointerDownCapture={clearFound}
+          onBlur={event => {
+            if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) {
+              pendingFocus.current = undefined;
+            }
+          }}
         >
-          {Array.from({ length: Math.ceil(rows.length / FIND_CHUNK_SIZE) }, (_, chunk) => {
-            const from = chunk * FIND_CHUNK_SIZE;
-            const to = Math.min(rows.length, from + FIND_CHUNK_SIZE);
-            const drawn = items.some(item => item.index >= from && item.index < to);
-            return (
-              <TreeFindChunk
-                key={chunk}
-                rows={rows}
-                from={from}
-                to={to}
-                getRowLabel={getRowLabel}
-                renderRowAt={drawn ? renderRowAt : undefined}
-              />
-            );
-          })}
+          {children}
         </div>
       </ScrollAreaViewport>
     </ScrollArea>

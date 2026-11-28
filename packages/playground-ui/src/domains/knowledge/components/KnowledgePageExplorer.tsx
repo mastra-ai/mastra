@@ -340,6 +340,8 @@ const skeletonBar = 'motion-reduce:before:animate-none';
 const CHILD_PAGES_CARD = cn('rounded-xl p-1', raisedSurfaceStyle);
 const CHILD_PAGES_TREE = 'rounded-lg bg-nested p-1';
 const CHILD_PAGE_FILE_INDENT = 18;
+const CHILD_PAGES_MAX_HEIGHT = '24rem';
+const RETRY_MORE_LABEL = 'Couldn’t load more. Try again';
 
 function PageTreeSkeleton({ rows }: { rows: number }) {
   return (
@@ -425,7 +427,7 @@ function MoreNotes({
 type ChildPageRow = TreeRow &
   (
     | { kind: 'page'; page: KnowledgePagePayload }
-    | { kind: 'more'; parentId: string; cursor: string }
+    | { kind: 'more'; parentId: string; cursor: string; retry: boolean }
     | { kind: 'note'; text: string }
     | { kind: 'loading' }
   );
@@ -440,9 +442,9 @@ function ChildPages({
   parentId: string;
   onOpen: (pageId: string) => void;
 }) {
-  const [open, setOpen] = useState<string[]>([]);
+  const [open, setOpen] = useState<ReadonlyArray<readonly [id: string, parent: string]>>([]);
   const [cursors, setCursors] = useState<Record<string, string[]>>({});
-  const requests = [parentId, ...open].flatMap(id => [
+  const requests = [parentId, ...open.map(([id]) => id)].flatMap(id => [
     { parentId: id },
     ...(cursors[id] ?? []).map(cursor => ({ parentId: id, cursor })),
   ]);
@@ -463,37 +465,55 @@ function ChildPages({
       </KnowledgeDetailSection>
     );
   }
+  const pagination = (id: string) => {
+    const results = levels.get(id) ?? [];
+    const last = results[results.length - 1];
+    if (last?.data?.nextCursor) return { cursor: last.data.nextCursor, retry: false };
+    const failed = cursors[id]?.at(-1);
+    if (last?.isError && results.length > 1 && failed) return { cursor: failed, retry: true };
+    return undefined;
+  };
   const topPages = top.flatMap(level => level.data?.pages ?? []);
-  const next = top[top.length - 1]?.data?.nextCursor;
+  const next = pagination(parentId);
   if (topPages.length === 0 && !next) return null;
 
   const rows: ChildPageRow[] = [];
-  const addLevel = (pages: KnowledgePagePayload[], level: number) =>
+  const addLevel = (pages: KnowledgePagePayload[], level: number, setSize: number) =>
     pages.forEach((page, index) => {
       const folder = page.childCount !== 0;
-      const expanded = folder ? open.includes(page.id) : undefined;
-      rows.push({ kind: 'page', id: page.id, page, level, posInSet: index + 1, setSize: pages.length, expanded });
+      const expanded = folder ? open.some(([id]) => id === page.id) : undefined;
+      rows.push({ kind: 'page', id: page.id, page, level, posInSet: index + 1, setSize, expanded });
       if (expanded) addChildren(page.id, level + 1);
     });
   const addChildren = (id: string, level: number) => {
     const results = levels.get(id) ?? [];
     const pages = results.flatMap(result => result.data?.pages ?? []);
-    const more = results[results.length - 1]?.data?.nextCursor;
-    const place = { level, posInSet: 1, setSize: 1 };
-    if (results[0]?.isPending) rows.push({ kind: 'loading', id: `${id}/\0loading`, ...place });
+    const more = pagination(id);
+    const alone = { level, posInSet: 1, setSize: 1 };
+    if (results[0]?.isPending) rows.push({ kind: 'loading', id: `${id}/\0loading`, ...alone });
     else if (results[0]?.isError)
-      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'Couldn’t load the pages under this one.', ...place });
+      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'Couldn’t load the pages under this one.', ...alone });
     else if (pages.length === 0 && !more)
-      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'No pages under this one.', ...place });
-    else addLevel(pages, level);
-    if (more) rows.push({ kind: 'more', id: `${id}/\0more`, parentId: id, cursor: more, ...place });
+      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'No pages under this one.', ...alone });
+    else addLevel(pages, level, pages.length + (more ? 1 : 0));
+    if (more) {
+      const place = { level, posInSet: pages.length + 1, setSize: pages.length + 1 };
+      rows.push({ kind: 'more', id: `${id}/\0more`, parentId: id, ...more, ...place });
+    }
   };
-  addLevel(topPages, 0);
+  addLevel(topPages, 0, topPages.length);
 
-  const setFolderOpen = (id: string, expanded: boolean) =>
-    setOpen(current => (expanded ? [...current, id] : current.filter(item => item !== id)));
-  const loadMore = (id: string, cursor: string) =>
+  const setFolderOpen = (id: string, parent: string, expanded: boolean) =>
+    setOpen(current => {
+      if (expanded) return current.some(([open]) => open === id) ? current : [...current, [id, parent]];
+      const closed = new Set([id]);
+      for (const [open, under] of current) if (closed.has(under)) closed.add(open);
+      return current.filter(([open]) => !closed.has(open));
+    });
+  const loadMore = (id: string, cursor: string, retry: boolean) => {
+    if (retry) flushSync(() => setCursors(current => ({ ...current, [id]: (current[id] ?? []).slice(0, -1) })));
     setCursors(current => ({ ...current, [id]: [...(current[id] ?? []), cursor] }));
+  };
 
   return (
     <KnowledgeDetailSection label="Pages">
@@ -501,19 +521,27 @@ function ChildPages({
         <Tree
           aria-label="Pages"
           className={CHILD_PAGES_TREE}
+          maxHeight={CHILD_PAGES_MAX_HEIGHT}
           rows={rows}
           getRowLabel={row => (row.kind === 'page' ? row.page.name : row.kind === 'note' ? row.text : '')}
           onActivate={row => {
-            if (row.kind === 'more') loadMore(row.parentId, row.cursor);
+            if (row.kind === 'more') loadMore(row.parentId, row.cursor, row.retry);
             if (row.kind !== 'page') return;
             if (row.expanded === undefined) onOpen(row.page.id);
-            else setFolderOpen(row.page.id, !row.expanded);
+            else setFolderOpen(row.page.id, row.page.parentId ?? parentId, !row.expanded);
           }}
-          onExpandedChange={(row, expanded) => setFolderOpen(row.id, expanded)}
+          onExpandedChange={(row, expanded) => {
+            if (row.kind === 'page') setFolderOpen(row.page.id, row.page.parentId ?? parentId, expanded);
+          }}
           renderRow={row => <ChildPageRowContent row={row} onOpen={onOpen} onLoadMore={loadMore} />}
         />
       </div>
-      {next ? <MoreButton onClick={() => loadMore(parentId, next)} /> : null}
+      {next ? (
+        <MoreButton
+          label={next.retry ? RETRY_MORE_LABEL : undefined}
+          onClick={() => loadMore(parentId, next.cursor, next.retry)}
+        />
+      ) : null}
     </KnowledgeDetailSection>
   );
 }
@@ -525,7 +553,7 @@ function ChildPageRowContent({
 }: {
   row: ChildPageRow;
   onOpen: (pageId: string) => void;
-  onLoadMore: (parentId: string, cursor: string) => void;
+  onLoadMore: (parentId: string, cursor: string, retry: boolean) => void;
 }) {
   if (row.kind === 'loading') {
     return (
@@ -537,7 +565,14 @@ function ChildPageRowContent({
     );
   }
   if (row.kind === 'note') return <span className="text-muted-foreground">{row.text}</span>;
-  if (row.kind === 'more') return <MoreButton onClick={() => onLoadMore(row.parentId, row.cursor)} />;
+  if (row.kind === 'more') {
+    return (
+      <MoreButton
+        label={row.retry ? RETRY_MORE_LABEL : undefined}
+        onClick={() => onLoadMore(row.parentId, row.cursor, row.retry)}
+      />
+    );
+  }
   const { page } = row;
   return (
     <>

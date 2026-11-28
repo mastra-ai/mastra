@@ -72,17 +72,37 @@ const files = (count: number) =>
     setSize: count,
   }));
 
-function SelectedTree({ rows, selectedId }: { rows: ReturnType<typeof files>; selectedId?: string }) {
-  const [activated, setActivated] = useState<string>();
+function SelectedTree({
+  rows,
+  selectedId,
+  onActivate,
+}: {
+  rows: ReturnType<typeof files>;
+  selectedId?: string;
+  onActivate?: (id: string) => void;
+}) {
+  const [activated, setActivated] = useState<{ id: string; over?: string }>();
   return (
     <Tree
       aria-label="Files"
       rows={rows}
       getRowLabel={row => row.id}
-      selectedId={activated ?? selectedId}
-      onActivate={row => setActivated(row.id)}
+      selectedId={activated && activated.over === selectedId ? activated.id : selectedId}
+      onActivate={row => {
+        setActivated({ id: row.id, over: selectedId });
+        onActivate?.(row.id);
+      }}
       onExpandedChange={() => {}}
-      renderRow={row => <Tree.Label>{row.id}</Tree.Label>}
+      renderRow={row => (
+        <>
+          <Tree.Label>{row.id}</Tree.Label>
+          <button type="button" aria-label={`Delete ${row.id}`}>
+            <svg>
+              <path data-testid={`icon-${row.id}`} d="M0 0h1v1z" />
+            </svg>
+          </button>
+        </>
+      )}
     />
   );
 }
@@ -141,12 +161,83 @@ describe('Tree selection reveal', () => {
     expect(scrolls.scrolls()).toHaveLength(1);
   });
 
+  it('waits for a row selected before it loads, but not once the user has scrolled', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(50)} />);
+    const scrolls = revealScrolls(container, 300);
+    rerender(<SelectedTree rows={files(50)} selectedId="file-150" />);
+    fireEvent.wheel(scrolls.viewport);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-150" />);
+    expect(scrolls.scrolls()).toEqual([]);
+  });
+
+  it('reveals a row selected elsewhere even if it was the last one clicked in the tree', () => {
+    const { container, rerender } = render(<SelectedTree rows={files(200)} />);
+    const scrolls = revealScrolls(container, 300);
+    fireEvent.click(item('file-20'));
+    rerender(<SelectedTree rows={files(200)} selectedId="file-3" />);
+    rerender(<SelectedTree rows={files(200)} selectedId="file-20" />);
+    expect(scrolls.scrolls()).toEqual([expect.objectContaining({ top: 20 * 28 - 100 })]);
+  });
+
   it('scrolls once per selection, not on every render', () => {
     const { container, rerender } = render(<SelectedTree rows={files(200)} />);
     const scrolls = revealScrolls(container, 300);
     rerender(<SelectedTree rows={files(200)} selectedId="file-100" />);
     rerender(<SelectedTree rows={files(200)} selectedId="file-100" />);
     expect(scrolls.scrolls()).toHaveLength(1);
+  });
+});
+
+describe('Tree focus and activation', () => {
+  it('keeps focus on a row that rows loading above it push past a hundred', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<SelectedTree rows={files(100)} />);
+    item('file-0').focus();
+    await user.keyboard('{End}');
+    const focused = item('file-99');
+    expect(document.activeElement).toBe(focused);
+
+    rerender(<SelectedTree rows={[{ id: 'new', level: 0, posInSet: 1, setSize: 101 }, ...files(100)]} />);
+
+    expect(item('file-99')).toBe(focused);
+    expect(document.activeElement).toBe(focused);
+  });
+
+  it('activates a row with Space right after the page loads', () => {
+    const onActivate = vi.fn();
+    render(<SelectedTree rows={files(3)} onActivate={onActivate} />);
+    const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+    Object.defineProperty(space, 'timeStamp', { value: 100 });
+    act(() => item('file-1').dispatchEvent(space));
+    expect(onActivate).toHaveBeenCalledWith('file-1');
+  });
+
+  it('does not activate a row when an icon inside one of its buttons is clicked', () => {
+    const onActivate = vi.fn();
+    render(<SelectedTree rows={files(3)} onActivate={onActivate} />);
+    fireEvent.click(screen.getByTestId('icon-file-1'));
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('does not pull focus back after the user tabs out of the tree', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <>
+        <SelectedTree rows={files(3)} />
+        <button type="button">Outside</button>
+      </>,
+    );
+    item('file-0').focus();
+    await user.keyboard('{ArrowUp}');
+    const outside = screen.getByRole('button', { name: 'Outside' });
+    act(() => outside.focus());
+    rerender(
+      <>
+        <SelectedTree rows={files(4)} />
+        <button type="button">Outside</button>
+      </>,
+    );
+    expect(document.activeElement).toBe(outside);
   });
 });
 
