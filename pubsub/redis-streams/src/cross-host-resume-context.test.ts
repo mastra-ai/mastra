@@ -13,7 +13,16 @@ import { killProcess, spawnFixture, waitFor, waitForLine } from '../test-fixture
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const POSTGRES = process.env.POSTGRES_CONNECTION_STRING ?? 'postgres://postgres:postgres@localhost:5436/postgres';
 
-type Observation = ReturnType<typeof contextSnapshot> & { host: string; pid: number; event: string };
+type Observation = ReturnType<typeof contextSnapshot> & {
+  host: string;
+  pid: number;
+  event: string;
+  tools?: string[];
+};
+
+/** Tools the model was offered at each input step. */
+const offeredTools = (entries: Observation[]) =>
+  entries.filter(entry => entry.event === 'input-step').map(entry => entry.tools);
 
 describe('evented resume claimed by another host', () => {
   let mock: LLMock;
@@ -126,7 +135,9 @@ describe('evented resume claimed by another host', () => {
       // The LLM-step processors see the resume's own values. Finalization restores ordinary keys from the
       // run snapshot by design, so the output processor is only checked for identity above.
       expect(
-        resumedSteps.filter(entry => entry.event !== 'output-result').map(({ event, marker }) => ({ event, marker })),
+        resumedSteps
+          .filter(entry => entry.event === 'input-step' || entry.event === 'llm-request')
+          .map(({ event, marker }) => ({ event, marker })),
       ).toEqual([
         { event: 'input-step', marker: 'B' },
         { event: 'llm-request', marker: 'B' },
@@ -140,6 +151,9 @@ describe('evented resume claimed by another host', () => {
       expect(finalized).toMatchObject({ controller: { sessionId: 'A' }, marker: 'A', user: 'bob' });
       expect(finalized?.controllerState).toBeUndefined();
       expect(finalized?.closurePresent).toBe(false);
+      // The model step after the approved tool is offered the resuming caller's tools only.
+      expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
+      expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);
     } finally {
       if (hostB) await killProcess(hostB);
       await mastra.shutdown();
@@ -224,6 +238,11 @@ describe('evented resume claimed by another host', () => {
           .slice(beforeResume)
           .some(entry => entry.event === 'tool-result'),
       );
+      await waitFor(async () =>
+        read()
+          .slice(beforeResume)
+          .some(entry => entry.event === 'input-step'),
+      );
 
       const initial = read().slice(0, beforeResume);
       const resumed = read().slice(beforeResume);
@@ -241,6 +260,9 @@ describe('evented resume claimed by another host', () => {
         expect(entry.controllerState).toBeUndefined();
         expect(entry.closurePresent).toBe(false);
       }
+      // The model step after the approved tool is offered the resuming caller's tools only.
+      expect(offeredTools(initial)).toEqual([['alice_only', 'approve']]);
+      expect(offeredTools(resumed)).toEqual([['approve', 'bob_only']]);
     } finally {
       if (hostB) await killProcess(hostB);
       if (worker) await killProcess(worker);

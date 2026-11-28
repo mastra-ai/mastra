@@ -51,6 +51,7 @@ type ToolEvent = {
   marker?: string;
   user?: string;
   value?: string;
+  tools?: string[];
 };
 
 let mock: LLMock;
@@ -267,12 +268,14 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
         { toolCallId: 'call-approve', requestContext: context },
       );
       expect((await drain(resume)).map(chunk => chunk.type)).toContain('finish');
-      expect(toolEvents()).toContainEqual({
-        worker: 'resume-owner',
-        event: 'resume-context',
-        marker: 'resumed',
-        value: 'live-controller',
-      });
+      expect(toolEvents()).toContainEqual(
+        expect.objectContaining({
+          worker: 'resume-owner',
+          event: 'resume-context',
+          marker: 'resumed',
+          value: 'live-controller',
+        }),
+      );
     } finally {
       server.close();
       server.closeAllConnections?.();
@@ -352,6 +355,7 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
         .filter(e => e.event === 'resume-context' || e.event === 'llm-request-context');
       expect(resumed.map(e => e.event).sort()).toEqual(['llm-request-context', 'resume-context']);
       for (const event of resumed) expect(event).toMatchObject({ worker: 'driver', marker: 'B', user: 'bob' });
+      expect(resumed.find(e => e.event === 'resume-context')?.tools).toEqual(['approve', 'bob_only', 'slow']);
     } finally {
       server.close();
       server.closeAllConnections?.();

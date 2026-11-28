@@ -71,6 +71,14 @@ export function buildDeadlineCrossWorkerAgent({
     },
   });
 
+  const approve = createTool({
+    id: 'approve',
+    description: 'Approval probe',
+    inputSchema: z.object({}),
+    requireApproval: true,
+    execute: async () => ({ approved: true }),
+  });
+
   const storage = new DefaultStorage({ id: `deadline-cross-worker-${agentId}`, url: dbUrl });
   const memory = new Memory({ storage });
 
@@ -79,16 +87,17 @@ export function buildDeadlineCrossWorkerAgent({
     name: 'Deadline Cross Worker Agent',
     instructions: 'Call slow, then reply.',
     model: provider.chat('deadline-cross-worker-model'),
-    tools: {
+    // Each caller gets a tool only they may use, so a resumed step shows whose build it was offered.
+    tools: ({ requestContext }) => ({
       slow,
-      approve: createTool({
-        id: 'approve',
-        description: 'Approval probe',
+      approve,
+      [`${userId(requestContext) ?? 'anonymous'}_only`]: createTool({
+        id: `${userId(requestContext) ?? 'anonymous'}_only`,
+        description: 'Caller-only probe',
         inputSchema: z.object({}),
-        requireApproval: true,
-        execute: async () => ({ approved: true }),
+        execute: async () => ({ ok: true }),
       }),
-    },
+    }),
     inputProcessors: [
       {
         id: 'resume-context-probe',
@@ -99,11 +108,12 @@ export function buildDeadlineCrossWorkerAgent({
             user: userId(requestContext),
           });
         },
-        processInputStep: ({ requestContext }) => {
+        processInputStep: ({ requestContext, tools }) => {
           const controller = requestContext?.get('probe-controller');
           log({
             event: 'resume-context',
             marker: requestContext?.get('probe-marker'),
+            tools: Object.keys(tools ?? {}).sort(),
             ...(requestContext?.has('mastra__user') ? { user: userId(requestContext) } : {}),
             value:
               controller &&

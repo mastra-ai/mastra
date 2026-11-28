@@ -57,10 +57,10 @@ export function createCrossHostRuntime(config: {
   /** Also log the context tool-result output processing sees. */
   observeToolResults?: boolean;
 }) {
-  const log = (event: string, requestContext: RequestContext | undefined) =>
+  const log = (event: string, requestContext: RequestContext | undefined, extra: Record<string, unknown> = {}) =>
     appendFileSync(
       config.logFile,
-      `${JSON.stringify({ host: config.host, pid: process.pid, event, ...contextSnapshot(requestContext) })}\n`,
+      `${JSON.stringify({ host: config.host, pid: process.pid, event, ...contextSnapshot(requestContext), ...extra })}\n`,
     );
   const storage = new PostgresStore({
     id: `${config.schemaName}_${config.host}`,
@@ -69,6 +69,16 @@ export function createCrossHostRuntime(config: {
   });
   const pubsub = new RedisStreamsPubSub({ url: config.redisUrl, keyPrefix: config.schemaName, blockMs: 100 });
   const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${config.modelUrl}/v1` });
+  const approve = createTool({
+    id: 'approve',
+    description: 'Approve the operation',
+    inputSchema: z.object({}),
+    requireApproval: true,
+    execute: async (_input, context) => {
+      log('tool-execute', context?.requestContext);
+      return { approved: true };
+    },
+  });
   const agent = new Agent({
     id: 'cross-host',
     name: 'Cross host',
@@ -76,22 +86,24 @@ export function createCrossHostRuntime(config: {
     durable: { executionEngine: 'evented' },
     memory: new Memory({ storage, options: { generateTitle: false } }),
     model: openai('gpt-4o-mini'),
-    tools: {
-      approve: createTool({
-        id: 'approve',
-        description: 'Approve the operation',
-        inputSchema: z.object({}),
-        requireApproval: true,
-        execute: async (_input, context) => {
-          log('tool-execute', context?.requestContext);
-          return { approved: true };
-        },
-      }),
+    // Each caller also gets a tool only they may use, so the log shows whose tools a step was offered.
+    tools: ({ requestContext }) => {
+      const user = contextSnapshot(requestContext).user ?? 'anonymous';
+      return {
+        approve,
+        [`${user}_only`]: createTool({
+          id: `${user}_only`,
+          description: `Only for ${user}`,
+          inputSchema: z.object({}),
+          execute: async () => ({ user }),
+        }),
+      };
     },
     inputProcessors: [
       {
         id: 'observe-context',
-        processInputStep: ({ requestContext }) => log('input-step', requestContext),
+        processInputStep: ({ requestContext, tools }) =>
+          log('input-step', requestContext, { tools: Object.keys(tools ?? {}).sort() }),
         processLLMRequest: ({ requestContext }) => log('llm-request', requestContext),
       },
     ],
