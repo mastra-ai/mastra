@@ -1,0 +1,82 @@
+---
+title: 'Reference: Event fields | Connect'
+description: 'API reference for connectEventFields(), unknownConnectEventFields(), and matchesConnectEventFields() in @mastra/connect: filter Connect events by payload field.'
+packages:
+  - '@mastra/connect'
+---
+
+# Event fields
+
+Connect knows the payload fields of every event type that has payload types. Use these functions to filter events by field without hand-written per-provider code, for example when an agent chooses at runtime which events it wants to receive.
+
+```typescript
+import {
+  connectEventFields,
+  matchesConnectEventFields,
+  unknownConnectEventFields,
+} from '@mastra/connect'
+
+const filters = { 'repository.full_name': 'acme/app', 'pull_request.number': 12 }
+
+const unknown = unknownConnectEventFields('github', 'pull_request_review.submitted', filters)
+if (unknown.length > 0) {
+  const fields = connectEventFields('github', 'pull_request_review.submitted')
+  throw new Error(`Unknown fields: ${unknown.join(', ')}. Valid fields: ${fields?.join(', ')}`)
+}
+
+if (matchesConnectEventFields(event.payload, filters)) {
+  // The event is a review on acme/app#12
+}
+```
+
+## Field paths
+
+A field path names a plain value (a string, number, or boolean) in the payload, with `.` between keys. `[]` steps into an array, so `issue.labels[].name` is the name of any of the issue's labels.
+
+The list covers fields up to three objects deep. An array element counts at its array's depth. Link fields (keys ending in `_url`, `url`, `node_id`) and large GitHub objects such as `repository.permissions` and `installation` aren't listed.
+
+## connectEventFields()
+
+```typescript
+declare function connectEventFields(
+  provider: string,
+  eventType: string,
+): readonly string[] | undefined
+```
+
+Returns the field paths an event type's payload can be filtered on, such as `pull_request.number` or `review.user.login`. Returns `undefined` when Connect has no payload type for the event.
+
+## unknownConnectEventFields()
+
+```typescript
+declare function unknownConnectEventFields(
+  provider: string,
+  eventType: string,
+  filters: ConnectEventFieldFilters,
+): string[]
+```
+
+Returns the filter paths the event type's payload doesn't have. It returns an empty array when every path is known, and when Connect has no payload type for the event, since its fields can't be checked.
+
+## matchesConnectEventFields()
+
+```typescript
+declare function matchesConnectEventFields(
+  payload: unknown,
+  filters: ConnectEventFieldFilters,
+): boolean
+```
+
+Returns whether the payload has every filtered field with one of its values. Filters with no fields match every payload.
+
+## ConnectEventFieldFilters
+
+```typescript
+type ConnectEventFieldValue = string | number | boolean
+
+type ConnectEventFieldFilters = {
+  readonly [path: string]: ConnectEventFieldValue | readonly ConnectEventFieldValue[]
+}
+```
+
+Each path maps to a value, or to a list of values any of which matches. Values match exactly: strings are case-sensitive and `12` doesn't match `'12'`. A path through an array matches when any element has the value.
