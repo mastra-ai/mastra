@@ -360,3 +360,24 @@ describe('SearchInput that cannot be edited', () => {
     expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
   });
 });
+
+describe('SearchInput action', () => {
+  it('keeps the action reachable while the field is empty and after text is typed', () => {
+    render(
+      <SearchInput
+        label="Search threads"
+        onValueChange={vi.fn()}
+        action={
+          <button type="button" aria-label="Filter threads">
+            Filter
+          </button>
+        }
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Filter threads' })).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search threads' }), { target: { value: 'deal' } });
+    expect(screen.getByRole('button', { name: 'Filter threads' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Clear search' })).toBeTruthy();
+  });
+});

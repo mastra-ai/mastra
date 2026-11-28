@@ -18,6 +18,14 @@ export interface FormFrameProps {
   children: ReactNode;
 }
 
+function formGridClasses(hasAside: boolean, placement: FormFrameProps['asidePlacement']) {
+  if (!hasAside) return 'grid-rows-[auto_1fr]';
+  if (placement === 'start') {
+    return 'grid-rows-[auto_1fr] @4xl:max-w-226 @4xl:grid-cols-[--spacing(56)_minmax(0,--spacing(160))] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10';
+  }
+  return 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10';
+}
+
 /** The frame behind `<PageLayout variant="form">`. */
 export function FormFrame({
   breadcrumbs,
@@ -32,6 +40,7 @@ export function FormFrame({
 }: FormFrameProps) {
   const hasAside = Boolean(aside);
   const asideStart = hasAside && asidePlacement === 'start';
+  const gridClasses = formGridClasses(hasAside, asidePlacement);
 
   return (
     // A form shows one way back: breadcrumbs (multi-step create flows) replace the back link, never both.
@@ -39,14 +48,7 @@ export function FormFrame({
       <div className="@container grid min-h-full">
         <div
           data-slot="form-layout"
-          className={cn(
-            'mx-auto grid w-full max-w-160 min-w-0 grid-cols-1 gap-8 pt-6',
-            !hasAside
-              ? 'grid-rows-[auto_1fr]'
-              : asideStart
-                ? 'grid-rows-[auto_1fr] @4xl:max-w-226 @4xl:grid-cols-[--spacing(56)_minmax(0,--spacing(160))] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10'
-                : 'grid-rows-[auto_auto_1fr] @4xl:max-w-7xl @4xl:grid-cols-[minmax(0,--spacing(160))_minmax(--spacing(64),1fr)] @4xl:grid-rows-[auto_1fr] @4xl:gap-x-10',
-          )}
+          className={cn('mx-auto grid w-full max-w-160 min-w-0 grid-cols-1 gap-8 pt-6', gridClasses)}
         >
           <PageHeader className={asideStart ? '@4xl:col-span-2' : '@4xl:col-start-1'}>
             {!breadcrumbs && backHref !== undefined && backLabel !== undefined && (
