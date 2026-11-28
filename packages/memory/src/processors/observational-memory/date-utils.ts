@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 
 /**
  * Date/time utility functions for Observational Memory.
- * Pure functions for formatting relative timestamps and annotating observations.
+ * Functions for formatting relative timestamps and annotating observations; date formatters are cached by time zone and option set.
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000;
