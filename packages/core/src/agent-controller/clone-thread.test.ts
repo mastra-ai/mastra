@@ -374,7 +374,7 @@ describe('AgentController cloneThread', () => {
     it.each([
       ['an empty filter', { messageFilter: {} }],
       ['a limit', { messageLimit: 1 }],
-    ])('clone refuses fullThread with %s before anything is copied', async (_, selection) => {
+    ])('clone refuses contextWindowOnly with %s before anything is copied', async (_, selection) => {
       const { memoryStore, session } = await setup();
       await memoryStore.saveThread({
         thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
@@ -388,14 +388,14 @@ describe('AgentController cloneThread', () => {
       const before = await threadIds();
 
       await expect(
-        session.thread.clone({ sourceThreadId: 'src', options: { fullThread: true, ...selection } }),
-      ).rejects.toThrow(/fullThread/);
+        session.thread.clone({ sourceThreadId: 'src', options: { contextWindowOnly: true, ...selection } }),
+      ).rejects.toThrow(/contextWindowOnly/);
 
       expect(copy).not.toHaveBeenCalled();
       expect(await threadIds()).toEqual(before);
     });
 
-    it('cloneToCurrentResource refuses fullThread with a filter before anything is copied', async () => {
+    it('cloneToCurrentResource refuses contextWindowOnly with a filter before anything is copied', async () => {
       const { memoryStore, session } = await setup();
       await memoryStore.saveThread({
         thread: {
@@ -413,14 +413,14 @@ describe('AgentController cloneThread', () => {
           threadId: 'other',
           expectedResourceId: 'other-resource',
           expectedProjectPath: '/old/home',
-          options: { fullThread: true, messageFilter: { startDate: old } },
+          options: { contextWindowOnly: true, messageFilter: { startDate: old } },
         }),
-      ).rejects.toThrow(/fullThread/);
+      ).rejects.toThrow(/contextWindowOnly/);
 
       expect(copy).not.toHaveBeenCalled();
     });
 
-    it('clone through raw storage copies every message for fullThread and keeps it out of the storage call', async () => {
+    it('clone through raw storage keeps contextWindowOnly out of the storage call', async () => {
       const { memoryStore, session } = await setup();
       await memoryStore.saveThread({
         thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
@@ -430,7 +430,7 @@ describe('AgentController cloneThread', () => {
       });
       const copy = vi.spyOn(memoryStore, 'cloneThread');
 
-      const cloned = await session.thread.clone({ sourceThreadId: 'src', options: { fullThread: true } });
+      const cloned = await session.thread.clone({ sourceThreadId: 'src', options: { contextWindowOnly: true } });
 
       expect(copy.mock.calls[0]![0].options).toEqual({});
       expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toHaveLength(2);

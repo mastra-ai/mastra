@@ -41,36 +41,36 @@ async function setup() {
   return { clone, threadCount };
 }
 
-describe('POST /memory/threads/:threadId/clone with fullThread', () => {
+describe('POST /memory/threads/:threadId/clone with contextWindowOnly', () => {
   it.each([
     ['an empty filter', { messageFilter: {} }],
     ['a limit', { messageLimit: 1 }],
     ['a zero limit', { messageLimit: 0 }],
-  ])('answers 400 and clones nothing when fullThread comes with %s', async (_, selection) => {
+  ])('answers 400 and clones nothing when contextWindowOnly comes with %s', async (_, selection) => {
     const { clone, threadCount } = await setup();
 
-    const response = await clone({ fullThread: true, ...selection });
+    const response = await clone({ contextWindowOnly: true, ...selection });
 
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error).toBe('Invalid request body');
-    expect(body.issues.map((issue: { field: string }) => issue.field)).toEqual(['options.fullThread']);
+    expect(body.issues.map((issue: { field: string }) => issue.field)).toEqual(['options.contextWindowOnly']);
     expect(await threadCount()).toBe(1);
   });
 
-  it('copies every message for fullThread alone', async () => {
+  it('copies every message for contextWindowOnly when memory has observed nothing', async () => {
     const { clone } = await setup();
 
-    const response = await clone({ fullThread: true });
+    const response = await clone({ contextWindowOnly: true });
 
     expect(response.status).toBe(200);
     expect((await response.json()).clonedMessages).toHaveLength(3);
   });
 
-  it('applies the limit when fullThread is false', async () => {
+  it('applies the limit when contextWindowOnly is false', async () => {
     const { clone } = await setup();
 
-    const response = await clone({ fullThread: false, messageLimit: 1 });
+    const response = await clone({ contextWindowOnly: false, messageLimit: 1 });
 
     expect(response.status).toBe(200);
     const body = await response.json();
