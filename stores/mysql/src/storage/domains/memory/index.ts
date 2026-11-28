@@ -2316,7 +2316,15 @@ export class MemoryMySQL extends MemoryStorage {
         });
         // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
         if (!plan) return stored;
-        return this.rollOverOMRow(connection, stored.id, plan.observations, plan.tokenCount, input.newRecordId, false);
+        return this.rollOverOMRow(
+          connection,
+          stored.id,
+          plan.observations,
+          plan.tokenCount,
+          input.newRecordId,
+          false,
+          currentRecord.metadata,
+        );
       }, 'createReflectionGeneration');
     } catch (error) {
       rethrowOrWrapOM(error, input.currentRecord.id, 'CREATE_REFLECTION_GENERATION', {
@@ -2882,10 +2890,13 @@ export class MemoryMySQL extends MemoryStorage {
     tokenCount: number,
     newRecordId: string | undefined,
     clearBufferedReflection: boolean,
+    snapshotMetadata?: Record<string, unknown>,
   ): Promise<ObservationalMemoryRecord> {
     const id = newRecordId ?? globalThis.crypto.randomUUID();
     const nowSql = transformToSqlValue(new Date());
     const c = omCol;
+    // The caller's staged metadata (the durable observation cursor) is newer than the stored copy.
+    const metadataPatch = snapshotMetadata ? JSON.stringify(snapshotMetadata) : null;
     await connection.execute(
       `INSERT INTO ${OM_TABLE_QUOTED} (
         ${c('id')}, ${c('lookupKey')}, ${c('scope')}, ${c('resourceId')}, ${c('threadId')},
@@ -2903,9 +2914,11 @@ export class MemoryMySQL extends MemoryStorage {
         ${c('pendingMessageTokens')}, ${c('totalTokensObserved')}, ?, ${c('bufferedObservationChunks')},
         false, false, ${c('isBufferingObservation')}, false,
         ${c('lastBufferedAtTokens')}, ${c('lastBufferedAtTime')},
-        ${c('observedTimezone')}, ${c('metadata')}, NULL, ?, ?
+        ${c('observedTimezone')},
+        CASE WHEN ? IS NULL THEN ${c('metadata')} ELSE JSON_MERGE_PATCH(COALESCE(${c('metadata')}, '{}'), ?) END,
+        NULL, ?, ?
       FROM ${OM_TABLE_QUOTED} WHERE ${c('id')} = ?`,
-      [id, observations, nowSql, Math.round(tokenCount), nowSql, nowSql, storedId],
+      [id, observations, nowSql, Math.round(tokenCount), metadataPatch, metadataPatch, nowSql, nowSql, storedId],
     );
 
     // Retire the stored record: chunks moved, liveness marker set (never cleared).

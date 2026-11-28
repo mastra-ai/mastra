@@ -103,6 +103,8 @@ interface PendingSuccessor {
   /** Clear the old document's buffered reflection fields during cleanup (buffered reflection swap). */
   clearBufferedReflection: boolean;
   createdAt: Date;
+  /** The caller's staged metadata (the durable observation cursor), overlaid on the stored copy. */
+  snapshotMetadata?: Record<string, unknown> | null;
 }
 
 /**
@@ -146,7 +148,9 @@ function buildSuccessorDocument(old: any, pending: PendingSuccessor): Record<str
     lastBufferedAtTokens: old.lastBufferedAtTokens ?? 0,
     lastBufferedAtTime: old.lastBufferedAtTime ?? null,
     observedTimezone: old.observedTimezone ?? null,
-    metadata: old.metadata ?? null,
+    metadata: pending.snapshotMetadata
+      ? { ...(old.metadata ?? {}), ...pending.snapshotMetadata }
+      : (old.metadata ?? null),
     supersededBy: null,
     createdAt: pending.createdAt,
     updatedAt: pending.createdAt,
@@ -2093,6 +2097,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
           snapObservationTokenCount: currentRecord.observationTokenCount ?? 0,
           clearBufferedReflection: false,
           createdAt: new Date(),
+          snapshotMetadata: currentRecord.metadata ?? null,
         };
       });
     } catch (error) {

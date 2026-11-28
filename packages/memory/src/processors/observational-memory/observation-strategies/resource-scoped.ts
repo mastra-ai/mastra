@@ -1,9 +1,11 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
-import type { ThreadOMMetadata } from '@mastra/core/memory';
+import type { StorageThreadType, ThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 
+import { createThreadBranchError } from '../../../branching/core-compat';
+import { parseThreadBranchMetadata } from '../../../branching/lineage';
 import { OBSERVATIONAL_MEMORY_DEFAULTS } from '../constants';
 import {
   applyExtractorHooks,
@@ -17,7 +19,12 @@ import {
   createObservationStartMarker,
   createThreadUpdateMarker,
 } from '../markers';
-import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
+import {
+  getBufferedChunks,
+  getDurableObservedMessageIds,
+  getLastObservedMessageCursor,
+  sortThreadsByOldestMessage,
+} from '../message-utils';
 import type { ObservationGroup } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
@@ -96,7 +103,18 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
   async prepare() {
     const { record, threadId: currentThreadId, messages: currentThreadMessages } = this.opts;
 
-    const { threads: allThreads } = await this.storage.listThreads({ filter: { resourceId: this.resourceId } });
+    const branchOwned = record.threadId !== null;
+    let allThreads: StorageThreadType[];
+    if (branchOwned) {
+      const currentThread = await this.storage.getThreadById({ threadId: currentThreadId });
+      allThreads = currentThread?.resourceId === this.resourceId ? [currentThread] : [];
+    } else {
+      const { threads: resourceThreads } = await this.storage.listThreads({
+        filter: { resourceId: this.resourceId },
+        perPage: false,
+      });
+      allThreads = resourceThreads.filter(thread => !parseThreadBranchMetadata(thread));
+    }
     const threadMetadataMap = new Map<string, { lastObservedAt?: string }>();
 
     for (const thread of allThreads) {
@@ -107,20 +125,46 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       }
     }
 
-    for (const thread of allThreads) {
-      const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
-      const startDate = threadLastObservedAt ? new Date(new Date(threadLastObservedAt).getTime() + 1) : undefined;
-
-      const result = await this.storage.listMessages({
-        threadId: thread.id,
+    if (branchOwned) {
+      if (!this.deps.memory) {
+        throw createThreadBranchError(
+          'BRANCHING_UNSUPPORTED',
+          'Resource-scoped observation requires branch-aware Memory for shared history.',
+        );
+      }
+      const result = await this.deps.memory.recall({
+        threadId: currentThreadId,
+        resourceId: this.resourceId,
         perPage: false,
         orderBy: { field: 'createdAt', direction: 'ASC' },
-        filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
-
       const messages = result.messages.filter(msg => msg.role !== 'system');
-      if (messages.length > 0) {
-        this.messagesByThread.set(thread.id, messages);
+      if (messages.length > 0) this.messagesByThread.set(currentThreadId, messages);
+    } else {
+      // Equal-timestamp messages are only separated from the cursor by their IDs; with no IDs
+      // recorded, read strictly after the cursor so a message at it is not offered again.
+      const coversEqualTimestamps =
+        (Array.isArray(record.observedMessageIds) ? record.observedMessageIds.length : 0) > 0 ||
+        getDurableObservedMessageIds(record).length > 0;
+      for (const thread of allThreads) {
+        const threadLastObservedAt = threadMetadataMap.get(thread.id)?.lastObservedAt;
+        const startDate = threadLastObservedAt
+          ? new Date(
+              coversEqualTimestamps
+                ? new Date(threadLastObservedAt)
+                : new Date(new Date(threadLastObservedAt).getTime() + 1),
+            )
+          : undefined;
+        const result = await this.storage.listMessages({
+          threadId: thread.id,
+          resourceId: this.resourceId,
+          perPage: false,
+          orderBy: { field: 'createdAt', direction: 'ASC' },
+          filter: startDate ? { dateRange: { start: startDate } } : undefined,
+        });
+
+        const messages = result.messages.filter(msg => msg.role !== 'system');
+        if (messages.length > 0) this.messagesByThread.set(thread.id, messages);
       }
     }
 
@@ -138,8 +182,15 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
       this.messagesByThread.set(currentThreadId, Array.from(messageMap.values()));
     }
 
+    const observedMessageIds = new Set([
+      ...this.deps.observedMessageIds,
+      ...(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []),
+      ...getDurableObservedMessageIds(record),
+      ...(Array.isArray(record.bufferedMessageIds) ? record.bufferedMessageIds : []),
+      ...getBufferedChunks(record).flatMap(chunk => chunk.messageIds ?? []),
+    ]);
     for (const [tid, msgs] of this.messagesByThread) {
-      const filtered = msgs.filter(m => !this.deps.observedMessageIds.has(m.id));
+      const filtered = msgs.filter(m => !observedMessageIds.has(m.id));
       if (filtered.length > 0) {
         this.messagesByThread.set(tid, filtered);
       } else {
@@ -206,7 +257,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         })),
     });
 
-    const freshRecord = await this.storage.getObservationalMemory(null, this.resourceId);
+    const freshRecord = await this.storage.getObservationalMemory(record.threadId, this.resourceId);
     const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
     const allMessages = Array.from(this.threadsWithMessages.values()).flat();

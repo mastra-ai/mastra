@@ -165,6 +165,7 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       new Set(),
+      ['final-response'],
     );
     expect(mockOM.getUnobservedMessages).toHaveBeenCalledWith(finalMessageList.get.all.db(), mockOM._mockRecord);
     expect(mockOM.buffer).toHaveBeenCalledWith(
@@ -369,6 +370,7 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       new Set(),
+      ['unsaved-2'],
     );
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
@@ -463,6 +465,7 @@ describe('22573 idle', () => {
         'idle-buffer-thread',
         undefined,
         new Set(),
+        [],
       );
       if (expected) {
         expect(mockOM.buffer).toHaveBeenCalledWith(expect.objectContaining({ messages: messages.slice(0, expected) }));
@@ -502,6 +505,7 @@ describe('22573 idle', () => {
             'idle-buffer-thread',
             'idle-buffer-resource',
             new Set(),
+            source === 'response' ? [message.id] : [],
           );
         }
         expect(mockOM.buffer).not.toHaveBeenCalled();

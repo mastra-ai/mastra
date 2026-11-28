@@ -24,17 +24,27 @@ import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
   StorageListMessagesInput,
+  StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   StorageCopyThreadOutput,
+  BranchThreadInput,
+  BranchThreadOutput,
+  GetThreadBranchInput,
+  ListThreadBranchesInput,
+  ListThreadBranchesOutput,
+  ThreadBranchHistoryOutput,
 } from '../storage';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import type { IdGeneratorContext } from '../types';
 import { deepMerge } from '../utils';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
+
+import { assertNoReservedThreadBranchMetadata, createThreadBranchError } from './branching';
+import { persistGeneratedMessages, persistMessagesWithThreadCreation } from './internal';
 import {
   advanceMemoryTokenBoundary,
   getMemoryTokenBoundary,
@@ -42,7 +52,6 @@ import {
 } from './message-history-config';
 import { checkThreadFGA } from './thread-fga';
 import type { CheckThreadFGAOptions } from './thread-fga';
-
 import type {
   SharedMemoryConfig,
   StorageThreadType,
@@ -127,6 +136,11 @@ export { filterSystemReminderMessages, isSystemReminderMessage } from './system-
  * - Handles memory processors to manipulate messages before they are sent to the LLM
  */
 export abstract class MastraMemory extends MastraBase {
+  /** Whether this memory implementation supports shared-history thread branching. */
+  get supportsThreadBranching(): boolean {
+    return false;
+  }
+
   /**
    * Unique identifier for the memory instance.
    * If not provided, defaults to a static name 'default-memory'.
@@ -599,6 +613,23 @@ https://mastra.ai/en/docs/memory/overview`,
     embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }>;
 
+  /** @internal Framework-owned generated-message persistence hook. */
+  protected __mastraPersistGeneratedMessages(
+    args: {
+      messages: MastraDBMessage[];
+      memoryConfig?: MemoryConfig | undefined;
+      observabilityContext?: Partial<ObservabilityContext>;
+      /** @internal See `MastraMemory.saveMessages`. */
+      embeddedMessages?: Map<string, string>;
+      thread?: StorageThreadType;
+      skipVectors?: boolean;
+    },
+    _generatedMessageIds: readonly string[],
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
+    const { thread: _thread, skipVectors: _skipVectors, ...saveArgs } = args;
+    return this.saveMessages(saveArgs);
+  }
+
   /**
    * Retrieves messages for a specific thread with optional semantic recall
    * @param threadId - The unique identifier of the thread
@@ -647,6 +678,8 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
     saveThread?: boolean;
   }): Promise<StorageThreadType> {
+    assertNoReservedThreadBranchMetadata(metadata);
+
     const thread: StorageThreadType = {
       id:
         threadId ||
@@ -844,6 +877,20 @@ https://mastra.ai/en/docs/memory/overview`,
     return undefined;
   }
 
+  protected getMessageHistoryReader():
+    | ((input: StorageListMessagesInput) => Promise<StorageListMessagesOutput>)
+    | undefined {
+    return undefined;
+  }
+
+  protected getSemanticRecallMessageRetriever(
+    _semanticRecall: MemoryConfigInternal['semanticRecall'],
+  ):
+    | ((args: { query: string; threadId: string; resourceId?: string }) => Promise<MastraDBMessage[] | undefined>)
+    | undefined {
+    return undefined;
+  }
+
   /**
    * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
@@ -972,6 +1019,7 @@ https://mastra.ai/en/docs/memory/overview`,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
             tokenCounter: messageTokenCounter,
+            listMessages: this.getMessageHistoryReader(),
           }),
         );
       }
@@ -1017,16 +1065,19 @@ https://mastra.ai/en/docs/memory/overview`,
         const indexName = this.getEmbeddingIndexName(embeddingDimension);
 
         processors.push(
-          new SemanticRecall({
-            storage: memoryStore,
-            vector: this.vector,
-            embedder: this.embedder,
-            embedderOptions: this.embedderOptions,
-            embeddingDimension: this.embeddingDimension,
-            indexName,
-            ...semanticConfig,
-            maxChunkChars: this.configuredMaxChunkChars,
-          }),
+          new SemanticRecall(
+            {
+              storage: memoryStore,
+              vector: this.vector,
+              embedder: this.embedder,
+              embedderOptions: this.embedderOptions,
+              embeddingDimension: this.embeddingDimension,
+              indexName,
+              ...semanticConfig,
+              maxChunkChars: this.configuredMaxChunkChars,
+            },
+            this.getSemanticRecallMessageRetriever(effectiveConfig.semanticRecall),
+          ),
         );
       }
     }
@@ -1193,6 +1244,12 @@ https://mastra.ai/en/docs/memory/overview`,
         configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
         isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
+      // SemanticRecall's output step embeds the turn's messages, so the history
+      // save skips vectors only when that processor is in the pipeline.
+      const semanticRecallWritesVectors = [...configuredProcessors, ...processors].some(
+        p => !isProcessorWorkflow(p) && p.id === 'semantic-recall',
+      );
+
       // Skip MessageHistory output processor if ObservationalMemory handles message saving
       if (!hasMessageHistory && !hasObservationalMemory) {
         processors.push(
@@ -1206,6 +1263,18 @@ https://mastra.ai/en/docs/memory/overview`,
                     maxTokens: lastMessages.maxTokens,
                     atMaxRemoveTokens: lastMessages.atMaxRemoveTokens!,
                   },
+            listMessages: this.getMessageHistoryReader(),
+            ...(this.supportsThreadBranching
+              ? {
+                  persistMessages: (input, generatedMessageIds) =>
+                    persistMessagesWithThreadCreation(
+                      this,
+                      { ...input, skipVectors: semanticRecallWritesVectors },
+                      generatedMessageIds,
+                    ),
+                  persistMessagesCreatesThread: true,
+                }
+              : {}),
           }),
         );
       }
@@ -1220,6 +1289,34 @@ https://mastra.ai/en/docs/memory/overview`,
     messageIds: MessageDeleteInput,
     observabilityContext?: Partial<ObservabilityContext>,
   ): Promise<void>;
+
+  async branchThread(_input: BranchThreadInput): Promise<BranchThreadOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async getParentThread(_input: GetThreadBranchInput): Promise<StorageThreadType | null> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async listBranches(_input: ListThreadBranchesInput): Promise<ListThreadBranchesOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
+
+  async getBranchHistory(_input: GetThreadBranchInput): Promise<ThreadBranchHistoryOutput> {
+    throw createThreadBranchError(
+      'BRANCHING_UNSUPPORTED',
+      `Thread branching is not supported by this memory implementation (${this.constructor.name}).`,
+    );
+  }
 
   /**
    * Clones a thread with all its messages to a new thread

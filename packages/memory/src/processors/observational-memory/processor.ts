@@ -12,7 +12,7 @@ import type {
   ProcessOutputResultArgs,
   ProcessorSpanPhase,
 } from '@mastra/core/processors';
-import type { ObservationalMemoryRecord } from '@mastra/core/storage';
+import type { ObservationalMemoryHistoryOptions, ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
@@ -54,7 +54,7 @@ export interface MemoryContextProvider {
     otherThreadsContext: string | undefined;
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
-  persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  persistMessages(messages: MastraDBMessage[], generatedMessageIds?: readonly string[]): Promise<void>;
   getPersistedMessages?(threadId: string, ids: string[]): Promise<MastraDBMessage[]>;
 }
 
@@ -716,6 +716,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     timeoutMs?: number,
   ) {
     return this.engine.waitForBuffering(threadId, resourceId, timeoutMs);
+  }
+
+  async getRecord(threadId: string, resourceId?: string) {
+    return this.engine.getRecord(threadId, resourceId);
+  }
+
+  async getHistory(threadId: string, resourceId?: string, limit?: number, options?: ObservationalMemoryHistoryOptions) {
+    return this.engine.getHistory(threadId, resourceId, limit, options);
   }
 
   async getResolvedConfig(requestContext?: any) {

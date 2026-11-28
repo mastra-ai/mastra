@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../message-list';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
   createTextStreamModel,
@@ -59,6 +60,10 @@ describe('Agent signals: message ids', () => {
 
   it('uses the configured message ID generator for persisted sendMessage signal rows', async () => {
     const memory = new MockMemory();
+    const persistGenerated = vi.fn(async ({ messages }: { messages: MastraDBMessage[] }) =>
+      memory.saveMessages({ messages }),
+    );
+    (memory as any).__mastraPersistGeneratedMessages = persistGenerated;
     const threadId = 'configured-send-message-thread';
     const resourceId = 'configured-send-message-user';
     await memory.createThread({ threadId, resourceId });
@@ -95,6 +100,10 @@ describe('Agent signals: message ids', () => {
 
     await expect(result.persisted).resolves.toBeUndefined();
 
+    expect(persistGenerated).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: [expect.objectContaining({ id: result.signal.id })] }),
+      [result.signal.id],
+    );
     expect(result.signal.id).toMatch(/^message_custom_\d+$/);
     const recalled = await memory.recall({ threadId, resourceId });
     const persistedSignal = recalled.messages.find(message => message.role === 'signal');

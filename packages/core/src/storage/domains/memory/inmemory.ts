@@ -1237,7 +1237,13 @@ export class InMemoryMemory extends MemoryStorage {
       tokenCount: input.tokenCount,
     });
     if (!plan) return stored;
-    return this.rollOverObservationalMemory(stored, plan.observations, plan.tokenCount, input.newRecordId);
+    return this.rollOverObservationalMemory(
+      stored,
+      plan.observations,
+      plan.tokenCount,
+      input.newRecordId,
+      input.currentRecord.metadata,
+    );
   }
 
   /**
@@ -1250,6 +1256,7 @@ export class InMemoryMemory extends MemoryStorage {
     observations: string,
     tokenCount: number,
     newRecordId?: string,
+    snapshotMetadata?: Record<string, unknown>,
   ): ObservationalMemoryRecord {
     const key = this.getObservationalMemoryKey(stored.threadId, stored.resourceId);
     const now = new Date();
@@ -1282,8 +1289,9 @@ export class InMemoryMemory extends MemoryStorage {
       lastBufferedAtTime: stored.lastBufferedAtTime ?? null,
       // Timezone used for observation date formatting
       observedTimezone: stored.observedTimezone,
-      // Extensible metadata (optional)
-      metadata: stored.metadata ?? {},
+      // Extensible metadata (optional). The caller's staged metadata (the durable observation
+      // cursor) is newer than the stored copy and must survive the rollover.
+      metadata: structuredClone({ ...(stored.metadata ?? {}), ...(snapshotMetadata ?? {}) }),
     };
 
     // Retire the stored record: chunks moved, liveness marker set (never cleared).

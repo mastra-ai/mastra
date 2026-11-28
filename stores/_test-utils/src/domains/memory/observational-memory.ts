@@ -1052,6 +1052,57 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(newRecord.scope).toBe(input.scope);
       });
 
+      it("carries the caller's staged metadata over the stored metadata into the new generation", async () => {
+        const input = createSampleOMInput();
+        const now = new Date();
+        const storedOnly = { existing: true };
+        // Metadata can only be seeded through the optional raw insert.
+        try {
+          await memoryStorage.insertObservationalMemoryRecord({
+            id: randomUUID(),
+            scope: input.scope,
+            threadId: input.threadId,
+            resourceId: input.resourceId,
+            createdAt: now,
+            updatedAt: now,
+            lastObservedAt: now,
+            originType: 'initial',
+            generationCount: 0,
+            activeObservations: 'Initial observations',
+            totalTokensObserved: 0,
+            observationTokenCount: 100,
+            pendingMessageTokens: 0,
+            isReflecting: false,
+            isObserving: false,
+            isBufferingObservation: false,
+            isBufferingReflection: false,
+            lastBufferedAtTokens: 0,
+            lastBufferedAtTime: null,
+            config: {},
+            metadata: storedOnly,
+          });
+        } catch (error) {
+          if (String(error).includes('is not implemented by this storage adapter')) return;
+          throw error;
+        }
+        const current = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(current!.metadata).toEqual(storedOnly);
+        const staged = { cursor: { lastObservedAt: '2026-01-01T00:00:00.000Z', messageIds: ['observed'] } };
+
+        // The snapshot carries only the staged key, so a store that replaced the
+        // stored metadata with the snapshot's would lose `existing`.
+        const newRecord = await memoryStorage.createReflectionGeneration({
+          currentRecord: { ...current!, metadata: staged },
+          reflection: 'Condensed reflection',
+          tokenCount: 50,
+        });
+
+        expect(newRecord.metadata).toEqual({ ...storedOnly, ...staged });
+        const stored = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(stored!.id).toBe(newRecord.id);
+        expect(stored!.metadata).toEqual({ ...storedOnly, ...staged });
+      });
+
       it('should carry over lastObservedAt from current record', async () => {
         const input = createSampleOMInput();
         const initial = await memoryStorage.initializeObservationalMemory(input);

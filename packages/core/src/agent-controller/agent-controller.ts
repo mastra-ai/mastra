@@ -18,6 +18,12 @@ import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
+import {
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY,
+  MASTRA_THREAD_BRANCH_STATE_METADATA_KEY,
+  createThreadBranchError,
+} from '../memory/branching';
 import type { MastraMemory } from '../memory/memory';
 import type { StorageThreadType } from '../memory/types';
 import type { TracingContext, TracingOptions } from '../observability';
@@ -74,6 +80,34 @@ import { createEmptyTokenUsage } from './types';
 import type { ControllerRunBinding } from './worker-run-binding';
 import { CONTROLLER_RUN_BINDING_KEY, restoredWorkerControllerContexts } from './worker-run-binding';
 
+type RawThreadBranchMetadata = { state: 'pending' | 'ready'; parentThreadId: string };
+
+function getRawThreadBranchMetadata(thread: StorageThreadType): RawThreadBranchMetadata | null {
+  const value = thread.metadata?.[MASTRA_THREAD_BRANCH_METADATA_KEY];
+  if (value === undefined) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage is malformed.');
+  }
+  const branch = value as Record<string, unknown>;
+  if (
+    (branch.state !== 'pending' && branch.state !== 'ready') ||
+    typeof branch.parentThreadId !== 'string' ||
+    !branch.parentThreadId
+  ) {
+    throw createThreadBranchError('BRANCH_LINEAGE_CORRUPT', 'Stored thread branch lineage is malformed.');
+  }
+  return { state: branch.state, parentThreadId: branch.parentThreadId };
+}
+
+/**
+ * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
+ * so the key is collision-proof for arbitrary strings: a scoped session can
+ * never collide with an unscoped one or with a different resource/scope split
+ * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
+ */
+function sessionRegistryKey(resourceId: string, scope?: string): string {
+  return JSON.stringify([resourceId, scope ?? null]);
+}
 function validateModes(modes: AgentControllerMode[]): void {
   const modeIds = new Set<string>();
 
@@ -2455,6 +2489,31 @@ export class AgentController<TState = {}> {
         },
       },
     };
+
+    const target = await memoryStorage.getThreadById({ threadId });
+    const targetBranch = target ? getRawThreadBranchMetadata(target) : null;
+    if (targetBranch?.state === 'pending') {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    const readyChildren = target
+      ? await memoryStorage.listThreads({
+          filter: {
+            resourceId: target.resourceId,
+            metadata: {
+              [MASTRA_THREAD_BRANCH_PARENT_METADATA_KEY]: threadId,
+              [MASTRA_THREAD_BRANCH_STATE_METADATA_KEY]: 'ready',
+            },
+          },
+          page: 0,
+          perPage: 1,
+        })
+      : null;
+    if (targetBranch?.state === 'ready' || (readyChildren?.threads.length ?? 0) > 0) {
+      throw createThreadBranchError(
+        'BRANCHING_UNSUPPORTED',
+        'AgentController raw-storage reminder persistence does not support branch-tree participants.',
+      );
+    }
 
     const result = await memoryStorage.saveMessages({ messages: [dbMessage] });
     const saved = result.messages[0] ?? dbMessage;

@@ -15,13 +15,16 @@ type LanguageModelV2StreamPart =
 const threadId = 'projection-thread';
 const resourceId = 'projection-resource';
 
+// One fixed timestamp: tests resend whole messages, and stored timestamps cannot change.
+const createdAt = new Date('2026-01-01T00:00:00.000Z');
+
 function message(id = 'assistant'): MastraDBMessage {
   return {
     id,
     threadId,
     resourceId,
     role: 'assistant',
-    createdAt: new Date(),
+    createdAt,
     content: {
       format: 2,
       content: 'Visible <working_memory>private text</working_memory>',

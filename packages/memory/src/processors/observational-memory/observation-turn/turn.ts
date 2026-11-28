@@ -242,6 +242,7 @@ export class ObservationTurn {
         this.threadId,
         this.resourceId,
         idsMarkedForResave(messageList, [...unsavedInput, ...unsavedOutput]),
+        unsavedOutput.map(message => message.id),
       );
     }
 

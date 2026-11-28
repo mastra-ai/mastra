@@ -16,6 +16,12 @@ import { assertEmbeddingDimension, isEmbeddingDimensionMismatchError } from './e
 const DEFAULT_TOP_K = 4;
 const DEFAULT_MESSAGE_RANGE = 1; // Will be used for both before and after
 
+type SemanticRecallMessageRetriever = (args: {
+  query: string;
+  threadId: string;
+  resourceId?: string;
+}) => Promise<MastraDBMessage[] | undefined>;
+
 export interface SemanticRecallOptions {
   /**
    * Storage instance for retrieving messages
@@ -179,7 +185,10 @@ export class SemanticRecall implements Processor {
     return !this.embedder && this.vector.isSelfEmbedding;
   }
 
-  constructor(options: SemanticRecallOptions) {
+  constructor(
+    options: SemanticRecallOptions,
+    private readonly messageRetriever?: SemanticRecallMessageRetriever,
+  ) {
     this.storage = options.storage;
     this.vector = options.vector;
     this.embedder = options.embedder;
@@ -439,6 +448,9 @@ export class SemanticRecall implements Processor {
     threadId: string;
     resourceId?: string;
   }): Promise<MastraDBMessage[]> {
+    const retrieved = await this.messageRetriever?.({ query, threadId, resourceId });
+    if (retrieved) return retrieved;
+
     // Ensure vector index exists
     const indexName = this.indexName || this.getDefaultIndexName();
 

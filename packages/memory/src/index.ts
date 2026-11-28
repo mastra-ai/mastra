@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
@@ -14,10 +16,10 @@ import {
   MESSAGE_EMBEDDING_CHARS_PER_TOKEN,
   buildMessageEmbeddingRows,
   chunkMessageText,
-  loadMessageHistory,
-  normalizeMessageHistoryConfig,
   getMemoryTokenBoundary,
   isAfterMemoryTokenBoundary,
+  loadMessageHistory,
+  normalizeMessageHistoryConfig,
   resolveMaxChunkChars,
   upsertMessageVectors,
 } from '@mastra/core/memory';
@@ -67,7 +69,46 @@ import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
+import {
+  assertNoReservedThreadBranchMetadata,
+  createThreadBranchError,
+  MASTRA_THREAD_BRANCH_METADATA_KEY,
+} from './branching/core-compat';
+import type {
+  BranchThreadInput,
+  BranchThreadOutput,
+  GeneratedMessagePersistenceInput,
+  GetThreadBranchInput,
+  InternalThreadBranchMetadata,
+  ListThreadBranchesInput,
+  ListThreadBranchesOutput,
+  ThreadBranchHistoryOutput,
+} from './branching/core-compat';
+import {
+  compareMessageTuples,
+  hasChildThread,
+  listChildThreads,
+  parseThreadBranchMetadata,
+  resolveThreadLineage,
+  resourceHasBranch,
+  sanitizeThread,
+  serializeThreadBranchMetadata,
+  threadBranchMetadataFields,
+  toPublicThreadBranchMetadata,
+} from './branching/lineage';
+import {
+  assertResourceHasNoReadyBranches,
+  getThreadBranchParticipation,
+  queryThreadMessages,
+  resolveThreadBranchSegments,
+} from './branching/query';
+import type { ThreadBranchSegment } from './branching/query';
+import { queryReachableVectorResults } from './branching/semantic-recall';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import {
+  remapDurableObservedMessageIds,
+  withDurableObservationCursor,
+} from './processors/observational-memory/message-utils';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -547,6 +588,10 @@ export class Memory extends MastraMemory {
     return new TokenCounter();
   }
 
+  override get supportsThreadBranching(): boolean {
+    return true;
+  }
+
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
@@ -703,6 +748,7 @@ export class Memory extends MastraMemory {
 
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const memoryStore = await this.getMemoryStore();
+    await assertResourceHasNoReadyBranches(memoryStore, args.resourceId);
     return memoryStore.listMessagesByResourceId(args);
   }
 
@@ -872,6 +918,12 @@ export class Memory extends MastraMemory {
         );
       }
 
+      const memoryStore = await this.getMemoryStore();
+      const semanticBranchSegments =
+        config.semanticRecall && vectorSearchString
+          ? await this.resolveSemanticBranchSegments(memoryStore, threadId, resourceScope ? resourceId : undefined)
+          : undefined;
+
       let usage: { tokens: number } | undefined;
 
       if (config?.semanticRecall && vectorSearchString && this.vector) {
@@ -905,14 +957,36 @@ export class Memory extends MastraMemory {
                 );
               }
 
-              vectorResults.push(
-                ...(await this.vector.query({
-                  indexName,
-                  queryVector: embedding,
-                  topK: vectorConfig.topK,
-                  filter: combinedFilter,
-                })),
-              );
+              if (semanticBranchSegments) {
+                vectorResults.push(
+                  ...(await queryReachableVectorResults({
+                    memoryStore,
+                    segments: semanticBranchSegments,
+                    topK: vectorConfig.topK,
+                    threshold: typeof config.semanticRecall === 'object' ? config.semanticRecall.threshold : undefined,
+                    userFilter,
+                    query: (topK, branchFilter) =>
+                      this.vector!.query({
+                        // The SemanticRecall processor writes rows to a configured custom index.
+                        indexName:
+                          (typeof config.semanticRecall === 'object' ? config.semanticRecall.indexName : undefined) ??
+                          indexName,
+                        queryVector: embedding,
+                        topK,
+                        filter: branchFilter,
+                      }),
+                  })),
+                );
+              } else {
+                vectorResults.push(
+                  ...(await this.vector.query({
+                    indexName,
+                    queryVector: embedding,
+                    topK: vectorConfig.topK,
+                    filter: combinedFilter,
+                  })),
+                );
+              }
             }),
           );
         }
@@ -920,16 +994,24 @@ export class Memory extends MastraMemory {
 
       const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
       const threshold = semanticConfig?.threshold;
+      // A branch recall may reach ancestor threads on the branch's path, so the scope guard admits
+      // any of those; everything else must belong to the recalled thread.
+      const reachableThreadIds = semanticBranchSegments
+        ? new Set(semanticBranchSegments.map(segment => segment.thread.id))
+        : undefined;
       // Check each hit's scope as well as the store's filter, so a store that drops or misapplies
       // filters cannot bring other threads' or resources' messages into recall.
       const filteredVectorResults = vectorResults.filter(
         r =>
           (threshold === undefined || r.score >= threshold) &&
-          (resourceScope ? r.metadata?.resource_id === resourceId : r.metadata?.thread_id === threadId),
+          (resourceScope
+            ? r.metadata?.resource_id === resourceId
+            : reachableThreadIds
+              ? reachableThreadIds.has(r.metadata?.thread_id)
+              : r.metadata?.thread_id === threadId),
       );
 
       // Get raw messages from storage
-      const memoryStore = await this.getMemoryStore();
       const include = filteredVectorResults.map(r => ({
         id: r.metadata?.message_id,
         threadId: r.metadata?.thread_id,
@@ -954,8 +1036,17 @@ export class Memory extends MastraMemory {
           storedBoundary.atMaxRemoveTokens === history.atMaxRemoveTokens
             ? storedBoundary
             : undefined;
+        const branchAwareMemoryStore = new Proxy(memoryStore, {
+          get(target, property, receiver) {
+            if (property === 'listMessages') {
+              return (input: StorageListMessagesInput) => queryThreadMessages(target, input);
+            }
+            const value = Reflect.get(target, property, receiver);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
         const loaded = await loadMessageHistory({
-          storage: memoryStore,
+          storage: branchAwareMemoryStore,
           threadId,
           resourceId,
           boundary,
@@ -969,7 +1060,7 @@ export class Memory extends MastraMemory {
         rawMessages = loaded.messages;
 
         if (include.length) {
-          const semanticMessages = await memoryStore.listMessages({
+          const semanticMessages = await queryThreadMessages(memoryStore, {
             threadId,
             resourceId,
             perPage: 0,
@@ -993,7 +1084,7 @@ export class Memory extends MastraMemory {
         // When history is disabled by config, use perPage: 0 so only semantic recall
         // include results are returned (not the full message history)
         const effectivePerPage = historyDisabledByConfig ? 0 : perPage;
-        const paginatedResult = await memoryStore.listMessages({
+        const paginatedResult = await queryThreadMessages(memoryStore, {
           threadId,
           resourceId,
           perPage: effectivePerPage,
@@ -1012,7 +1103,10 @@ export class Memory extends MastraMemory {
       // context neighbour, that the vector hit's metadata placed in scope but storage does not.
       if (include.length) {
         rawMessages = rawMessages.filter(
-          message => message.threadId === threadId || (resourceScope && message.resourceId === resourceId),
+          message =>
+            message.threadId === threadId ||
+            (!!message.threadId && reachableThreadIds?.has(message.threadId)) ||
+            (resourceScope && message.resourceId === resourceId),
         );
       }
 
@@ -1038,7 +1132,298 @@ export class Memory extends MastraMemory {
     }
   }
 
-  async getThreadById({
+  // These locks coordinate Memory instances in this process only. Adapters must provide durable
+  // transactions or row locks when branch mutations can race across processes.
+  private static readonly branchMutationMutexes = new Map<string, Mutex>();
+  private static readonly BRANCH_ID_COLLISION_RETRIES = 5;
+
+  private async withBranchMutationLocks<T>(keys: string[], operation: () => Promise<T>): Promise<T> {
+    const uniqueKeys = [...new Set(keys)].sort();
+    const acquired: Array<{ mutex: Mutex; release: () => void }> = [];
+    try {
+      for (const key of uniqueKeys) {
+        const mutex = Memory.branchMutationMutexes.get(key) ?? new Mutex();
+        Memory.branchMutationMutexes.set(key, mutex);
+        acquired.push({ mutex, release: await mutex.acquire() });
+      }
+      return await operation();
+    } finally {
+      for (const entry of acquired.reverse()) entry.release();
+      for (const key of uniqueKeys) {
+        const mutex = Memory.branchMutationMutexes.get(key);
+        if (mutex && !mutex.isLocked()) Memory.branchMutationMutexes.delete(key);
+      }
+    }
+  }
+
+  private async getBranchMutationThreadLockKeys(
+    memoryStore: MemoryStorage,
+    targetThreadIds: Iterable<string | undefined>,
+  ): Promise<string[]> {
+    const lineage = new Map<string, Pick<StorageThreadType, 'id' | 'resourceId'> | null>();
+    for (const targetThreadId of new Set([...targetThreadIds].filter((id): id is string => Boolean(id)))) {
+      let currentId: string | undefined = targetThreadId;
+      while (currentId && !lineage.has(currentId)) {
+        const current = await memoryStore.getThreadById({ threadId: currentId });
+        lineage.set(currentId, current);
+        currentId = current ? parseThreadBranchMetadata(current)?.parentThreadId : undefined;
+      }
+    }
+
+    const lockIds = new Set(lineage.keys());
+    for (const thread of lineage.values()) {
+      if (!thread) continue;
+      for (const child of await listChildThreads(memoryStore, thread)) {
+        parseThreadBranchMetadata(child);
+        lockIds.add(child.id);
+      }
+    }
+
+    return [...lockIds].map(id => `thread:${id}`);
+  }
+
+  private async withValidatedMessageMutation<T>(
+    memoryStore: MemoryStorage,
+    messages: MastraDBMessage[],
+    operation: (validatedMessages: MastraDBMessage[]) => Promise<T>,
+    generatedMessageIds: readonly string[] = [],
+    threadToCreate?: StorageThreadType,
+  ): Promise<T> {
+    const existingMessages = await memoryStore.listMessagesById({ messageIds: messages.map(message => message.id) });
+    const ownerThreadIds = [
+      ...new Set(
+        [
+          ...messages.map(message => message.threadId),
+          ...existingMessages.messages.map(message => message.threadId),
+          threadToCreate?.id,
+        ].filter((threadId): threadId is string => Boolean(threadId)),
+      ),
+    ];
+    // Only the threads the messages belong to, and their direct branches, decide whether a
+    // mutation touches the branch tree; the rest of the resource is never read.
+    const loadOwnerThreads = async () => {
+      const byId = new Map<string, StorageThreadType>();
+      for (const threadId of ownerThreadIds) {
+        const thread = await memoryStore.getThreadById({ threadId });
+        if (thread) byId.set(thread.id, thread);
+      }
+      return byId;
+    };
+    const ownerHasBranchTree = async (owners: Map<string, StorageThreadType>) => {
+      for (const owner of owners.values()) {
+        if (parseThreadBranchMetadata(owner) || (await hasChildThread(memoryStore, owner))) return true;
+      }
+      return false;
+    };
+    const initialOwners = await loadOwnerThreads();
+    const keys = [
+      ...((await ownerHasBranchTree(initialOwners))
+        ? await this.getBranchMutationThreadLockKeys(memoryStore, ownerThreadIds)
+        : []),
+      ...messages.flatMap(message => [
+        `message:${message.id}`,
+        ...(message.threadId ? [`thread:${message.threadId}`] : []),
+      ]),
+    ];
+    return this.withBranchMutationLocks(keys, async () => {
+      const threadById = await loadOwnerThreads();
+      if (!threadToCreate && generatedMessageIds.length === 0 && !(await ownerHasBranchTree(threadById))) {
+        return operation(messages);
+      }
+      const shouldCreateThread = Boolean(threadToCreate && !threadById.has(threadToCreate.id));
+      if (threadToCreate) {
+        assertNoReservedThreadBranchMetadata(threadToCreate.metadata);
+        const existingThread = threadById.get(threadToCreate.id);
+        if (existingThread && existingThread.resourceId !== threadToCreate.resourceId) {
+          throw createThreadBranchError(
+            'BRANCH_MUTATION_CONFLICT',
+            'A message cannot change thread or resource ownership.',
+          );
+        }
+        if (!existingThread) threadById.set(threadToCreate.id, threadToCreate);
+      }
+      // A message is referenced by a ready branch when it sorts at or before that branch's branch
+      // point; only the owner's direct ready branches carry branch points into the owner thread.
+      const readyChildBranchPoints = new Map<string, InternalThreadBranchMetadata[]>();
+      for (const owner of threadById.values()) {
+        if (owner === threadToCreate && shouldCreateThread) {
+          readyChildBranchPoints.set(owner.id, []);
+          continue;
+        }
+        const children = await listChildThreads(memoryStore, owner, 'ready');
+        readyChildBranchPoints.set(
+          owner.id,
+          children.map(child => parseThreadBranchMetadata(child)!),
+        );
+      }
+      const refreshedMessages = await memoryStore.listMessagesById({ messageIds: messages.map(message => message.id) });
+      const existingById = new Map(refreshedMessages.messages.map(message => [message.id, message]));
+      const generatedIds = new Set(generatedMessageIds);
+      const mixedTrustedBatch = generatedIds.size > 0 && generatedIds.size < messages.length;
+      const latestTupleByThread = new Map<string, { createdAt: Date; id: string }>();
+      const generatedLowerBoundByThread = new Map<string, number>();
+      const validatedMessages: MastraDBMessage[] = [];
+
+      for (const inputMessage of messages) {
+        let message = inputMessage;
+        if (!message.id || !message.threadId) {
+          throw createThreadBranchError('BRANCH_INVALID_REQUEST', 'Branch-tree messages require IDs and thread IDs.');
+        }
+        const owner = threadById.get(message.threadId);
+        const ownerBranch = owner ? parseThreadBranchMetadata(owner) : null;
+        if (ownerBranch?.state === 'pending') {
+          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+        }
+        if (!owner || owner.resourceId !== message.resourceId) {
+          throw createThreadBranchError(
+            'BRANCH_MUTATION_CONFLICT',
+            'A message cannot change thread or resource ownership.',
+          );
+        }
+        const existing = existingById.get(message.id);
+        if (existing && (existing.threadId !== message.threadId || existing.resourceId !== message.resourceId)) {
+          throw createThreadBranchError(
+            'BRANCH_MUTATION_CONFLICT',
+            'A message cannot change thread or resource ownership.',
+          );
+        }
+
+        const ownerReadyChildren = readyChildBranchPoints.get(message.threadId) ?? [];
+        const participatesInBranchTree = Boolean(ownerBranch) || ownerReadyChildren.length > 0;
+        const existingGenerated = generatedIds.has(message.id) && existing;
+        if (generatedIds.has(message.id)) {
+          if (existing) {
+            message = { ...message, createdAt: existing.createdAt };
+          } else if (participatesInBranchTree || mixedTrustedBatch) {
+            if (!generatedLowerBoundByThread.has(message.threadId)) {
+              const physical = await memoryStore.listMessages({
+                threadId: message.threadId,
+                perPage: false,
+                orderBy: { field: 'createdAt', direction: 'ASC' },
+              });
+              const latest = physical.messages.sort(compareMessageTuples).at(-1);
+              let lowerBound = latest ? new Date(latest.createdAt).getTime() : -Infinity;
+              if (ownerBranch) lowerBound = Math.max(lowerBound, ownerBranch.branchPointCreatedAt.getTime());
+              for (const child of ownerReadyChildren) {
+                lowerBound = Math.max(lowerBound, child.branchPointCreatedAt.getTime());
+              }
+              generatedLowerBoundByThread.set(message.threadId, lowerBound);
+            }
+            const previousAccepted = latestTupleByThread.get(message.threadId);
+            const minimumTimestamp = Math.max(
+              generatedLowerBoundByThread.get(message.threadId)! + 1,
+              (previousAccepted?.createdAt.getTime() ?? -Infinity) + 1,
+            );
+            if (message.createdAt.getTime() < minimumTimestamp) {
+              message = { ...message, createdAt: new Date(minimumTimestamp) };
+            }
+          }
+        }
+
+        const previousAccepted = latestTupleByThread.get(message.threadId!);
+        // A row re-saved at its stored timestamp keeps its stored place, which generated-message
+        // normalization may already have put before a generated row from an earlier save.
+        const unchangedStoredRow =
+          existing && new Date(existing.createdAt).getTime() === new Date(message.createdAt).getTime();
+        if (
+          !existingGenerated &&
+          !unchangedStoredRow &&
+          mixedTrustedBatch &&
+          previousAccepted &&
+          compareMessageTuples(message, previousAccepted) <= 0
+        ) {
+          throw createThreadBranchError(
+            'BRANCH_MUTATION_CONFLICT',
+            'A mixed generated-message batch must preserve same-thread tuple order.',
+          );
+        }
+        if (
+          !previousAccepted ||
+          (!existingGenerated && compareMessageTuples(message, previousAccepted) > 0) ||
+          (existingGenerated && compareMessageTuples(existing!, previousAccepted) > 0)
+        ) {
+          const watermark = existingGenerated ? existing! : message;
+          latestTupleByThread.set(message.threadId!, { createdAt: new Date(watermark.createdAt), id: watermark.id });
+        }
+
+        if (ownerBranch) {
+          const lowerBound = {
+            createdAt: ownerBranch.branchPointCreatedAt,
+            id: ownerBranch.branchPointMessageId,
+          };
+          if (compareMessageTuples(message, lowerBound) <= 0) {
+            throw createThreadBranchError(
+              'BRANCH_MUTATION_CONFLICT',
+              'A branch-owned message must sort after its branch point.',
+            );
+          }
+        }
+
+        for (const descendantEdge of ownerReadyChildren) {
+          const cutoff = {
+            createdAt: descendantEdge.branchPointCreatedAt,
+            id: descendantEdge.branchPointMessageId,
+          };
+          const existingWasReferenced = existing ? compareMessageTuples(existing, cutoff) <= 0 : false;
+          const resultWouldBeReferenced = compareMessageTuples(message, cutoff) <= 0;
+          if (
+            (existingWasReferenced && !isDeepStrictEqual(existing, message)) ||
+            (!existingWasReferenced && resultWouldBeReferenced)
+          ) {
+            throw createThreadBranchError(
+              'BRANCH_MUTATION_CONFLICT',
+              'A message mutation cannot rewrite a referenced branch prefix.',
+            );
+          }
+        }
+        validatedMessages.push(message);
+      }
+
+      if (!shouldCreateThread || !threadToCreate) return operation(validatedMessages);
+      await memoryStore.saveThread({ thread: threadToCreate });
+      try {
+        return await operation(validatedMessages);
+      } catch (error) {
+        await memoryStore.deleteThread({ threadId: threadToCreate.id });
+        throw error;
+      }
+    });
+  }
+
+  private async assertMessagesCanBeDeleted(memoryStore: MemoryStorage, messages: MastraDBMessage[]): Promise<void> {
+    // A message is part of a ready branch's shared prefix when its thread has a ready direct
+    // branch whose branch point sorts at or after it.
+    const branchPointsByThread = new Map<string, InternalThreadBranchMetadata[]>();
+    for (const message of messages) {
+      if (!message.threadId || branchPointsByThread.has(message.threadId)) continue;
+      const thread = await memoryStore.getThreadById({ threadId: message.threadId });
+      branchPointsByThread.set(
+        message.threadId,
+        thread
+          ? (await listChildThreads(memoryStore, thread, 'ready')).map(child => parseThreadBranchMetadata(child)!)
+          : [],
+      );
+    }
+    for (const message of messages) {
+      const branchPoints = message.threadId ? (branchPointsByThread.get(message.threadId) ?? []) : [];
+      if (
+        branchPoints.some(
+          branch =>
+            compareMessageTuples(message, {
+              createdAt: branch.branchPointCreatedAt,
+              id: branch.branchPointMessageId,
+            }) <= 0,
+        )
+      ) {
+        throw createThreadBranchError(
+          'BRANCH_MUTATION_CONFLICT',
+          'Referenced branch-prefix messages cannot be deleted.',
+        );
+      }
+    }
+  }
+
+  private async getRawThreadById({
     threadId,
     resourceId,
   }: {
@@ -1049,9 +1434,45 @@ export class Memory extends MastraMemory {
     return memoryStore.getThreadById({ threadId, resourceId });
   }
 
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
+    const thread = await this.getRawThreadById({ threadId, resourceId });
+    if (!thread) return null;
+    const branch = parseThreadBranchMetadata(thread);
+    if (branch?.state === 'pending') return null;
+    return sanitizeThread(thread);
+  }
+
   async listThreads(args: StorageListThreadsInput): Promise<StorageListThreadsOutput> {
+    assertNoReservedThreadBranchMetadata(args.filter?.metadata);
+    const page = args.page ?? 0;
+    const perPage = args.perPage ?? 100;
+    if (!Number.isInteger(page) || page < 0) {
+      throw new Error('page must be >= 0');
+    }
+    if (perPage !== false && (!Number.isInteger(perPage) || perPage < 0)) {
+      throw new Error('perPage must be >= 0');
+    }
+
     const memoryStore = await this.getMemoryStore();
-    return memoryStore.listThreads(args);
+    const result = await memoryStore.listThreads({ ...args, page: 0, perPage: false });
+    const allThreads = result.threads
+      .filter(thread => parseThreadBranchMetadata(thread)?.state !== 'pending')
+      .map(sanitizeThread);
+    const offset = perPage === false ? 0 : page * perPage;
+    const threads = perPage === false ? allThreads : allThreads.slice(offset, offset + perPage);
+    return {
+      threads,
+      total: allThreads.length,
+      page,
+      perPage,
+      hasMore: perPage === false ? false : offset + perPage < allThreads.length,
+    };
   }
 
   private async handleWorkingMemoryFromMetadata({
@@ -1087,19 +1508,43 @@ export class Memory extends MastraMemory {
     thread: StorageThreadType;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
+    assertNoReservedThreadBranchMetadata(thread.metadata);
     const memoryStore = await this.getMemoryStore();
-    const savedThread = await memoryStore.saveThread({ thread });
+    return this.withBranchMutationLocks(
+      await this.getBranchMutationThreadLockKeys(memoryStore, [thread.id]),
+      async () => {
+        const existing = await memoryStore.getThreadById({ threadId: thread.id });
+        const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
+        if (existingBranch?.state === 'pending') {
+          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+        }
+        const hasDescendants = existing ? await hasChildThread(memoryStore, existing, 'ready') : false;
+        if ((existingBranch || hasDescendants) && existing?.resourceId !== thread.resourceId) {
+          throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A branch lineage member cannot change resources.');
+        }
 
-    // Check if metadata contains workingMemory and working memory is enabled
-    if (thread.metadata?.workingMemory && typeof thread.metadata.workingMemory === 'string' && thread.resourceId) {
-      await this.handleWorkingMemoryFromMetadata({
-        workingMemory: thread.metadata.workingMemory,
-        resourceId: thread.resourceId,
-        memoryConfig,
-      });
-    }
+        const persistedThread = existingBranch
+          ? {
+              ...thread,
+              metadata: {
+                ...thread.metadata,
+                ...threadBranchMetadataFields(existingBranch),
+              },
+            }
+          : thread;
+        const savedThread = await memoryStore.saveThread({ thread: persistedThread });
 
-    return savedThread;
+        if (thread.metadata?.workingMemory && typeof thread.metadata.workingMemory === 'string' && thread.resourceId) {
+          await this.handleWorkingMemoryFromMetadata({
+            workingMemory: thread.metadata.workingMemory,
+            resourceId: thread.resourceId,
+            memoryConfig,
+          });
+        }
+
+        return sanitizeThread(savedThread);
+      },
+    );
   }
 
   /**
@@ -1120,29 +1565,334 @@ export class Memory extends MastraMemory {
     metadata?: Record<string, unknown>;
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
+    assertNoReservedThreadBranchMetadata(metadata);
     const memoryStore = await this.getMemoryStore();
-    const updatedThread = await memoryStore.patchThread({
-      id,
-      title,
-      metadata,
-    });
-
-    // Check if metadata contains workingMemory and working memory is enabled
-    if (metadata?.workingMemory && typeof metadata.workingMemory === 'string' && updatedThread.resourceId) {
-      await this.handleWorkingMemoryFromMetadata({
-        workingMemory: metadata.workingMemory as string,
-        resourceId: updatedThread.resourceId,
-        memoryConfig,
+    return this.withBranchMutationLocks(await this.getBranchMutationThreadLockKeys(memoryStore, [id]), async () => {
+      const existing = await memoryStore.getThreadById({ threadId: id });
+      const existingBranch = existing ? parseThreadBranchMetadata(existing) : null;
+      if (existingBranch?.state === 'pending') {
+        throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+      }
+      const persistedMetadata =
+        metadata === undefined
+          ? undefined
+          : {
+              ...metadata,
+              ...(existingBranch ? threadBranchMetadataFields(existingBranch) : {}),
+            };
+      const updatedThread = await memoryStore.patchThread({
+        id,
+        title,
+        metadata: persistedMetadata,
       });
+
+      if (metadata?.workingMemory && typeof metadata.workingMemory === 'string' && updatedThread.resourceId) {
+        await this.handleWorkingMemoryFromMetadata({
+          workingMemory: metadata.workingMemory as string,
+          resourceId: updatedThread.resourceId,
+          memoryConfig,
+        });
+      }
+
+      return sanitizeThread(updatedThread);
+    });
+  }
+
+  /**
+   * Creates a shared-history child thread. Generic adapters are synchronized only within this
+   * Memory instance; concurrent out-of-process source mutation requires adapter-level atomicity.
+   */
+  public override async branchThread(input: BranchThreadInput): Promise<BranchThreadOutput> {
+    if (
+      !input ||
+      typeof input.threadId !== 'string' ||
+      input.threadId.length === 0 ||
+      typeof input.branchPointMessageId !== 'string' ||
+      input.branchPointMessageId.length === 0 ||
+      (input.title !== undefined && typeof input.title !== 'string') ||
+      (input.metadata !== undefined &&
+        (typeof input.metadata !== 'object' || input.metadata === null || Array.isArray(input.metadata)))
+    ) {
+      throw createThreadBranchError('BRANCH_INVALID_REQUEST', 'Invalid thread branch request.');
+    }
+    assertNoReservedThreadBranchMetadata(input.metadata);
+    if (input.metadata && Object.prototype.hasOwnProperty.call(input.metadata, 'workingMemory')) {
+      throw createThreadBranchError(
+        'BRANCH_MUTATION_CONFLICT',
+        'Branch metadata cannot set workingMemory; Mastra initializes branch working memory.',
+      );
     }
 
-    return updatedThread;
+    const memoryStore = await this.getMemoryStore();
+    const initialLineage = await resolveThreadLineage(memoryStore, input.threadId);
+    const initialSource = initialLineage.entries.at(-1)!;
+    const initialFork = initialLineage.messages.find(message => message.id === input.branchPointMessageId);
+    if (!initialFork) {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    const sourceSnapshot = {
+      resourceId: initialSource.thread.resourceId,
+      branch: initialSource.branch ? serializeThreadBranchMetadata(initialSource.branch) : null,
+    };
+    const forkSnapshot = structuredClone(initialFork);
+    const lockKeys = [
+      ...initialLineage.entries.map(entry => `thread:${entry.thread.id}`),
+      `message:${input.branchPointMessageId}`,
+    ];
+
+    for (let attempt = 0; attempt < Memory.BRANCH_ID_COLLISION_RETRIES; attempt += 1) {
+      const childThreadId = this.generateId({
+        idType: 'thread',
+        source: 'memory',
+        resourceId: initialSource.thread.resourceId,
+      });
+      const result = await this.withBranchMutationLocks([...lockKeys, `thread:${childThreadId}`], async () => {
+        if (await memoryStore.getThreadById({ threadId: childThreadId })) return null;
+
+        const currentLineage = await resolveThreadLineage(memoryStore, input.threadId);
+        const currentSource = currentLineage.entries.at(-1)!;
+        const currentFork = currentLineage.messages.find(message => message.id === input.branchPointMessageId);
+        if (!currentFork) {
+          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+        }
+        if (
+          !isDeepStrictEqual(sourceSnapshot, {
+            resourceId: currentSource.thread.resourceId,
+            branch: currentSource.branch ? serializeThreadBranchMetadata(currentSource.branch) : null,
+          }) ||
+          !isDeepStrictEqual(forkSnapshot, currentFork)
+        ) {
+          throw createThreadBranchError(
+            'BRANCH_MUTATION_CONFLICT',
+            'The source thread changed while the branch was being created.',
+          );
+        }
+
+        const branchCreatedAt = new Date();
+        const branch: InternalThreadBranchMetadata = {
+          parentThreadId: input.threadId,
+          branchPointMessageId: currentFork.id,
+          branchPointCreatedAt: new Date(currentFork.createdAt),
+          branchCreatedAt,
+          observationalMemoryThreadId: childThreadId,
+          state: 'pending',
+        };
+        const config = this.getMergedThreadConfig();
+        const observationalMemoryConfig = normalizeObservationalMemoryConfig(config.observationalMemory);
+        if (observationalMemoryConfig && !memoryStore.supportsObservationalMemory) {
+          throw createThreadBranchError(
+            'BRANCHING_UNSUPPORTED',
+            'Thread branching with Observational Memory requires adapter Observational Memory support.',
+          );
+        }
+        let workingMemory: string | null = null;
+        if (config.workingMemory?.enabled && (config.workingMemory.scope ?? 'resource') === 'thread') {
+          workingMemory = await this.getWorkingMemory({
+            threadId: input.threadId,
+            resourceId: currentSource.thread.resourceId,
+          });
+        }
+        const child: StorageThreadType = {
+          id: childThreadId,
+          resourceId: currentSource.thread.resourceId,
+          title: input.title ?? currentSource.thread.title,
+          metadata: {
+            ...input.metadata,
+            ...(workingMemory ? { workingMemory } : {}),
+            ...threadBranchMetadataFields(branch),
+          },
+          createdAt: branchCreatedAt,
+          updatedAt: branchCreatedAt,
+        };
+
+        let childCreated = false;
+        try {
+          await memoryStore.saveThread({ thread: child });
+          childCreated = true;
+
+          if (observationalMemoryConfig) {
+            await this.cloneBranchObservationalMemory({
+              memoryStore,
+              sourceLineage: currentLineage,
+              branchPoint: currentFork,
+              childThreadId,
+              resourceId: currentSource.thread.resourceId,
+              scope: observationalMemoryConfig.scope ?? 'thread',
+            });
+          }
+
+          const finalLineage = await resolveThreadLineage(memoryStore, input.threadId);
+          const finalSource = finalLineage.entries.at(-1)!;
+          const finalFork = finalLineage.messages.find(message => message.id === input.branchPointMessageId);
+          const pendingChild = await memoryStore.getThreadById({ threadId: childThreadId });
+          if (
+            !finalFork ||
+            !isDeepStrictEqual(sourceSnapshot, {
+              resourceId: finalSource.thread.resourceId,
+              branch: finalSource.branch ? serializeThreadBranchMetadata(finalSource.branch) : null,
+            }) ||
+            !isDeepStrictEqual(forkSnapshot, finalFork) ||
+            !isDeepStrictEqual(child, pendingChild)
+          ) {
+            throw createThreadBranchError(
+              'BRANCH_MUTATION_CONFLICT',
+              'The source thread changed while the branch was being created.',
+            );
+          }
+
+          branch.state = 'ready';
+          const readyThread = await memoryStore.patchThread({
+            id: childThreadId,
+            metadata: {
+              ...child.metadata,
+              ...threadBranchMetadataFields(branch),
+            },
+          });
+          return { thread: sanitizeThread(readyThread), branch: toPublicThreadBranchMetadata(branch) };
+        } catch (error) {
+          if (childCreated) {
+            if (observationalMemoryConfig && memoryStore.supportsObservationalMemory) {
+              try {
+                await memoryStore.clearObservationalMemory(childThreadId, currentSource.thread.resourceId);
+              } catch (rollbackError) {
+                this.logger.error('Failed to rollback pending thread branch Observational Memory', rollbackError);
+              }
+            }
+            try {
+              await memoryStore.deleteThread({ threadId: childThreadId });
+            } catch (rollbackError) {
+              this.logger.error('Failed to rollback pending thread branch', rollbackError);
+            }
+          }
+          throw error;
+        }
+      });
+      if (result) return result;
+    }
+
+    throw createThreadBranchError(
+      'BRANCH_MUTATION_CONFLICT',
+      `Unable to allocate a unique branch thread ID after ${Memory.BRANCH_ID_COLLISION_RETRIES} attempts.`,
+    );
+  }
+
+  private async cloneBranchObservationalMemory({
+    memoryStore,
+    sourceLineage,
+    branchPoint,
+    childThreadId,
+    resourceId,
+    scope,
+  }: {
+    memoryStore: MemoryStorage;
+    sourceLineage: Awaited<ReturnType<typeof resolveThreadLineage>>;
+    branchPoint: MastraDBMessage;
+    childThreadId: string;
+    resourceId: string;
+    scope: 'thread' | 'resource';
+  }): Promise<void> {
+    const source = sourceLineage.entries.at(-1)!;
+    const sourceStorageThreadId =
+      scope === 'thread' ? source.thread.id : (source.branch?.observationalMemoryThreadId ?? null);
+    const sourceRecord = await memoryStore.getObservationalMemory(sourceStorageThreadId, resourceId);
+    if (!sourceRecord) return;
+
+    const reachableMessageIds = Object.fromEntries(
+      sourceLineage.messages
+        .filter(message => compareMessageTuples(message, branchPoint) <= 0)
+        .map(message => [message.id, message.id]),
+    );
+    const hasher = scope === 'resource' ? await this.hasher : undefined;
+    let cloned = this.remapObservationalMemoryRecord(sourceRecord, {
+      newThreadId: childThreadId,
+      newResourceId: resourceId,
+      messageIdMap: reachableMessageIds,
+      sourceThreadId: scope === 'resource' ? source.thread.id : undefined,
+      clonedThreadId: scope === 'resource' ? childThreadId : undefined,
+      hasher,
+    });
+    if (cloned.lastObservedAt && cloned.lastObservedAt.getTime() > branchPoint.createdAt.getTime()) {
+      cloned.lastObservedAt = new Date(branchPoint.createdAt);
+      cloned.observedMessageIds = sourceLineage.messages
+        .filter(message => message.createdAt.getTime() === branchPoint.createdAt.getTime())
+        .filter(message => compareMessageTuples(message, branchPoint) <= 0)
+        .map(message => message.id);
+      cloned = withDurableObservationCursor(cloned);
+    }
+    const now = new Date();
+    cloned.id = crypto.randomUUID();
+    cloned.createdAt = now;
+    cloned.updatedAt = now;
+    await memoryStore.insertObservationalMemoryRecord(cloned);
+  }
+
+  public override async getParentThread(input: GetThreadBranchInput): Promise<StorageThreadType | null> {
+    const memoryStore = await this.getMemoryStore();
+    const lineage = await resolveThreadLineage(memoryStore, input.threadId);
+    const selected = lineage.entries.at(-1)!;
+    if (!selected.branch) return null;
+    return sanitizeThread(lineage.entries.at(-2)!.thread);
+  }
+
+  public override async listBranches(input: ListThreadBranchesInput): Promise<ListThreadBranchesOutput> {
+    const page = input.page ?? 0;
+    const perPage = input.perPage ?? 100;
+    if (
+      !Number.isInteger(page) ||
+      page < 0 ||
+      (perPage === false ? page !== 0 : !Number.isInteger(perPage) || perPage <= 0)
+    ) {
+      throw createThreadBranchError('BRANCH_INVALID_REQUEST', 'Invalid branch pagination request.');
+    }
+
+    const memoryStore = await this.getMemoryStore();
+    const parentLineage = await resolveThreadLineage(memoryStore, input.threadId);
+    const parent = parentLineage.entries.at(-1)!.thread;
+    const toBranch = async (thread: StorageThreadType): Promise<BranchThreadOutput> => {
+      await resolveThreadLineage(memoryStore, thread.id);
+      return {
+        thread: sanitizeThread(thread),
+        branch: toPublicThreadBranchMetadata(parseThreadBranchMetadata(thread)!),
+      };
+    };
+    const children = await listChildThreads(memoryStore, parent, 'ready');
+    const offset = perPage === false ? 0 : page * perPage;
+    const selected = perPage === false ? children : children.slice(offset, offset + perPage);
+    return {
+      branches: await Promise.all(selected.map(toBranch)),
+      total: children.length,
+      page,
+      perPage,
+      hasMore: offset + selected.length < children.length,
+    };
+  }
+
+  public override async getBranchHistory(input: GetThreadBranchInput): Promise<ThreadBranchHistoryOutput> {
+    const memoryStore = await this.getMemoryStore();
+    const lineage = await resolveThreadLineage(memoryStore, input.threadId);
+    return {
+      history: lineage.entries.map(entry => ({
+        thread: sanitizeThread(entry.thread),
+        branch: entry.branch ? toPublicThreadBranchMetadata(entry.branch) : null,
+      })),
+    };
   }
 
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
-    const thread = await memoryStore.getThreadById({ threadId });
-    await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
+    await this.withBranchMutationLocks(
+      await this.getBranchMutationThreadLockKeys(memoryStore, [threadId]),
+      async () => {
+        const thread = await memoryStore.getThreadById({ threadId });
+        if (thread && parseThreadBranchMetadata(thread)?.state === 'pending') {
+          throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+        }
+        if (thread && (await hasChildThread(memoryStore, thread, 'ready'))) {
+          throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A thread with branches cannot be deleted.');
+        }
+        await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
+      },
+    );
   }
 
   private async deleteStoredThread(memoryStore: MemoryStorage, threadId: string, resourceId?: string): Promise<void> {
@@ -1285,8 +2035,8 @@ export class Memory extends MastraMemory {
             workingMemory,
           });
         } else {
-          const thread = await this.getThreadById({ threadId });
-          if (!thread) {
+          const thread = await memoryStore.getThreadById({ threadId });
+          if (!thread || parseThreadBranchMetadata(thread)?.state === 'pending') {
             throw new Error(`Thread ${threadId} not found`);
           }
 
@@ -1520,8 +2270,8 @@ ${workingMemory}`;
         }
       } else {
         // Update working memory in thread metadata (existing behavior)
-        const thread = await this.getThreadById({ threadId });
-        if (!thread) {
+        const thread = await memoryStore.getThreadById({ threadId });
+        if (!thread || parseThreadBranchMetadata(thread)?.state === 'pending') {
           throw new Error(`Thread ${threadId} not found`);
         }
 
@@ -1780,6 +2530,27 @@ ${workingMemory}`;
     /** @internal See `MastraMemory.saveMessages`. */
     embeddedMessages?: Map<string, string>;
   }): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
+    return this.saveMessagesInternal({ messages, memoryConfig, observabilityContext, embeddedMessages }, []);
+  }
+
+  protected override __mastraPersistGeneratedMessages(
+    input: GeneratedMessagePersistenceInput,
+    generatedMessageIds: readonly string[],
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
+    return this.saveMessagesInternal(input, generatedMessageIds);
+  }
+
+  private async saveMessagesInternal(
+    {
+      messages,
+      memoryConfig,
+      observabilityContext,
+      embeddedMessages,
+      thread,
+      skipVectors,
+    }: GeneratedMessagePersistenceInput,
+    generatedMessageIds: readonly string[],
+  ): Promise<{ messages: MastraDBMessage[]; usage?: { tokens: number } }> {
     const span = this.createMemorySpan('save', observabilityContext, undefined, {
       messageCount: messages.length,
     });
@@ -1798,14 +2569,29 @@ ${workingMemory}`;
       })
         .add(updatedMessages, 'memory')
         .get.all.db();
+      if (generatedMessageIds.length > 0) {
+        const inputOrder = new Map(messages.map((message, index) => [message.id, index]));
+        dbMessages.sort(
+          (a, b) =>
+            (inputOrder.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (inputOrder.get(b.id) ?? Number.MAX_SAFE_INTEGER),
+        );
+      }
 
       const memoryStore = await this.getMemoryStore();
-      const result = await memoryStore.saveMessages({
-        messages: dbMessages,
-      });
+      let persistedMessages = dbMessages;
+      const result = await this.withValidatedMessageMutation(
+        memoryStore,
+        dbMessages,
+        async validatedMessages => {
+          persistedMessages = validatedMessages;
+          return memoryStore.saveMessages({ messages: validatedMessages });
+        },
+        generatedMessageIds,
+        thread,
+      );
 
       const usage =
-        this.vector && config.semanticRecall
+        this.vector && config.semanticRecall && !skipVectors
           ? await this.writeMessageVectors({
               items: updatedMessages.map(message => ({ message })),
               config,
@@ -2198,44 +2984,15 @@ ${workingMemory}`;
     // 3. Load messages — unobserved if OM is active, or recent N
     let messages: MastraDBMessage[];
     if (omEngine && omRecord) {
-      // OM is active: load unobserved messages.
-      // When lastObservedAt exists, load only messages after the boundary.
-      // When lastObservedAt is NULL (no observations yet), load ALL messages
-      // so the threshold check can fire on the full context.
-      const dateFilter = omRecord.lastObservedAt
-        ? { dateRange: { start: new Date(new Date(omRecord.lastObservedAt).getTime() + 1) } }
-        : undefined;
-
       const boundary = omRecord.lastObservedAt ? new Date(omRecord.lastObservedAt).toISOString() : '';
-      if (omEngine.scope === 'resource' && resourceId) {
-        const loadMessages = async () => {
-          const result = await memoryStore.listMessagesByResourceId({
-            resourceId,
-            orderBy: { field: 'createdAt', direction: 'ASC' },
-            perPage: false,
-            includeTotal: false,
-            filter: dateFilter,
-          });
-          return result.messages;
-        };
-        messages = runState
-          ? await runState.load(`observational-memory:messages:resource:${resourceId}:${boundary}`, loadMessages)
-          : await loadMessages();
-      } else {
-        const loadMessages = async () => {
-          const result = await memoryStore.listMessages({
-            threadId,
-            orderBy: { field: 'createdAt', direction: 'ASC' },
-            perPage: false,
-            includeTotal: false,
-            filter: dateFilter,
-          });
-          return result.messages;
-        };
-        messages = runState
-          ? await runState.load(`observational-memory:messages:thread:${threadId}:${boundary}`, loadMessages)
-          : await loadMessages();
-      }
+      const loadMessages = () => omEngine.loadUnobservedMessages({ threadId, resourceId });
+      const scopeKey =
+        omEngine.scope === 'resource' && resourceId
+          ? `resource:${resourceId}:thread:${threadId}`
+          : `thread:${threadId}`;
+      messages = runState
+        ? await runState.load(`observational-memory:messages:${scopeKey}:${boundary}`, loadMessages)
+        : await loadMessages();
     } else {
       // No OM: load recent messages
       const lastMessages = normalizeMessageHistoryConfig(config.lastMessages, config.messageHistory);
@@ -2280,7 +3037,7 @@ ${workingMemory}`;
         });
         messages = messageList.get.all.db();
       } else {
-        const result = await memoryStore.listMessages({
+        const result = await queryThreadMessages(memoryStore, {
           threadId,
           resourceId,
           orderBy: { field: 'createdAt', direction: 'DESC' },
@@ -2306,14 +3063,20 @@ ${workingMemory}`;
    * Raw message upsert — apply the persistence projection without embedding or extracting working memory.
    * Used by the processor to save sealed messages before firing a background buffer operation.
    */
-  async persistMessages(messages: MastraDBMessage[]): Promise<void> {
+  async persistMessages(messages: MastraDBMessage[], generatedMessageIds: readonly string[] = []): Promise<void> {
     if (messages.length === 0) return;
 
     const persistableMessages = this.prepareMessagesForPersistence(messages);
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
-    await memoryStore.saveMessages({ messages: persistableMessages });
+    const persistedIds = new Set(persistableMessages.map(message => message.id));
+    await this.withValidatedMessageMutation(
+      memoryStore,
+      persistableMessages,
+      validatedMessages => memoryStore.saveMessages({ messages: validatedMessages }).then(() => undefined),
+      generatedMessageIds.filter(messageId => persistedIds.has(messageId)),
+    );
   }
 
   /**
@@ -3077,129 +3840,162 @@ Notes:
 
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
+    const existingResult = await memoryStore.listMessagesById({ messageIds: messages.map(message => message.id) });
+    const existingById = new Map(existingResult.messages.map(message => [message.id, message]));
 
-    // Use effective content for filtering/empty-message decisions, but keep the
-    // patch shape: forwarding omitted fields would overwrite concurrent edits.
-    const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
-    const existingById = new Map(existing.messages.map(m => [m.id, m]));
-    // Text to index per edited message, read from the projected effective content so a
-    // sparse patch does not hide stored text. Fields the patch sets take priority.
-    const textForEmbeddingById = new Map<string, string | null>();
-    const textFields = ['content', 'parts'] as const;
-    const textOf = (
-      content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
-      fields: readonly (typeof textFields)[number][],
-    ): string | null => {
-      for (const field of fields) {
-        const text =
-          field === 'content'
-            ? content.content?.trim()
-              ? content.content
-              : null
-            : (content.parts ?? [])
-                .filter((part): part is TextPart => part?.type === 'text')
-                .map(part => part.text)
-                .join(' ')
-                .trim();
-        if (text) return text;
-      }
-      return null;
-    };
-    messages = messages.flatMap(update => {
-      const stored = existingById.get(update.id);
-      if (!stored) return [];
-      const effective = {
-        ...stored,
-        ...update,
-        content:
-          update.content === undefined
-            ? stored.content
-            : {
-                ...stored.content,
-                ...update.content,
-                metadata: { ...stored.content.metadata, ...update.content.metadata },
-              },
-      };
-      const [projected] = this.prepareMessagesForPersistence([effective]);
-      if (!projected) return [];
-      if (update.content === undefined) {
-        existingById.set(update.id, effective);
-        return [update];
-      }
-      const content = {
-        ...update.content,
-        ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
-        ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
-        ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
-      };
-      existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
-      const patched = textFields.filter(field => update.content?.[field] !== undefined);
-      if (patched.length > 0) {
-        const omitted = textFields.filter(field => !patched.includes(field));
-        // Fall back to stored text only when the projection hid the patched text, not
-        // when the edit cleared it.
-        const text =
-          textOf(projected.content, patched) ??
-          (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
-        textForEmbeddingById.set(update.id, text);
-      }
-      return [{ ...update, content }];
-    });
-    if (messages.length === 0) return [];
-
-    // Update vector database if semantic recall is enabled and any messages have text updates
-    if (this.vector && config.semanticRecall) {
-      const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
-
-      if (messagesWithTextUpdates.length > 0) {
-        // Reuse the pre-update rows for vector metadata.
-        const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
-
-        // Old rows go for every edited message: cleared text leaves nothing to index, and new text
-        // can have fewer chunks or land in another index if the embedding model changed.
-        const messageIdsNeedingDeletion = new Set<string>();
-        const items: MessageEmbeddingItem[] = [];
-        for (const { id } of messagesWithTextUpdates) {
-          const existingMessage = existingMessagesMap.get(id);
-          if (!existingMessage) continue;
-          messageIdsNeedingDeletion.add(id);
-          const text = textForEmbeddingById.get(id);
-          if (text) items.push({ message: existingMessage, text });
-        }
-
-        // Embed before deleting, so a failed embedding call leaves the old rows searchable.
-        const rows = await this.buildMessageVectorRows({ items });
-
-        if (messageIdsNeedingDeletion.size > 0) {
-          try {
-            const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
-            const idsToDelete = [...messageIdsNeedingDeletion];
-
-            await Promise.all(
-              memoryIndexes.map(async indexName => {
-                for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
-                  const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
-                  try {
-                    await this.vector!.deleteVectors({
-                      indexName,
-                      filter: { message_id: { $in: batch } },
-                    });
-                  } catch {
-                    this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
-                  }
-                }
-              }),
-            );
-          } catch {
-            this.logger.debug('Failed to clean up old vectors during message update');
-          }
-        }
-
-        await this.writeMessageVectorRows({ rows, config });
+    // A caller may resend a whole message, but the stored timestamp is immutable: branch history
+    // and observation cursors order by it, so only an unchanged value is accepted.
+    for (const message of messages) {
+      if (message.createdAt === undefined) continue;
+      const stored = existingById.get(message.id)?.createdAt;
+      if (!stored || new Date(message.createdAt).getTime() !== new Date(stored).getTime()) {
+        throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'Message timestamps cannot be updated.');
       }
     }
+    const resultingMessages = messages.flatMap(update => {
+      const existing = existingById.get(update.id);
+      if (!existing) return [];
+      const content =
+        update.content === undefined
+          ? existing.content
+          : {
+              ...existing.content,
+              ...update.content,
+              ...(existing.content.metadata || update.content.metadata
+                ? { metadata: { ...existing.content.metadata, ...update.content.metadata } }
+                : {}),
+            };
+      return [{ ...existing, ...update, content } satisfies MastraDBMessage];
+    });
+    return this.withValidatedMessageMutation(memoryStore, resultingMessages, async () => {
+      // Use effective content for filtering/empty-message decisions, but keep the
+      // patch shape: forwarding omitted fields would overwrite concurrent edits.
+      const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
+      const existingById = new Map(existing.messages.map(m => [m.id, m]));
+      // Text to index per edited message, read from the projected effective content so a
+      // sparse patch does not hide stored text. Fields the patch sets take priority.
+      const textForEmbeddingById = new Map<string, string | null>();
+      const textFields = ['content', 'parts'] as const;
+      const textOf = (
+        content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
+        fields: readonly (typeof textFields)[number][],
+      ): string | null => {
+        for (const field of fields) {
+          const text =
+            field === 'content'
+              ? content.content?.trim()
+                ? content.content
+                : null
+              : (content.parts ?? [])
+                  .filter((part): part is TextPart => part?.type === 'text')
+                  .map(part => part.text)
+                  .join(' ')
+                  .trim();
+          if (text) return text;
+        }
+        return null;
+      };
+      messages = messages.flatMap(update => {
+        const stored = existingById.get(update.id);
+        if (!stored) return [];
+        const effective = {
+          ...stored,
+          ...update,
+          content:
+            update.content === undefined
+              ? stored.content
+              : {
+                  ...stored.content,
+                  ...update.content,
+                  metadata: { ...stored.content.metadata, ...update.content.metadata },
+                },
+        };
+        const [projected] = this.prepareMessagesForPersistence([effective]);
+        if (!projected) return [];
+        if (update.content === undefined) {
+          existingById.set(update.id, effective);
+          return [update];
+        }
+        const content = {
+          ...update.content,
+          ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
+          ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
+          ...(update.content.toolInvocations !== undefined
+            ? { toolInvocations: projected.content.toolInvocations }
+            : {}),
+        };
+        existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+        const patched = textFields.filter(field => update.content?.[field] !== undefined);
+        if (patched.length > 0) {
+          const omitted = textFields.filter(field => !patched.includes(field));
+          // Fall back to stored text only when the projection hid the patched text, not
+          // when the edit cleared it.
+          const text =
+            textOf(projected.content, patched) ??
+            (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
+          textForEmbeddingById.set(update.id, text);
+        }
+        return [{ ...update, content }];
+      });
+      if (messages.length === 0) return [];
 
-    return memoryStore.updateMessages({ messages });
+      // Storage first: a rejected update must leave the vectors untouched.
+      const updatedMessages = await memoryStore.updateMessages({ messages });
+
+      // Update vector database if semantic recall is enabled and any messages have text updates
+      if (this.vector && config.semanticRecall) {
+        const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
+
+        if (messagesWithTextUpdates.length > 0) {
+          // Reuse the pre-update rows for vector metadata.
+          const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
+
+          // Old rows go for every edited message: cleared text leaves nothing to index, and new text
+          // can have fewer chunks or land in another index if the embedding model changed.
+          const messageIdsNeedingDeletion = new Set<string>();
+          const items: MessageEmbeddingItem[] = [];
+          for (const { id } of messagesWithTextUpdates) {
+            const existingMessage = existingMessagesMap.get(id);
+            if (!existingMessage) continue;
+            messageIdsNeedingDeletion.add(id);
+            const text = textForEmbeddingById.get(id);
+            if (text) items.push({ message: existingMessage, text });
+          }
+
+          // Embed before deleting, so a failed embedding call leaves the old rows searchable.
+          const rows = await this.buildMessageVectorRows({ items });
+
+          if (messageIdsNeedingDeletion.size > 0) {
+            try {
+              const memoryIndexes = await this.getMemoryVectorIndexes([this.messageIndexPrefix]);
+              const idsToDelete = [...messageIdsNeedingDeletion];
+
+              await Promise.all(
+                memoryIndexes.map(async indexName => {
+                  for (let i = 0; i < idsToDelete.length; i += VECTOR_DELETE_BATCH_SIZE) {
+                    const batch = idsToDelete.slice(i, i + VECTOR_DELETE_BATCH_SIZE);
+                    try {
+                      await this.vector!.deleteVectors({
+                        indexName,
+                        filter: { message_id: { $in: batch } },
+                      });
+                    } catch {
+                      this.logger.debug('Failed to delete vector batch, skipping', { indexName, batchOffset: i });
+                    }
+                  }
+                }),
+              );
+            } catch {
+              this.logger.debug('Failed to clean up old vectors during message update');
+            }
+          }
+
+          await this.writeMessageVectorRows({ rows, config });
+        }
+      }
+
+      return updatedMessages;
+    });
   }
 
   /**
@@ -3244,10 +4040,42 @@ Notes:
 
     try {
       const memoryStore = await this.getMemoryStore();
+      let deleted = false;
+      for (let attempt = 0; attempt < Memory.BRANCH_ID_COLLISION_RETRIES && !deleted; attempt += 1) {
+        const storedMessages = await memoryStore.listMessagesById({ messageIds });
+        const resourceIds = [
+          ...new Set(
+            storedMessages.messages.map(message => message.resourceId).filter((id): id is string => Boolean(id)),
+          ),
+        ].sort();
+        await this.withBranchMutationLocks(
+          (
+            await this.getBranchMutationThreadLockKeys(
+              memoryStore,
+              storedMessages.messages.map(message => message.threadId),
+            )
+          ).concat(messageIds.map(id => `message:${id}`)),
+          async () => {
+            const refreshedMessages = await memoryStore.listMessagesById({ messageIds });
+            const refreshedResourceIds = [
+              ...new Set(
+                refreshedMessages.messages.map(message => message.resourceId).filter((id): id is string => Boolean(id)),
+              ),
+            ].sort();
+            if (!isDeepStrictEqual(resourceIds, refreshedResourceIds)) return;
 
-      await memoryStore.deleteMessages(messageIds);
-      if (this.vector) {
-        this.trackVectorCleanup(this.deleteMessageVectors(messageIds));
+            await this.assertMessagesCanBeDeleted(memoryStore, refreshedMessages.messages);
+            await memoryStore.deleteMessages(messageIds);
+            if (this.vector) this.trackVectorCleanup(this.deleteMessageVectors(messageIds));
+            deleted = true;
+          },
+        );
+      }
+      if (!deleted) {
+        throw createThreadBranchError(
+          'BRANCH_MUTATION_CONFLICT',
+          'Message ownership changed repeatedly while validating deletion.',
+        );
       }
 
       span?.end({ output: { success: true }, attributes: { messageCount: messageIds.length } });
@@ -3378,10 +4206,18 @@ Notes:
     args: StorageCloneThreadInput,
     memoryConfig?: MemoryConfigInternal,
   ): Promise<StorageCopyThreadOutput> {
+    assertNoReservedThreadBranchMetadata(args.metadata);
     const memoryStore = await this.getMemoryStore();
+    const sourceThreadRaw = await memoryStore.getThreadById({ threadId: args.sourceThreadId });
+    if (sourceThreadRaw && parseThreadBranchMetadata(sourceThreadRaw)?.state === 'pending') {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
     const config = this.getMergedThreadConfig(memoryConfig);
+    const participation = await getThreadBranchParticipation(memoryStore, args.sourceThreadId);
 
-    const result = await memoryStore.copyThread(args);
+    const result = participation.participant
+      ? await this.copyReachableBranchHistory(memoryStore, args, sourceThreadRaw!)
+      : await memoryStore.copyThread(args);
 
     // Fetch source thread once for working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
@@ -3443,7 +4279,90 @@ Notes:
       }
     }
 
-    return result;
+    return { ...result, thread: sanitizeThread(result.thread) };
+  }
+
+  private async copyReachableBranchHistory(
+    memoryStore: MemoryStorage,
+    args: StorageCloneThreadInput,
+    sourceThread: StorageThreadType,
+  ): Promise<StorageCopyThreadOutput> {
+    const destinationThreadId = args.newThreadId ?? this.generateId();
+    if (await memoryStore.getThreadById({ threadId: destinationThreadId })) {
+      throw new Error(`Thread with id ${destinationThreadId} already exists`);
+    }
+
+    const filter = args.options?.messageFilter;
+    const logicalResult = await queryThreadMessages(memoryStore, {
+      threadId: args.sourceThreadId,
+      resourceId: sourceThread.resourceId,
+      perPage: false,
+      includeTotal: false,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      ...(filter?.startDate || filter?.endDate
+        ? {
+            filter: {
+              dateRange: {
+                ...(filter.startDate ? { start: filter.startDate } : {}),
+                ...(filter.endDate ? { end: filter.endDate } : {}),
+              },
+            },
+          }
+        : {}),
+    });
+
+    let selectedMessages = logicalResult.messages;
+    if (filter?.messageIds) {
+      const selectedIds = new Set(filter.messageIds);
+      selectedMessages = selectedMessages.filter(message => selectedIds.has(message.id));
+    }
+    if (
+      args.options?.messageLimit &&
+      args.options.messageLimit > 0 &&
+      selectedMessages.length > args.options.messageLimit
+    ) {
+      selectedMessages = selectedMessages.slice(-args.options.messageLimit);
+    }
+
+    const now = new Date();
+    const lastMessageId = selectedMessages.at(-1)?.id;
+    const thread: StorageThreadType = {
+      id: destinationThreadId,
+      resourceId: args.resourceId || sourceThread.resourceId,
+      title: args.title || (sourceThread.title ? `Clone of ${sourceThread.title}` : undefined),
+      metadata: {
+        ...args.metadata,
+        clone: {
+          sourceThreadId: args.sourceThreadId,
+          clonedAt: now,
+          ...(lastMessageId ? { lastMessageId } : {}),
+        } satisfies ThreadCloneMetadata,
+      },
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const messageIdMap: Record<string, string> = {};
+    const copiedMessages = selectedMessages.map(message => {
+      const id = this.generateId();
+      messageIdMap[message.id] = id;
+      return {
+        ...message,
+        id,
+        threadId: destinationThreadId,
+        resourceId: thread.resourceId,
+      };
+    });
+
+    await memoryStore.saveThread({ thread });
+    try {
+      if (copiedMessages.length > 0) await memoryStore.saveMessages({ messages: copiedMessages });
+    } catch (error) {
+      await memoryStore.deleteThread({ threadId: destinationThreadId });
+      throw error;
+    }
+
+    return { thread, messageIdMap };
   }
 
   /**
@@ -3532,7 +4451,18 @@ Notes:
     }
   }
 
-  public async updateThreadResourceId({
+  public async updateThreadResourceId(input: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType> {
+    const memoryStore = await this.getMemoryStore();
+    return this.withBranchMutationLocks(await this.getBranchMutationThreadLockKeys(memoryStore, [input.threadId]), () =>
+      this.updateThreadResourceIdUnderLock(input),
+    );
+  }
+
+  private async updateThreadResourceIdUnderLock({
     threadId,
     resourceId,
     memoryConfig,
@@ -3542,6 +4472,15 @@ Notes:
     memoryConfig?: MemoryConfigInternal;
   }): Promise<StorageThreadType> {
     const memoryStore = await this.getMemoryStore();
+    const existingRaw = await memoryStore.getThreadById({ threadId });
+    const existingBranch = existingRaw ? parseThreadBranchMetadata(existingRaw) : null;
+    if (existingBranch?.state === 'pending') {
+      throw createThreadBranchError('BRANCH_NOT_FOUND', 'The requested thread branch is unavailable.');
+    }
+    const hasReadyDescendants = existingRaw ? await hasChildThread(memoryStore, existingRaw, 'ready') : false;
+    if ((existingBranch || hasReadyDescendants) && existingRaw?.resourceId !== resourceId) {
+      throw createThreadBranchError('BRANCH_MUTATION_CONFLICT', 'A branch lineage member cannot change resources.');
+    }
 
     const config = this.getMergedThreadConfig(memoryConfig);
     const migratesVectors = Boolean(this.vector && (this.embedder || this.isSelfEmbedding) && config.semanticRecall);
@@ -3555,7 +4494,7 @@ Notes:
     if (!this.vector) {
       const existing = await memoryStore.getThreadById({ threadId });
       if (existing && existing.resourceId === resourceId) {
-        return existing;
+        return sanitizeThread(existing);
       }
     }
 
@@ -3614,7 +4553,7 @@ Notes:
       }
     }
 
-    return thread;
+    return sanitizeThread(thread);
   }
 
   /**
@@ -3766,7 +4705,7 @@ Notes:
     },
   ): ObservationalMemoryRecord {
     const { newThreadId, newResourceId, messageIdMap, sourceThreadId, clonedThreadId, hasher } = opts;
-    const cloned: ObservationalMemoryRecord = { ...record };
+    const cloned: ObservationalMemoryRecord = structuredClone(record);
 
     cloned.threadId = newThreadId;
     cloned.resourceId = newResourceId;
@@ -3779,6 +4718,7 @@ Notes:
     } else {
       cloned.observedMessageIds = undefined;
     }
+    remapDurableObservedMessageIds(cloned, messageIdMap);
 
     // Remap deprecated bufferedMessageIds
     if (Array.isArray(cloned.bufferedMessageIds)) {
@@ -3982,6 +4922,62 @@ Notes:
     }
 
     return history;
+  }
+
+  protected override getMessageHistoryReader() {
+    return async (input: StorageListMessagesInput) => queryThreadMessages(await this.getMemoryStore(), input);
+  }
+
+  /**
+   * The branch path semantic recall must search, or undefined when the thread (or, for
+   * resource scope, the resource) has no ready branch and plain recall applies.
+   */
+  private async resolveSemanticBranchSegments(
+    memoryStore: MemoryStorage,
+    threadId: string,
+    resourceId: string | undefined,
+  ): Promise<ThreadBranchSegment[] | undefined> {
+    if (resourceId) {
+      if (!(await resourceHasBranch(memoryStore, resourceId, 'ready'))) return undefined;
+      const resolved = await resolveThreadBranchSegments(memoryStore, threadId);
+      if (!resolved) {
+        throw createThreadBranchError(
+          'BRANCH_INVALID_REQUEST',
+          'Semantic recall for a resource containing branches requires an existing threadId.',
+        );
+      }
+      return resolved.segments;
+    }
+    const participation = await getThreadBranchParticipation(memoryStore, threadId);
+    if (!participation.participant) return undefined;
+    return (await resolveThreadBranchSegments(memoryStore, threadId))?.segments;
+  }
+
+  protected override getSemanticRecallMessageRetriever(semanticRecall: MemoryConfigInternal['semanticRecall']) {
+    if (!semanticRecall) return undefined;
+
+    const resourceScope =
+      semanticRecall === true || (typeof semanticRecall === 'object' && semanticRecall.scope !== 'thread');
+    return async ({ query, threadId, resourceId }: { query: string; threadId: string; resourceId?: string }) => {
+      // Without a branch on the recall path the processor's own search applies unchanged.
+      const memoryStore = await this.getMemoryStore();
+      const segments = await this.resolveSemanticBranchSegments(
+        memoryStore,
+        threadId,
+        resourceScope ? resourceId : undefined,
+      );
+      if (!segments) return undefined;
+      const result = await this.recall({
+        threadId,
+        ...(resourceId ? { resourceId } : {}),
+        vectorSearchString: query,
+        threadConfig: {
+          lastMessages: false,
+          semanticRecall,
+        },
+      });
+      return result.messages;
+    };
   }
 
   /**
