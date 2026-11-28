@@ -1563,6 +1563,135 @@ describe('Processor Tracing Tests', () => {
 
       await testExporter.finalExpectations();
     });
+
+    it("keeps the structuring model's usage on the agent's trace when a data chunk is sent before the first model step", async () => {
+      const structuringModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: JSON.stringify({ answer: 'Mock response' }) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 7, totalTokens: 107 } },
+          ]),
+        }),
+      });
+      // Technical: the data chunk reaches the output processors before any model
+      // step, so their stream state is created with no span to parent it.
+      const dataChunkProcessor: Processor = {
+        id: 'data-chunk',
+        processInputStep: async ({ writer, messageList }) => {
+          await writer?.custom({ type: 'data-note', data: {}, transient: true });
+          return messageList;
+        },
+      };
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model: createMockModel(),
+        errorProcessorDefaults: false,
+        inputProcessors: [dataChunkProcessor],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello', {
+        structuredOutput: { schema: z.object({ answer: z.string() }), model: structuringModel },
+      });
+      expect(await stream.object).toEqual({ answer: 'Mock response' });
+
+      const structuredOutputSpan = testExporter
+        .getProcessorSpans()
+        .find(span => span.name === 'output stream processor: Structured Output');
+      expect(structuredOutputSpan?.attributes?.internalUsage).toMatchObject({ inputTokens: 100, outputTokens: 7 });
+
+      // Also fails if the structuring agent starts a trace of its own.
+      await testExporter.finalExpectations();
+    });
+
+    it("keeps the structuring model's usage on an exported processor span in a run with a tool call", async () => {
+      const structuringModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: JSON.stringify({ answer: 'Mock response' }) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 7, totalTokens: 107 } },
+          ]),
+        }),
+      });
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream(
+            calls++ === 0
+              ? [
+                  { type: 'response-metadata', id: '1' },
+                  { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ]
+              : [
+                  { type: 'response-metadata', id: '2' },
+                  { type: 'text-delta', id: '2', delta: 'Mock response' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  },
+                ],
+          ),
+        }),
+      });
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({}),
+        execute: async () => ({ found: true }),
+      });
+      // Technical: exporters send a span when it ends, so read it as it was then.
+      const endedProcessorSpans: AnyExportedSpan[] = [];
+      const endSnapshotExporter = {
+        name: 'end-snapshot',
+        async exportTracingEvent(event: TracingEvent) {
+          if (event.type === TracingEventType.SPAN_ENDED && event.exportedSpan.type === SpanType.PROCESSOR_RUN) {
+            endedProcessorSpans.push(structuredClone(event.exportedSpan));
+          }
+        },
+        async flush() {},
+        async shutdown() {},
+      } as ObservabilityExporter;
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        tools: { lookup },
+        errorProcessorDefaults: false,
+      });
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter, { exporters: [testExporter, endSnapshotExporter] }),
+        agents: { agent },
+      });
+
+      const stream = await mastra.getAgent('agent').stream('Hello', {
+        structuredOutput: { schema: z.object({ answer: z.string() }), model: structuringModel },
+      });
+      expect(await stream.object).toEqual({ answer: 'Mock response' });
+      await testExporter.finalExpectations();
+
+      const structuredOutputSpans = endedProcessorSpans.filter(
+        span => span.name === 'output stream processor: Structured Output',
+      );
+      const usage = structuredOutputSpans.map(span => span.attributes?.internalUsage).filter(Boolean);
+      expect(usage).toEqual([expect.objectContaining({ inputTokens: 100, outputTokens: 7 })]);
+      // Each step's span counts only that step's chunks.
+      expect(structuredOutputSpans.map(span => (span.output as { totalChunks: number }).totalChunks)).toEqual([3, 6]);
+    });
   });
 
   // ==========================================================================
