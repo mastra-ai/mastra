@@ -1,8 +1,7 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useSessionHost } from '../context/SessionHostContext';
 import { useEffect, useRef } from 'react';
 
 import type { ChangeRequestProvider } from '@mastra/playground-ui/domains/factory';
-import { pullRequestSubscriptionsQueryKey } from '../../factory/services/githubSubscriptions';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { TranscriptState } from '../services/transcript';
@@ -31,7 +30,7 @@ export function useRefreshThreadSubscriptions(
 ) {
   const { sessionId } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
-  const queryClient = useQueryClient();
+  const pullRequestSubscriptions = useSessionHost().data.pullRequestSubscriptions;
   const notificationIds = notificationKey(transcript.entries);
   const sessionKey = `${sessionId}:${threadId}`;
   const previous = useRef({ busy, notificationIds, sessionKey });
@@ -48,8 +47,6 @@ export function useRefreshThreadSubscriptions(
     const newNotification = seen.notificationIds !== notificationIds;
     if (!runSettled && !newNotification) return;
     if (!active) return;
-    void queryClient.invalidateQueries({
-      queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
-    });
-  }, [active, busy, notificationIds, provider, queryClient, sessionId, sessionKey, threadId]);
+    pullRequestSubscriptions?.invalidate(sessionId, threadId, provider);
+  }, [active, busy, notificationIds, provider, pullRequestSubscriptions, sessionId, sessionKey, threadId]);
 }

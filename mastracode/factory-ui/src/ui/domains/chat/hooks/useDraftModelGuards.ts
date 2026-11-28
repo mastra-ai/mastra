@@ -1,7 +1,7 @@
+import { useSessionHost } from '../context/SessionHostContext';
 import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import { isConnectedAt } from '../../settings/components/provider-credential';
 import { sessionDefaultsAnchor } from '../services/sessionSettings';
@@ -28,7 +28,7 @@ export function useDraftModelGuards(
   factoryId: string | undefined,
   kind: ChatSessionContextApi['kind'],
 ): DraftModelGuards {
-  const factoryQuery = useFactoryQuery(factoryId);
+  const factoryQuery = useSessionHost().data.useProject(factoryId);
   const activeFactory = factoryQuery.data;
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
   const personalDefaultQuery = useDefaultModelQuery();

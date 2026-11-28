@@ -24,9 +24,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
-import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { threadPath } from '../../workspaces/services/factoryPaths';
-import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '@mastra/playground-ui/domains/factory';
 import type { NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
@@ -98,18 +96,14 @@ function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
  * The server decides who may answer; its refusal is shown in place of the buttons.
  */
 function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
-  const { LinkComponent, links } = useSessionHost();
-  const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
+  const { LinkComponent, links, data } = useSessionHost();
   const parked = useSessionActivityQuery(factoryId).data?.parkedSessionIds.includes(waiting.sessionId);
   const { toolCallId } = waiting;
   const answer = useMutation({
     mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
-    mutationFn: (decision: 'approve' | 'decline') =>
-      answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
+    mutationFn: (decision: 'approve' | 'decline') => data.answerParkedApproval(waiting.sessionId, decision, toolCallId),
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) });
-      void invalidateSessionQueries(queryClient, factoryId);
+      void data.invalidateSessions(factoryId);
     },
   });
   const outcome = answer.isSuccess

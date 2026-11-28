@@ -3,9 +3,11 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, renderHook, waitFor } from '@testing-library/react';
 import type { RenderHookOptions } from '@testing-library/react';
+import { useMemo } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 
 import { ApiConfigProvider, createApiConfig } from '../../src/api/config';
+import { useFactorySessionData } from '../../src/ui/domains/chat/context/RouterSessionHost';
 import { SessionHostContext } from '../../src/ui/domains/chat/context/SessionHostContext';
 import type { SessionHost } from '../../src/ui/domains/chat/context/SessionHostContext';
 import { FactoryPlatformConnect } from '../../src/ui/domains/settings/components/FactoryPlatformConnect';
@@ -25,7 +27,7 @@ export const TEST_API = createApiConfig({ baseUrl: TEST_BASE_URL });
  * plain links, and navigation that goes nowhere. Tests that render inside a
  * router mount `RouterSessionHost` there instead, which takes precedence.
  */
-const STATIC_SESSION_HOST: SessionHost = {
+const STATIC_SESSION_HOST: Omit<SessionHost, 'data'> = {
   factoryProjectId: undefined,
   sessionId: undefined,
   threadId: undefined,
@@ -43,6 +45,13 @@ const STATIC_SESSION_HOST: SessionHost = {
   },
 };
 
+/** A session host outside any route, reading Factory's data like the app does. */
+function StaticSessionHost({ children }: { children: ReactNode }) {
+  const data = useFactorySessionData();
+  const host = useMemo<SessionHost>(() => ({ ...STATIC_SESSION_HOST, data }), [data]);
+  return <SessionHostContext.Provider value={host}>{children}</SessionHostContext.Provider>;
+}
+
 function makeQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -58,9 +67,9 @@ function Wrapper({ client, children }: { client: QueryClient; children: ReactNod
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={client}>
           <ApiConfigProvider config={TEST_API}>
-            <SessionHostContext.Provider value={STATIC_SESSION_HOST}>
+            <StaticSessionHost>
               <FactoryPlatformConnect>{children}</FactoryPlatformConnect>
-            </SessionHostContext.Provider>
+            </StaticSessionHost>
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>

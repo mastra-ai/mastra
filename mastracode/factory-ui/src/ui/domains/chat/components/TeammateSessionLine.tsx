@@ -2,9 +2,7 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 import type { SessionOwnershipLock } from '@internal/factory-contract';
 import { useChatModelScope } from '../context/useChatModelScope';
@@ -24,9 +22,9 @@ function lockReason(lock: SessionOwnershipLock, organizationKeys: boolean): stri
 }
 
 export function TeammateSessionLine() {
-  const { factoryProjectId: factoryId } = useSessionHost();
-  const session = useUserSessionQuery(useRouteSessionId()).data;
-  const viewerUserId = useFactoryAuth().data?.user?.userId;
+  const { factoryProjectId: factoryId, data } = useSessionHost();
+  const session = data.useUserSession(useRouteSessionId()).data;
+  const viewerUserId = data.useViewer().data?.user?.userId;
   const { modelScope } = useChatModelScope();
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 

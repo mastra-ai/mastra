@@ -1,8 +1,8 @@
+import { useSessionHost } from '../context/SessionHostContext';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -69,7 +69,7 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
 
 /** The credential this session's requests to `modelId` run on right now, and who holds it. */
 export function useModelCredential(modelId: string | undefined): ModelCredential | undefined {
-  const authQuery = useFactoryAuth();
+  const authQuery = useSessionHost().data.useViewer();
   const { owner, draftSessionId } = useChatSessionContext();
   const { catalogTarget, modelScope, projectQuery } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);

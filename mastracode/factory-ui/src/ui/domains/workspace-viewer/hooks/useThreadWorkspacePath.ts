@@ -1,6 +1,5 @@
 import { useSessionHost } from '../../chat/context/SessionHostContext';
 
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { sessionUnavailableError, DraftSessionCreateError } from '../../chat/services/sessionErrors';
 
 /** Workspace for the current route — user threads have no `sessionId` segment, so resolve from the thread. */
@@ -8,7 +7,7 @@ export function useThreadWorkspacePath() {
   const { sessionId, threadId, routeKind } = useSessionHost();
   const isUserThreadRoute = routeKind === 'user-thread';
   const routedSessionId = isUserThreadRoute ? threadId : sessionId;
-  const session = useUserSessionQuery(routedSessionId);
+  const session = useSessionHost().data.useUserSession(routedSessionId);
   const unavailable = sessionUnavailableError(session);
 
   return {

@@ -19,7 +19,6 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
@@ -42,7 +41,7 @@ function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
   const { factoryProjectId: factoryId, navigate, links } = useSessionHost();
-  const factoryQuery = useFactoryQuery(factoryId);
+  const factoryQuery = useSessionHost().data.useProject(factoryId);
   const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();

@@ -8,8 +8,6 @@ import { useSessionHost } from './SessionHostContext';
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { sessionUnavailableError, isSessionNotFound } from '../services/sessionErrors';
 import type { LinkedRepositoryPayload, FactoryUserSession } from '@internal/factory-contract';
 import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
@@ -50,11 +48,11 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
   draftSessionId?: string;
 }) {
-  const { factoryProjectId: factoryId, sessionId, location } = useSessionHost();
+  const { factoryProjectId: factoryId, sessionId, location, data } = useSessionHost();
   const { baseUrl } = useApiConfig();
-  const factoryQuery = useFactoryQuery(factoryId);
+  const factoryQuery = data.useProject(factoryId);
   const isDraft = Boolean(draftSessionId);
-  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
+  const sessionQuery = data.useUserSession(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const owner = useMemo(

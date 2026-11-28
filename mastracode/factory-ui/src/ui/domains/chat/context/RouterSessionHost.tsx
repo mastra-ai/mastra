@@ -1,11 +1,83 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { forwardRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useMatch, useNavigate } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
+import { queryKeys } from '../../../../api/keys';
+import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import {
+  addCachedSession,
+  invalidateSessionQueries,
+  updateCachedSessionTitle,
+  useUserSessionQuery,
+  useWorkspacesQuery,
+} from '../../../../hooks/useWorkspaces';
+import { useSessionCard } from '../../factory/hooks/useSessionCard';
+import { useSessionRepository } from '../../factory/hooks/useSessionRepository';
+import {
+  pullRequestSubscriptionsQuery,
+  pullRequestSubscriptionsQueryKey,
+} from '../../factory/services/githubSubscriptions';
+import { answerParkedApproval, createUserSession } from '../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
+
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { newUserSessionPath, threadPath } from '../../workspaces/services/factoryPaths';
 import { SessionHostContext } from './SessionHostContext';
-import type { SessionHost, SessionLinkProps, SessionRouteKind } from './SessionHostContext';
+import type { SessionHost, SessionHostData, SessionLinkProps, SessionRouteKind } from './SessionHostContext';
+
+/** Factory's project, viewer and session data, read through its own query cache. */
+export function useFactorySessionData(): SessionHostData {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMemo<SessionHostData>(
+    () => ({
+      useProject: useFactoryQuery,
+      useProjects: useFactoriesQuery,
+      useViewer: useFactoryAuth,
+      useUserSession: useUserSessionQuery,
+      useSessionList: useWorkspacesQuery,
+      createUserSession: ({ projectId, projectRepositoryId, ...options }, toError) =>
+        queryClient.query({
+          queryKey: queryKeys.userSession(options.sessionId),
+          queryFn: async (): Promise<FactoryUserSession> => {
+            let session: FactoryUserSession;
+            try {
+              session = await createUserSession(baseUrl, projectRepositoryId, options);
+            } catch (error) {
+              throw toError(error);
+            }
+            addCachedSession(queryClient, projectId, session);
+            return session;
+          },
+        }),
+      answerParkedApproval: (sessionId, decision, toolCallId) =>
+        answerParkedApproval(baseUrl, sessionId, decision, toolCallId),
+      onSessionTitleChanged: (projectId, sessionId, title) =>
+        updateCachedSessionTitle(queryClient, projectId, sessionId, title),
+      invalidateSessions: async projectId => {
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.workItems(projectId) }),
+          invalidateSessionQueries(queryClient, projectId),
+        ]);
+      },
+      useSessionCard,
+      useSessionRepository,
+      pullRequestSubscriptions: {
+        use: function usePullRequestSubscriptions(sessionId, threadId, provider, enabled) {
+          return useQuery(pullRequestSubscriptionsQuery(baseUrl, sessionId, threadId, provider, enabled));
+        },
+        invalidate: (sessionId, threadId, provider) =>
+          void queryClient.invalidateQueries({
+            queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
+          }),
+      },
+    }),
+    [baseUrl, queryClient],
+  );
+}
 
 /** Fills the session host from Factory's router. Mounted once, above every session page. */
 export function RouterSessionHost({ children }: { children: ReactNode }) {
@@ -35,6 +107,7 @@ export function RouterSessionHost({ children }: { children: ReactNode }) {
   const threadId = threadMatch?.params.threadId ?? userThreadMatch?.params.threadId;
   const draftSessionId = (userDraftMatch ?? cardDraftMatch)?.params.draftSessionId;
 
+  const data = useFactorySessionData();
   const host = useMemo<SessionHost>(() => {
     const factoryId = factoryProjectId ?? '';
     const from = { from: location };
@@ -58,8 +131,9 @@ export function RouterSessionHost({ children }: { children: ReactNode }) {
         newUserSession: () => newUserSessionPath(factoryId),
         channelThread: id => `/factories/${factoryId}/threads/${id}`,
       },
+      data,
     };
-  }, [factoryProjectId, sessionId, threadId, draftSessionId, routeKind, location, navigate]);
+  }, [factoryProjectId, sessionId, threadId, draftSessionId, routeKind, location, navigate, data]);
 
   return <SessionHostContext.Provider value={host}>{children}</SessionHostContext.Provider>;
 }

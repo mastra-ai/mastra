@@ -1,9 +1,9 @@
+import { useSessionHost } from './SessionHostContext';
 import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useContext, useEffectEvent, useLayoutEffect, useReducer } from 'react';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { initialChatRuntime, runtimeReducer } from '../services/runtime';
@@ -35,7 +35,7 @@ export function ChatTranscriptProvider({
   isLoadingMoreHistory?: boolean;
   loadMoreHistory?: () => void;
 }) {
-  const viewerId = useFactoryAuth().data?.user?.userId;
+  const viewerId = useSessionHost().data.useViewer().data?.user?.userId;
   const transcriptApi = useAgentControllerTranscript({ initialThreadId: threadId, initialMessages, viewerId });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
   const onEvent = (event: AgentControllerEvent, opensStream: boolean) => {

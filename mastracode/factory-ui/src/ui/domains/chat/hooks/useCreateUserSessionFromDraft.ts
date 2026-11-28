@@ -3,10 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSessionHost } from '../context/SessionHostContext';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import { addCachedSession } from '../../../../hooks/useWorkspaces';
-import { createUserSession } from '../../workspaces/services/user-sessions';
 import { DraftSessionCreateError } from '../services/sessionErrors';
-import type { FactoryUserSession } from '@internal/factory-contract';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { PendingImage } from '../context/ComposerImagesContext';
@@ -22,9 +19,9 @@ import { startPromptHandoff } from './useHandoffPrompt';
  * create returns the same session.
  */
 export function useCreateUserSessionFromDraft() {
-  const { baseUrl, factorySessionState } = useChatSessionContext();
+  const { factorySessionState } = useChatSessionContext();
   const { activeModelId, selection } = useChatModels();
-  const { factoryProjectId: factoryId, draftSessionId, navigate, links } = useSessionHost();
+  const { factoryProjectId: factoryId, draftSessionId, navigate, links, data } = useSessionHost();
   const queryClient = useQueryClient();
 
   return ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
@@ -37,31 +34,26 @@ export function useCreateUserSessionFromDraft() {
     }
 
     const draftPath = `/factories/${factoryId}/user/new/${draftSessionId}`;
-    void queryClient
-      .query({
-        queryKey: queryKeys.userSession(draftSessionId),
-        queryFn: async (): Promise<FactoryUserSession> => {
-          let session: FactoryUserSession;
-          try {
-            session = await createUserSession(baseUrl, projectRepositoryId, {
-              sessionId: draftSessionId,
-              title: prompt,
-              // A session someone opens for themselves stays theirs until they share it.
-              visibility: 'private',
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Session creation failed';
-            throw new DraftSessionCreateError(
-              `Could not create the session: ${message}. Try again.`,
-              { prompt, modelSelection: selection },
-              draftPath,
-              { cause: error },
-            );
-          }
-          addCachedSession(queryClient, factoryId, session);
-          return session;
+    void data
+      .createUserSession(
+        {
+          projectId: factoryId,
+          projectRepositoryId,
+          sessionId: draftSessionId,
+          title: prompt,
+          // A session someone opens for themselves stays theirs until they share it.
+          visibility: 'private',
         },
-      })
+        error => {
+          const message = error instanceof Error ? error.message : 'Session creation failed';
+          return new DraftSessionCreateError(
+            `Could not create the session: ${message}. Try again.`,
+            { prompt, modelSelection: selection },
+            draftPath,
+            { cause: error },
+          );
+        },
+      )
       .catch(() => undefined);
     // A new session has no history, so the thread opens on an empty transcript
     // instead of waiting on a history read the session cannot answer yet.

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
 import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import { useChatModelScope } from '../context/useChatModelScope';
@@ -23,7 +22,7 @@ export function ProviderReconnectAction() {
   const { LinkComponent, links } = useSessionHost();
   const { factoryId, modelScope, scopeLoading } = useChatModelScope();
   const { owner } = useChatSessionContext();
-  const authQuery = useFactoryAuth();
+  const authQuery = useSessionHost().data.useViewer();
   const payerUnknown = !factoryId || scopeLoading || authQuery.isPending;
   if (payerUnknown) return null;
 
