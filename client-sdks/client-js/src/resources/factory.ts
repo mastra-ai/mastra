@@ -172,6 +172,15 @@ export class FactoryRequestError extends MastraClientError {
   }
 }
 
+/** Factory answers failures with `{ message }` or `{ error }`; that text, not the raw body, becomes the error's message. */
+export function toFactoryRequestError(error: unknown): unknown {
+  if (!(error instanceof MastraClientError)) return error;
+  const body = error.body as { message?: unknown; error?: unknown } | undefined;
+  const said = typeof body?.message === 'string' ? body.message : body?.error;
+  const message = typeof said === 'string' && said ? said : `Request failed (${error.status})`;
+  return new FactoryRequestError(error.status, error.statusText, message, error.body);
+}
+
 /**
  * One Factory project's board: its cards, phases, moves, decisions and run queue.
  * Every host (Factory itself, Platform) serves the same routes, under its own `basePath`.
@@ -189,16 +198,11 @@ export class Factory extends BaseResource {
     this.project = `/projects/${encodeURIComponent(factoryProjectId)}`;
   }
 
-  /** Factory answers failures with `{ message }` or `{ error }`; that text, not the raw body, is the error's message. */
   public override async request<T>(...args: Parameters<BaseResource['request']>): Promise<T> {
     try {
       return await super.request<T>(...args);
     } catch (error) {
-      if (!(error instanceof MastraClientError)) throw error;
-      const body = error.body as { message?: unknown; error?: unknown } | undefined;
-      const said = typeof body?.message === 'string' ? body.message : body?.error;
-      const message = typeof said === 'string' && said ? said : `Request failed (${error.status})`;
-      throw new FactoryRequestError(error.status, error.statusText, message, error.body);
+      throw toFactoryRequestError(error);
     }
   }
 

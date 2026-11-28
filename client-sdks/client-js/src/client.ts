@@ -9,6 +9,7 @@ import {
   Vector,
   Knowledge,
   Factory,
+  FactoryWeb,
   BaseResource,
   A2A,
   A2AV1,
@@ -29,7 +30,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
-import type { FactoryOptions, KnowledgeInstanceSummary } from './resources';
+import type { FactoryOptions, FactoryWebOptions, KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -725,6 +726,16 @@ export class MastraClient extends BaseResource {
    */
   public getFactory(factoryProjectId: string, options?: FactoryOptions) {
     return new Factory(this.options, factoryProjectId, options);
+  }
+
+  /**
+   * Gets the routes a Factory session reads outside Factory's own prefix: model config, provider credentials,
+   * voice and the session workspace
+   * @param options - `webBasePath` where the host serves them (default `/web`)
+   * @returns FactoryWeb resource
+   */
+  public getFactoryWeb(options?: FactoryWebOptions) {
+    return new FactoryWeb(this.options, options);
   }
 
   /**

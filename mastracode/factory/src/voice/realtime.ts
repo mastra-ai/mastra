@@ -1,3 +1,4 @@
+import type { RealtimeSession } from '@internal/factory-contract';
 import { classifyProviderError } from '@mastra/core/error';
 import { z } from 'zod';
 
@@ -5,11 +6,7 @@ const CLIENT_SESSIONS_URL = 'https://api.mistral.ai/v1/client/sessions';
 const REALTIME_URL = 'wss://api.mistral.ai/v1/audio/transcriptions/realtime';
 const MINT_TIMEOUT_MS = 10_000;
 
-export interface RealtimeSession {
-  url: string;
-  token: string;
-  expiresAt: string;
-}
+export type { RealtimeSession } from '@internal/factory-contract';
 
 const clientSessionSchema = z.object({
   client_secret: z.object({ value: z.string().min(1), expires_at: z.string().min(1) }),

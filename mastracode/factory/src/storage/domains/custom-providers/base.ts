@@ -1,3 +1,4 @@
+import type { CustomProviderLastCheck } from '@internal/factory-contract';
 import {
   customProviderHeaderProblem,
   isCustomProviderAuthScheme,
@@ -20,13 +21,7 @@ export interface CustomProviderOwner {
 }
 
 /** The outcome of the last connection test run against a saved provider. */
-export interface CustomProviderLastCheck {
-  /** When the test ran, as an ISO 8601 string. */
-  at: string;
-  ok: boolean;
-  /** The failure message when the test failed. */
-  message?: string;
-}
+export type { CustomProviderLastCheck } from '@internal/factory-contract';
 
 /**
  * A user-defined OpenAI-compatible provider. The DB-backed counterpart of the

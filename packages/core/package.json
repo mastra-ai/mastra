@@ -331,6 +331,16 @@
         "default": "./dist/llm/index.cjs"
       }
     },
+    "./llm/reasoning": {
+      "import": {
+        "types": "./dist/llm/reasoning/index.d.ts",
+        "default": "./dist/llm/reasoning/index.js"
+      },
+      "require": {
+        "types": "./dist/llm/reasoning/index.d.ts",
+        "default": "./dist/llm/reasoning/index.cjs"
+      }
+    },
     "./knowledge": {
       "import": {
         "types": "./dist/knowledge/index.d.ts",

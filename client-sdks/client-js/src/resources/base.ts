@@ -84,7 +84,7 @@ export class BaseResource {
           ...fetchOptions,
           headers: mergeHeaders(
             fetchOptions.body &&
-              !(fetchOptions.body instanceof FormData) &&
+              !isRawBody(fetchOptions.body) &&
               (fetchOptions.method === 'POST' ||
                 fetchOptions.method === 'PUT' ||
                 fetchOptions.method === 'PATCH' ||
@@ -98,12 +98,11 @@ export class BaseResource {
           ),
           signal,
           credentials: fetchOptions.credentials ?? credentials,
-          body:
-            fetchOptions.body instanceof FormData
-              ? fetchOptions.body
-              : fetchOptions.body
-                ? JSON.stringify(fetchOptions.body)
-                : undefined,
+          body: isRawBody(fetchOptions.body)
+            ? fetchOptions.body
+            : fetchOptions.body
+              ? JSON.stringify(fetchOptions.body)
+              : undefined,
         });
 
         if (!response.ok) {
@@ -166,4 +165,9 @@ export class BaseResource {
 
     throw lastError || new Error('Request failed');
   }
+}
+
+/** FormData and Blob bodies go out as they are; fetch sets their content type. */
+function isRawBody(body: unknown): body is FormData | Blob {
+  return body instanceof FormData || (typeof Blob !== 'undefined' && body instanceof Blob);
 }

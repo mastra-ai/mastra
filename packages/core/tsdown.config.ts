@@ -67,7 +67,12 @@ const dropBareBuiltinImports = {
  * zod, or pull in agent/provider-registry chunks. `src/storage/dashboards-browser-entry.test.ts`
  * also loads the dashboards entry in a context without Node globals.
  */
-const browserSafeEntries = ['storage/dashboards.js', 'storage/dashboards.cjs'];
+const browserSafeEntries = [
+  'storage/dashboards.js',
+  'storage/dashboards.cjs',
+  'llm/reasoning/index.js',
+  'llm/reasoning/index.cjs',
+];
 
 function findBrowserUnsafeImports(distDir: string, entry: string): string[] {
   const problems: string[] = [];
@@ -110,6 +115,7 @@ export default defineConfig({
     'src/vector/filter/index.ts',
     'src/test-utils/llm-mock.ts',
     'src/a2a/client.ts',
+    'src/llm/reasoning/index.ts',
     'src/a2a/v1.ts',
     'src/processors/index.ts',
     'src/zod-to-json.ts',

@@ -3,14 +3,12 @@
  * module. Kept dependency-free so neither side has to import the other.
  */
 
+import { MASTRA_GATEWAY_PREFIX, stripMastraGatewayPrefix } from '@mastra/core/llm/reasoning';
+
+export { MASTRA_GATEWAY_PREFIX, normalizeAnthropicModelId, stripMastraGatewayPrefix } from '@mastra/core/llm/reasoning';
+
 export const OPENAI_PREFIX = 'openai/';
 export const ANTHROPIC_PREFIX = 'anthropic/';
-export const MASTRA_GATEWAY_PREFIX = 'mastra/';
-
-/** Anthropic's API only accepts dashed ids (`claude-opus-4-6`), but catalogs may list dotted ones. */
-export function normalizeAnthropicModelId(modelId: string): string {
-  return modelId.replace(/\.(?=\d)/g, '-');
-}
 
 /**
  * The Codex ChatGPT-account endpoint serves some OpenAI models only under a
@@ -24,10 +22,6 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
   'gpt-5.1-mini': 'gpt-5.1-codex-mini',
   'gpt-5': 'gpt-5-codex',
 };
-
-export function stripMastraGatewayPrefix(modelId: string): string {
-  return modelId.startsWith(MASTRA_GATEWAY_PREFIX) ? modelId.substring(MASTRA_GATEWAY_PREFIX.length) : modelId;
-}
 
 /**
  * Kimi For Coding subscriptions are served from `api.kimi.com`, which models.dev

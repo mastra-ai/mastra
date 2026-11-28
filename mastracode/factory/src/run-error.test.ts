@@ -206,3 +206,11 @@ describe('describeRunError', () => {
     });
   });
 });
+
+describe('PROVIDER_AUTH_REQUIRED_ERROR', () => {
+  it('matches the code SDK error name the contract copies', async () => {
+    const sdk = await import('@mastra/code-sdk/auth/provider-auth-error');
+    const contract = await import('@internal/factory-contract');
+    expect(contract.PROVIDER_AUTH_REQUIRED_ERROR).toBe(sdk.PROVIDER_AUTH_REQUIRED_ERROR);
+  });
+});

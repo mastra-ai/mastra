@@ -47,7 +47,7 @@ export function useFileFinder({
   onOpen,
 }: UseFileFinderOptions): FileFinder {
   const queryClient = useQueryClient();
-  const { client } = useApiConfig();
+  const { mastra } = useApiConfig();
   const listboxId = useId();
   const searched = useDeferredValue(query);
   const finding = searched.trim() !== '';
@@ -91,7 +91,8 @@ export function useFileFinder({
     open: onOpen,
     onKeyDown,
     prefetch: () => {
-      if (visible) void queryClient.prefetchQuery(workspaceFileIndexQueryOptions(client, workspacePath));
+      if (visible)
+        void queryClient.prefetchQuery(workspaceFileIndexQueryOptions(mastra.getFactoryWeb(), workspacePath));
     },
   };
 }

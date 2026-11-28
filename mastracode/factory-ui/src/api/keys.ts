@@ -1,5 +1,5 @@
-import { factoryKeys } from '@mastra/react/hooks/factory';
-import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } from './types';
+import { factoryKeys, factoryWebKeys } from '@mastra/react/hooks/factory';
+import type { BoardPhasesRequest, SessionRowsRequest } from './types';
 
 /**
  * Stable, scoped React Query keys for the settings API.
@@ -18,13 +18,7 @@ import type { BoardPhasesRequest, SessionRowsRequest, WorkspaceChangesScope } fr
  */
 export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
-export interface AvailableModelsFilter {
-  factoryProjectId?: string;
-  scope?: 'org' | 'user';
-  sessionId?: string;
-  resourceId?: string;
-  threadId?: string;
-}
+export type { AvailableModelsFilter } from '@mastra/react/hooks/factory';
 
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
@@ -157,37 +151,27 @@ export const queryKeys = {
   sessionRows: (factoryId: string | undefined, request: SessionRowsRequest) =>
     [...queryKeys.sessionRowsRoot(factoryId), request] as const,
   sessionActivity: factoryKeys.sessionActivity,
-  providers: () => ['providers'] as const,
-  mastraGatewayCredits: () => ['mastra-gateway-credits'] as const,
-  availableModels: (filter?: AvailableModelsFilter) =>
-    filter ? (['available-models', filter] as const) : (['available-models'] as const),
+  providers: factoryWebKeys.providers,
+  mastraGatewayCredits: factoryWebKeys.mastraGatewayCredits,
+  availableModels: factoryWebKeys.availableModels,
   customProviders: () => ['custom-providers'] as const,
-  defaultModel: () => ['default-model'] as const,
-  voiceSettingsAll: () => ['voice-settings'] as const,
-  voiceSettings: (factoryId: string) => [...queryKeys.voiceSettingsAll(), factoryId] as const,
+  defaultModel: factoryWebKeys.defaultModel,
+  voiceSettingsAll: factoryWebKeys.voiceSettingsAll,
+  voiceSettings: factoryWebKeys.voiceSettings,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
   factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
-  fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
-  artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
-  workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
-    ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
-  workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
-  workspaceTree: (workspacePath: string | undefined, path: string) =>
-    ['workspace-tree', workspacePath ?? null, path] as const,
-  // Under the tree's prefix so a tree refresh refreshes it; the object never equals a folder path.
-  workspaceFileIndex: (workspacePath: string | undefined) =>
-    ['workspace-tree', workspacePath ?? null, { index: 'files' }] as const,
-  workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
-  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
-    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
-  // Keyed by toolCallId so each plan (re)submission fetches the file fresh
-  // instead of reusing the previous submission's cached content.
-  planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
-    ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
-  workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
-  workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
-    ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
+  fsList: factoryWebKeys.fsList,
+  artifactsList: factoryWebKeys.artifactsList,
+  workspaceRenderedList: factoryWebKeys.workspaceRenderedList,
+  workspaceTreeScope: factoryWebKeys.workspaceTreeScope,
+  workspaceTree: factoryWebKeys.workspaceTree,
+  workspaceFileIndex: factoryWebKeys.workspaceFileIndex,
+  workspaceFileScope: factoryWebKeys.workspaceFileScope,
+  workspaceFile: factoryWebKeys.workspaceFile,
+  planFile: factoryWebKeys.planFile,
+  workspaceChanges: factoryWebKeys.workspaceChanges,
+  workspacePatches: factoryWebKeys.workspacePatches,
   // Session-derived keys are addressed by the session id: sessions that share a
   // memory resource (a Factory's runs, a user's sessions) keep independent state.
   agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>

@@ -1,3 +1,9 @@
+import type {
+  LiveSessionResponse,
+  ModelChoice,
+  TranscribeResponse,
+  VoiceSettingsResponse,
+} from '@internal/factory-contract';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { findSTTModel, STT_MODELS, sttProviders } from '@mastra/code-sdk/voice/stt-registry';
 import type { STTModel } from '@mastra/code-sdk/voice/stt-registry';
@@ -5,8 +11,8 @@ import { sttApiKeyEnvVar } from '@mastra/code-sdk/voice/transcribe';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
@@ -27,6 +33,7 @@ import type { STTSelection, VoiceCaller, VoiceFactory, VoicePolicy } from '../vo
 import { resolveCredentialContext } from './provider-credentials.js';
 import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
+export type { LiveSessionResponse, TranscribeResponse, VoiceSettingsResponse } from '@internal/factory-contract';
 
 const factoryIdSchema = z.string().min(1).optional();
 
@@ -60,25 +67,9 @@ interface VoiceRequest {
   orgId?: string;
 }
 
-type ModelChoice = { provider: string; model: string };
-
 function choice(entry: STTModel | undefined): ModelChoice | null {
   return entry ? { provider: entry.provider, model: entry.model } : null;
 }
-
-export interface VoiceSettingsResponse {
-  scope: VoicePolicy['scope'];
-  selected: ModelChoice | null;
-  canEdit: boolean;
-  effective: ModelChoice | null;
-  models: Array<ModelChoice & { label: string }>;
-  /** `fromEnv`: local mode reads the key from the server environment, so it cannot be updated or removed here. */
-  keys: Array<{ provider: string; envVar: string | undefined; saved: boolean; fromEnv: boolean }>;
-}
-
-export type TranscribeResponse = ModelChoice & { text: string };
-
-export type LiveSessionResponse = { mode: 'batch' } | ({ mode: 'live' } & RealtimeSession);
 
 function settingsResponse(
   request: VoiceRequest,

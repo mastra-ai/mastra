@@ -196,8 +196,8 @@ export const prefetchComposer: Prefetch = ({ queryClient, api }, { params }) => 
   const { factoryId } = params;
   if (!factoryId) return;
   void queryClient.query(factoryProjectQueryOptions(api.baseUrl, factoryId)).catch(noop);
-  void queryClient.query(defaultModelQueryOptions(api.client)).catch(noop);
-  void queryClient.query(providersQueryOptions(api.client)).catch(noop);
+  void queryClient.query(defaultModelQueryOptions(api.mastra.getFactoryWeb())).catch(noop);
+  void queryClient.query(providersQueryOptions(api.mastra.getFactoryWeb())).catch(noop);
 };
 
 /** A draft offers starters counted off the board, and the board's activity, around the composer. */
