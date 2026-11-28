@@ -19,7 +19,7 @@ vi.mock('../../utils/resolve-runtime', () => ({
   resolveRuntimeDependencies: (...args: any[]) => resolveRuntimeDependencies(...args),
 }));
 
-const { runDurableFinishSideEffects } = await import('../finalize-run');
+const { runDurableFinishSideEffects, generateDurableThreadTitle } = await import('../finalize-run');
 
 function makeInitData(
   state: Record<string, unknown>,
@@ -195,7 +195,37 @@ describe('runDurableFinishSideEffects', () => {
     expect(generateThreadTitle).not.toHaveBeenCalled();
   });
 
-  it('skips title generation for an observational-memory run, matching the persistence guard', async () => {
+  // The OM processor already persisted the turn, so a principal that may read but not write the
+  // thread skips the title instead of failing a completed run.
+  it('skips the title without failing an observational-memory run when memory writes are denied', async () => {
+    authorizeDurableMemory.mockImplementation(async (_checks, input) => {
+      if (input.permission === 'memory:write') throw new Error('memory write denied');
+    });
+    const generateThreadTitle = vi.fn().mockResolvedValue('Title');
+
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [],
+      generateThreadTitle,
+    } as unknown as RunRegistryEntry);
+
+    const result = await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        threadExists: true,
+        observationalMemory: true,
+      }),
+      messageListState: makeMessageListState(),
+    });
+    await result.titleGeneration;
+
+    expect(generateThreadTitle).not.toHaveBeenCalled();
+  });
+
+  // #30478: the OM processor has already persisted the turn, so the run is titled like a regular Agent run.
+  it('generates a title for an observational-memory run without flushing messages', async () => {
     const generateThreadTitle = vi.fn().mockResolvedValue(undefined);
     const flushMessages = vi.fn().mockResolvedValue(undefined);
 
@@ -207,7 +237,7 @@ describe('runDurableFinishSideEffects', () => {
       memory: { createThread: vi.fn() },
     } as unknown as RunRegistryEntry);
 
-    await runDurableFinishSideEffects({
+    const result = await runDurableFinishSideEffects({
       runId: 'run-1',
       initData: makeInitData({
         threadId: 'thread-1',
@@ -218,10 +248,10 @@ describe('runDurableFinishSideEffects', () => {
       messageListState: makeMessageListState(),
     });
 
-    // Neither finish-time memory write runs, so the run cannot leave behind a
-    // titled thread that holds no messages.
+    await result.titleGeneration;
+
     expect(flushMessages).not.toHaveBeenCalled();
-    expect(generateThreadTitle).not.toHaveBeenCalled();
+    expect(generateThreadTitle).toHaveBeenCalledTimes(1);
   });
 
   it('still generates a title for an ordinary run', async () => {
@@ -476,5 +506,38 @@ describe('runDurableFinishSideEffects', () => {
 
     expect(seen?.memoryConfig?.readOnly).toBe(true);
     expect(seen?.thread?.id).toBe('thread-1');
+  });
+});
+
+describe('generateDurableThreadTitle', () => {
+  it('does not re-create a thread that no longer exists when the title is ready', async () => {
+    const createThread = vi.fn();
+    const updateThread = vi.fn();
+    const memory = {
+      getThreadById: vi.fn().mockResolvedValue(null),
+      getMergedThreadConfig: () => ({ generateTitle: true }),
+      createThread,
+      updateThread,
+    };
+    const agent = {
+      resolveTitleGenerationConfig: () => ({ shouldGenerate: true }),
+      filterUiMessagesByThread: (_list: unknown, _threadId: string, messages: unknown[]) => messages,
+      getMostRecentUserMessage: (messages: any[]) => messages.find(m => m.role === 'user'),
+      genTitle: vi.fn().mockResolvedValue('Late title'),
+      __getLogger: () => ({ debug: vi.fn() }),
+    };
+
+    const title = await generateDurableThreadTitle({
+      agent: agent as any,
+      memory: memory as any,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      messageListState: makeMessageListState(),
+    } as any);
+
+    expect(agent.genTitle).toHaveBeenCalledTimes(1);
+    expect(title).toBeUndefined();
+    expect(createThread).not.toHaveBeenCalled();
+    expect(updateThread).not.toHaveBeenCalled();
   });
 });
