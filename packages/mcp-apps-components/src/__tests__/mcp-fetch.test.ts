@@ -1,5 +1,5 @@
 import type { App } from '@modelcontextprotocol/ext-apps';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { createMcpFetch } from '../shared/mcp-fetch';
 import { serveAndConnect } from './greeting-server';
 import { traceServer, traceSpans } from './trace-server';
@@ -38,4 +38,39 @@ it('answers routes no tool serves with a 404', async () => {
   const response = await fetch('http://app/api/memory/threads/thread-1');
 
   expect(response.status).toBe(404);
+});
+
+it('returns a tool failure to the caller and hides a host failure', async () => {
+  const fetch = await mcpFetch(traceServer());
+  const missing = await fetch('http://app/api/observability/traces/missing/light');
+  expect(missing.status).toBe(400);
+  expect((await missing.json()).error).toContain('Trace missing not found');
+
+  const app = {
+    callServerTool: async () => {
+      throw new Error('connect ECONNREFUSED /var/secret/db.sock\n    at Socket.connect');
+    },
+  } as unknown as App;
+  const failing = createMcpFetch(app, () => undefined);
+  const logged: unknown[] = [];
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    logged.push(args);
+  });
+  try {
+    const response = await failing('http://app/api/observability/traces/trace-1/light');
+    expect(response.status).toBe(404);
+    const body = await response.text();
+    expect(body).toBe('{"error":"Not available in this app"}');
+    expect(body).not.toContain('ECONNREFUSED');
+    expect(body).not.toContain('/var/secret');
+    expect(body).not.toContain('Socket.connect');
+    expect(
+      logged.some(
+        entry =>
+          Array.isArray(entry) && entry.some(part => part instanceof Error && part.message.includes('ECONNREFUSED')),
+      ),
+    ).toBe(true);
+  } finally {
+    errorSpy.mockRestore();
+  }
 });

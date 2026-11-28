@@ -363,9 +363,10 @@ export function isZodType(value: unknown): value is z.ZodType {
   );
 }
 
-// Helper function to create a deterministic hash
+// Stable tool id from a description. This is not a password hash: the same description must keep
+// the same id anywhere a trace or message already stored `tool-<8 hex chars>`. SHA-256 stays.
 function createDeterministicId(input: string): string {
-  return createHash('sha256').update(input).digest('hex').slice(0, 8); // Take first 8 characters for a shorter but still unique ID
+  return createHash('sha256').update(input).digest('hex').slice(0, 8);
 }
 
 /**

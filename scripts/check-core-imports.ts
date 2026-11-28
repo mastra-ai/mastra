@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import ts from 'typescript-classic';
 
@@ -339,6 +339,14 @@ function getCoreExportSubpath(moduleName: string) {
   return `.${moduleName.slice('@mastra/core'.length)}`;
 }
 
+/** Replaces the first `*` in an export target. Package export wildcards have one star; a later star is part of the path. */
+export function substituteExportWildcard(target: string | undefined, matchedSubpath: string): string | undefined {
+  if (!target) return undefined;
+  const star = target.indexOf('*');
+  if (star === -1) return target;
+  return target.slice(0, star) + matchedSubpath + target.slice(star + 1);
+}
+
 function resolveExportTypesPath(coreRoot: string, moduleName: string) {
   const corePackageJson = JSON.parse(readFileSync(join(coreRoot, 'package.json'), 'utf-8')) as {
     exports?: Record<string, unknown>;
@@ -359,7 +367,7 @@ function resolveExportTypesPath(coreRoot: string, moduleName: string) {
     if (!exportSubpath.startsWith(prefix) || !exportSubpath.endsWith(suffix)) continue;
 
     const matchedSubpath = exportSubpath.slice(prefix.length, exportSubpath.length - suffix.length);
-    const wildcardTarget = getExportTypesTarget(exportValue)?.replace('*', matchedSubpath);
+    const wildcardTarget = substituteExportWildcard(getExportTypesTarget(exportValue), matchedSubpath);
 
     if (wildcardTarget) {
       return join(coreRoot, wildcardTarget.replace(/^\.\//, ''));
@@ -480,54 +488,67 @@ function checkPackage(packageInfo: PackageInfo, floorCoreRoot: string, tempRoot:
   return status;
 }
 
-const tempRoot = mkdtempSync(join(corePackageRoot, '.core-import-check-'));
-let exitCode = 0;
-
-try {
-  const packages = getPackagesToCheck();
-  const floorCoreRoots = new Map<string, string>();
-
-  console.info(
-    `Found ${packages.length} package${packages.length === 1 ? '' : 's'} with an @mastra/core peer dependency`,
-  );
-
-  for (const packageInfo of packages) {
-    const corePackVersion = packageInfo.corePackVersion;
-
-    if (packageInfo.coreRangeError || !corePackVersion) {
-      console.error(`\n✗ Failed to check ${packageInfo.name}`);
-      console.error(
-        `${packageInfo.coreRangeError ?? 'Could not determine @mastra/core peer dependency floor'} in ${relative(repoRoot, packageInfo.packageJsonPath)}`,
-      );
-      exitCode = 1;
-      continue;
-    }
-
-    try {
-      // The fallback version depends on the declared range, so cache per version and range.
-      const floorCoreKey = `${corePackVersion}\0${packageInfo.coreRange}`;
-      let floorCoreRoot = floorCoreRoots.get(floorCoreKey);
-
-      if (!floorCoreRoot) {
-        const versionTempDir = mkdtempSync(join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`));
-        floorCoreRoot = extractCorePackage(corePackVersion, packageInfo.coreRange, versionTempDir);
-        floorCoreRoots.set(floorCoreKey, floorCoreRoot);
-      }
-
-      if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {
-        exitCode = 1;
-      }
-    } catch (error) {
-      console.error(`\n✗ Failed to check ${packageInfo.name}`);
-      console.error(error instanceof Error ? error.message : error);
-      exitCode = 1;
-    }
-  }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  exitCode = 1;
-} finally {
-  rmSync(tempRoot, { recursive: true, force: true });
+function isDirectRun(): boolean {
+  const entry = process.argv[1];
+  return entry !== undefined && import.meta.url === pathToFileURL(resolve(entry)).href;
 }
 
-process.exit(exitCode);
+function main(): number {
+  const tempRoot = mkdtempSync(join(corePackageRoot, '.core-import-check-'));
+  let exitCode = 0;
+
+  try {
+    const packages = getPackagesToCheck();
+    const floorCoreRoots = new Map<string, string>();
+
+    console.info(
+      `Found ${packages.length} package${packages.length === 1 ? '' : 's'} with an @mastra/core peer dependency`,
+    );
+
+    for (const packageInfo of packages) {
+      const corePackVersion = packageInfo.corePackVersion;
+
+      if (packageInfo.coreRangeError || !corePackVersion) {
+        console.error(`\n✗ Failed to check ${packageInfo.name}`);
+        console.error(
+          `${packageInfo.coreRangeError ?? 'Could not determine @mastra/core peer dependency floor'} in ${relative(repoRoot, packageInfo.packageJsonPath)}`,
+        );
+        exitCode = 1;
+        continue;
+      }
+
+      try {
+        // The fallback version depends on the declared range, so cache per version and range.
+        const floorCoreKey = `${corePackVersion}\0${packageInfo.coreRange}`;
+        let floorCoreRoot = floorCoreRoots.get(floorCoreKey);
+
+        if (!floorCoreRoot) {
+          const versionTempDir = mkdtempSync(
+            join(tempRoot, `core-${corePackVersion.replace(/[^0-9A-Za-z.-]/g, '-')}-`),
+          );
+          floorCoreRoot = extractCorePackage(corePackVersion, packageInfo.coreRange, versionTempDir);
+          floorCoreRoots.set(floorCoreKey, floorCoreRoot);
+        }
+
+        if (checkPackage(packageInfo, floorCoreRoot, tempRoot) !== 0) {
+          exitCode = 1;
+        }
+      } catch (error) {
+        console.error(`\n✗ Failed to check ${packageInfo.name}`);
+        console.error(error instanceof Error ? error.message : error);
+        exitCode = 1;
+      }
+    }
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    exitCode = 1;
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+
+  return exitCode;
+}
+
+if (isDirectRun()) {
+  process.exit(main());
+}
