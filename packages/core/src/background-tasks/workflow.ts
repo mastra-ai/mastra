@@ -239,9 +239,9 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return { taskId, outcome: 'cancelled' as const };
         }
 
-        // Graceful process shutdown is not a task failure. Leave storage at
+        // Graceful process shutdown is not a task failure here. Leave storage at
         // `running` so retryable tasks can be recovered by the next process;
-        // non-retryable tasks are persisted as cancelled by manager.shutdown().
+        // manager.shutdown() fails non-retryable tasks as worker-terminated.
         if (manager.isShuttingDown()) {
           manager.deregisterTaskContext(taskId);
           return { taskId, outcome: 'cancelled' as const };

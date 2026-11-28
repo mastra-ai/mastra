@@ -1169,8 +1169,8 @@ export class BackgroundTaskManager {
 
     // Abort user code first, without waiting on storage or a remote broker.
     // Retryable running tasks intentionally remain `running` in storage so
-    // the next process can recover them through recoverStaleTasks(). Tasks
-    // without retries retain the existing terminal cancellation behavior.
+    // the next process can recover them through recoverStaleTasks(). Running
+    // tasks without retries are failed as worker-terminated, like a crash.
     // Snapshot the held leases now: waiting for runs to settle below removes
     // them from `ownedLeases`, but their leases still need handing back.
     const leasesToRelease = new Set(this.ownedLeases);
