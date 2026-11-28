@@ -13,6 +13,7 @@ import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/use
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { ChatSessionActionsProvider } from '../../context/ChatSessionActionsProvider';
 import { ChatThinkingProvider } from '../../context/ChatThinkingProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
@@ -107,11 +108,13 @@ function ErrorSession({
             loadMore: { hasMore: false, isLoading: false },
           }}
         >
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
+          <ChatSessionActionsProvider>
+            <ChatModelsProvider>
+              <ChatThinkingProvider>
+                <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+              </ChatThinkingProvider>
+            </ChatModelsProvider>
+          </ChatSessionActionsProvider>
         </ChatTranscriptContext.Provider>
       </ChatConnectionContext.Provider>
     </ChatSessionContext.Provider>

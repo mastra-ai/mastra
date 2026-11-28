@@ -24,6 +24,7 @@ import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
+import { ChatSessionActionsProvider } from './ChatSessionActionsProvider';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { TranscriptLoading } from '../components/TranscriptLoading';
@@ -215,29 +216,31 @@ export function ChatSessionBoundary({
   // Above the transcript so the favicon and the stepper read one pending state.
   return (
     <ChatThreadMessagesContext.Provider value={messages}>
-      <TranscriptContinuationContext.Provider value={transcript.continueInto}>
-        <ChatTranscriptProvider
-          // No `isPending` segment: remounting on the pending -> ready flip would drop
-          // the live SSE listener. Results merge into the reducer instead.
-          key={transcript.key}
-          threadId={threadId}
-          initialMessages={messagesQuery.data}
-          hasMoreHistory={messagesQuery.hasMore}
-          isLoadingMoreHistory={messagesQuery.isLoadingMore}
-          loadMoreHistory={messagesQuery.loadMore}
-        >
-          <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
-            <ChatThinkingProvider>
-              <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-                <ComposerImagesProvider initialImages={failedDraft?.files}>
-                  {/* Below the keyed transcript, so each thread starts with no annotations. */}
-                  <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
-                </ComposerImagesProvider>
-              </ChatCommandsProvider>
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatTranscriptProvider>
-      </TranscriptContinuationContext.Provider>
+      <ChatSessionActionsProvider>
+        <TranscriptContinuationContext.Provider value={transcript.continueInto}>
+          <ChatTranscriptProvider
+            // No `isPending` segment: remounting on the pending -> ready flip would drop
+            // the live SSE listener. Results merge into the reducer instead.
+            key={transcript.key}
+            threadId={threadId}
+            initialMessages={messagesQuery.data}
+            hasMoreHistory={messagesQuery.hasMore}
+            isLoadingMoreHistory={messagesQuery.isLoadingMore}
+            loadMoreHistory={messagesQuery.loadMore}
+          >
+            <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
+              <ChatThinkingProvider>
+                <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+                  <ComposerImagesProvider initialImages={failedDraft?.files}>
+                    {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                    <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+                  </ComposerImagesProvider>
+                </ChatCommandsProvider>
+              </ChatThinkingProvider>
+            </ChatModelsProvider>
+          </ChatTranscriptProvider>
+        </TranscriptContinuationContext.Provider>
+      </ChatSessionActionsProvider>
     </ChatThreadMessagesContext.Provider>
   );
 }

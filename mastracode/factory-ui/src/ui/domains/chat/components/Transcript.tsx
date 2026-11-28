@@ -8,12 +8,8 @@ import { useCallback } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
-import {
-  useApproveAgentControllerToolMutation,
-  useRespondAgentControllerSuspensionMutation,
-  isEndedPrompt,
-} from '../../../../hooks/useAgentControllerRunMutations';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { isEndedPrompt } from '../context/ChatSessionActionsContext';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { drawsModelFallback, ModelFallbackPart } from './ModelFallbackActivity';
 import { RunErrorNotice } from './RunErrorNotice';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -48,22 +44,15 @@ export function TranscriptEntries(props: ComponentProps<typeof HostTranscriptEnt
 }
 
 export function Transcript({ tail }: { tail?: TranscriptTail }) {
-  const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
+  const { sessionEnabled, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
-  const hookArgs = {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  };
-  const { mutateAsync: approve, isPending: approving } = useApproveAgentControllerToolMutation(hookArgs);
-  const { mutateAsync: respond, isPending: responding } = useRespondAgentControllerSuspensionMutation(hookArgs);
+  const { approveTool: approve, respondToSuspension: respond, replying } = useChatSessionActions();
 
   // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
   const onApprove = useCallback(
     async (toolCallId: string, approved: boolean, promptId: string) => {
-      const done = await approve({ toolCallId, approved }).then(
+      const done = await approve(toolCallId, approved).then(
         () => true,
         // The mutation already reported it. Drop a prompt whose run has ended;
         // keep any other so the card stays truthful.
@@ -75,7 +64,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   );
   const onRespond = useCallback(
     async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-      const done = await respond({ toolCallId, resumeData }).then(
+      const done = await respond(toolCallId, resumeData).then(
         () => true,
         // The mutation already reported it. Drop a prompt whose run has ended;
         // keep any other so the card stays truthful.
@@ -91,7 +80,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
       <TranscriptEntries
         entries={entries}
         restoredHistory
-        isSubmitting={approving || responding || !sessionEnabled}
+        isSubmitting={replying || !sessionEnabled}
         onApprove={onApprove}
         onRespond={onRespond}
         running={busy}
