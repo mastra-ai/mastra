@@ -974,7 +974,14 @@ type AgentThreadStreamRuntimeEvent =
 
 type AgentThreadIdleSignalAcceptanceEvent =
   | { type: 'idle-signal-accepted'; requestId: string; runId: string; sourceId: string }
-  | { type: 'idle-signal-rejected'; requestId: string; runId: string; sourceId: string; error: string };
+  | {
+      type: 'idle-signal-rejected';
+      requestId: string;
+      runId: string;
+      sourceId: string;
+      error: string;
+      blocked?: true;
+    };
 
 type AgentThreadOwnerDiscoveryEvent =
   | {
@@ -2897,6 +2904,7 @@ export class AgentThreadStreamRuntime {
             runId: accepted.runId,
             sourceId,
             error: accepted.error,
+            ...(accepted.blocked ? { blocked: true as const } : {}),
           });
         } else {
           await reply({
@@ -3722,26 +3730,28 @@ export class AgentThreadStreamRuntime {
     waitForIdle: boolean,
     joinSignal?: CreatedAgentSignal,
     requestContext?: RequestContext,
-  ): Promise<string> {
+  ): Promise<{ runId: string; blocked?: true }> {
     const requestId = globalThis.crypto.randomUUID();
     const requestContextEntries = snapshotWireRequestContext(requestContext);
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
 
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<{ runId: string; blocked?: true }>((resolve, reject) => {
       let settled = false;
-      const finish = (result: { runId: string } | { error: Error }) => {
+      const finish = (result: { runId: string; blocked?: true } | { error: Error }) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
         if ('error' in result) reject(result.error);
-        else resolve(result.runId);
+        else resolve(result);
         releaseReplyTopic(pubsub, replyTopic, onReply);
       };
       const onReply: EventCallback = withAck(event => {
         const data = event.data as AgentThreadIdleSignalAcceptanceEvent | undefined;
         if (!data || data.requestId !== requestId || data.sourceId !== targetSourceId) return;
         if (data.type === 'idle-signal-rejected') {
-          finish({ error: new Error(data.error) });
+          // The owner lost the lease to a run swept from its memory: report it as
+          // blocked, the same as a send from the owner's own process.
+          finish(data.blocked ? { runId: data.runId, blocked: true } : { error: new Error(data.error) });
           return;
         }
         if (data.type === 'idle-signal-accepted') {
@@ -3811,7 +3821,7 @@ export class AgentThreadStreamRuntime {
         `No claimed thread owner responded for ${describeThreadKey(key)} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
       );
     }
-    const acceptedRunId = await this.#deliverToClaimedThreadOwner(
+    const accepted = await this.#deliverToClaimedThreadOwner(
       pubsub,
       key,
       runId,
@@ -3821,7 +3831,8 @@ export class AgentThreadStreamRuntime {
       joinSignal,
       requestContext,
     );
-    return { action: 'deliver', runId: acceptedRunId };
+    if (accepted.blocked) return { action: 'blocked', reason: 'thread-blocked', runId: accepted.runId };
+    return { action: 'deliver', runId: accepted.runId };
   }
 
   async #findClaimedThreadOwnerWithRetry(pubsub: PubSub, key: string): Promise<string | undefined> {
