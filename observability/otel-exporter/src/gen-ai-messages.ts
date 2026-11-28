@@ -69,17 +69,11 @@ const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
     ((p.type === 'text' && 'text' in p) ||
       (p.type === 'reasoning' && 'text' in p) ||
       (p.type === 'tool-call' && 'toolCallId' in p && 'toolName' in p && 'input' in p) ||
-      // The declared tool-result shape is `{ value: unknown }`. A result whose `output` is
-      // `null` or a non-object (a `toModelOutput` callback can return either) is not that
-      // shape, so it is left to the callers' unknown-shape handling instead of being counted
-      // as a message it can convert.
-      (p.type === 'tool-result' &&
-        'toolCallId' in p &&
-        'toolName' in p &&
-        'output' in p &&
-        typeof p.output === 'object' &&
-        p.output !== null &&
-        'value' in p.output))
+      // A tool result is recognized by its call, not by its `output`: a `toModelOutput`
+      // callback can return `null`, a primitive or an object with no `value`. That only makes
+      // the *part* inexpressible — `toGenAIMessagePart` skips it — and must not cost the
+      // message its other parts.
+      (p.type === 'tool-result' && 'toolCallId' in p && 'toolName' in p))
   );
 };
 
@@ -111,10 +105,13 @@ const isMastraMessage = (m: unknown): m is MastraMessage => {
  * @returns a jsonified string that contains messages adhering to the OpenTelemetry gen_ai.input.messages and gen_ai.output.messages schema.
  * If parsing fails at any step, the original inputOutputString is returned unmodified.
  */
-const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage => {
+const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage | undefined => {
   const parts: GenAIMessagePart[] = Array.isArray(m.content)
     ? m.content.map(toGenAIMessagePart).filter((p): p is GenAIMessagePart => p !== undefined)
     : [{ type: 'text', content: m.content }];
+  // A message whose every part is one gen_ai cannot express has nothing to convert. Callers
+  // keep the recorded message instead of exporting one with no parts.
+  if (parts.length === 0) return undefined;
   return withFinishReason({ role: m.role, parts }, finishReason);
 };
 
@@ -228,9 +225,11 @@ const convert = (inputOutputString: string, finishReason?: string): string | und
     // A bare message list: the shallow prompt preview recorded on
     // MODEL_STEP / MODEL_INFERENCE spans.
     if (Array.isArray(parsedIO)) {
-      return parsedIO.every(isMastraMessage)
-        ? JSON.stringify(parsedIO.map(m => toGenAIMessage(m, finishReason)))
-        : undefined;
+      if (!parsedIO.every(isMastraMessage)) return undefined;
+      const messages = parsedIO.map(m => toGenAIMessage(m, finishReason));
+      // A message with no expressible part leaves the whole payload as recorded, rather than
+      // exporting a list with parts missing from it.
+      return messages.every((m): m is GenAIMessage => m !== undefined) ? JSON.stringify(messages) : undefined;
     }
     // The provider messages the step produced, when the span kept them: they carry
     // reasoning and provider-executed tool results the `{ text, toolCalls }` summary
@@ -254,7 +253,11 @@ const convert = (inputOutputString: string, finishReason?: string): string | und
     // if the IO contains messages, convert them to gen_ai messages
     if ('messages' in parsedIO && Array.isArray(parsedIO.messages)) {
       return JSON.stringify(
-        (parsedIO.messages as unknown[]).map(m => (isMastraMessage(m) ? toGenAIMessage(m, finishReason) : m)),
+        (parsedIO.messages as unknown[]).map(m => {
+          if (!isMastraMessage(m)) return m;
+          // A message with no expressible part is kept as it was recorded.
+          return toGenAIMessage(m, finishReason) ?? m;
+        }),
       );
     }
     return undefined;

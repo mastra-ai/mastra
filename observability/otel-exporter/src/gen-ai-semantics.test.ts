@@ -935,28 +935,44 @@ describe('convertMastraMessagesToGenAIMessages', () => {
     expect(convertMastraMessagesToGenAIMessages('not json')).toBe('not json');
   });
 
-  it('treats a tool result with no value object as an unknown shape', () => {
+  it('converts the expressible siblings of a message with an unusable tool result', () => {
     // A `toModelOutput` callback can return `null`, a primitive, an array, or a plain object
-    // with no `value`. The declared tool-result shape is `{ value: unknown }`, so anything
-    // without a value is not a message the input paths recognize: the caller's unchanged
-    // passthrough applies instead of converting an empty message.
-    const unconvertible: Record<string, unknown> = {
+    // with no `value`. None of those can become a gen_ai part, but that must not cost the
+    // message the parts that can: the unusable part is skipped and its siblings convert.
+    const unusableOutputs: Record<string, unknown> = {
       'null output': null,
       'primitive output': 'text',
       'empty object output': {},
       'object output with no value': { type: 'json' },
       'array output': [1, 2],
     };
-    for (const [name, output] of Object.entries(unconvertible)) {
+    for (const [name, output] of Object.entries(unusableOutputs)) {
       const messages = [
-        { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output }] },
+        {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'valid sibling text' },
+            { type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output },
+          ],
+        },
       ];
-      const bare = JSON.stringify(messages);
-      expect(convertMastraMessagesToGenAIMessages(bare), name).toBe(bare);
-      expect(convertMastraMessagesToGenAIMessages(JSON.stringify({ messages })), name).toBe(JSON.stringify(messages));
-      expect(convert(messages), name).toEqual(messages);
+      const converted = [{ role: 'assistant', parts: [{ type: 'text', content: 'valid sibling text' }] }];
+      expect(convert(messages), `bare ${name}`).toEqual(converted);
+      expect(convert({ messages }), `wrapped ${name}`).toEqual(converted);
     }
+  });
 
+  it('leaves a message with no expressible part as it was recorded', () => {
+    // With an unusable tool result as the only content there is nothing to convert, so the
+    // input paths keep the recorded message instead of exporting a message with no parts.
+    const unusableOnly = [
+      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: null }] },
+    ];
+    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(unusableOnly))).toBe(JSON.stringify(unusableOnly));
+    expect(convert({ messages: unusableOnly })).toEqual(unusableOnly);
+  });
+
+  it('keeps converting a tool result whose value is readable', () => {
     // A conforming result still converts, including values that are themselves empty or null.
     expect(
       convert([
