@@ -23,6 +23,7 @@
     "@mastra/server": "e2e-test",
     "@inner/alias-source": "workspace:*",
     "@inner/inner-tools": "workspace:*",
+    "@inner/cjs-interop": "workspace:*",
     "@inner/hello-world": "workspace:*",
     "@inner/optional-peer-host": "workspace:*",
     "@inner/subpath-only": "workspace:*",

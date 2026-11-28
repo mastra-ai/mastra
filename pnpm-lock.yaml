@@ -5080,8 +5080,8 @@ importers:
         specifier: 6.0.0
         version: 6.0.0(rollup@4.67.4)
       '@rollup/plugin-commonjs':
-        specifier: 29.0.2
-        version: 29.0.2(rollup@4.67.4)
+        specifier: 29.0.3
+        version: 29.0.3(rollup@4.67.4)
       '@rollup/plugin-esm-shim':
         specifier: 0.1.8
         version: 0.1.8(rollup@4.67.4)
@@ -19712,8 +19712,8 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/plugin-commonjs@29.0.2':
-    resolution: {integrity: sha512-S/ggWH1LU7jTyi9DxZOKyxpVd4hF/OZ0JrEbeLjXk/DFXwRny0tjD2c992zOUYQobLrVkRVMDdmHP16HKP7GRg==}
+  '@rollup/plugin-commonjs@29.0.3':
+    resolution: {integrity: sha512-ZaOxZceP7SOUW7Lqw5IRVweSQYWaeIPnXIGLiB690EBA3FGJTO40EEr2L5yZplJWsgTCogILRSpcAe7+U0Otdg==}
     engines: {node: '>=16.0.0 || 14 >= 14.17'}
     peerDependencies:
       rollup: ^2.68.0||^3.0.0||^4.0.0
@@ -43635,7 +43635,7 @@ snapshots:
     optionalDependencies:
       rollup: 4.67.4
 
-  '@rollup/plugin-commonjs@29.0.2(rollup@4.67.4)':
+  '@rollup/plugin-commonjs@29.0.3(rollup@4.67.4)':
     dependencies:
       '@rollup/pluginutils': 5.5.1(rollup@4.67.4)
       commondir: 1.0.1
