@@ -69,7 +69,16 @@ const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
     ((p.type === 'text' && 'text' in p) ||
       (p.type === 'reasoning' && 'text' in p) ||
       (p.type === 'tool-call' && 'toolCallId' in p && 'toolName' in p && 'input' in p) ||
-      (p.type === 'tool-result' && 'toolCallId' in p && 'toolName' in p && 'output' in p))
+      // The declared tool-result shape is `{ value: unknown }`. A result whose `output` is
+      // `null` or a non-object (a `toModelOutput` callback can return either) is not that
+      // shape, so it is left to the callers' unknown-shape handling instead of being counted
+      // as a message it can convert.
+      (p.type === 'tool-result' &&
+        'toolCallId' in p &&
+        'toolName' in p &&
+        'output' in p &&
+        typeof p.output === 'object' &&
+        p.output !== null))
   );
 };
 

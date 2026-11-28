@@ -934,4 +934,52 @@ describe('convertMastraMessagesToGenAIMessages', () => {
     expect(convertMastraMessagesToGenAIMessages('{"foo":1}')).toBe('{"foo":1}');
     expect(convertMastraMessagesToGenAIMessages('not json')).toBe('not json');
   });
+
+  it('treats a tool result with no value object as an unknown shape', () => {
+    // A `toModelOutput` callback can return `null` or a primitive. The declared tool-result
+    // shape is `{ value: unknown }`, so these are not messages the input paths recognize and
+    // the caller's unchanged passthrough applies, instead of converting an empty message.
+    const nullOutput = [
+      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: null }] },
+    ];
+    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(nullOutput))).toBe(JSON.stringify(nullOutput));
+    expect(convertMastraMessagesToGenAIMessages(JSON.stringify({ messages: nullOutput }))).toBe(
+      JSON.stringify(nullOutput),
+    );
+
+    const stringOutput = [
+      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: 'text' }] },
+    ];
+    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(stringOutput))).toBe(JSON.stringify(stringOutput));
+
+    // A conforming result still converts, including one whose value is itself `null`.
+    expect(
+      convert([
+        {
+          role: 'tool',
+          content: [
+            {
+              type: 'tool-result',
+              toolCallId: 't2',
+              toolName: 'lookup',
+              output: { type: 'json', value: { ok: true } },
+            },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: 'tool',
+        parts: [{ type: 'tool_call_response', id: 't2', name: 'lookup', response: JSON.stringify({ ok: true }) }],
+      },
+    ]);
+    expect(
+      convert([
+        {
+          role: 'tool',
+          content: [{ type: 'tool-result', toolCallId: 't3', toolName: 'lookup', output: { value: null } }],
+        },
+      ]),
+    ).toEqual([{ role: 'tool', parts: [{ type: 'tool_call_response', id: 't3', name: 'lookup', response: 'null' }] }]);
+  });
 });
