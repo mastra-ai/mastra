@@ -54,6 +54,56 @@ describe('observeSessionRunReports', () => {
     );
   });
 
+  it('carries the plan a parked submit_plan call paused with, and of no other tool', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const decision = JSON.stringify({
+      type: 'object',
+      properties: { action: { enum: ['approved', 'rejected'] }, feedback: { type: 'string' } },
+      required: ['action'],
+    });
+
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'plan-1',
+      toolName: 'submit_plan',
+      args: { path: '.artifacts/plans/a.md' },
+      suspendPayload: {
+        path: '.artifacts/plans/a.md',
+        title: 'Add dark mode',
+        plan: '## Goal\nLet people switch to a dark theme.',
+      },
+      resumeSchema: decision,
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+    session.emit({
+      type: 'tool_suspended',
+      toolCallId: 'other-1',
+      toolName: 'sign_off',
+      args: {},
+      suspendPayload: { path: '.artifacts/plans/a.md' },
+      resumeSchema: decision,
+    } as AgentControllerEvent);
+    session.emit(end('suspended'));
+
+    expect(report.mock.calls.map(([outcome]) => outcome)).toEqual([
+      {
+        status: 'blocked',
+        toolName: 'submit_plan',
+        toolCallId: 'plan-1',
+        decision: true,
+        planPath: '.artifacts/plans/a.md',
+        plan: expect.objectContaining({
+          ok: true,
+          title: 'Add dark mode',
+          goal: 'Let people switch to a dark theme.',
+        }),
+      },
+      { status: 'blocked', toolName: 'sign_off', toolCallId: 'other-1', decision: true },
+    ]);
+  });
+
   it('reports a run a memory-model failure stopped as failed, quoting the failure', () => {
     const session = fakeSession();
     const report = vi.fn(async () => {});
@@ -331,6 +381,62 @@ describe('createSessionRunEndReporter', () => {
     expect(deliver).toHaveBeenCalledWith(
       { sessionId: 'origin', threadId: 'origin-thread' },
       expect.objectContaining({ kind: 'blocked' }),
+    );
+  });
+});
+
+describe('createSessionRunEndReporter with a submitted plan', () => {
+  it('quotes the plan the session submitted to the follower', async () => {
+    const deliver = vi.fn(async () => ({ delivered: 'woken' as const, notificationId: 'n-1' }));
+    const row = {
+      sessionId: 'side',
+      orgId: 'org-1',
+      factoryProjectId: 'project-1',
+      userId: 'user-1',
+      originSessionId: 'origin',
+      originThreadId: 'origin-thread',
+      originMutedAt: null,
+      title: 'Plan it',
+    };
+    const plan = {
+      ok: true as const,
+      path: '.artifacts/plans/a.md',
+      title: 'Add dark mode',
+      goal: 'Let people switch to a dark theme.',
+      phases: [],
+      body: '',
+    };
+    const reporter = createSessionRunEndReporter({
+      sessions: { getBySessionId: async () => row as never },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession: async () => null,
+        listWorkItemSubscribers: vi.fn(),
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver, notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({
+      sessionId: 'side',
+      threadId: 'side-thread',
+      outcome: {
+        status: 'blocked',
+        toolName: 'submit_plan',
+        toolCallId: 'plan-1',
+        decision: true,
+        planPath: '.artifacts/plans/a.md',
+        plan,
+      },
+      since: new Date(),
+    });
+
+    expect(deliver).toHaveBeenCalledWith(
+      { sessionId: 'origin', threadId: 'origin-thread' },
+      expect.objectContaining({
+        summary: expect.stringContaining('Goal:\nLet people switch to a dark theme.'),
+        attributes: expect.objectContaining({ 'plan-path': '.artifacts/plans/a.md' }),
+      }),
     );
   });
 });

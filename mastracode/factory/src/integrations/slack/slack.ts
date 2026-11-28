@@ -115,7 +115,7 @@ function configuredSourceControls(deps: SlackChannelDeps): readonly SourceContro
  * slash-command body — both carry `team_id`), duck-typed to build the
  * workspace-scoped account-link key.
  */
-function rawTeamId(rawPayload: unknown): string | undefined {
+export function rawTeamId(rawPayload: unknown): string | undefined {
   if (!rawPayload || typeof rawPayload !== 'object') return undefined;
   const raw = rawPayload as { team_id?: unknown; team?: unknown };
   if (typeof raw.team_id === 'string' && raw.team_id) return raw.team_id;

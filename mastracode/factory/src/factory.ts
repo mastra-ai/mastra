@@ -121,6 +121,8 @@ import {
 import { isPlatformConnectEventSource } from './integrations/platform/foundation/connect-events.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { observeSessionMemoryFailurePosts } from './integrations/slack/memory-failure-post.js';
+import { withPlanApproveActions } from './integrations/slack/plan-approval-actions.js';
+import { observeSessionPlanCards, PlanApprovalCards } from './integrations/slack/plan-approval-post.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
@@ -242,6 +244,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SandboxEnvsStorage } from './storage/domains/sandbox-envs/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
+import type { SourceControlSession } from './storage/domains/source-control/base.js';
 import { VoiceSettingsStorage } from './storage/domains/voice-settings/base.js';
 import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
@@ -705,6 +708,8 @@ export class MastraFactory {
   readonly #embedder: MastraEmbeddingModel<string> | undefined;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
+  /** The Slack approval cards for plans sessions wait on; set when the factory mounts. */
+  #planCards: PlanApprovalCards | undefined;
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
@@ -1481,11 +1486,21 @@ export class MastraFactory {
       const notifications = await controller?.getMastra()?.getStorage()?.getStore('notifications');
       return controller && notifications ? { controller, notifications } : null;
     };
+    // A plan a session waits on gets an approval card in each follower thread on Slack.
+    const planCards = new PlanApprovalCards({
+      channels: () => this.#prepared?.base.controller.getChannels(),
+      sessions: sourceControlSessions,
+      notifications: async () => (await factoryMessaging())?.notifications ?? null,
+      store: () =>
+        storage.isDomainReady('integrations') ? integrationStorage.forIntegration('slack').subscriptions : null,
+    });
+    this.#planCards = planCards;
     const factoryReporting = async (): Promise<FactoryReporting | null> => {
       const messaging = await factoryMessaging();
       if (!messaging) return null;
       return {
         notifications: messaging.notifications,
+        postPlanApproval: request => planCards.post(request),
         deliver: (target, notification, options) =>
           deliverFactorySessionNotification({
             controller: messaging.controller,
@@ -2732,6 +2747,7 @@ export class MastraFactory {
         answersItself,
       });
       observeSessionMemoryFailurePosts(session, () => prepared.base.controller.getChannels());
+      if (this.#planCards) observeSessionPlanCards(session, this.#planCards);
       observeSessionThreadStamp(session);
       instrumentSessionFirstOutput(session);
     });
@@ -2821,7 +2837,18 @@ export class MastraFactory {
         integration.id,
       );
       // Integrations return a channels CONFIG; the factory owns construction and teardown.
-      const channels = new AgentControllerChannels(integration.channels!(context));
+      // A plan card's Approve button answers the parked plan as the linked person who clicked it.
+      const channelConfig = this.#planCards
+        ? withPlanApproveActions(integration.channels!(context), {
+            accountLinks: context.storage.channelIdentity,
+            getSession: sessionId => sourceControlSessions.getBySessionId(sessionId),
+            workItems: workItemsStorage,
+            messaging: factoryMessaging,
+            audit: auditDomain,
+            cards: this.#planCards,
+          })
+        : integration.channels!(context);
+      const channels = new AgentControllerChannels(channelConfig);
       prepared.base.controller.setChannels(channels);
       for (const adapter of Object.values(channels.adapters)) {
         const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
