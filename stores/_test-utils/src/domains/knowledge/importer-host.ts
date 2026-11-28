@@ -1852,6 +1852,34 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
     });
 
+    it('saves children of a merged item as settled when they have nothing to wait for, before any settle slice runs', async () => {
+      const { knowledge, storage } = await mergedSetup();
+      const host = knowledge.importers!.host;
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const saveNode = vi.spyOn(
+        Object.getPrototypeOf(storage.importers!) as {
+          saveNode: (node: { sourceId: string; unsettled: boolean }) => Promise<void>;
+        },
+        'saveNode',
+      );
+      // Each node's first save is its item write; the flush's settle slice can only save it after that.
+      try {
+        await flushOnce(host, started.runId, started.generation, 1, [
+          upsert({ sourceId: 'c1', parent: 'p1', body: 'existing child' }),
+          upsert({ sourceId: 'c2', parent: 'p1' }),
+          upsert({ sourceId: 'c3', parent: 'p1', links: [{ sourceId: 'zz', rel: 'see' }] }),
+        ]);
+        const firstSave = (sourceId: string) => saveNode.mock.calls.find(([node]) => node.sourceId === sourceId)?.[0];
+        expect(firstSave('c1')).toMatchObject({ unsettled: false });
+        expect(firstSave('c2')).toMatchObject({ unsettled: false });
+        // A link that doesn't resolve yet still waits for a settle slice.
+        expect(firstSave('c3')).toMatchObject({ unsettled: true });
+      } finally {
+        saveNode.mockRestore();
+      }
+    });
+
     it('settles a node that was waiting when its page was merged, without refusing it', async () => {
       const { run, storage, keeper, reread } = await mergedSetup();
       // Both were waiting for a settle slice when p1's page was merged: p1 itself, and its child c1.

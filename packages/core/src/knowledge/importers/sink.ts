@@ -648,9 +648,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     const parentRecord = await nodeOf(item.parent);
     const parentState = parentRecord ? await stateOf(parentRecord) : null;
     const sourceParent = parentState === 'live' ? parentRecord : null;
-    // A child that already exists stays where the merge of its parent put it.
+    // A child that already exists stays where the merge of its parent put it, and no child waits
+    // for a merged parent: it never comes back.
     const parentMerged = parentState === 'merged';
-    const misplaced = !!item.parent && !sourceParent;
+    const misplaced = !!item.parent && !sourceParent && !parentMerged;
     const parentNode = sourceParent ?? (await liveNodeOf(item.fallbackParent));
     // A flush with writes always has an anchor.
     const destination = parentNode ? await owned(parentNode.pageId, parentNode.sourceId) : anchor!;
