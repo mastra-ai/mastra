@@ -33,12 +33,12 @@ import {
   releaseRunOwnership,
   renewRunOwnership,
   runClaimKey,
-  writeBatch,
 } from '../run-fencing';
 import type { RunFenceCheck } from '../run-fencing';
 import { escapeRedisGlob, getKey } from '../utils';
 
 type WorkflowRunRecord = {
+  namespace?: string;
   workflow_name: string;
   run_id: string;
   snapshot: WorkflowRunState | string;
@@ -104,6 +104,73 @@ function legacySnapshotKey(namespace: string, workflowName: string, runId: strin
 function legacySnapshotPrefix(namespace: string, workflowName: string, runId: string): string {
   return `${canonicalSnapshotKey(namespace, workflowName, runId)}:resourceId:`;
 }
+
+/** Whether a stored record names the run being read, updated or deleted. */
+function recordMatchesRun(
+  record: WorkflowRunRecord | null | undefined,
+  namespace: string,
+  workflowName: string,
+  runId: string,
+): boolean {
+  return (
+    !!record &&
+    record.run_id === runId &&
+    record.workflow_name === workflowName &&
+    (record.namespace ?? 'workflows') === namespace
+  );
+}
+
+/**
+ * Lua shared by every script that reads, writes or deletes a run's snapshot.
+ *
+ * A key is not proof of identity: `run_id` and `workflow_name` are free-form, so
+ * the canonical key of run `r:resourceId:x` is byte-identical to a legacy key of
+ * run `r` with resource `x`. Every record is therefore matched on its stored
+ * identity before it is adopted, overwritten or deleted — inside the same script
+ * as the mutation, so a key that changed since it was read is never acted on.
+ */
+const SNAPSHOT_IDENTITY_LUA = `
+  local function matchesIdentity(rec, rid, wf, ns)
+    if not rec then return false end
+    if rec['run_id'] ~= rid or rec['workflow_name'] ~= wf then return false end
+    local storedNs = rec['namespace']
+    if storedNs == nil then storedNs = 'workflows' end
+    return storedNs == ns
+  end
+
+  local function canonicalKeyOf(rec, tableName)
+    if not rec or rec['workflow_name'] == nil or rec['run_id'] == nil then return nil end
+    local ns = rec['namespace']
+    if ns == nil then ns = 'workflows' end
+    return tableName .. ':namespace:' .. ns .. ':workflow_name:' .. rec['workflow_name'] .. ':run_id:' .. rec['run_id']
+  end
+
+  -- Moves a record that belongs to a *different* run off the key this write is
+  -- about to take, onto that run's own canonical key, so the occupant's snapshot
+  -- survives. Returns an error message when the collision cannot be resolved; a
+  -- record that already names this run, or an empty key, is left alone.
+  local function displaceForeignOccupant(canonicalKey, occupant, raw, rid, wf, ns, tableName)
+    if matchesIdentity(occupant, rid, wf, ns) then return nil end
+    if type(occupant['workflow_name']) ~= 'string' or type(occupant['run_id']) ~= 'string' then
+      return 'snapshot key for run ' .. rid .. ' holds a record with no run identity'
+    end
+    local destination = canonicalKeyOf(occupant, tableName)
+    if destination == nil or destination == canonicalKey then
+      return 'snapshot key for run ' .. rid .. ' is also the snapshot key of run ' .. occupant['run_id']
+    end
+    local destinationRaw = redis.call('GET', destination)
+    if destinationRaw then
+      local occupantNs = occupant['namespace']
+      if occupantNs == nil then occupantNs = 'workflows' end
+      if not matchesIdentity(cjson.decode(destinationRaw), occupant['run_id'], occupant['workflow_name'], occupantNs) then
+        return 'snapshot key for run ' .. occupant['run_id'] .. ' is held by another run'
+      end
+    else
+      redis.call('SET', destination, raw)
+    end
+    return nil
+  end
+`;
 
 export class WorkflowsUpstash extends WorkflowsStorage {
   private client: Redis;
@@ -230,7 +297,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
   }) {
     if (workflowName) {
       // Canonical first: when both a canonical and a legacy copy exist, the
-      // canonical one is the source of truth.
+      // canonical one is the source of truth. A canonical key can hold a
+      // different run's legacy record (see {@link SNAPSHOT_IDENTITY_LUA}), so a
+      // record is returned only when it names the run being read.
       const keyVariants: string[] = [canonicalSnapshotKey(namespace, workflowName, runId)];
       if (resourceId) {
         keyVariants.push(legacySnapshotKey(namespace, workflowName, runId, resourceId));
@@ -238,7 +307,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
 
       for (const key of keyVariants) {
         const data = await this.client.get<WorkflowRunRecord>(key);
-        if (data) return data;
+        if (recordMatchesRun(data, namespace, workflowName, runId)) return data;
       }
     }
 
@@ -250,9 +319,8 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }),
     );
 
-    const matches = workflows.filter(
-      (w): w is WorkflowRunRecord =>
-        !!w?.run_id && w.run_id === runId && (!workflowName || w.workflow_name === workflowName),
+    const matches = workflows.filter((next): next is WorkflowRunRecord =>
+      workflowName ? recordMatchesRun(next, namespace, workflowName, runId) : !!next?.run_id && next.run_id === runId,
     );
 
     if (resourceId) {
@@ -282,8 +350,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
    * whose id embeds `:resourceId:`: run `a`'s legacy key and run
    * `a:resourceId:r`'s canonical key are the same string. The stored record,
    * not the key, is the run's identity, so every candidate is read back and
-   * kept only when it is a copy of this run (`run_id` and `workflow_name`
-   * match). Otherwise fold-in and delete would act on an unrelated run.
+   * kept only when it is a copy of this run ({@link recordMatchesRun}). The
+   * scripts re-check identity before acting on a key, because the record can
+   * change between this scan and the mutation.
    */
   async #legacySnapshotKeys({
     namespace,
@@ -313,7 +382,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const keys: string[] = [];
     for (const key of candidates) {
       const record = await this.client.get<WorkflowRunRecord>(key);
-      if (record?.run_id === runId && record.workflow_name === workflowName) keys.push(key);
+      if (recordMatchesRun(record, namespace, workflowName, runId)) keys.push(key);
     }
 
     return keys;
@@ -342,14 +411,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // this run (a run split across a canonical and a legacy copy) so the atomic
       // write below merges them and drops them.
       const canonicalKey = canonicalSnapshotKey(WORKFLOW_NAMESPACE, workflowName, runId);
-      const existing = await this.client.get<WorkflowRunRecord>(canonicalKey);
+      const canonicalRecord = await this.client.get<WorkflowRunRecord>(canonicalKey);
+      // The canonical key can hold another run's record; only a copy that names
+      // this run may be merged into.
+      const existing = recordMatchesRun(canonicalRecord, WORKFLOW_NAMESPACE, workflowName, runId)
+        ? canonicalRecord
+        : null;
       const legacyKeys = await this.#legacySnapshotKeys({
         namespace: WORKFLOW_NAMESPACE,
         workflowName,
         runId,
         knownResourceIds: [existing?.resourceId],
-        // The canonical copy is missing or has no resourceId, so legacy copies
-        // (if any) cannot be named and have to be discovered.
+        // The canonical copy is missing, is another run's, or has no resourceId,
+        // so legacy copies (if any) cannot be named and have to be discovered.
         discover: !existing?.resourceId,
       });
 
@@ -370,14 +444,37 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local runId = ARGV[8]
         local timestamp = tonumber(ARGV[9])
         local stateJson = ARGV[10]
+        local tableName = ARGV[11]
+
+${SNAPSHOT_IDENTITY_LUA}
 
         -- Read the canonical record first, then a legacy resource-suffixed copy.
-        local existing = redis.call('GET', canonicalKey)
+        -- A record is used only when it names this run: the canonical key can
+        -- hold another run's legacy record (see displaceForeignOccupant).
+        local canonicalRaw = redis.call('GET', canonicalKey)
+        local existing = nil
+        local displaced = nil
+        if canonicalRaw then
+          local occupant = cjson.decode(canonicalRaw)
+          if matchesIdentity(occupant, runId, workflowName, namespace) then
+            existing = canonicalRaw
+          else
+            displaced = occupant
+          end
+        end
+
+        local legacyKeys = {}
         local legacy = nil
         for i = 2, 1 + legacyCount do
           local copy = redis.call('GET', KEYS[i])
-          if copy and not legacy then
-            legacy = copy
+          if copy then
+            local copyRecord = cjson.decode(copy)
+            if matchesIdentity(copyRecord, runId, workflowName, namespace) then
+              legacyKeys[#legacyKeys + 1] = KEYS[i]
+              if not legacy then
+                legacy = copy
+              end
+            end
           end
         end
         if not existing then
@@ -452,10 +549,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         data.snapshot = snapshot
         data.updatedAt = now
 
+        -- Another run's record must not be overwritten: move it to its own
+        -- canonical key first, in this same script.
+        if displaced then
+          local placeErr = displaceForeignOccupant(canonicalKey, displaced, cjson.encode(displaced), runId, workflowName, namespace, tableName)
+          if placeErr then
+            return redis.error_reply(placeErr)
+          end
+        end
+
         -- Save back to the canonical key and drop every legacy copy.
         redis.call('SET', canonicalKey, cjson.encode(data))
-        for i = 2, 1 + legacyCount do
-          redis.call('DEL', KEYS[i])
+        for _, key in ipairs(legacyKeys) do
+          redis.call('DEL', key)
         end
 
         -- Return the full updated data
@@ -477,6 +583,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           runId,
           String(Date.now()),
           state === undefined ? '' : JSON.stringify(state),
+          TABLE_WORKFLOW_SNAPSHOT,
         ],
         check,
       );
@@ -521,14 +628,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // Canonical key plus every legacy resource-suffixed copy, so a run written
       // by an older release is migrated to the canonical key by the atomic write.
       const canonicalKey = canonicalSnapshotKey(WORKFLOW_NAMESPACE, workflowName, runId);
-      const existing = await this.client.get<WorkflowRunRecord>(canonicalKey);
+      const canonicalRecord = await this.client.get<WorkflowRunRecord>(canonicalKey);
+      // The canonical key can hold another run's record; only a copy that names
+      // this run may be updated.
+      const existing = recordMatchesRun(canonicalRecord, WORKFLOW_NAMESPACE, workflowName, runId)
+        ? canonicalRecord
+        : null;
       const legacyKeys = await this.#legacySnapshotKeys({
         namespace: WORKFLOW_NAMESPACE,
         workflowName,
         runId,
         knownResourceIds: [existing?.resourceId],
-        // The canonical copy is missing or has no resourceId, so legacy copies
-        // (if any) cannot be named and have to be discovered.
+        // The canonical copy is missing, is another run's, or has no resourceId,
+        // so legacy copies (if any) cannot be named and have to be discovered.
         discover: !existing?.resourceId,
       });
 
@@ -542,14 +654,40 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local optsJson = ARGV[2]
         local now = ARGV[3]
         local expectedStatusJson = ARGV[4]
+        local namespace = ARGV[5]
+        local workflowName = ARGV[6]
+        local runId = ARGV[7]
+        local tableName = ARGV[8]
+
+${SNAPSHOT_IDENTITY_LUA}
 
         -- Read the canonical record first, then a legacy resource-suffixed copy.
-        local existing = redis.call('GET', canonicalKey)
+        -- A record is used only when it names this run: the canonical key can
+        -- hold another run's legacy record (see displaceForeignOccupant).
+        local canonicalRaw = redis.call('GET', canonicalKey)
+        local existing = nil
+        local displaced = nil
+        if canonicalRaw then
+          local occupant = cjson.decode(canonicalRaw)
+          if matchesIdentity(occupant, runId, workflowName, namespace) then
+            existing = canonicalRaw
+          else
+            displaced = occupant
+          end
+        end
+
+        local legacyKeys = {}
         local legacy = nil
         for i = 2, 1 + legacyCount do
           local copy = redis.call('GET', KEYS[i])
-          if copy and not legacy then
-            legacy = copy
+          if copy then
+            local copyRecord = cjson.decode(copy)
+            if matchesIdentity(copyRecord, runId, workflowName, namespace) then
+              legacyKeys[#legacyKeys + 1] = KEYS[i]
+              if not legacy then
+                legacy = copy
+              end
+            end
           end
         end
         if not existing then
@@ -605,10 +743,19 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         data.snapshot = snapshot
         data.updatedAt = now
 
+        -- Another run's record must not be overwritten: move it to its own
+        -- canonical key first, in this same script.
+        if displaced then
+          local placeErr = displaceForeignOccupant(canonicalKey, displaced, cjson.encode(displaced), runId, workflowName, namespace, tableName)
+          if placeErr then
+            return redis.error_reply(placeErr)
+          end
+        end
+
         -- Save back to the canonical key and drop every legacy copy.
         redis.call('SET', canonicalKey, cjson.encode(data))
-        for i = 2, 1 + legacyCount do
-          redis.call('DEL', KEYS[i])
+        for _, key in ipairs(legacyKeys) do
+          redis.call('DEL', key)
         end
 
         -- Return the full updated data
@@ -625,7 +772,16 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         this.client,
         luaScript,
         [canonicalKey, ...legacyKeys],
-        [String(legacyKeys.length), JSON.stringify(state), now, expectedStatusJson],
+        [
+          String(legacyKeys.length),
+          JSON.stringify(state),
+          now,
+          expectedStatusJson,
+          WORKFLOW_NAMESPACE,
+          workflowName,
+          runId,
+          TABLE_WORKFLOW_SNAPSHOT,
+        ],
         check,
       );
 
@@ -671,26 +827,23 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
       const now = new Date();
-      // Snapshots live under the canonical key; a legacy resource-suffixed copy
-      // is removed in the same atomic write. A caller that names the resourceId
-      // points straight at its legacy key. A caller that does not may still be
-      // writing a run that a pre-fix release split across a canonical copy and a
-      // legacy one, so read the canonical copy and, when it carries no
-      // resourceId, scan for a legacy sibling to fold in.
       const canonicalKey = canonicalSnapshotKey(namespace, workflowName, runId);
-      let knownResourceIds: Array<string | undefined> = [resourceId];
-      let discover = false;
-      if (!resourceId) {
-        const existing = await this.client.get<WorkflowRunRecord>(canonicalKey);
-        knownResourceIds = [existing?.resourceId];
-        discover = !!existing && !existing.resourceId;
-      }
+      // The canonical key can hold another run's record; only a copy that names
+      // this run may be read, folded in or overwritten.
+      const canonicalRecord = resourceId ? null : await this.client.get<WorkflowRunRecord>(canonicalKey);
+      const existing = recordMatchesRun(canonicalRecord, namespace, workflowName, runId) ? canonicalRecord : null;
+      // Snapshots live under the canonical key; any legacy resource-suffixed copy
+      // is folded in and removed by the same atomic write. A caller that names
+      // the resourceId points straight at its legacy key. A caller that does not
+      // may be writing a run that a pre-fix release kept solely, or as well,
+      // under a legacy key, so its legacy copies are discovered by scan and
+      // confirmed by identity.
       const legacyKeys = await this.#legacySnapshotKeys({
         namespace,
         workflowName,
         runId,
-        knownResourceIds,
-        discover,
+        knownResourceIds: [resourceId ?? existing?.resourceId],
+        discover: !resourceId,
       });
 
       const record = {
@@ -709,30 +862,45 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local canonicalKey = KEYS[1]
         local legacyCount = tonumber(ARGV[1])
         local next = cjson.decode(ARGV[2])
+        local namespace = ARGV[3]
+        local workflowName = ARGV[4]
+        local runId = ARGV[5]
+        local tableName = ARGV[6]
+
+${SNAPSHOT_IDENTITY_LUA}
 
         -- Metadata precedence: the canonical copy wins for createdAt. A canonical
         -- copy written before the resource-aware fix has no resourceId, so adopt
         -- it from a legacy sibling before that sibling is dropped. When there is
         -- no canonical copy, the first legacy sibling that carries the metadata
         -- supplies it (parity with the pre-fix read-then-overwrite behaviour).
+        -- Only records that name this run are read: the canonical key can hold
+        -- another run's legacy record (see displaceForeignOccupant).
         local createdAtLocked = false
         local canonicalRaw = redis.call("GET", canonicalKey)
+        local displaced = nil
         if canonicalRaw then
           local current = cjson.decode(canonicalRaw)
-          if current["createdAt"] then
-            next["createdAt"] = current["createdAt"]
-            createdAtLocked = true
-          end
-          if next["resourceId"] == nil and current["resourceId"] then
-            next["resourceId"] = current["resourceId"]
+          if matchesIdentity(current, runId, workflowName, namespace) then
+            if current["createdAt"] then
+              next["createdAt"] = current["createdAt"]
+              createdAtLocked = true
+            end
+            if next["resourceId"] == nil and current["resourceId"] then
+              next["resourceId"] = current["resourceId"]
+            end
+          else
+            displaced = current
           end
         end
 
+        local legacyKeys = {}
         for i = 2, 1 + legacyCount do
-          if (not createdAtLocked) or next["resourceId"] == nil then
-            local legacyRaw = redis.call("GET", KEYS[i])
-            if legacyRaw then
-              local copy = cjson.decode(legacyRaw)
+          local legacyRaw = redis.call("GET", KEYS[i])
+          if legacyRaw then
+            local copy = cjson.decode(legacyRaw)
+            if matchesIdentity(copy, runId, workflowName, namespace) then
+              legacyKeys[#legacyKeys + 1] = KEYS[i]
               if not createdAtLocked and copy["createdAt"] then
                 next["createdAt"] = copy["createdAt"]
                 createdAtLocked = true
@@ -744,14 +912,23 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           end
         end
 
+        -- Another run's record must not be overwritten: move it to its own
+        -- canonical key first, in this same script.
+        if displaced then
+          local placeErr = displaceForeignOccupant(canonicalKey, displaced, cjson.encode(displaced), runId, workflowName, namespace, tableName)
+          if placeErr then
+            return redis.error_reply(placeErr)
+          end
+        end
+
         redis.call("SET", canonicalKey, cjson.encode(next))
-        for i = 2, 1 + legacyCount do
-          redis.call("DEL", KEYS[i])
+        for _, key in ipairs(legacyKeys) do
+          redis.call("DEL", key)
         end
         return 1
         `,
         [canonicalKey, ...legacyKeys],
-        [String(legacyKeys.length), JSON.stringify(record)],
+        [String(legacyKeys.length), JSON.stringify(record), namespace, workflowName, runId, TABLE_WORKFLOW_SNAPSHOT],
         check,
       );
     } catch (error) {
@@ -841,7 +1018,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       // Delete the canonical key and every legacy resource-suffixed copy for
       // this run, so no orphaned record is left behind. The pattern is escaped
       // and every hit re-checked against the literal prefix, so a runId holding
-      // `*`, `?` or `[` cannot widen the scan to other runs.
+      // `*`, `?` or `[` cannot widen the scan to other runs. The delete itself
+      // re-checks the stored identity inside the script: `run_id` is free-form,
+      // so the canonical key of one run can be the legacy key of another, and
+      // only records that name this run may go.
       const canonicalKey = canonicalSnapshotKey(WORKFLOW_NAMESPACE, workflowName, runId);
       const legacyKeys = await this.#legacySnapshotKeys({
         namespace: WORKFLOW_NAMESPACE,
@@ -851,12 +1031,41 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         discover: true,
       });
 
-      const batch = writeBatch(this.client, check);
-      batch.del(canonicalKey);
-      for (const key of legacyKeys) {
-        batch.del(key);
-      }
-      await batch.exec();
+      await evalFenced(
+        this.client,
+        `
+        local canonicalKey = KEYS[1]
+        local legacyCount = tonumber(ARGV[1])
+        local namespace = ARGV[2]
+        local workflowName = ARGV[3]
+        local runId = ARGV[4]
+
+${SNAPSHOT_IDENTITY_LUA}
+
+        local canonicalRaw = redis.call('GET', canonicalKey)
+        if canonicalRaw then
+          local current = cjson.decode(canonicalRaw)
+          if matchesIdentity(current, runId, workflowName, namespace) then
+            redis.call('DEL', canonicalKey)
+          end
+        end
+
+        for i = 2, 1 + legacyCount do
+          local legacyRaw = redis.call('GET', KEYS[i])
+          if legacyRaw then
+            local copy = cjson.decode(legacyRaw)
+            if matchesIdentity(copy, runId, workflowName, namespace) then
+              redis.call('DEL', KEYS[i])
+            end
+          end
+        end
+
+        return 1
+        `,
+        [canonicalKey, ...legacyKeys],
+        [String(legacyKeys.length), WORKFLOW_NAMESPACE, workflowName, runId],
+        check,
+      );
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
