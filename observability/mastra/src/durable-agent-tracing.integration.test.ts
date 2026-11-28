@@ -836,6 +836,21 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
           dropTimestamps,
         ),
       ).not.toContain('42');
+      // The clean output above must come from a promoted response, not from dropping it: the plain
+      // path exports the model's own messages, the first call's tool call and the second call's
+      // processed text. An export that disappears again, or ships the raw text, fails here.
+      if (variant === 'plain') {
+        const responseMessages = inferences.map(i => (i.output as Record<string, unknown>).responseMessages);
+        expect(responseMessages[0]).toMatchObject([
+          {
+            role: 'assistant',
+            content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: { q: 'answer' } }],
+          },
+        ]);
+        expect(responseMessages[1]).toMatchObject([
+          { role: 'assistant', content: [{ type: 'text', text: 'The answer is [REDACTED].' }] },
+        ]);
+      }
       expect(inferences[0].attributes).toMatchObject({ finishReason: 'tool-calls', usage: { inputTokens: 10 } });
 
       const [toolCall] = testExporter.getSpansByType('tool_call' as any) as any[];
