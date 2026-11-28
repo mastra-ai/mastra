@@ -54,6 +54,7 @@ const controller = new AgentController({
     id: 'assistant-workspace',
     filesystem: new LocalFilesystem({ basePath: './workspace' }),
   }),
+  maxSteps: 100,
   modes: [
     {
       id: 'plan',
@@ -84,6 +85,8 @@ const unsubscribe = session.subscribe(event => {
 await session.sendMessage({ content: 'Plan a small TypeScript CLI.' })
 unsubscribe()
 ```
+
+Set `maxSteps` on the controller to change the execution budget for each initial run and every resumed continuation. The default is `1000`.
 
 Each message emits a `message_start` event with the initial message, zero or more `message_update` events with compact deltas, and a `message_end` event containing the message ID. Apply updates by ID when you need to reconstruct the complete message.
 

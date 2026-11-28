@@ -171,6 +171,13 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
+    name: 'maxSteps',
+    type: 'number',
+    description: 'Maximum number of steps for controller-managed agent runs, including resumed continuations.',
+    isOptional: true,
+    defaultValue: '1000',
+  },
+  {
     name: 'instructions',
     type: 'string',
     description: 'Controller instructions layered with the current mode instructions.',

@@ -460,6 +460,7 @@ describe('AgentController: tool suspension and resumption', () => {
       workspace: createMockWorkspace(),
       id: 'test-controller-budget-resume',
       storage,
+      maxSteps: 100,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
       initialState: { yolo: true } as any,
     });
@@ -473,8 +474,8 @@ describe('AgentController: tool suspension and resumption', () => {
 
     expect(sendStreamResumeSpy).toHaveBeenCalled();
     const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
-    // Must match the budget used for the initial stream, not the agent default.
-    expect(resumeOptions.streamOptions.maxSteps).toBe(1000);
+    // Must match the configured budget used for the initial stream, not the agent default.
+    expect(resumeOptions.streamOptions.maxSteps).toBe(100);
     expect(resumeOptions.streamOptions.savePerStep).toBe(false);
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
