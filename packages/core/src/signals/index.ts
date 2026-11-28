@@ -31,6 +31,9 @@ export { assignTaskIds } from '../tools/builtin/task-tools';
 // The implementation lives with the goal built-in under `agent/goal`.
 export { GoalSignalProvider } from '../agent/goal';
 
+// `TimeSignalProvider` keeps a `<current-time>` state signal current at a configured interval.
+export { TimeSignalProvider, type TimeSignalProviderOptions, type TimeSignalFormatter } from './time-signal-provider';
+
 // Signal factories and the canonical DB-message <-> signal reconstruction helpers.
 // Consumers that read persisted `role: 'signal'` `MastraDBMessage` rows use
 // `mastraDBMessageToSignal` to recover the original signal (type, tagName, contents,

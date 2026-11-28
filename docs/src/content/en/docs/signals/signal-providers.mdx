@@ -235,6 +235,22 @@ const agent = new Agent({
 
 It contributes `task_write`, `task_update`, `task_complete`, and `task_check`, plus the processor that projects the task list onto a state-signal lane. Task tracking requires a memory-backed thread and a `storage` instance. Without memory, the tools report that tracking needs agent memory.
 
+### Time signal provider
+
+[`TimeSignalProvider`](/reference/signals/time-signal-provider) keeps a `<current-time>` state signal in the agent's context. The model can read the time without calling a tool:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { TimeSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  // ...
+  signals: [new TimeSignalProvider({ interval: 'minute', timeZone: 'Europe/Paris' })],
+})
+```
+
+The provider reads the clock at each model step and adds a snapshot only when the interval (15 minutes by default) moves on, without timers or waking idle threads. It requires a memory-backed thread.
+
 ### Webhook signal provider
 
 For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure a function that extracts the resource id and an optional one that builds the notification:
