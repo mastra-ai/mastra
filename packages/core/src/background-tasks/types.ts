@@ -407,6 +407,20 @@ export interface ToolBackgroundConfig {
    *   opts in via `_background` — eligibility only grants the *option*.
    */
   defaultDisposition?: 'foreground' | 'deferred';
+  /**
+   * Whether the model can override background execution per call with the
+   * `_background` field. Default: true.
+   *
+   * When `false`, the tool stays background-eligible but its input schema and
+   * the background system prompt omit `_background`, and any `_background`
+   * the model sends is ignored. Each overridable tool adds five optional
+   * parameters to the request schema, which counts against provider limits
+   * such as Anthropic's cap on optional parameters across strict tools.
+   *
+   * Combined with `defaultDisposition: 'foreground'`, the tool never runs in
+   * the background.
+   */
+  modelOverrides?: boolean;
   /** Override the manager's default timeout for this tool, in ms. `0` means no timeout. */
   timeoutMs?: number;
   /** Override retry config for this tool */
@@ -421,7 +435,13 @@ export interface ToolBackgroundConfig {
 
 export type AgentBackgroundToolConfig =
   | boolean
-  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
+  | {
+      enabled: boolean;
+      timeoutMs?: number;
+      defaultDisposition?: 'foreground' | 'deferred';
+      /** Overrides the tool's `background.modelOverrides` for this agent. */
+      modelOverrides?: boolean;
+    };
 
 export interface AgentBackgroundConfig {
   /**
@@ -438,10 +458,40 @@ export interface AgentBackgroundConfig {
    * tool run inline unless the call opts in via `_background`.
    * - `true`: allow the tool's own background config
    * - `false`: always foreground, even if the tool is eligible
-   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `{ enabled, timeoutMs, defaultDisposition, modelOverrides }`: override specific settings
    * - `'all'`: make all tools eligible for background execution
+   *
+   * The agent-wide `defaultDisposition` and `modelOverrides` below act as
+   * defaults for these entries: they apply to `'all'` and to every named entry
+   * that does not set the field itself. A named entry always wins. Neither
+   * makes an otherwise-ineligible tool eligible.
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
+  /**
+   * Agent-wide default for how eligible tools run when a call carries no
+   * `_background` override. Applies to `tools: 'all'` and to named entries that
+   * do not set their own `defaultDisposition`; a named entry overrides it.
+   * - `'deferred'` (default): eligible calls run in the background.
+   * - `'foreground'`: eligible calls run inline unless the call opts in via
+   *   `_background` — eligibility only grants the *option*.
+   *
+   * Never changes eligibility, so it cannot make a foreground tool run in the
+   * background.
+   */
+  defaultDisposition?: 'foreground' | 'deferred';
+  /**
+   * Agent-wide default for whether the model may override background execution
+   * per call with `_background`. Applies to `tools: 'all'` and to named entries
+   * that do not set their own `modelOverrides`; a named entry overrides it.
+   * Default: true.
+   *
+   * When `false`, affected tools keep their eligibility but their request schema
+   * and the background system prompt omit `_background`, and any `_background`
+   * the model sends is ignored (see issue #28638). Combined with
+   * `defaultDisposition: 'foreground'`, eligible calls never run in the
+   * background.
+   */
+  modelOverrides?: boolean;
   /** Per-agent concurrency override */
   concurrency?: number;
   /** Override how long the loop waits for background tasks from this agent (in ms) */

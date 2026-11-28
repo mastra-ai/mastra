@@ -4,6 +4,7 @@ import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-re
 import { startRunStep } from '../../../agent/run-lease-fence';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
+import { sanitizeToolArguments } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
@@ -557,6 +558,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const { resumeData: resumeDataFromInput, ...argsFromInput } = inputData.args;
           args = argsFromInput;
           resumeDataFromArgs = resumeDataFromInput;
+        }
+
+        // Drop a `_background` override the resolved policy disallows (#31614, #31612) before the
+        // args reach schema validation, the approval checks, `beforeApproval`, and execute, so a
+        // stray model field cannot fail a strict schema or leak into the tool. An allowed override
+        // is left in place for the background dispatch extraction below.
+        if (typeof args === 'object' && args !== null) {
+          args = sanitizeToolArguments({
+            args,
+            toolName: inputData.toolName,
+            toolConfig: (tool as { backgroundConfig?: ToolBackgroundConfig } | undefined)?.backgroundConfig,
+            agentConfig: readScoped(scopeCtx, AGENT_BACKGROUND_CONFIG_KEY, 'agentBackgroundConfig'),
+          });
         }
 
         const resumeData = resumeDataFromArgs ?? workflowResumeData;

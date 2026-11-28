@@ -18,7 +18,8 @@ export interface ResolvedBackgroundConfig {
  * Resolves whether a tool call should run in the background, and with what config.
  *
  * Resolution order (highest to lowest priority):
- * 1. LLM per-call override (`_background` field in tool args)
+ * 1. LLM per-call override (`_background` field in tool args), unless the
+ *    tool or agent sets `modelOverrides: false`
  * 2. Agent-level backgroundTasks.tools config
  * 3. Tool-level background config
  * 4. Default for eligible tools: the configured `defaultDisposition`
@@ -39,8 +40,6 @@ export function resolveBackgroundConfig({
   agentConfig?: AgentBackgroundConfig;
   managerConfig?: BackgroundTaskManagerConfig;
 }): ResolvedBackgroundConfig {
-  const llmOverride = llmBgOverrides as LLMBackgroundOverride | undefined;
-
   // If this agent has background tasks disabled, short-circuit so no tool can
   // dispatch a background task even if its own config or the LLM override
   // would otherwise enable it. Default timeoutMs/maxRetries are still returned
@@ -56,6 +55,12 @@ export function resolveBackgroundConfig({
 
   // Resolve agent-level config for this specific tool
   const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
+
+  // Tools that disallow model overrides never advertise `_background`, so
+  // ignore one if the model sends it anyway. See issue #28638.
+  const llmOverride = isModelBackgroundOverrideAllowed({ toolName, toolConfig, agentConfig })
+    ? (llmBgOverrides as LLMBackgroundOverride | undefined)
+    : undefined;
 
   // --- disposition ---
   // Tool and agent config gate eligibility. A non-eligible tool always runs
@@ -130,14 +135,68 @@ export function resolveDefaultDisposition({
   return agentToolConfig?.defaultDisposition ?? toolConfig?.defaultDisposition ?? 'deferred';
 }
 
+/**
+ * Whether the model may override background execution per call via
+ * `_background`. Schema injection, the system prompt, and dispatch all use
+ * this so they cannot disagree. Agent per-tool config wins over tool config;
+ * defaults to true. See issue #28638.
+ */
+export function isModelBackgroundOverrideAllowed({
+  toolName,
+  toolConfig,
+  agentConfig,
+}: {
+  toolName: string;
+  toolConfig?: ToolBackgroundConfig;
+  agentConfig?: AgentBackgroundConfig;
+}): boolean {
+  const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
+  return agentToolConfig?.modelOverrides ?? toolConfig?.modelOverrides ?? true;
+}
+
+/**
+ * Drops a model-supplied `_background` override from tool arguments when the
+ * tool's resolved policy disallows model overrides (#31614, #31612).
+ *
+ * Returns the arguments unchanged unless all three hold: the tool is
+ * background-eligible, its resolved `modelOverrides` policy is `false`, and the
+ * arguments carry their own `_background` key. In that case it returns a
+ * shallow copy without `_background`, so model input is never mutated and the
+ * later extraction for allowed calls is unaffected. A domain argument named
+ * `_background` on an ineligible or ordinary tool is left intact.
+ */
+export function sanitizeToolArguments({
+  args,
+  toolName,
+  toolConfig,
+  agentConfig,
+}: {
+  args: Record<string, unknown>;
+  toolName: string;
+  toolConfig?: ToolBackgroundConfig;
+  agentConfig?: AgentBackgroundConfig;
+}): Record<string, unknown> {
+  if (!Object.hasOwn(args, '_background')) return args;
+  if (!isToolBackgroundEligible({ toolName, toolConfig, agentConfig })) return args;
+  if (isModelBackgroundOverrideAllowed({ toolName, toolConfig, agentConfig })) return args;
+
+  const sanitized = { ...args };
+  delete sanitized._background;
+  return sanitized;
+}
+
 function resolveAgentToolConfig(
   toolName: string,
   agentConfig?: AgentBackgroundConfig,
-): { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' } | undefined {
+): Exclude<AgentBackgroundToolConfig, boolean> | undefined {
   if (!agentConfig?.tools) return undefined;
 
   if (agentConfig.tools === 'all') {
-    return { enabled: true };
+    return {
+      enabled: true,
+      defaultDisposition: agentConfig.defaultDisposition,
+      modelOverrides: agentConfig.modelOverrides,
+    };
   }
 
   if (toolName.startsWith('agent-')) {
@@ -148,6 +207,14 @@ function resolveAgentToolConfig(
 
   const entry: AgentBackgroundToolConfig | undefined = agentConfig.tools[toolName];
   if (entry === undefined) return undefined;
-  if (typeof entry === 'boolean') return { enabled: entry };
-  return entry;
+
+  // Agent-wide `defaultDisposition`/`modelOverrides` act as defaults for this
+  // entry; a value the entry sets itself wins. `enabled` is never inherited, so
+  // an agent-wide field can't make an unlisted or false tool eligible.
+  const resolved: Exclude<AgentBackgroundToolConfig, boolean> = typeof entry === 'boolean' ? { enabled: entry } : entry;
+  return {
+    ...resolved,
+    defaultDisposition: resolved.defaultDisposition ?? agentConfig.defaultDisposition,
+    modelOverrides: resolved.modelOverrides ?? agentConfig.modelOverrides,
+  };
 }
