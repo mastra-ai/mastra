@@ -106,9 +106,22 @@ function snapshotKey(namespace: string, workflowName: string, runId: string): st
 
 /**
  * Earlier versions appended `:resourceId:<id>` to snapshot keys. Matches those keys for a run.
+ *
+ * The pattern is only a cheap candidate filter. Both `run_id` and `resourceId` are free-form, so a
+ * canonical key whose run ID contains `:` is byte-identical to a legacy key of a shorter run ID
+ * (`run_id:r:resourceId:x` is both the legacy key of run `r` with resource `x` and the canonical key
+ * of run `r:resourceId:x`). Existing legacy keys cannot be rewritten to a stricter delimiter, so
+ * every candidate is confirmed with {@link recordMatchesRun} before it is read or deleted.
  */
 function legacySnapshotKeyPattern(namespace: string, workflowName: string, runId: string): string {
   return `${escapeGlob(snapshotKey(namespace, workflowName, runId))}:resourceId:*`;
+}
+
+/** Whether a stored record belongs to the run being read, updated or deleted. */
+function recordMatchesRun(record: SnapshotRecord, namespace: string, workflowName: string, runId: string): boolean {
+  return (
+    record.run_id === runId && record.workflow_name === workflowName && (record.namespace ?? 'workflows') === namespace
+  );
 }
 
 export class WorkflowsValkey extends WorkflowsStorage {
@@ -123,7 +136,8 @@ export class WorkflowsValkey extends WorkflowsStorage {
 
   /**
    * Reads a run's snapshot record by its canonical key, falling back to legacy
-   * `:resourceId:`-suffixed keys only when the canonical key is missing.
+   * `:resourceId:`-suffixed keys only when the canonical key is missing. Legacy candidates are
+   * matched on the run identity stored in the record, not on the key shape alone.
    */
   private async getSnapshotRecord(
     namespace: string,
@@ -132,15 +146,29 @@ export class WorkflowsValkey extends WorkflowsStorage {
   ): Promise<SnapshotRecord | null> {
     const data = await this.client.get(snapshotKey(namespace, workflowName, runId));
     if (data) {
-      return JSON.parse(data) as SnapshotRecord;
+      const record = JSON.parse(data) as SnapshotRecord;
+      // The canonical key can hold a legacy record of a shorter run ID whose key is byte-identical
+      // (`run_id:r:resourceId:x`); only the record naming this run may be returned.
+      if (recordMatchesRun(record, namespace, workflowName, runId)) {
+        return record;
+      }
     }
 
     const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern(namespace, workflowName, runId));
     if (legacyKeys.length === 0) {
       return null;
     }
-    const legacyData = await this.client.get(legacyKeys[0]!);
-    return legacyData ? (JSON.parse(legacyData) as SnapshotRecord) : null;
+
+    const legacyRecords = await this.client.mGet(legacyKeys);
+    for (const legacyData of legacyRecords) {
+      if (!legacyData) continue;
+      const record = JSON.parse(legacyData) as SnapshotRecord;
+      if (recordMatchesRun(record, namespace, workflowName, runId)) {
+        return record;
+      }
+    }
+
+    return null;
   }
 
   public supportsConcurrentUpdates(): boolean {
@@ -373,9 +401,15 @@ export class WorkflowsValkey extends WorkflowsStorage {
       if (!finalCreatedAt || !finalResourceId) {
         // No SCAN here (it would run on every new run); a legacy key is only reachable when resourceId is known.
         const canonicalKey = snapshotKey(namespace, workflowName, runId);
-        const existingData =
-          (await this.client.get(canonicalKey)) ??
-          (resourceId ? await this.client.get(`${canonicalKey}:resourceId:${resourceId}`) : null);
+        let existingData = await this.client.get(canonicalKey);
+        if (!existingData && resourceId) {
+          // The candidate can hold another run whose ID merely ends in `:resourceId:<resourceId>`.
+          const legacyData = await this.client.get(`${canonicalKey}:resourceId:${resourceId}`);
+          if (legacyData) {
+            const legacy = JSON.parse(legacyData) as SnapshotRecord;
+            if (recordMatchesRun(legacy, namespace, workflowName, runId)) existingData = legacyData;
+          }
+        }
         const existing = existingData ? (JSON.parse(existingData) as SnapshotRecord) : null;
         finalCreatedAt ??= existing?.createdAt ? ensureDate(existing.createdAt) : new Date();
         finalResourceId ??= existing?.resourceId;
@@ -519,8 +553,17 @@ export class WorkflowsValkey extends WorkflowsStorage {
     const check = this.#runFenceCheck(fence, runId, 'deleteWorkflowRunById');
     try {
       const legacyKeys = await this.db.scanKeys(legacySnapshotKeyPattern('workflows', workflowName, runId));
+      const legacyRecords = await this.client.mGet(legacyKeys);
       const batch = writeBatch(this.client, check);
-      for (const key of [snapshotKey('workflows', workflowName, runId), ...legacyKeys]) batch.del(key);
+      // The canonical key belongs to this run by definition; a scanned candidate only when the
+      // record stored behind it names this run, so a colliding `:resourceId:`-shaped run survives.
+      batch.del(snapshotKey('workflows', workflowName, runId));
+      legacyKeys.forEach((key, index) => {
+        const legacyData = legacyRecords[index];
+        if (!legacyData) return;
+        const record = JSON.parse(legacyData) as SnapshotRecord;
+        if (recordMatchesRun(record, 'workflows', workflowName, runId)) batch.del(key);
+      });
       await batch.exec();
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
