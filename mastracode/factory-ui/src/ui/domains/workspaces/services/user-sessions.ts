@@ -7,46 +7,9 @@
 import type { FailedDraft } from '../../chat/services/handoffFiles';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export interface FactoryUserSessionOwner {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
+import type { FactoryUserSession } from '@internal/factory-contract';
 
-export interface FactoryUserSession {
-  id: string;
-  sessionId: string;
-  projectRepositoryId: string;
-  orgId: string;
-  userId: string;
-  /**
-   * Memory resource the session runs under (the Factory for runs and Slack
-   * sessions, the owner for user sessions). Only the single-session read reports it.
-   */
-  resourceId?: string;
-  owner?: FactoryUserSessionOwner;
-  visibility: 'org' | 'private';
-  title?: string;
-  branch: string;
-  baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
-  materializedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** What the viewer may do with this session, computed by the server. */
-  capabilities?: {
-    recreateSandbox: boolean;
-    takeOwnership: boolean;
-    switchModel?: boolean;
-    ownershipLock?: SessionOwnershipLock;
-  };
-  /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
-  followedWorkItemIds?: readonly string[];
-}
-
-/** Why a session the viewer doesn't own keeps its owner. */
-export type SessionOwnershipLock = 'card' | 'slack-thread' | 'side-session';
+export type { FactoryUserSession, FactoryUserSessionOwner, SessionOwnershipLock } from '@internal/factory-contract';
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
 

@@ -5,7 +5,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
-import type { FactoryModelScope } from '../../workspaces/services/github';
+import type { FactoryModelScope } from '@internal/factory-contract';
 import { resolveEffectiveThinkingLevel, routedThinkingDefault } from '../services/thinkingLevels';
 import type { EffectiveThinkingLevel, PersonalThinkingDefault, ThinkingDefault } from '../services/thinkingLevels';
 

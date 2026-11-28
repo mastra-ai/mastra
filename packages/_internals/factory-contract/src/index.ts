@@ -42,6 +42,7 @@ export * from './wire/config.js';
 export * from './wire/workspace.js';
 export * from './wire/voice.js';
 export * from './wire/gateway.js';
+export * from './wire/sessions.js';
 export * from './run/run-error.js';
 export * from './run/provider-display-name.js';
 export * from './run/default-thinking-level.js';

@@ -14,7 +14,7 @@ import { ChatPageLayout } from '../../../chat/components/ChatPageLayout';
 import { ChatTranscriptContext } from '../../../chat/context/ChatTranscriptContext';
 import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptContext';
 import { initialTranscript } from '../../../chat/services/transcript';
-import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 import { WorkspacePanelDock } from '../WorkspacePanelDock';

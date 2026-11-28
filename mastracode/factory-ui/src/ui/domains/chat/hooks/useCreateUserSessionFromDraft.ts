@@ -5,7 +5,7 @@ import { useSessionHost } from '../context/SessionHostContext';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { addCachedSession } from '../../../../hooks/useWorkspaces';
 import { createUserSession, DraftSessionCreateError } from '../../workspaces/services/user-sessions';
-import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { PendingImage } from '../context/ComposerImagesContext';

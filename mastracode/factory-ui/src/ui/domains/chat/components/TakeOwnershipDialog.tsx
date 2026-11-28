@@ -1,7 +1,7 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 
-import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
 import { useTakeSessionOwnership } from '../../workspaces/hooks/useTakeSessionOwnership';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { TakeoverBillingMessage } from './TakeoverBillingMessage';

@@ -8,7 +8,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { createUserSession } from '../../../workspaces/services/user-sessions';
-import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;

@@ -13,10 +13,21 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import type { ModelPack } from '@internal/factory-contract';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type {
+  FactoryProjectPayload,
+  FactoryProjectSnapshot,
+  LinkedRepositoryPayload,
+} from '@internal/factory-contract';
 import type { FACTORY_ROUTE_CONTRACTS, ProjectListRepository } from '@mastra/factory/routes/contracts';
 import type { z } from 'zod';
+
+export type {
+  FactoryModelScope,
+  FactoryProject,
+  FactoryProjectPayload,
+  FactoryProjectSnapshot,
+  LinkedRepositoryPayload,
+} from '@internal/factory-contract';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
@@ -237,27 +248,6 @@ export async function listGithubRepos(
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
-/**
- * Where a Factory's sessions and runs get their model and credentials: `factory` uses the organization's for both,
- * `user` the session owner's for both, and `hybrid` the owner's for interactive sessions and the organization's for
- * work-item runs.
- */
-export type FactoryModelScope = 'factory' | 'user' | 'hybrid';
-
-/** A Factory project row from `/web/factory/projects`. */
-export interface FactoryProjectPayload {
-  id: string;
-  name: string;
-  /** Org-wide default model for factory runs; null when unset. */
-  defaultModelId?: string | null;
-  /** Where sessions and runs get their model and credentials. */
-  modelScope?: FactoryModelScope;
-  /** Thinking level every session and run uses until it picks its own. */
-  defaultThinkingLevel?: ThinkingLevelSetting;
-  modelPacks?: ModelPack[];
-  defaultModelPackId?: string | null;
-}
-
 /** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
 export interface ListedFactoryProjectPayload extends FactoryProjectPayload {
   repositories: ProjectListRepository[];
@@ -274,23 +264,6 @@ interface ProjectConnectionPayload {
   id: string;
   installationId: string;
 }
-
-/** Browser-shaped view of a repository linked to a Factory project. */
-export interface LinkedRepositoryPayload {
-  projectRepositoryId: string;
-  provider?: 'github' | 'gitlab';
-  /** Provider repository/project id; stable across renames. */
-  externalId?: string;
-  slug: string;
-  gitBranch?: string;
-}
-
-/** A Factory project with its linked repositories flattened across connections. */
-export interface FactoryProjectSnapshot extends FactoryProjectPayload {
-  repositories: LinkedRepositoryPayload[];
-}
-
-export type FactoryProject = FactoryProjectSnapshot;
 
 function toLinkedRepositoryPayload(
   projectName: string,

@@ -6,7 +6,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
-import type { SessionOwnershipLock } from '../../workspaces/services/user-sessions';
+import type { SessionOwnershipLock } from '@internal/factory-contract';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { TakeOwnershipDialog } from './TakeOwnershipDialog';
 

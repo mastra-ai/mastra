@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
+import type { ChangeRequestProvider } from '@mastra/playground-ui/domains/factory';
 import { pullRequestSubscriptionsQueryKey } from '../../factory/services/githubSubscriptions';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';

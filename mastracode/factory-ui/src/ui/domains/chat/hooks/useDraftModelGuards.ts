@@ -6,7 +6,7 @@ import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel
 import { isConnectedAt } from '../../settings/components/provider-credential';
 import { sessionDefaultsAnchor } from '../../settings/settingsSections';
 import type { ModelDefaultsAnchor } from '../../settings/settingsSections';
-import type { FactoryProject } from '../../workspaces/services/github';
+import type { FactoryProject } from '@internal/factory-contract';
 import type { ChatSessionContextApi } from '../context/ChatSessionContext';
 import { newChatCatalogTarget, routedDefaultModelId, routedModelDefaults } from '../context/chatDefaultModel';
 
