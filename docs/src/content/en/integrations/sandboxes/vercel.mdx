@@ -195,7 +195,7 @@ await sandbox.start()
 await sandbox.executeCommand('sh', ['-c', 'echo hello > /data/marker.txt'])
 ```
 
-Mount paths must be absolute and can't overlap. A sandbox can mount up to four Drives, and its main region must match each Drive's region. A Drive can be mounted read-write only once. Mount extra read-only copies through `drive.snapshot()`. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or an explicit `{ drive: string, mode }` pair where `drive` is the Drive's name and `mode` is `'read-write'` or `'snapshot'`:
+Mount paths must be absolute and can't overlap. A sandbox can mount up to four Drives, and its main region must match each Drive's region. Only one sandbox at a time can mount a Drive read-write, so other sandboxes mount `drive.snapshot()` for read-only copies. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or an explicit `{ drive: string, mode }` pair where `drive` is the Drive's name and `mode` is `'read-write'` or `'snapshot'`:
 
 ```typescript
 const archive = await Drive.getOrCreate({ name: 'agent-archive', region: drive.region })
@@ -213,9 +213,11 @@ const sandbox = new VercelSandbox({
 })
 ```
 
-Files written to a read-write mount persist in the Drive, so another sandbox that mounts the same Drive reads them back:
+Files written to a read-write mount persist in the Drive. Once the sandbox that holds the read-write mount stops, another sandbox can mount the same Drive and read them back:
 
 ```typescript
+await sandbox.stop()
+
 const reader = new VercelSandbox({
   region: drive.region,
   mounts: { '/data': drive },
