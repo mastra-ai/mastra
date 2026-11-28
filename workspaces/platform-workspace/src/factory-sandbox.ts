@@ -199,6 +199,8 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
     return new PlatformSandbox({
       ...options,
       ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
+      // Never borrow a deployment-wide identity for an unattributed Factory run.
+      actingUserId: ctx.userId,
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,

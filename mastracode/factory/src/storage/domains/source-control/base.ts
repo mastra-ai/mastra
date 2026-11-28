@@ -174,6 +174,9 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
+      sandbox_user_id: { type: 'text', nullable: true },
+      sandbox_actor_set: { type: 'boolean', nullable: true },
+      sandbox_credential_mode: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
@@ -367,6 +370,8 @@ export interface SourceControlSession {
   factoryProjectId: string | null;
   orgId: string;
   userId: string;
+  /** Authenticated card starter: null for automation, undefined for ordinary/legacy sessions. */
+  sandboxUserId?: string | null;
   branch: string;
   title: string | null;
   visibility: SourceControlSessionVisibility;
@@ -379,6 +384,7 @@ export interface SourceControlSession {
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
+  sandboxCredentialMode?: 'vault' | 'token' | null;
   materializedAt: Date | null;
   /** When the first user message reached the session's agent. Write-once. */
   firstMessageAt: Date | null;
@@ -447,7 +453,12 @@ export type SessionBranchKey =
   | { projectRepositoryId: string; userId: string; branch: string }
   | { factoryProjectId: string; userId: string; branch: string };
 export type TransferSourceControlSessionOwnerResult =
-  | { status: 'updated'; session: SourceControlSession }
+  | {
+      status: 'updated';
+      session: SourceControlSession;
+      /** With `releaseSandbox`: the VM id the transfer took off the session, null when it had none. */
+      releasedSandboxId?: string | null;
+    }
   | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
 export interface LinkedRepositoriesChange {
@@ -571,13 +582,27 @@ export interface SourceControlStorageHandle {
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
-    /** Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict. */
+    /** Persist a trusted card starter without reassigning an existing credential grant. */
+    setSandboxUser(args: { sessionId: string; userId: string | null }): Promise<SourceControlSession>;
+    /**
+     * Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict.
+     * `releaseSandbox` clears the session's VM id in the same write, so the new owner never resumes a VM built for the
+     * previous one; the result reports the id it cleared.
+     */
     transferOwner(args: {
       sessionId: string;
       expectedUserId: string;
       toUserId: string;
+      releaseSandbox?: boolean;
     }): Promise<TransferSourceControlSessionOwnerResult>;
-    setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
+    /** Record the session's VM; with `expectedUserId`, only while that user still owns the session. */
+    setSandbox(args: {
+      id: string;
+      sandboxId: string | null;
+      sandboxWorkdir: string;
+      sandboxCredentialMode?: 'vault' | 'token';
+      expectedUserId?: string;
+    }): Promise<void>;
     /**
      * Record when the session's workspace was first materialized. Write-once:
      * the guarded update only lands while the column is still NULL, so resumes
@@ -680,6 +705,9 @@ interface SessionDbRow extends Record<string, unknown> {
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
+  sandbox_user_id?: string | null;
+  sandbox_actor_set?: boolean | null;
+  sandbox_credential_mode?: 'vault' | 'token' | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
@@ -800,6 +828,8 @@ function toSession(row: SessionDbRow): SourceControlSession {
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
+    sandboxCredentialMode: row.sandbox_credential_mode ?? null,
+    sandboxUserId: row.sandbox_actor_set ? (row.sandbox_user_id ?? null) : undefined,
     materializedAt: row.materialized_at,
     firstMessageAt: row.first_message_at,
     firstMeaningfulExecAt: row.first_meaningful_exec_at,
@@ -1816,9 +1846,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
             throw error;
           }
         },
-        transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
+        transferOwner: async ({ sessionId, expectedUserId, toUserId, releaseSandbox }) => {
           let refusedPrivate = false;
           let moved = false;
+          let releasedSandboxId: string | null = null;
           try {
             const updated = await db().updateAtomic<SessionDbRow>(
               SESSIONS,
@@ -1831,14 +1862,25 @@ export class SourceControlStorage extends FactoryStorageDomain {
                 }
                 if (current.user_id === toUserId) return null;
                 moved = true;
-                return { user_id: toUserId, updated_at: new Date() };
+                if (!releaseSandbox) return { user_id: toUserId, updated_at: new Date() };
+                releasedSandboxId = current.sandbox_id;
+                return {
+                  user_id: toUserId,
+                  sandbox_id: null,
+                  sandbox_workdir: '',
+                  sandbox_credential_mode: null,
+                  updated_at: new Date(),
+                };
               },
             );
             if (updated) {
               if (moved) this.#announceSessions([updated]);
-              return refusedPrivate
-                ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
-                : { status: 'updated', session: toSession(updated) };
+              if (refusedPrivate) return { status: 'conflict', reason: 'stale_owner', session: toSession(updated) };
+              return {
+                status: 'updated',
+                session: toSession(updated),
+                ...(releaseSandbox ? { releasedSandboxId } : {}),
+              };
             }
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1848,13 +1890,32 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
           return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
         },
-        setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
-          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id }, () => ({
-            sandbox_id: sandboxId,
-            sandbox_workdir: sandboxWorkdir,
-            updated_at: new Date(),
-          }));
-          if (row) this.#announceSessions([row]);
+        setSandboxUser: async ({ sessionId, userId }) => {
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, current => {
+            if (current.sandbox_actor_set && (current.sandbox_user_id ?? null) === userId) return null;
+            if (current.sandbox_user_id || current.sandbox_id || current.materialized_at) {
+              throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
+            }
+            return { sandbox_user_id: userId, sandbox_actor_set: true, updated_at: new Date() };
+          });
+          if (!row) throw new Error(`Factory session ${sessionId} not found`);
+          return toSession(row);
+        },
+        setSandbox: async ({ id, sandboxId, sandboxWorkdir, sandboxCredentialMode, expectedUserId }) => {
+          let written = false;
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { id }, current => {
+            if (expectedUserId !== undefined && current.user_id !== expectedUserId) return null;
+            written = true;
+            return {
+              sandbox_id: sandboxId,
+              sandbox_workdir: sandboxWorkdir,
+              sandbox_credential_mode: sandboxId
+                ? (sandboxCredentialMode ?? (current.sandbox_id === sandboxId ? current.sandbox_credential_mode : null))
+                : null,
+              updated_at: new Date(),
+            };
+          });
+          if (row && written) this.#announceSessions([row]);
         },
         markMaterialized: ({ id }) => this.#stampOnce({ id }, 'materialized_at'),
         markFirstMessage: ({ sessionId }) => this.#stampOnce({ session_id: sessionId }, 'first_message_at'),

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxContext, ProviderStatus, WorkspaceSandbox } from '@mastra/core/workspace';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -21,6 +22,7 @@ import {
 } from './session-sandbox.js';
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   __clearSessionSandboxesForTests();
   __clearSessionEnvironmentsForTests();
 });
@@ -191,6 +193,87 @@ describe('SessionRetirementCoordinator detached sandboxes', () => {
     await storage.sessions.setSandbox({ id: session.id, sandboxId: 'vm-1', sandboxWorkdir: '/workspace/repo' });
     return (await storage.sessions.getBySessionId(session.sessionId))!;
   }
+
+  it('rechecks a newly recorded Vault VM before transferring ownership', async () => {
+    const storage = new SourceControlStorageInMemory();
+    seedRepositoryLink(storage);
+    const session = await materializedSession(storage);
+    await storage.sessions.setSandbox({
+      id: session.id,
+      sandboxId: 'vm-1',
+      sandboxWorkdir: '/workspace/repo',
+      sandboxCredentialMode: 'vault',
+    });
+    const calls: string[] = [];
+    const coordinator = new SessionRetirementCoordinator({ sandbox: fakeFactorySandbox(calls) });
+    const result = await coordinator.transferSessionOwner({
+      sourceControl: storage,
+      orgId: 'org-1',
+      sessionId: session.sessionId,
+      expectedUserId: 'user-1',
+      toUserId: 'user-2',
+      // The route inspected the VM before its trusted mode was recorded.
+      releaseSandbox: false,
+    });
+    expect(result.status).toBe('updated');
+    expect(calls).toEqual([`destroy:${session.id}:vm-1`]);
+    expect(await storage.sessions.getBySessionId(session.sessionId)).toMatchObject({
+      userId: 'user-2',
+      sandboxId: null,
+    });
+  });
+
+  it.each([false, true].flatMap(cold => ['token', 'legacy-token', 'vault'].map(mode => ({ cold, mode }))))(
+    'releases only positively known Platform vault VMs after transfer ($mode, cold=$cold)',
+    async ({ cold, mode }) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const storage = new SourceControlStorageInMemory();
+      seedRepositoryLink(storage);
+      const session = await materializedSession(storage);
+      const requests: string[] = [];
+      const sandbox = new PlatformFactorySandbox({
+        accessToken: 'platform-test-token',
+        projectId: 'project-1',
+        environmentId: 'env-1',
+        fetch: async (url, init) => {
+          requests.push((init?.method ?? 'GET') + ' ' + String(url));
+          return Response.json({ id: 'vm-1', ...(mode === 'legacy-token' ? {} : { vault: mode === 'vault' }) });
+        },
+      });
+      if (!cold)
+        getSessionSandbox(session.id, 'acme/mastra', () =>
+          sandbox.create(
+            {
+              sessionId: session.id,
+              sandboxId: 'vm-1',
+              userId: 'user-1',
+              getRepositoryAccess: undefined,
+            },
+            {},
+          ),
+        );
+      await storage.sessions.transferOwner({
+        orgId: 'org-1',
+        sessionId: session.sessionId,
+        expectedUserId: 'user-1',
+        toUserId: 'user-2',
+      });
+      const invalidateSession = vi.fn();
+      await new SessionRetirementCoordinator({ sandbox, invalidateSession }).releasePreviousOwnerSandbox({
+        sourceControl: storage,
+        orgId: 'org-1',
+        sessionId: session.sessionId,
+        previousOwnerId: 'user-1',
+        sandboxId: 'vm-1',
+      });
+      expect(requests.filter(request => request.startsWith('DELETE '))).toHaveLength(mode === 'vault' ? 1 : 0);
+      expect(invalidateSession).toHaveBeenCalledTimes(mode === 'vault' ? 1 : 0);
+      if (mode !== 'vault') {
+        expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBe('vm-1');
+        expect(Boolean(peekSessionSandbox(session.id))).toBe(!cold);
+      }
+    },
+  );
 
   it('destroys a deleted session VM this process never attached to', async () => {
     const storage = new SourceControlStorageInMemory();

@@ -98,6 +98,38 @@ class FakeSocket implements DirectExecWebSocket {
   }
 }
 
+const GITHUB_CONFIG_KEYS = [
+  'http.https://github.com.extraHeader',
+  'http.https://github.com/.extraHeader',
+  'http.https://github.com..extraHeader',
+  'http.https://github.com./.extraHeader',
+  'http.https://api.github.com./.extraHeader',
+  'http.https://*.github.com..extraHeader',
+  'credential.https://github.com..helper',
+  'http.https://user@github.com:443/octocat.extraHeader',
+  'http.github.com.extraHeader',
+  'http.https://*.github.com.extraHeader',
+  'http.https://gist.github.*.extraHeader',
+  'http.https://uploads.github.*.extraHeader',
+  'http.https://*.*.extraHeader',
+  'http.https://api.github.com/.extraheader',
+  'http.extraHeader',
+  'HTTP.EXTRAHEADER',
+  'http.cookieFile',
+  'credential.helper',
+  'credential.https://github.com.helper',
+  'credential.https://github.com/.username',
+];
+const OTHER_HOST_CONFIG_KEYS = [
+  'http.https://gitlab.com.extraHeader',
+  'http.https://github.com.evil.example/.extraHeader',
+  'http.https://*.gitlab.com.extraHeader',
+  'http.https://gist.github.*.example.extraHeader',
+  'credential.https://gitlab.com.helper',
+  'http.sslVerify',
+  'url.https://vault.test/git/.insteadOf',
+];
+
 describe('PlatformSandbox', () => {
   beforeEach(() => {
     vi.stubEnv('SANDBOX_PROVIDER', 'railway');
@@ -142,6 +174,272 @@ describe('PlatformSandbox', () => {
     // init_exec frame carries the command (changing into cwd in the shell) + env.
     const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
     expect(init.data).toEqual({ command: commandInCwd('echo ok', '/workspace', undefined), env: { A: '1' } });
+  });
+
+  it('drops GitHub credentials from a call whose own VM acquisition lands on a vault VM', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    // Built by a caller that has not seen the VM yet; executeCommand provisions a vault VM.
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: {
+        GH_TOKEN: 'ghs_real',
+        GH_TOKEN_2: 'ghs_real_2',
+        GIT_CONFIG_COUNT: '1',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_TERMINAL_PROMPT: '0',
+        GITLAB_HOST_TOKEN: 'glpat_kept',
+      },
+    });
+
+    expect(sandbox.vault).toBe(true);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GIT_TERMINAL_PROMPT: '0', GITLAB_HOST_TOKEN: 'glpat_kept' });
+  });
+
+  it.each([
+    ...GITHUB_CONFIG_KEYS.map(key => [key, false] as const),
+    ...OTHER_HOST_CONFIG_KEYS.map(key => [key, true] as const),
+  ])('sends %s to a vault VM: %s', async (key, kept) => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' },
+    });
+
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual(
+      kept ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' } : { A: '1' },
+    );
+  });
+
+  it('drops GITHUB_TOKEN and only the github.com config pairs, renumbering the rest', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z', vault: true }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('git', ['fetch'], {
+      env: {
+        GITHUB_TOKEN: 'ghs_real',
+        GH_ENTERPRISE_TOKEN: 'ghs_ent',
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_CONFIG_KEY_1: 'http.https://gitlab.com/group/proj.extraHeader',
+        GIT_CONFIG_VALUE_1: 'Authorization: Basic gitlab',
+        GIT_CONFIG_KEY_2: 'HTTP.https://github.com/octocat/hello.git.extraHeader',
+        GIT_CONFIG_VALUE_2: 'Authorization: Basic secret',
+      },
+    });
+
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.com/group/proj.extraHeader',
+      GIT_CONFIG_VALUE_0: 'Authorization: Basic gitlab',
+    });
+  });
+
+  it('keeps per-call GitHub credentials for a VM that is not vault', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real' } });
+
+    expect(sandbox.vault).toBe(false);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
+  });
+
+  it('keeps per-call GitHub credentials for a reattached VM whose response does not report vault', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_existing', destroyedAt: null }))
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      sandboxId: 'sbx_existing',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+
+    expect(sandbox.vault).toBe(false);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real', A: '1' });
+  });
+
+  it('drops GitHub credentials when the VM is replaced between acquisition and dispatch', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let sandbox!: PlatformSandbox;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockImplementationOnce(async () => {
+        // Another call replaced the VM while this one was waiting for a lease.
+        (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_2';
+        return leaseResponse();
+      });
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+
+    expect(sandbox.vault).toBe(false);
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ A: '1' });
+  });
+
+  it('never reuses a cached lease minted for a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_1' }))
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_2' }));
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+    await sandbox.executeCommand('true');
+    (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_2';
+
+    await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real' } });
+
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_2/exec-lease');
+    expect(sockets[1]!.subprotocols.join(' ')).not.toContain('jwt.sbx_1');
+    const init = JSON.parse(sockets[1]!.sent[0]!) as { data: { env: Record<string, string> } };
+    expect(init.data.env).toEqual({ GH_TOKEN: 'ghs_real' });
+  });
+
+  it('never joins or caches a lease that is in flight for a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let releaseOld!: () => void;
+    const oldLease = new Promise<Response>(resolve => {
+      releaseOld = () => resolve(leaseResponse({ jwt: 'jwt.sbx_1' }));
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockReturnValueOnce(oldLease)
+      .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.sbx_2' }));
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+      webSocketFactory: factory,
+    });
+    const internals = sandbox as unknown as { _sandboxId: string; _lease: { boundTo: string } | null };
+
+    const oldCall = sandbox.executeCommand('gh', ['pr', 'view'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    internals._sandboxId = 'sbx_2';
+    const newCall = sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    releaseOld();
+    await Promise.all([oldCall, newCall]);
+
+    expect(String(fetchMock.mock.calls[2]![0])).toContain('/sandbox/sbx_2/exec-lease');
+    expect(internals._lease?.boundTo).toBe('sbx_2');
+    const envs = sockets.map(
+      socket => (JSON.parse(socket.sent[0]!) as { data: { env: Record<string, string> } }).data.env,
+    );
+    // The call still holding the old VM's lease gets no GitHub credential; the new VM's call does.
+    expect(envs).toContainEqual({ A: '1' });
+    expect(envs).toContainEqual({ GH_TOKEN: 'ghs_real', A: '1' });
+  });
+
+  it('ignores a late checkpoint answer about a VM that has been replaced', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    let answer!: () => void;
+    const checkpoint = new Promise<Response>(resolve => {
+      answer = () => resolve(json({ checkpointName: 'mastra-checkpoint-abc123', status: 'skipped' }));
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockReturnValueOnce(checkpoint);
+    const sandbox = new PlatformSandbox({
+      id: 'mc-session-42',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    await sandbox._start();
+    const internals = sandbox as unknown as { _sandboxId: string | undefined };
+
+    const capture = sandbox.captureCheckpoint();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    internals._sandboxId = 'sbx_2';
+    sandbox.vault = true;
+    answer();
+    await capture;
+
+    expect(internals._sandboxId).toBe('sbx_2');
+    expect(sandbox.vault).toBe(true);
   });
 
   it('uses the regional workspace proxy URL for sandbox requests', async () => {
@@ -413,6 +711,290 @@ describe('PlatformSandbox', () => {
     });
     expect(JSON.parse(fetchMock.mock.calls[0]![1].body as string)).not.toHaveProperty('templateId');
     expect(sandbox.templatePending).toBeUndefined();
+  });
+
+  describe('vault mode', () => {
+    it.each([
+      ['carries the acting user on every proxy request of a vault sandbox', 'user_owner', 'user_owner'],
+      ['runs a non-vault sandbox with no acting user', undefined, null],
+    ])('%s', async (_name, actingUserId, header) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const vault = actingUserId !== undefined;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_test', vault }))
+        .mockResolvedValueOnce(leaseResponse())
+        .mockResolvedValueOnce(json({ id: 'sbx_test', status: 'running', vault }))
+        .mockResolvedValueOnce(leaseResponse())
+        .mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const options = {
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        ...(actingUserId ? { actingUserId } : {}),
+        fetch: fetchMock,
+      };
+      const first = new PlatformSandbox({ ...options, webSocketFactory: fakeExecSocket({ exitCode: 0 }).factory });
+      await first._start();
+      await first.executeCommand('true');
+      const reattached = new PlatformSandbox({
+        ...options,
+        sandboxId: 'sbx_test',
+        webSocketFactory: fakeExecSocket({ exitCode: 0 }).factory,
+      });
+      await reattached._start();
+      await reattached.executeCommand('true');
+      await reattached._destroy();
+
+      const requests = fetchMock.mock.calls.map(([url, init]) => `${init?.method ?? 'GET'} ${String(url)}`);
+      expect(requests).toEqual([
+        expect.stringMatching(/^POST .*\/sandbox$/),
+        expect.stringMatching(/^POST .*\/sandbox\/sbx_test\/exec-lease$/),
+        expect.stringMatching(/^GET .*\/sandbox\/sbx_test$/),
+        expect.stringMatching(/^POST .*\/sandbox\/sbx_test\/exec-lease$/),
+        expect.stringMatching(/^DELETE .*\/sandbox\/sbx_test$/),
+      ]);
+      for (const [, init] of fetchMock.mock.calls) {
+        expect((init.headers as Headers).get('x-acting-user-id')).toBe(header);
+      }
+    });
+
+    const create = (response: Record<string, unknown>, sandboxId?: string, ...later: Record<string, unknown>[]) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json(response));
+      for (const next of later) fetchMock.mockResolvedValueOnce(json(next));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        ...(sandboxId ? { sandboxId } : {}),
+        fetch: fetchMock,
+      });
+      return sandbox;
+    };
+
+    it('is unknown before the sandbox starts', () => {
+      expect(create({ id: 'sbx_1' }).vault).toBeUndefined();
+    });
+
+    it('reports a vault provision', async () => {
+      const sandbox = create({ id: 'sbx_1', vault: true });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('reports a provision without the vault flag as not vault', async () => {
+      const sandbox = create({ id: 'sbx_1' });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('treats a recovery-id reattach as not vault when the sandbox record does not report vault', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null }, undefined, { id: 'sbx_1' });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('learns vault from the recovery POST response', async () => {
+      const sandbox = create({ id: 'sbx_1', reattached: true, instanceUrl: null, vault: true });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
+
+    describe('reading the mode after a recovery-id reattach', () => {
+      const boom = (status: number) =>
+        json({ error: { message: 'boom', type: status === 400 ? 'bad_request' : 'internal_error' } }, { status });
+      const reattached = () => json({ id: 'sbx_1', reattached: true, instanceUrl: null });
+      let sockets: ReturnType<typeof fakeExecSocket>['sockets'];
+      const sandboxWith = (fetchMock: ReturnType<typeof vi.fn>) => {
+        vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+        const socket = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+        sockets = socket.sockets;
+        return new PlatformSandbox({
+          accessToken: 'sk_test',
+          projectId: 'proj_123',
+          environmentId: 'env_123',
+          fetch: fetchMock,
+          webSocketFactory: socket.factory,
+        });
+      };
+      const vaultReads = (fetchMock: ReturnType<typeof vi.fn>) =>
+        fetchMock.mock.calls.filter(([url, init]) => String(url).endsWith('/sandbox/sbx_1') && !init?.method).length;
+      // Runs a command carrying a GitHub token and returns the env the VM received.
+      const execEnv = async (sandbox: PlatformSandbox) => {
+        await sandbox.executeCommand('gh', ['pr', 'create'], { env: { GH_TOKEN: 'ghs_real', A: '1' } });
+        const init = JSON.parse(sockets.at(-1)!.sent[0]!) as { data: { env: Record<string, string> } };
+        return init.data.env;
+      };
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('retries a 503 and learns vault from the next answer', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockResolvedValueOnce(boom(503))
+          .mockResolvedValueOnce(json({ id: 'sbx_1', vault: true }))
+          .mockResolvedValueOnce(leaseResponse());
+        const sandbox = sandboxWith(fetchMock);
+        await sandbox.start();
+        const refreshed = sandbox.refreshVault();
+        await vi.runAllTimersAsync();
+        await refreshed;
+        expect(vaultReads(fetchMock)).toBe(2);
+        expect(sandbox.vault).toBe(true);
+        vi.useRealTimers();
+        expect(await execEnv(sandbox)).toEqual({ A: '1' });
+      });
+
+      it('retries a network error and treats an answer without the flag as not vault', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockRejectedValueOnce(new TypeError('fetch failed'))
+          .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+          .mockResolvedValueOnce(leaseResponse());
+        const sandbox = sandboxWith(fetchMock);
+        await sandbox.start();
+        const refreshed = sandbox.refreshVault();
+        await vi.runAllTimersAsync();
+        await refreshed;
+        expect(vaultReads(fetchMock)).toBe(2);
+        expect(sandbox.vault).toBe(false);
+        vi.useRealTimers();
+        expect(await execEnv(sandbox)).toEqual({ GH_TOKEN: 'ghs_real', A: '1' });
+      });
+
+      it.each([true, false, undefined])(
+        'uses the recovery POST mode (%s) without an extra GET before credential dispatch',
+        async vault => {
+          const fetchMock = vi.fn(async (url, init) => {
+            if (String(url).endsWith('/exec-lease')) return leaseResponse();
+            if (init?.method === 'POST')
+              return json({ id: 'sbx_1', reattached: true, ...(vault === undefined ? {} : { vault }) });
+            return boom(502);
+          });
+          const sandbox = sandboxWith(fetchMock);
+          const started = sandbox.start();
+          await vi.runAllTimersAsync();
+          await started;
+          expect(sandbox.vault).toBe(vault === true);
+          expect(vaultReads(fetchMock)).toBe(0);
+          vi.useRealTimers();
+          expect(await execEnv(sandbox)).toEqual(vault === true ? { A: '1' } : { GH_TOKEN: 'ghs_real', A: '1' });
+        },
+      );
+
+      it('does not change the reported token mode when a later read is unavailable', async () => {
+        const fetchMock = vi
+          .fn()
+          .mockResolvedValueOnce(reattached())
+          .mockImplementation(async () => boom(502));
+        const sandbox = sandboxWith(fetchMock);
+        await sandbox.start();
+        const refreshed = expect(sandbox.refreshVault()).rejects.toThrow('boom');
+        await vi.runAllTimersAsync();
+        await refreshed;
+        expect(sandbox.vault).toBe(false);
+        expect(vaultReads(fetchMock)).toBe(4);
+      });
+
+      it('does not retry a mode read returning 400', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValueOnce(boom(400));
+        const sandbox = sandboxWith(fetchMock);
+        await sandbox.start();
+        await expect(sandbox.refreshVault()).rejects.toThrow('boom');
+        expect(vaultReads(fetchMock)).toBe(1);
+        expect(sandbox.vault).toBe(false);
+      });
+
+      it('treats a 404 as a gone sandbox, so the next start provisions', async () => {
+        const fetchMock = vi.fn().mockResolvedValueOnce(reattached()).mockResolvedValueOnce(boom(404));
+        const sandbox = sandboxWith(fetchMock);
+        await sandbox.start();
+        await expect(sandbox.refreshVault()).rejects.toThrow();
+        expect(vaultReads(fetchMock)).toBe(1);
+        expect(sandbox.vault).toBeUndefined();
+        expect((sandbox as unknown as { _sandboxId?: string })._sandboxId).toBeUndefined();
+      });
+    });
+
+    it('treats a reattach that does not report vault as not vault', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('reports a reattach that says the sandbox is not vault', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null, vault: false }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+    });
+
+    it('reads the mode again with refreshVault', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null }, 'sbx_existing', {
+        id: 'sbx_existing',
+        vault: true,
+      });
+      await sandbox._start();
+      expect(sandbox.vault).toBe(false);
+      await expect(sandbox.refreshVault()).resolves.toBe(true);
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('propagates a non-retryable refreshVault failure and keeps the mode', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_existing', destroyedAt: null, vault: true }))
+        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'bad_request' } }, { status: 400 }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_existing',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      await expect(sandbox.refreshVault()).rejects.toThrow();
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('ignores a refreshVault answer for a sandbox that was replaced while it was in flight', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      let answer!: (response: Response) => void;
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_old', destroyedAt: null }))
+        .mockReturnValueOnce(new Promise<Response>(resolve => (answer = resolve)));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_old',
+        fetch: fetchMock,
+      });
+      await sandbox._start();
+      const refresh = sandbox.refreshVault();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      // A replacement vault sandbox is provisioned while the read for the old one is pending.
+      (sandbox as unknown as { _sandboxId: string })._sandboxId = 'sbx_new';
+      sandbox.vault = true;
+      answer(json({ id: 'sbx_old', vault: false }));
+      await expect(refresh).resolves.toBe(true);
+      expect(sandbox.vault).toBe(true);
+    });
+
+    it('takes the mode from a reattach that reports it', async () => {
+      const sandbox = create({ id: 'sbx_existing', destroyedAt: null, vault: true }, 'sbx_existing');
+      await sandbox._start();
+      expect(sandbox.vault).toBe(true);
+    });
   });
 
   it('uses E2B direct exec for E2B leases instead of the Railway WebSocket protocol', async () => {
@@ -1307,6 +1889,8 @@ describe('PlatformSandbox', () => {
       // Status must reset too: the next `ensureRunning()` re-runs the full
       // start lifecycle (acquisition + onStart hook), not just a new lease.
       expect(sandbox.status).toBe('stopped');
+      // The destroyed VM's credential-vault mode must not carry over to its replacement.
+      expect(sandbox.vault).toBeUndefined();
     });
 
     it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {

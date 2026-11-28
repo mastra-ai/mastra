@@ -24,6 +24,7 @@ import {
   resolveGitIdentity,
   runSetupCommand,
   runTeardownCommand,
+  sh,
   shellQuote,
   SetupCommandError,
   githubCredentialHelper,
@@ -119,6 +120,38 @@ beforeEach(() => {
   dbUpdates.length = 0;
   __clearSessionSandboxesForTests();
 });
+
+const GITHUB_CONFIG_KEYS = [
+  'http.https://github.com.extraHeader',
+  'http.https://github.com/.extraHeader',
+  'http.https://github.com..extraHeader',
+  'http.https://github.com./.extraHeader',
+  'http.https://api.github.com./.extraHeader',
+  'http.https://*.github.com..extraHeader',
+  'credential.https://github.com..helper',
+  'http.https://user@github.com:443/octocat.extraHeader',
+  'http.github.com.extraHeader',
+  'http.https://*.github.com.extraHeader',
+  'http.https://gist.github.*.extraHeader',
+  'http.https://uploads.github.*.extraHeader',
+  'http.https://*.*.extraHeader',
+  'http.https://api.github.com/.extraheader',
+  'http.extraHeader',
+  'HTTP.EXTRAHEADER',
+  'http.cookieFile',
+  'credential.helper',
+  'credential.https://github.com.helper',
+  'credential.https://github.com/.username',
+];
+const OTHER_HOST_CONFIG_KEYS = [
+  'http.https://gitlab.com.extraHeader',
+  'http.https://github.com.evil.example/.extraHeader',
+  'http.https://*.gitlab.com.extraHeader',
+  'http.https://gist.github.*.example.extraHeader',
+  'credential.https://gitlab.com.helper',
+  'http.sslVerify',
+  'url.https://vault.test/git/.insteadOf',
+];
 
 describe('materializeRepo', () => {
   it('clones on first open with structured argv and process-scoped credentials', async () => {
@@ -460,6 +493,134 @@ describe('materializeRepo', () => {
     );
     expect(err).toBeInstanceOf(MaterializeError);
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe('credential-vault sandboxes', () => {
+  const vaultSandbox = (vault: boolean | undefined, handler?: ConstructorParameters<typeof FakeSandbox>[0]) =>
+    Object.assign(new FakeSandbox(handler), { vault });
+
+  it('clones GitHub with no credentials in the command env', async () => {
+    const sandbox = vaultSandbox(true);
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
+    expect(clone.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+    expect(JSON.stringify(sandbox.executions)).not.toContain(Buffer.from('x-access-token:tok-123').toString('base64'));
+  });
+
+  it('unsets the gh credential helper instead of installing it', async () => {
+    const sandbox = vaultSandbox(true, script => {
+      if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      return OK;
+    });
+
+    await checkoutSessionBranch(sandbox, '/workspace/repo', {
+      branch: 'factory/pr-1',
+      baseBranch: 'main',
+      token: 'tok-123',
+      repoFullName: 'octocat/hello',
+    });
+
+    expect(sandbox.calls.join('\n')).not.toContain('config credential.helper !');
+    expect(sandbox.calls.some(call => call.includes('--unset-all credential.helper'))).toBe(true);
+  });
+
+  it('pushes GitHub with no credentials in the command env', async () => {
+    const sandbox = vaultSandbox(true);
+    await pushBranch(sandbox, '/workspace/repo', 'feature-a', 'tok-123', 'octocat/hello');
+
+    const push = sandbox.executions.find(entry => entry.command === 'git' && entry.args.includes('push'))!;
+    expect(push.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it('opens a PR without a GH_TOKEN so the placeholder and vault authenticate gh', async () => {
+    const sandbox = vaultSandbox(true, script =>
+      script.startsWith('gh pr create')
+        ? { exitCode: 0, stdout: 'https://github.com/octocat/hello/pull/7\n', stderr: '' }
+        : OK,
+    );
+    await createPullRequest(sandbox, '/workspace/repo', {
+      token: 'tok-123',
+      base: 'main',
+      head: 'feat/x',
+      title: 't',
+      body: 'b',
+    });
+
+    const gh = sandbox.executions.find(entry => entry.command === 'gh' && entry.args[0] === 'pr')!;
+    expect(gh.options?.env?.GH_TOKEN).toBeUndefined();
+  });
+
+  it('drops GitHub credentials from a retry that lands on a vault VM', async () => {
+    let clones = 0;
+    const sandbox: FakeSandbox & { vault?: boolean } = vaultSandbox(false, script => {
+      if (!script.startsWith('git clone')) return OK;
+      clones++;
+      if (clones > 1) return OK;
+      sandbox.vault = true;
+      return { exitCode: 128, stdout: '', stderr: 'fatal: early EOF' };
+    });
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const attempts = sandbox.executions.filter(entry => entry.command === 'git' && entry.args[0] === 'clone');
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]!.options?.env?.GIT_CONFIG_COUNT).toBe('2');
+    expect(attempts[1]!.options?.env).toEqual({ GIT_TERMINAL_PROMPT: '0' });
+  });
+
+  it.each([
+    ...GITHUB_CONFIG_KEYS.map(key => [key, false] as const),
+    ...OTHER_HOST_CONFIG_KEYS.map(key => [key, true] as const),
+  ])('sends %s to a vault sandbox: %s', async (key, kept) => {
+    const sandbox = vaultSandbox(true);
+    await sh(sandbox, 'true', {
+      env: { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' },
+    });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual(
+      kept ? { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value', A: '1' } : { A: '1' },
+    );
+  });
+
+  it.each(GITHUB_CONFIG_KEYS)('keeps %s for a non-vault sandbox', async key => {
+    const sandbox = vaultSandbox(false);
+    const env = { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: key, GIT_CONFIG_VALUE_0: 'value' };
+    await sh(sandbox, 'true', { env });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual(env);
+  });
+
+  it('drops GITHUB_TOKEN and only the github.com config pairs for a vault sandbox', async () => {
+    const sandbox = vaultSandbox(true);
+    await sh(sandbox, 'true', {
+      env: {
+        GITHUB_TOKEN: 'ghs_real',
+        GH_ENTERPRISE_TOKEN: 'ghs_ent',
+        GIT_CONFIG_COUNT: '3',
+        GIT_CONFIG_KEY_0: 'http.https://github.com/octocat/hello.extraHeader',
+        GIT_CONFIG_VALUE_0: 'Authorization: Basic secret',
+        GIT_CONFIG_KEY_1: 'http.https://gitlab.com/group/proj.extraHeader',
+        GIT_CONFIG_VALUE_1: 'Authorization: Basic gitlab',
+        GIT_CONFIG_KEY_2: 'HTTP.https://github.com/octocat/hello.git.extraHeader',
+        GIT_CONFIG_VALUE_2: 'Authorization: Basic secret',
+      },
+    });
+
+    expect(sandbox.executions[0]!.options?.env).toEqual({
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.https://gitlab.com/group/proj.extraHeader',
+      GIT_CONFIG_VALUE_0: 'Authorization: Basic gitlab',
+    });
+  });
+
+  it('keeps process-scoped credentials when the platform reports a non-vault sandbox', async () => {
+    const sandbox = vaultSandbox(false);
+    await materializeRepo(makeRow({ materializedAt: null }), makeRepoInfo(), sandbox, 'tok-123');
+
+    const clone = sandbox.executions.find(entry => entry.command === 'git' && entry.args[0] === 'clone')!;
+    expect(clone.options?.env?.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
   });
 });
 

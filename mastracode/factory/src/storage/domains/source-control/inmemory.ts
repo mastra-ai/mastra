@@ -568,14 +568,27 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.sessionsRows.push(session);
       return session;
     },
+    setSandboxUser: async ({ sessionId, userId }: { sessionId: string; userId: string | null }) => {
+      const session = this.sessionsRows.find(row => row.sessionId === sessionId);
+      if (!session) throw new Error(`Factory session ${sessionId} not found`);
+      if (session.sandboxUserId === userId) return session;
+      if (session.sandboxUserId || session.sandboxId || session.materializedAt) {
+        throw new Error(`Factory session ${sessionId} cannot change its sandbox credential actor`);
+      }
+      const updated = { ...session, sandboxUserId: userId, updatedAt: new Date() };
+      this.sessionsRows[this.sessionsRows.indexOf(session)] = updated;
+      return updated;
+    },
     transferOwner: async ({
       sessionId,
       expectedUserId,
       toUserId,
+      releaseSandbox,
     }: {
       sessionId: string;
       expectedUserId: string;
       toUserId: string;
+      releaseSandbox?: boolean;
     }) => {
       const index = this.sessionsRows.findIndex(row => row.sessionId === sessionId);
       const session = this.sessionsRows[index] ?? null;
@@ -594,21 +607,43 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       );
       if (branchOwned) return { status: 'conflict' as const, reason: 'branch_owned' as const, session };
       // A new row, so a caller holding the old one keeps its pre-transfer snapshot like base.ts.
-      const updated = { ...session, userId: toUserId, updatedAt: new Date() };
+      const updated = {
+        ...session,
+        userId: toUserId,
+        ...(releaseSandbox ? { sandboxId: null, sandboxWorkdir: '', sandboxCredentialMode: null } : {}),
+        updatedAt: new Date(),
+      };
       this.sessionsRows[index] = updated;
-      return { status: 'updated' as const, session: updated };
+      return {
+        status: 'updated' as const,
+        session: updated,
+        ...(releaseSandbox ? { releasedSandboxId: session.sandboxId } : {}),
+      };
     },
     setSandbox: async ({
       id,
       sandboxId,
       sandboxWorkdir,
+      sandboxCredentialMode,
+      expectedUserId,
     }: {
       id: string;
       sandboxId: string | null;
       sandboxWorkdir: string;
+      sandboxCredentialMode?: 'vault' | 'token';
+      expectedUserId?: string;
     }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);
-      if (row) Object.assign(row, { sandboxId, sandboxWorkdir, updatedAt: new Date() });
+      if (row && (expectedUserId === undefined || row.userId === expectedUserId)) {
+        Object.assign(row, {
+          sandboxCredentialMode: sandboxId
+            ? (sandboxCredentialMode ?? (row.sandboxId === sandboxId ? row.sandboxCredentialMode : null))
+            : null,
+          sandboxId,
+          sandboxWorkdir,
+          updatedAt: new Date(),
+        });
+      }
     },
     markMaterialized: async ({ id }: { id: string }) => {
       const row = this.sessionsRows.find(candidate => candidate.id === id);

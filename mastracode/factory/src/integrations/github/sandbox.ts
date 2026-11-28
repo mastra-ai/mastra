@@ -20,6 +20,7 @@ import { recordSandboxCommand } from '../../metrics/sandbox.js';
 import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
+import { sandboxAcceptsGithubToken, sandboxGithubAuth } from '../../sandbox/vault.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
@@ -140,6 +141,76 @@ async function execute(
   }
 }
 
+const GITHUB_TOKEN_ENV = /^(GH_TOKEN(_\d+)?|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)$/;
+const GIT_CONFIG_ENV = /^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/;
+
+/**
+ * Whether git would apply a config key's credential to github.com. Scoped
+ * `http.<url>.*` and `credential.<url>.*` keys count when their URL's host is
+ * github.com or a subdomain, with or without a scheme, path, trailing slash
+ * or trailing dot on the host (git resolves `github.com.` to github.com),
+ * including `*` wildcards git allows in the host: git matches `*` within one
+ * label, so a pattern applies when its last two labels can match `github.com`
+ * (any leading labels can match some subdomain, e.g. `gist.github.*`). Unscoped `http.extraHeader`,
+ * `http.cookieFile` and `credential.*` keys apply to every host, so they count too.
+ */
+function appliesToGithub(key: string): boolean {
+  const lower = key.toLowerCase();
+  const first = lower.indexOf('.');
+  const last = lower.lastIndexOf('.');
+  if (first < 0) return false;
+  const section = lower.slice(0, first);
+  if (section !== 'http' && section !== 'credential') return false;
+  if (first === last) {
+    const variable = lower.slice(last + 1);
+    return section === 'credential' || variable === 'extraheader' || variable === 'cookiefile';
+  }
+  const host = lower
+    .slice(first + 1, last)
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
+    .replace(/^[^/@]*@/, '')
+    .split(/[/:]/)[0]!
+    .replace(/\.+$/, '');
+  if (host === 'github.com' || host.endsWith('.github.com')) return true;
+  if (!host.includes('*')) return false;
+  const labels = host.split('.');
+  if (labels.length < 2) return false;
+  const labelMatches = (label: string, target: string) =>
+    new RegExp(
+      '^' +
+        label
+          .split('*')
+          .map(part => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&'))
+          .join('[^.]*') +
+        '$',
+    ).test(target);
+  return labelMatches(labels.at(-2)!, 'github') && labelMatches(labels.at(-1)!, 'com');
+}
+
+/**
+ * Drops GitHub credentials from a per-call env: the token variables `gh` reads, and the
+ * `GIT_CONFIG_*` pairs git would apply to github.com (see {@link appliesToGithub}).
+ * Other pairs (GitLab auth) are kept and renumbered without gaps, because git
+ * reads indices 0..GIT_CONFIG_COUNT-1.
+ */
+function withoutGithubCredentials<T extends Record<string, string | undefined>>(env: T): T {
+  const result: Record<string, string | undefined> = Object.fromEntries(
+    Object.entries(env).filter(([name]) => !GITHUB_TOKEN_ENV.test(name) && !GIT_CONFIG_ENV.test(name)),
+  );
+  const count = Number(env.GIT_CONFIG_COUNT);
+  if (env.GIT_CONFIG_COUNT === undefined || !Number.isInteger(count) || count < 0) return result as T;
+  let kept = 0;
+  for (let index = 0; index < count; index++) {
+    const key = env[`GIT_CONFIG_KEY_${index}`];
+    if (key === undefined || appliesToGithub(key)) continue;
+    result[`GIT_CONFIG_KEY_${kept}`] = key;
+    result[`GIT_CONFIG_VALUE_${kept}`] = env[`GIT_CONFIG_VALUE_${index}`];
+    kept++;
+  }
+  if (kept > 0) result.GIT_CONFIG_COUNT = String(kept);
+  return result as T;
+}
+
 /** Single structured command execution attempt, bounded by the hang guard. */
 async function executeOnce(
   sandbox: ExecutableSandbox,
@@ -156,12 +227,15 @@ async function executeOnce(
     }, timeoutMs);
     timer.unref?.();
   });
+  // Re-decided per attempt: a retry may land on a replacement VM whose
+  // credential-vault mode differs from the one the env was built for.
+  const env = options.env && !sandboxAcceptsGithubToken(sandbox) ? withoutGithubCredentials(options.env) : options.env;
   try {
     return await Promise.race([
       sandbox.executeCommand(command, args, {
         timeout: timeoutMs,
         ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-        ...(options.env !== undefined ? { env: options.env } : {}),
+        ...(env !== undefined ? { env } : {}),
       }),
       hangGuard,
     ]);
@@ -312,14 +386,22 @@ function credentialScope(
  * Provide HTTP Basic credentials to one Git process without putting a secret
  * in argv, a remote URL, or persistent git config. Git reads the URL-scoped
  * extra header from its process environment and discards it on exit.
+ *
+ * A credential-vault sandbox gets no header for GitHub: its git rewrites
+ * github.com to the vault, which adds the real credential itself, so the
+ * token never enters the sandbox.
  */
 function gitAuthenticationEnvironment(
+  sandbox: ExecutableSandbox,
   cloneUrl: string,
   token: string,
   username: string,
   code: 'clone-failed' | 'pull-failed' | 'push-failed' = 'clone-failed',
 ): Record<string, string> {
   const scope = credentialScope(cloneUrl, code);
+  if (!sandboxAcceptsGithubToken(sandbox) && new URL(scope).hostname === 'github.com') {
+    return { GIT_TERMINAL_PROMPT: '0' };
+  }
   if (!token || !username) {
     throw new MaterializeError('Repository access did not include usable credentials.', code);
   }
@@ -470,6 +552,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
     // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
+      sandbox,
       cleanCloneUrl,
       token,
       repoInfo.authUsername ?? 'x-access-token',
@@ -633,11 +716,20 @@ export async function syncEnvironmentRepository(
   }
   assertRepositoryLocator(repoFullName, cloneUrl, 'pull-failed');
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(
+    sandbox,
+    cleanCloneUrl,
+    token,
+    authUsername ?? 'x-access-token',
+    'pull-failed',
+  );
 
   // Raw git in this checkout (push, fetch) authenticates through gh with the
-  // token that covers this repository, like the session repository does.
-  if (!authUsername) {
+  // token that covers this repository, like the session repository does. A
+  // vault sandbox holds no token for gh to hand out; the vault authenticates.
+  if (!authUsername && !sandboxAcceptsGithubToken(sandbox)) {
+    await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', 'credential.helper']);
+  } else if (!authUsername) {
     const configured = await execute(sandbox, 'git', [
       '-C',
       workdir,
@@ -765,6 +857,7 @@ export async function refreshMergeRequestCheckout(
   const token = access.authorization?.token;
   if (!token) throw new Error('GitLab repository access did not include a bearer token.');
   const env = gitAuthenticationEnvironment(
+    sandbox,
     access.cloneUrl,
     token,
     access.authorization?.username ?? 'oauth2',
@@ -825,9 +918,16 @@ async function checkoutSessionBranchImpl(
   // helper when reopening an older checkout so a stale sandbox cannot retain
   // credentials injected by an earlier implementation.
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
-  const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+  const authEnv = gitAuthenticationEnvironment(
+    sandbox,
+    cleanCloneUrl,
+    token,
+    authUsername ?? 'x-access-token',
+    'pull-failed',
+  );
   const credentialKey = authUsername ? 'credential.' + credentialScope(cleanCloneUrl) + '.helper' : 'credential.helper';
-  if (authUsername) {
+  // A vault sandbox holds no token for gh to hand out; the vault authenticates.
+  if (authUsername || !sandboxAcceptsGithubToken(sandbox)) {
     await execute(sandbox, 'git', ['-C', workdir, 'config', '--unset-all', credentialKey]);
   } else {
     const configured = await execute(sandbox, 'git', ['-C', workdir, 'config', credentialKey, GH_CREDENTIAL_HELPER]);
@@ -1039,7 +1139,7 @@ async function pushAuthenticatedBranch(
 ): Promise<PushedBranch> {
   const tip = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', `refs/heads/${branch}`]);
   if (tip.exitCode !== 0) throw classifyGitFailure(tip, 'push-failed');
-  const env = gitAuthenticationEnvironment(cloneUrl, token, username, 'push-failed');
+  const env = gitAuthenticationEnvironment(sandbox, cloneUrl, token, username, 'push-failed');
   const push = await execute(sandbox, 'git', ['-C', workdir, 'push', '--porcelain', '-u', 'origin', branch], { env });
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
   // Porcelain lines read `<flag>\t<src>:<dst>\t<summary>`; `=` marks a ref the remote already had.
@@ -1143,7 +1243,8 @@ export async function pushRepositoryBranch(
   }
   assertRepositoryLocator(repoFullName, access.cloneUrl, 'push-failed');
   const authorization = access.authorization;
-  if (!authorization?.token) {
+  const vaultTransport = sandboxGithubAuth(sandbox) === 'vault' && new URL(access.cloneUrl).hostname === 'github.com';
+  if (!authorization?.token && !vaultTransport) {
     throw new MaterializeError('Repository access did not include push credentials.', 'push-failed');
   }
   return pushAuthenticatedBranch(
@@ -1151,8 +1252,8 @@ export async function pushRepositoryBranch(
     workdir,
     branch,
     access.cloneUrl,
-    authorization.token,
-    authorization.username ?? 'x-access-token',
+    authorization?.token ?? '',
+    authorization?.username ?? 'x-access-token',
   );
 }
 
@@ -1355,7 +1456,7 @@ function parsePullRequestUrl(stdout: string): string | undefined {
 /**
  * Open a pull request from inside the sandbox via `gh pr create`. The token is
  * passed only through a per-invocation `GH_TOKEN` env scoped to the single `gh`
- * process (never persisted), all arguments are passed as structured argv, and
+ * process (never persisted, and never in a credential-vault sandbox), all arguments are passed as structured argv, and
  * the resulting PR URL is parsed from stdout.
  *
  * @param sandbox live sandbox containing the checkout
@@ -1379,7 +1480,8 @@ export async function createPullRequest(
     sandbox,
     'gh',
     ['pr', 'create', '--base', base, '--head', head, '--title', title, '--body', body ?? ''],
-    { cwd: workdir, env: { GH_TOKEN: token } },
+    // A vault sandbox keeps its placeholder GH_TOKEN; the vault authenticates gh.
+    { cwd: workdir, env: sandboxAcceptsGithubToken(sandbox) ? { GH_TOKEN: token } : {} },
   );
   if (result.exitCode !== 0) {
     const classified = classifyGitFailure(result, 'push-failed');

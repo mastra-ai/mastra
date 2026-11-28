@@ -12,10 +12,12 @@ import type {
   ProjectRepository,
   SourceControlSession,
   SourceControlStorageHandle,
+  TransferSourceControlSessionOwnerResult,
 } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { requireExec } from './materialization.js';
 import { clearFailedSetupCommands, evictSessionSandbox, peekSessionSandbox } from './session-sandbox.js';
+import { sandboxGithubAuth, sandboxOwner, sessionSandboxCredentialMode } from './vault.js';
 
 type WarningLogger = (message: string, details: Record<string, unknown>) => void;
 
@@ -42,6 +44,13 @@ export interface RecreateSessionSandboxInput {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   sessionId: string;
+}
+
+export interface ReleasePreviousOwnerSandboxInput extends RecreateSessionSandboxInput {
+  /** The user the released VM was built for. */
+  previousOwnerId: string;
+  /** The VM id the owner transfer cleared off the session. */
+  sandboxId: string | null;
 }
 
 const DEFAULT_DESTROY_TIMEOUT_MS = 30_000;
@@ -118,6 +127,92 @@ export class SessionRetirementCoordinator {
     if (result === 'recreated')
       factoryMetrics().count('sandbox', 'mastra_factory_sandbox_recreated_total', { kind: 'recreate' });
     return result;
+  }
+
+  /**
+   * Destroy the VM a session ran for its previous owner, after an owner
+   * transfer cleared its id off the session (so nothing resumes it as the new
+   * owner). Only the instance built for the previous owner is evicted: one the
+   * new owner built since the transfer runs a VM of their own. Without such an
+   * instance in this process, the VM is destroyed by the id the transfer cleared.
+   */
+  async releasePreviousOwnerSandbox(input: ReleasePreviousOwnerSandboxInput): Promise<void> {
+    await this.#withSessionLock(input.sessionId, () => this.#releasePreviousOwnerSandbox(input));
+  }
+
+  async transferSessionOwner(
+    input: RecreateSessionSandboxInput & { expectedUserId: string; toUserId: string; releaseSandbox: boolean },
+  ): Promise<TransferSourceControlSessionOwnerResult> {
+    return this.#withSessionLock(input.sessionId, async () => {
+      const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+      if (
+        !session ||
+        session.orgId !== input.orgId ||
+        session.userId !== input.expectedUserId ||
+        session.visibility === 'private'
+      ) {
+        return { status: 'conflict', reason: 'stale_owner', session: session?.orgId === input.orgId ? session : null };
+      }
+      const memo = peekSessionSandbox(session.id)?.sandbox;
+      const releaseSandbox =
+        input.releaseSandbox ||
+        session.sandboxCredentialMode === 'vault' ||
+        (memo !== undefined && sandboxGithubAuth(memo) === 'vault');
+      if (releaseSandbox) {
+        await this.#releasePreviousOwnerSandbox(
+          {
+            ...input,
+            previousOwnerId: input.expectedUserId,
+            sandboxId: session.sandboxId,
+          },
+          true,
+        );
+      }
+      const result = await input.sourceControl.sessions.transferOwner({
+        sessionId: input.sessionId,
+        expectedUserId: input.expectedUserId,
+        toUserId: input.toUserId,
+        releaseSandbox,
+      });
+      if (releaseSandbox && result.status === 'updated') {
+        evictSessionSandbox(session.id);
+        await this.#invalidate(result.session);
+      }
+      return result;
+    });
+  }
+
+  async #releasePreviousOwnerSandbox(input: ReleasePreviousOwnerSandboxInput, requireRelease = false): Promise<void> {
+    const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
+    if (!session || session.orgId !== input.orgId) return;
+    // Read before invalidating, which drops the memo: the instance is destroyed itself, not by identity.
+    const memo = peekSessionSandbox(session.id)?.sandbox;
+    const previous = memo && sandboxOwner(memo, input.previousOwnerId) === input.previousOwnerId ? memo : undefined;
+    const mode = await sessionSandboxCredentialMode(
+      { ...session, userId: input.previousOwnerId, sandboxId: input.sandboxId },
+      this.#sandbox,
+    );
+    if (mode !== 'vault' && (!previous || !('vault' in previous) || previous.vault !== true)) {
+      if (requireRelease) throw new Error('Cannot confirm the previous sandbox credential binding for release.');
+      return;
+    }
+    if (!previous && input.sandboxId && !this.#sandbox) {
+      throw new Error("No sandbox provider is configured to release the previous owner's VM.");
+    }
+    if (requireRelease && session.sandboxCredentialMode !== 'vault') {
+      await input.sourceControl.sessions.setSandbox({
+        id: session.id,
+        sandboxId: session.sandboxId,
+        sandboxWorkdir: session.sandboxWorkdir ?? '',
+        sandboxCredentialMode: 'vault',
+        expectedUserId: input.previousOwnerId,
+      });
+    }
+    // Fences an in-flight start of the previous owner's instance.
+    await this.#invalidate(session);
+    if (!previous && !input.sandboxId) return;
+    await this.#destroyForRecreate({ ...session, userId: input.previousOwnerId, sandboxId: input.sandboxId }, previous);
+    if (previous) evictSessionSandbox(session.id);
   }
 
   /**

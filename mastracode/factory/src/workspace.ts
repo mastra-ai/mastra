@@ -18,6 +18,7 @@ import type {
   SkillSourceEntry,
   SkillSourceStat,
   WorkspaceSandbox,
+  WorkspaceToolsConfig,
 } from '@mastra/core/workspace';
 import { getFactoryAuthUserFromContext, getFactoryAuthUserId } from './auth.js';
 import { REVIEW_CONTEXT } from './boards/define-board.js';
@@ -65,6 +66,15 @@ import {
   resolveSessionWorkdir,
 } from './sandbox/session-sandbox.js';
 import type { FactorySandboxContext, SessionEnvironmentGate, SessionSetupGate } from './sandbox/session-sandbox.js';
+import { sandboxHostMayUseCredentialVault } from './sandbox/vault-host.js';
+import {
+  assertVaultSandboxCaller,
+  bindSandboxOwner,
+  learnSandboxGithubAuth,
+  sandboxAcceptsGithubToken,
+  sandboxOwner,
+  sessionSandboxUser,
+} from './sandbox/vault.js';
 import { repositoryDirectoryName } from './sandbox/workdir.js';
 import {
   clearSessionEnvironment,
@@ -72,6 +82,7 @@ import {
   setSessionEnvironmentNote,
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
+import { isFactoryPrincipalId } from './storage/domains/projects/base.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SandboxEnvStore } from './storage/domains/sandbox-envs/base.js';
 import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
@@ -695,6 +706,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     tokenIssuedAt: number;
     generation: number;
     tokenReplacementPending: boolean;
+    // The sandbox the registration installs into. A sandbox the platform
+    // reported as credential-vault takes no token, so nothing is minted or
+    // refreshed for it.
+    target: SessionSandbox;
   };
   // The session setup path runs commands and installs credentials, so it
   // needs `executeCommand` (required by `ExecutableSandbox`) plus core's
@@ -840,18 +855,49 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // Install the credentials and the note that matches them: a PAT needs no
     // note, and recording the environment drops the note, so every install
     // (including a reconnect that reuses a fresh token) restores it.
-    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean) => {
+    // A credential-vault sandbox takes no GitHub token, so it gets every
+    // Factory token removed from its overlay instead, so
+    // the provider's placeholder `GH_TOKEN` is what its commands see.
+    // Returns whether the credential reached the sandbox.
+    const installGithubTokens = (target: SessionSandbox, token: string, pat: boolean, required: boolean): boolean => {
+      if (!sandboxAcceptsGithubToken(target)) {
+        target.setEnv?.(env =>
+          Object.fromEntries(Object.entries(env).filter(([name]) => !/^GH_TOKEN(_\d+)?$/.test(name))),
+        );
+        setSessionEnvironmentNote(session.sessionId, null);
+        return false;
+      }
       if (!target.setEnv) {
         if (required) throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-        return;
+        return false;
       }
       target.setEnv(env => withGithubTokens(env, token, pat));
       setSessionEnvironmentNote(session.sessionId, pat ? null : (githubGroupTokens.get(workspaceId)?.note ?? null));
+      return true;
+    };
+    // A withheld credential leaves the registration empty, non-PAT and stale,
+    // so a later token-mode start never reinstalls a credential chosen for a
+    // different role.
+    const recordGithubToken = (
+      registration: GithubTokenRegistration,
+      token: string,
+      pat: boolean,
+      installed: boolean,
+    ) => {
+      // An empty install (withheld, or a failed mint's fallback) stays stale so the next command re-mints.
+      const live = installed && token !== '';
+      registration.ghToken = live ? token : '';
+      registration.patInstalled = live && pat;
+      registration.tokenIssuedAt = live ? Date.now() : 0;
     };
     if (githubProvider) {
       registerGithubRefreshTarget(requestContext, {
         orgId: session.orgId,
         repositoryId: repository.id,
+        sandboxAuth: () => {
+          const registration = githubTokenInjectors.get(workspaceId);
+          return registration ? learnSandboxGithubAuth(registration.target) : 'token';
+        },
         // Bound below once the minter exists; a refresh re-mints the same set.
         ...(tokenRepositoryIds.length > 1 ? { mint: () => getRepositoryToken() } : {}),
       });
@@ -885,7 +931,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // installed org PAT is never stale. Returns whether a fresh token was injected.
     const refreshStaleGithubToken = async (): Promise<boolean> => {
       const registration = githubTokenInjectors.get(workspaceId);
-      if (!githubProvider || !registration || !isGithubTokenStale(registration)) return false;
+      if (
+        !githubProvider ||
+        !registration ||
+        !sandboxAcceptsGithubToken(registration.target) ||
+        !isGithubTokenStale(registration)
+      ) {
+        return false;
+      }
       // Let an in-flight reconcile settle the role before choosing a credential.
       await githubTokenReconciliations.get(workspaceId)?.catch(() => {});
       if (githubTokenInjectors.get(workspaceId) !== registration || !isGithubTokenStale(registration)) return false;
@@ -914,6 +967,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (workspaceRegistry.generation(session.sessionId) !== workspaceGeneration) {
         throw retiredError();
       }
+      // Learn the credential-vault mode before setup decides whether the
+      // sandbox may hold a GitHub token.
+      const sandboxCredentialMode = await learnSandboxGithubAuth(args.sandbox);
+      // The overlay survives VM replacement; clear a token left by an earlier
+      // token-mode start before setup runs its first command here.
+      if (githubProvider && !sandboxAcceptsGithubToken(requireExec(args.sandbox))) {
+        installGithubTokens(requireExec(args.sandbox), '', false, false);
+      }
       let setupError: SetupCommandError | undefined;
       try {
         await guardedSetup(args);
@@ -940,11 +1001,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const publishStartSideEffects = async () => {
         await storage.sessions.setSandbox({
           id: session.id,
+          // A vault VM is its builder's: once the session changes owner (which clears the id), the previous
+          // owner's instance must not hand its VM to the new one.
+          ...(sandboxAcceptsGithubToken(target) ? {} : { expectedUserId: session.userId }),
           // Persist the provider's PHYSICAL, reattachable VM id so resume can
           // reattach to the same VM. Providers with no separate physical id
           // (e.g. local) persist nothing: a logical id handed back as a
           // `sandboxId` hint is unknown to the provider and breaks resume.
           sandboxId: target.sandboxId ?? null,
+          ...('vault' in args.sandbox && args.sandbox.vault === undefined ? {} : { sandboxCredentialMode }),
           // D2: a list session's working directory is the workspace root,
           // the repositories sit beneath it; a single-repository session
           // keeps its checkout as before.
@@ -972,11 +1037,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // reconcileGithubToken owns role/generation and the active context's
         // injector, so replacing them here would reauthorize the stale
         // constructing context and reject the current one.
+        existingRegistration.target = target;
         existingRegistration.inject = (freshToken, pat = false) => {
-          installGithubTokens(target, freshToken, pat, true);
-          existingRegistration.ghToken = freshToken;
-          existingRegistration.patInstalled = pat;
-          existingRegistration.tokenIssuedAt = Date.now();
+          recordGithubToken(existingRegistration, freshToken, pat, installGithubTokens(target, freshToken, pat, true));
         };
         // A minted token may have expired while the VM was away; re-mint it
         // instead of reinstalling it over the fresh one setup just used.
@@ -984,12 +1047,31 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // that cannot accept the credential fails the reconnect here instead of
         // deferring the failure to a later token refresh.
         // A failed mint keeps the reconnect usable with the current token.
-        const refreshed = await refreshStaleGithubToken().catch(() => false);
+        // A registration made while the sandbox withheld tokens (vault mode)
+        // holds no credential; when the new sandbox accepts
+        // one, install the org PAT if configured, before falling back to a mint.
+        const { generation: patGeneration } = existingRegistration;
+        const lookedUpPat =
+          githubProvider && !existingRegistration.ghToken && sandboxAcceptsGithubToken(target)
+            ? await getGithubPat(() => githubProvider.integrationStorage, session.orgId, existingRegistration.patKind)
+            : undefined;
+        // Discard a lookup a concurrent role change or install overtook.
+        const withheldPat =
+          lookedUpPat &&
+          githubTokenInjectors.get(workspaceId) === existingRegistration &&
+          existingRegistration.generation === patGeneration &&
+          existingRegistration.target === target &&
+          !existingRegistration.ghToken &&
+          sandboxAcceptsGithubToken(target)
+            ? lookedUpPat
+            : undefined;
+        if (withheldPat) existingRegistration.inject(withheldPat, true);
+        const refreshed = withheldPat ? true : await refreshStaleGithubToken().catch(() => false);
         if (!refreshed) {
           // Reinstalling the same credential must not reset its age.
-          const { tokenIssuedAt } = existingRegistration;
-          existingRegistration.inject(existingRegistration.ghToken, existingRegistration.patInstalled);
-          existingRegistration.tokenIssuedAt = tokenIssuedAt;
+          const { tokenIssuedAt, ghToken } = existingRegistration;
+          existingRegistration.inject(ghToken, existingRegistration.patInstalled);
+          if (ghToken && existingRegistration.ghToken) existingRegistration.tokenIssuedAt = tokenIssuedAt;
         }
         await finishStart();
         return;
@@ -1000,22 +1082,26 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
       const patKind = await resolveGithubPatKind();
-      const ghCliPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
-      const ghCliToken = ghCliPat ?? (await getRepositoryToken());
+      // A sandbox that takes no token needs none minted. The empty token is
+      // stale on purpose: if a later start reconnects a sandbox that does take
+      // one, reconnect mints it then.
+      const acceptsToken = sandboxAcceptsGithubToken(target);
+      const ghCliPat = acceptsToken
+        ? await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)
+        : null;
+      const ghCliToken = ghCliPat ?? (acceptsToken ? await getRepositoryToken() : '');
       installGithubTokens(target, ghCliToken, ghCliPat !== null, false);
       const tokenRegistration: GithubTokenRegistration = {
         inject: (freshToken, pat = false) => {
-          installGithubTokens(target, freshToken, pat, true);
-          tokenRegistration.ghToken = freshToken;
-          tokenRegistration.patInstalled = pat;
-          tokenRegistration.tokenIssuedAt = Date.now();
+          recordGithubToken(tokenRegistration, freshToken, pat, installGithubTokens(target, freshToken, pat, true));
         },
         patKind,
         ghToken: ghCliToken,
         patInstalled: ghCliPat !== null,
-        tokenIssuedAt: Date.now(),
+        tokenIssuedAt: acceptsToken ? Date.now() : 0,
         generation: 0,
         tokenReplacementPending: false,
+        target,
       };
       githubTokenInjectors.set(workspaceId, tokenRegistration);
       registerGithubTokenContext(tokenRegistration);
@@ -1032,6 +1118,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
+                ...(sessionSandboxUser(session) ? { userId: sessionSandboxUser(session) } : {}),
                 ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
                 ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first
@@ -1120,6 +1207,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // waits for this resolver to finish because the start hook reads
           // bindings declared further down.
           startEagerly = eagerSandboxStart;
+          bindSandboxOwner(sandbox, sessionSandboxUser(session));
           return sandbox;
         },
         environment?.repos.map(repo => repo.slug) ?? [],
@@ -1138,6 +1226,50 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
     };
     const sessionEntry = constructSessionEntry();
+    // A credential-vault sandbox acts with its owner's vault grant (the sandbox
+    // is created with `userId: session.userId`), so only that user may create or
+    // reuse it, even after the session changes owner; an org-visible session gives other members no share of that
+    // credential. Learning the mode never starts the sandbox: `refreshVault()`
+    // asks the platform about an existing VM and is a no-op before one exists.
+    // A resolution refuses a non-owner only once the mode is known to be vault,
+    // so viewing a session never boots its VM; a non-owner's workspace tool call
+    // (the first thing that would start or use the VM) refuses unless the mode
+    // is known to be token.
+    const vaultSandbox = sessionEntry.sandbox as WorkspaceSandbox & { vault?: boolean };
+    const mayUseCredentialVault = sandboxHostMayUseCredentialVault(sandboxConfig.provider);
+    const credentialCaller = (callerId: string | undefined) =>
+      callerId === session.userId && isFactoryPrincipalId(session.userId) ? sessionSandboxUser(session) : callerId;
+    const ownsVault = (callerId: string | undefined) =>
+      (credentialCaller(callerId) !== undefined &&
+        credentialCaller(callerId) === sandboxOwner(vaultSandbox, sessionSandboxUser(session))) ||
+      (!mayUseCredentialVault && !('vault' in vaultSandbox));
+    const vaultCaller = (callerId: string | undefined) => ({
+      ownerId: sessionSandboxUser(session),
+      callerId: credentialCaller(callerId),
+      sessionId: session.sessionId,
+      mayUseCredentialVault,
+    });
+    if (!ownsVault(userId)) {
+      // Refuse here only once the mode is known to be vault; an unknown mode
+      // refuses at the first tool call instead, so viewing never boots the VM.
+      await assertVaultSandboxCaller(vaultSandbox, vaultCaller(userId)).catch(error => {
+        if (vaultSandbox.vault === true) throw error;
+      });
+    }
+    const planGuard = FACTORY_WORKSPACE_TOOLS.hooks?.beforeToolCall;
+    const toolsConfig: WorkspaceToolsConfig = {
+      ...FACTORY_WORKSPACE_TOOLS,
+      hooks: {
+        ...FACTORY_WORKSPACE_TOOLS.hooks,
+        beforeToolCall: hookContext => {
+          const requestContext = (hookContext.context as { requestContext?: { get: (key: string) => unknown } })
+            ?.requestContext;
+          const callerId = getFactoryAuthUserId(getFactoryAuthUserFromContext(requestContext));
+          if (ownsVault(callerId) || vaultSandbox.vault === false) return planGuard?.(hookContext);
+          return assertVaultSandboxCaller(vaultSandbox, vaultCaller(callerId)).then(() => planGuard?.(hookContext));
+        },
+      },
+    };
     // The session's working directory as the agent sees it: the checkout
     // when the environment holds one repository, the workspace root with a
     // directory per repository when it holds several (D2). The file routes
@@ -1413,7 +1545,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
           const pat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind);
           let token = pat;
-          if (!token && (registered.tokenReplacementPending || isGithubTokenStale(registered))) {
+          if (
+            !token &&
+            sandboxAcceptsGithubToken(registered.target) &&
+            (registered.tokenReplacementPending || isGithubTokenStale(registered))
+          ) {
             token = await getRepositoryToken();
           }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
@@ -1478,7 +1614,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     let existing = mastra?.getWorkspaceById(workspaceId, { optional: true }) as Workspace | undefined;
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
+      existing.setToolsConfig(toolsConfig);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       // Likewise when the project's skill-override revision moves: a save or revert
@@ -1560,7 +1696,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // GitHub setup commands may shell out to gh/HTTPS. Preserve its
       // role-aware PAT behavior without applying GitHub credentials to other
       // source-control providers.
-      if (githubProvider) {
+      if (githubProvider && !sandboxAcceptsGithubToken(target)) {
+        // Clear any token an earlier implementation left in the overlay.
+        installGithubTokens(target, '', false, false);
+      } else if (githubProvider) {
         const setupPatKind = await resolveGithubPatKind();
         const setupPat = await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind);
         // Setup commands in any environment repository may fetch through its
@@ -1906,7 +2045,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: FACTORY_WORKSPACE_TOOLS,
+      tools: toolsConfig,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the
@@ -1954,7 +2093,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
     }
 
-    fireEagerStart();
+    // An eager start would create the VM with the owner's vault grant, so a
+    // non-owner's resolution only starts it once the mode is known to be token.
+    if (ownsVault(userId) || vaultSandbox.vault === false) fireEagerStart();
     return workspace;
   };
   return (context: DynamicWorkspaceContext) => timed('workspace.resolve', () => resolve(context));
