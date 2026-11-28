@@ -558,4 +558,43 @@ describe('plugin loader', () => {
     expect(Object.keys(collectActivePluginTools(loaded))).toEqual(['same']);
     expect(collectActivePluginTools(loaded).same).toBe(loaded[0]?.tools.same);
   });
+
+  it('builds plain extractor configs with the host memory and rejects instances from another copy', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-extractors-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const dirOf = (name: string) => path.join(projectRoot, '.mastracode', 'plugins', name);
+    writePlugin(
+      path.join(dirOf('good'), 'index.ts'),
+      `const notes = { name: 'vis notes', instructions: 'notes' };
+      export default { id: 'acme.good', extractors: { observation: [notes], reflection: [notes] } };`,
+    );
+    writePlugin(
+      path.join(dirOf('bad'), 'index.ts'),
+      `class Extractor { constructor() { this.name = 'foreign notes'; this.slug = 'foreign-notes'; this.mode = 'hook'; } }
+      export default { id: 'acme.bad', extractors: { observation: [new Extractor()] } };`,
+    );
+    const record = (name: string) => ({
+      enabled: true,
+      source: 'local' as const,
+      specifier: `../${name}`,
+      path: dirOf(name),
+      entry: 'index.ts',
+    });
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: { plugins: { 'acme.good': record('good'), 'acme.bad': record('bad') } },
+      globalRegistry: { plugins: {} },
+    });
+
+    const { Extractor } = await import('@mastra/memory');
+    const good = loaded.find(plugin => plugin.id === 'acme.good')!;
+    expect(good.status).toBe('active');
+    expect(good.extractors?.observation[0]).toBeInstanceOf(Extractor);
+    expect(good.extractors?.observation[0]).toBe(good.extractors?.reflection[0]);
+    const bad = loaded.find(plugin => plugin.id === 'acme.bad')!;
+    expect(bad.status).toBe('load failed');
+    expect(bad.error).toMatch(/different @mastra\/memory copy/);
+  });
 });

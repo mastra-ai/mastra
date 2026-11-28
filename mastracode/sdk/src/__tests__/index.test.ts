@@ -1195,6 +1195,7 @@ describe('createMastraCode', () => {
     // Knowledge attaches to the code agent, not to Memory.
     expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), undefined, {
       disableSettingsOmSeed: undefined,
+      readExtractors: expect.any(Function),
     });
     expect(codeAgentConfig().knowledge).toBe(instance);
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
@@ -1374,6 +1375,7 @@ describe('createMastraCode', () => {
     // observational-memory resolution; neither was configured here.
     expect(getDynamicMemoryMock).toHaveBeenCalledWith(expect.anything(), vector, undefined, {
       disableSettingsOmSeed: undefined,
+      readExtractors: expect.any(Function),
     });
     expect(createVectorStoreMock).not.toHaveBeenCalled();
   });

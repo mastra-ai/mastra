@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Extractor } from '../extractor';
 import { ObserverRunner } from '../observer-runner';
+import { WorkingMemoryExtractor } from '../working-memory-extractor';
 
 type Reply =
   | { text: string; finishReason: 'stop' | 'other' | 'unknown' }
@@ -76,7 +77,12 @@ function withLogger(warn: ReturnType<typeof vi.fn>) {
   return mastra;
 }
 
-function createRunner(model: MockLanguageModelV2, extractors: Extractor<any>[], warn: ReturnType<typeof vi.fn>) {
+function createRunner(
+  model: MockLanguageModelV2,
+  extractors: Extractor<any>[],
+  warn: ReturnType<typeof vi.fn>,
+  memory?: any,
+) {
   return new ObserverRunner({
     observationConfig: {
       model: 'mock/model',
@@ -90,6 +96,7 @@ function createRunner(model: MockLanguageModelV2, extractors: Extractor<any>[], 
     resolveModel: () => ({ model: model as any }),
     tokenCounter: { countMessages: () => 1 } as any,
     mastra: withLogger(warn),
+    memory,
   });
 }
 
@@ -119,5 +126,27 @@ describe('observer logs required sections it could not extract', () => {
     await createRunner(model, [mood], warn).call(undefined, [createMessage('Hi', 'user')]);
 
     expect(warn).not.toHaveBeenCalledWith('OM observer could not extract required sections', expect.anything());
+  });
+
+  it('rejects before model execution when required working-memory state cannot be read', async () => {
+    const { model, prompts } = createScriptedModel([{ text: REPLY, finishReason: 'stop' }]);
+    const readError = new Error('working memory storage unavailable');
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'markdown', content: '# User' })),
+      getWorkingMemory: vi.fn(async () => {
+        throw readError;
+      }),
+    };
+
+    await expect(
+      createRunner(model, [new WorkingMemoryExtractor()], vi.fn(), memory).call(
+        undefined,
+        [createMessage('Hi', 'user')],
+        undefined,
+        { resourceId: 'resource-1' },
+      ),
+    ).rejects.toBe(readError);
+    expect(prompts).toHaveLength(0);
   });
 });

@@ -4,9 +4,11 @@ import type { SignalProvider } from '@mastra/core/signals';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
+import type { Extractor, ExtractorConfig } from '@mastra/memory';
 
 import type { MastraCodeState } from './schema.js';
 
+export { Agent } from '@mastra/core/agent';
 export { createTool } from '@mastra/core/tools';
 export { RequestContext } from '@mastra/core/di';
 export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
@@ -14,6 +16,8 @@ export { SignalProvider } from '@mastra/core/signals';
 export type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals';
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 export { z } from 'zod';
+export { Extractor } from '@mastra/memory';
+export type { ExtractorConfig, ExtractorOnExtractedContext } from '@mastra/memory';
 
 export type MastraCodeToolRenderConfig = {
   type: 'subagent';
@@ -175,6 +179,30 @@ export type MastraCodePluginProcessorEntries =
     };
 
 /**
+ * Observational Memory extractors a plugin contributes. Plain extractor configs are portable and
+ * Mastra Code builds them with its own `@mastra/memory` constructor.
+ *
+ * `Extractor` instances are accepted only when their constructor comes from the host copy re-exported
+ * by `mastracode/plugin`. A plugin that bundles or resolves a separate `@mastra/memory` copy must pass
+ * a plain `ExtractorConfig`; foreign instances are rejected because rebuilding one would lose dynamic
+ * instructions, schemas, mode and hooks.
+ *
+ * `observation` extractors run with the observer, `reflection` extractors with
+ * the reflector; an extractor may sit in both lanes. They join Mastra Code's
+ * built-in extractors on the next request after the plugin loads, and leave
+ * when it is disabled, updated or removed. An extractor whose slug another
+ * active plugin already contributed is skipped and reported as a plugin error.
+ *
+ * @experimental Extractors are experimental in Observational Memory.
+ */
+export type MastraCodePluginExtractor = Extractor<any> | ExtractorConfig<any>;
+
+export type MastraCodePluginExtractorEntries = {
+  observation?: MastraCodePluginExtractor[];
+  reflection?: MastraCodePluginExtractor[];
+};
+
+/**
  * Signal providers a plugin contributes.
  *
  * Mastra Code owns their lifecycle: it registers Mastra on them, connects them
@@ -202,6 +230,11 @@ export type MastraCodePlugin = {
     | ((
         context: MastraCodePluginContext,
       ) => MastraCodePluginProcessorEntries | Promise<MastraCodePluginProcessorEntries>);
+  extractors?:
+    | MastraCodePluginExtractorEntries
+    | ((
+        context: MastraCodePluginContext,
+      ) => MastraCodePluginExtractorEntries | Promise<MastraCodePluginExtractorEntries>);
   signalProviders?:
     | MastraCodePluginSignalProviderEntries
     | ((

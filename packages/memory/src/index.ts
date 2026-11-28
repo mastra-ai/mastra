@@ -91,6 +91,7 @@ export {
 } from './processors/observational-memory/model-by-input-tokens';
 export {
   Extractor,
+  validateExtractorList,
   type ExtractorConfig,
   type ExtractorOnExtractedContext,
   type ExtractorRuntimeContext,
