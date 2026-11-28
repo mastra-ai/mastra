@@ -613,6 +613,10 @@ export class WorkflowsValkey extends WorkflowsStorage {
       const normalizedFrom = fromDate ? ensureDate(fromDate) : undefined;
       const normalizedTo = toDate ? ensureDate(toDate) : undefined;
 
+      // The canonical key carries no `resourceId`, so a resource-scoped call scans the workflow's
+      // keys and filters `resourceId` off the record below; a narrower scan needs a per-resource
+      // index, as no legacy or canonical key shape can be trusted to hold exactly one resource
+      // (a run ID containing `:` makes the shapes collide).
       const pattern = workflowName
         ? `${escapeGlob(getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: workflowName }))}:*`
         : `${getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows' })}:*`;
