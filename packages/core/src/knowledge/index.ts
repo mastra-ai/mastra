@@ -56,7 +56,7 @@ import type { PinBudget, PinEntry } from './pinned';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { reembedKnowledge } from './reembed';
 import type { KnowledgeReembedOptions, KnowledgeReembedResult } from './reembed';
-import { KnowledgeRun, knowledgeRunPrincipals } from './run';
+import { KnowledgeRun, KnowledgeRunScopesError, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';
 import { KnowledgeScopeRuntime } from './scope-runtime';
 import type { KnowledgeAccessExplanation } from './scope-runtime';
@@ -439,9 +439,19 @@ export class Knowledge extends MastraBase {
     return { read, write };
   }
 
-  /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
-  __principalsKey(context: KnowledgeRunContext): string {
-    return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
+  /**
+   * The run's principals as a stable key, or `undefined` when the run has no Knowledge view (no scopes,
+   * or an undeclared scope). Loads the store's declarations first, so a scope only the store declares
+   * counts; a failure loading them rejects. @internal
+   */
+  async __principalsKey(context: KnowledgeRunContext): Promise<string | undefined> {
+    await this.#runtime.resolve();
+    try {
+      return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
+    } catch (error) {
+      if (error instanceof KnowledgeRunScopesError || error instanceof KnowledgeDeclarationError) return undefined;
+      throw error;
+    }
   }
 
   /**

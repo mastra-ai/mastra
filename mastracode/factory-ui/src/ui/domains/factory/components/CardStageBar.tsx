@@ -13,7 +13,7 @@ import type { StageStep } from '../cardStageBar';
 import { useItemDecisions } from '../hooks/useBoardDecisions';
 import { useBoardItems } from '../hooks/useBoardItems';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { phaseIconKind } from './BoardIcons';
 
 export function CardStageBar({

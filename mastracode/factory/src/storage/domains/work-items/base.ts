@@ -1,3 +1,10 @@
+import { createHash } from 'node:crypto';
+import {
+  FACTORY_DISPATCH_FAILURE_CODES,
+  externalSourceForWorkItem,
+  FACTORY_TRIAGE_TYPES,
+  primarySource,
+} from '@internal/factory-contract';
 /**
  * Factory work-items storage domain.
  *
@@ -8,10 +15,8 @@
  * Factory transition path keeps one exclusive current stage per item.
  */
 
-import { createHash } from 'node:crypto';
-
-import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES, primarySource } from '@internal/factory-contract';
 import type {
+  FactoryDispatchFailureCode,
   ExternalWorkItemSource,
   FactoryTriageType,
   WorkItemRow as ProviderWorkItemRow,
@@ -208,34 +213,6 @@ export type FactoryDispatchStatus =
   | 'succeeded'
   | 'failed';
 
-const FACTORY_DISPATCH_FAILURE_CODES = [
-  'session_unavailable',
-  'source_control_missing',
-  'source_repository_missing',
-  'source_repository_ambiguous',
-  'unsupported_provider_item',
-  'notification_delivery_failed',
-  'run_terminal_event_missing',
-  'run_incomplete',
-  'skill_delivery_ambiguous',
-  'run_overdue',
-  'repository_git_missing',
-  'repository_sandbox_unresponsive',
-  'repository_egress_blocked',
-  'repository_clone_failed',
-  'repository_pull_failed',
-  'repository_push_failed',
-  'repository_commit_failed',
-  'repository_cli_missing',
-  'repository_pr_failed',
-  'run_configuration_invalid',
-  'run_credentials_unavailable',
-  'run_user_unauthenticated',
-  'factory_org_key_missing',
-  'run_failed',
-  'unknown',
-] as const;
-
 /** Written until a pause stopped counting as a failure; stored rows still read through them. */
 const RETIRED_FACTORY_DISPATCH_FAILURE_CODES = ['plan_awaiting_approval', 'run_awaiting_input'] as const;
 
@@ -244,7 +221,6 @@ const STORED_FACTORY_DISPATCH_FAILURE_CODES = [
   ...RETIRED_FACTORY_DISPATCH_FAILURE_CODES,
 ] as const;
 
-export type FactoryDispatchFailureCode = (typeof FACTORY_DISPATCH_FAILURE_CODES)[number];
 export type StoredFactoryDispatchFailureCode = (typeof STORED_FACTORY_DISPATCH_FAILURE_CODES)[number];
 
 function isStoredFactoryDispatchFailureCode(value: unknown): value is StoredFactoryDispatchFailureCode {

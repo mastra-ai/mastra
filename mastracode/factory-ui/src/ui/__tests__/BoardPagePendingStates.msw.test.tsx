@@ -1,4 +1,4 @@
-import type { FactoryTransitionResultRejected } from '@internal/factory-contract';
+import type { FactoryTransitionResultRejected, FactoryDecisionSummary } from '@internal/factory-contract';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -11,7 +11,6 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { pushableFeedStream } from '../../../e2e/ui/feed-stream';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
-import type { FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubIssue } from '../domains/factory/services/factory';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';

@@ -9,7 +9,7 @@ import { currentItemStage, phaseLabel } from '../boardStages';
 import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedCardName, relationshipPath, workItemReference } from '../services/relationships';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { WorkItemSourceIcon } from './BoardCardParts';
 import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
 import { threadPath } from '../../workspaces/services/factoryPaths';

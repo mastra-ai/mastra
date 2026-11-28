@@ -11,12 +11,13 @@ import type {
   FactoryRuleActor,
   FactoryRuleCausalEntry,
   FactoryRuleRejectionCode,
+  FactoryDispatchFailureCode,
 } from '@internal/factory-contract';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
-import { RequestContext } from '@mastra/core/request-context';
 
+import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
@@ -82,7 +83,6 @@ import {
 import type {
   FactoryDecisionProvenance,
   FactoryDeferredDecisionRecord,
-  FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
   Card,

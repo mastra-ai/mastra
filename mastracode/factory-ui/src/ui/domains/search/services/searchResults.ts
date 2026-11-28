@@ -1,5 +1,5 @@
 import { cardContextSessions } from '@internal/factory-contract';
-import type { CardContextSession } from '@internal/factory-contract';
+import type { CardContextSession, WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
 import { workItemNumber } from '@mastra/factory/work-items/card-number';
 import { matchesSearch, searchableCard } from '@mastra/factory/work-items/search-terms';
 import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/search-terms';
@@ -10,7 +10,6 @@ import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { CARD_SOURCES } from '../../factory/cardSources';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
-import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {

@@ -2,10 +2,10 @@ import {
   SLACK_SESSION_BRANCH_PREFIX,
   USER_BRANCH_PREFIX,
   USER_SESSION_BRANCH_PREFIX,
+  isPullRequestSource,
 } from '@internal/factory-contract';
 
-import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
-import { isPullRequestSource } from '../../factory/services/workItems';
+import type { WorkItem, WorkItemBoardSource as WorkItemSource } from '@internal/factory-contract';
 import type { FactoryUserSession } from './user-sessions';
 
 const GITHUB_REVIEW_BRANCH = /^factory\/pr-([1-9]\d*)$/;

@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 2.11.1-alpha.0
+
+### Patch Changes
+
+- Fixed MCP client reconnect decisions to read the HTTP status from structured SDK error metadata instead of the error message. A server that returned 400, 401, 403, or 404 without quoting the status in its response body was treated as a non-reconnectable failure, so the client gave up and dropped the connection instead of reconnecting once and retrying. The status now comes from `SdkHttpError.status` (or `statusCode`/`data.status`) and a JSON-RPC numeric `code` still blocks reconnection, so a structured status outside 400/401/403/404 no longer reconnects even when the error message quotes a transport failure. No change to retry counts, the unsent-request check, or `MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN` behavior. ([#31766](https://github.com/mastra-ai/mastra/pull/31766))
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+
 ## 2.11.0
 
 ### Minor Changes

@@ -9,7 +9,13 @@ export default defineConfig({
   clean: true,
   dts: false,
   treeshake: true,
+  deps: {
+    alwaysBundle: ['@internal/factory-contract'],
+  },
   onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));
+    await generateTypes(
+      process.cwd(),
+      new Set(['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5', '@internal/factory-contract']),
+    );
   },
 });

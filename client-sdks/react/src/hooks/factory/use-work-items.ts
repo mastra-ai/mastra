@@ -1,5 +1,20 @@
-import type { FactoryRuleStage } from '@internal/factory-contract';
-import type { QueryClient, QueryKey } from '@tanstack/react-query';
+import { boardIdOf } from '@internal/factory-contract';
+import type {
+  BoardPhasesRequest,
+  BoardSnapshot,
+  CreateWorkItemInput,
+  Factory,
+  FactoryBoard,
+  FactoryRuleStage,
+  TransitionOutcome,
+  UpdateWorkItemInput,
+  WorkItem,
+  WorkItemActivityResponse,
+  WorkItemFilterOptionsResponse,
+  WorkItemStageEntry,
+  WorkItemStartersResponse,
+} from '@mastra/client-js';
+import type { QueryClient, QueryKey, UseQueryOptions } from '@tanstack/react-query';
 import {
   keepPreviousData,
   queryOptions,
@@ -10,34 +25,9 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-
-import { useApiConfig } from '../api/config';
-import { cardMoveMutationKey, cardWriteMutationKey, isUnnarrowedBoardView, queryKeys } from '../api/keys';
-import type { BoardPhasesRequest } from '../api/types';
-import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
-import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
-import { itemBoard } from '../ui/domains/factory/boardStages';
-import {
-  createWorkItem,
-  deleteWorkItem,
-  fetchWorkItemActivity,
-  fetchBoardPhases,
-  fetchWorkItemFilterOptions,
-  fetchWorkItemStarters,
-  listWorkItems,
-  transitionWorkItem,
-  updateWorkItem,
-} from '../ui/domains/factory/services/workItems';
-import { awaitMoveAnswer, moveAnswerStream } from '../ui/domains/factory/services/submittedMoves';
-import type {
-  BoardSnapshot,
-  CreateWorkItemInput,
-  FactoryBoard,
-  TransitionOutcome,
-  UpdateWorkItemInput,
-  WorkItem,
-  WorkItemStageEntry,
-} from '../ui/domains/factory/services/workItems';
+import { useFactory } from './context';
+import { factoryKeys, isUnnarrowedBoardView } from './keys';
+import { awaitMoveAnswer, moveAnswerStream } from './submitted-moves';
 
 /**
  * How long a submitted move waits for its answer. The server may hold a move for two minutes
@@ -45,9 +35,9 @@ import type {
  */
 const SUBMITTED_MOVE_WAIT_MS = 150_000;
 
-function requireFactoryProjectId(factoryProjectId: string | undefined): string {
-  if (!factoryProjectId) throw new Error('No Factory selected');
-  return factoryProjectId;
+function requireFactory(factory: Factory | undefined): Factory {
+  if (!factory) throw new Error('No Factory selected');
+  return factory;
 }
 
 /**
@@ -64,8 +54,8 @@ function patchCards(queryClient: QueryClient, listKey: QueryKey, patch: (cards: 
 /** Drop every card ref to a deleted session so the board stops advertising it before the next poll. */
 export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectId: string, sessionId: string) {
   // an in-flight list fetch still carries the stale refs and would clobber the edit below
-  void queryClient.cancelQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
-  patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
+  void queryClient.cancelQueries({ queryKey: factoryKeys.workItems(factoryProjectId) });
+  patchCards(queryClient, factoryKeys.workItems(factoryProjectId), cards =>
     cards.map(card => {
       const kept = Object.entries(card.sessions).filter(([, ref]) => ref.sessionId !== sessionId);
       return kept.length === Object.keys(card.sessions).length ? card : { ...card, sessions: Object.fromEntries(kept) };
@@ -77,12 +67,12 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 const selectCards = (board: BoardSnapshot) => board.workItems;
 
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
-function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function sessionCardsQueryOptions(
+  factory: Factory | undefined,
+): UseQueryOptions<BoardSnapshot, Error, BoardSnapshot, ReturnType<typeof factoryKeys.workItemsWithSessions>> {
   return queryOptions({
-    queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
-    queryFn: factoryProjectId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { scope: 'sessions' })
-      : skipToken,
+    queryKey: factoryKeys.workItemsWithSessions(factory?.factoryProjectId),
+    queryFn: factory ? ({ signal }) => factory.listWorkItems({ scope: 'sessions' }, { signal }) : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
   });
@@ -116,11 +106,11 @@ export interface BoardPhasesSnapshot extends BoardSnapshot {
 const CARDS_PER_READ = 100;
 
 /** The cards among `ids` the server still holds, read by id. */
-async function readCards(baseUrl: string, factoryProjectId: string, ids: string[], signal: AbortSignal) {
+async function readCards(factory: Factory, ids: string[], signal: AbortSignal) {
   const reads: Promise<BoardSnapshot>[] = [];
   for (let start = 0; start < ids.length; start += CARDS_PER_READ) {
     const workItemId = ids.slice(start, start + CARDS_PER_READ);
-    reads.push(listWorkItems(baseUrl, factoryProjectId, signal, { workItemId }));
+    reads.push(factory.listWorkItems({ workItemId }, { signal }));
   }
   return (await Promise.all(reads)).flatMap(read => read.workItems);
 }
@@ -131,7 +121,7 @@ async function readCards(baseUrl: string, factoryProjectId: string, ids: string[
  */
 function heldCards(client: QueryClient, factoryProjectId: string, versions: ReadonlyMap<string, string>) {
   const held = new Map<string, WorkItem>();
-  const snapshots = client.getQueriesData<BoardSnapshot>({ queryKey: queryKeys.workItems(factoryProjectId) });
+  const snapshots = client.getQueriesData<BoardSnapshot>({ queryKey: factoryKeys.workItems(factoryProjectId) });
   for (const [, snapshot] of snapshots) {
     for (const card of snapshot?.workItems ?? []) {
       const version = versions.get(card.id);
@@ -151,16 +141,16 @@ function heldCards(client: QueryClient, factoryProjectId: string, versions: Read
  * again, and a read that changes nothing answers the snapshot held.
  */
 async function readBoardPhases(
-  baseUrl: string,
-  factoryProjectId: string,
+  factory: Factory,
   request: BoardPhasesRequest,
   signal: AbortSignal,
   client: QueryClient,
 ): Promise<BoardPhasesSnapshot> {
+  const { factoryProjectId } = factory;
   const boardHeld = client
-    .getQueriesData<BoardPhasesSnapshot>({ queryKey: queryKeys.boardPhases(factoryProjectId, request.board) })
+    .getQueriesData<BoardPhasesSnapshot>({ queryKey: factoryKeys.boardPhases(factoryProjectId, request.board) })
     .some(([, snapshot]) => snapshot !== undefined);
-  const answer = await fetchBoardPhases(baseUrl, factoryProjectId, request, !boardHeld, signal);
+  const answer = await factory.boardPhases(request, { cards: !boardHeld, signal });
   const named = [
     ...answer.phases.flatMap(phase => phase.cards),
     ...(answer.item ? [answer.item] : []),
@@ -173,7 +163,7 @@ async function readBoardPhases(
     read.has(id) || heldAtAnswer.get(id)?.version === version ? [] : [id],
   );
   if (stale.length > 0) {
-    for (const card of await readCards(baseUrl, factoryProjectId, stale, signal)) {
+    for (const card of await readCards(factory, stale, signal)) {
       if (versions.has(card.id)) read.set(card.id, card);
     }
   }
@@ -203,7 +193,7 @@ async function readBoardPhases(
     boardTotal: answer.boardTotal,
   };
   const workItems = [...cards.values()];
-  const previous = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
+  const previous = client.getQueryData<BoardPhasesSnapshot>(factoryKeys.boardPhasesView(factoryProjectId, request));
   if (!previous) return { ...listing, workItems };
   const { workItems: previousCards, ...previousListing } = previous;
   const sameCards =
@@ -215,15 +205,12 @@ async function readBoardPhases(
 
 /** One view of a board: its phases, and the cards they list. */
 export function boardPhasesQueryOptions(
-  baseUrl: string,
-  factoryProjectId: string | undefined,
+  factory: Factory | undefined,
   request: BoardPhasesRequest,
-) {
+): UseQueryOptions<BoardPhasesSnapshot, Error, BoardPhasesSnapshot, ReturnType<typeof factoryKeys.boardPhasesView>> {
   return queryOptions({
-    queryKey: queryKeys.boardPhasesView(factoryProjectId, request),
-    queryFn: factoryProjectId
-      ? ({ signal, client }) => readBoardPhases(baseUrl, factoryProjectId, request, signal, client)
-      : skipToken,
+    queryKey: factoryKeys.boardPhasesView(factory?.factoryProjectId, request),
+    queryFn: factory ? ({ signal, client }) => readBoardPhases(factory, request, signal, client) : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
     // `readBoardPhases` shares cards by id. React Query shares by index, which would rebuild
@@ -233,38 +220,62 @@ export function boardPhasesQueryOptions(
 }
 
 /** The labels and people the project's cards can be filtered by. */
-export function workItemFilterOptionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function workItemFilterOptionsQueryOptions(
+  factory: Factory | undefined,
+): UseQueryOptions<
+  WorkItemFilterOptionsResponse,
+  Error,
+  WorkItemFilterOptionsResponse,
+  ReturnType<typeof factoryKeys.workItemFilterOptions>
+> {
   return queryOptions({
-    queryKey: queryKeys.workItemFilterOptions(factoryProjectId),
-    queryFn: factoryProjectId
-      ? ({ signal }) => fetchWorkItemFilterOptions(baseUrl, factoryProjectId, signal)
-      : skipToken,
+    queryKey: factoryKeys.workItemFilterOptions(factory?.factoryProjectId),
+    queryFn: factory ? ({ signal }) => factory.filterOptions({ signal }) : skipToken,
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
   });
 }
 
 /** What the draft page's starter buttons count: the server counts, so the page never loads the board for them. */
-export function workItemStartersQueryOptions(baseUrl: string, factoryProjectId: string) {
+export function workItemStartersQueryOptions(
+  factory: Factory,
+): UseQueryOptions<
+  WorkItemStartersResponse,
+  Error,
+  WorkItemStartersResponse,
+  ReturnType<typeof factoryKeys.workItemStarters>
+> {
   return queryOptions({
-    queryKey: queryKeys.workItemStarters(factoryProjectId),
-    queryFn: ({ signal }) => fetchWorkItemStarters(baseUrl, factoryProjectId, signal),
+    queryKey: factoryKeys.workItemStarters(factory.factoryProjectId),
+    queryFn: ({ signal }) => factory.starters({ signal }),
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
   });
 }
 
 const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
-/** When cards were created and completed over `period`, for the activity band. */
-export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: string, period: ActivityPeriod) {
-  const depth = activityDepth(period);
+/** How far back an activity read goes: a week serves the day and week views, a month the month view. */
+export type WorkItemActivityDepth = 'week' | 'month';
+const ACTIVITY_DAYS: Record<WorkItemActivityDepth, number> = { week: 7, month: 30 };
+
+/** When cards were created and completed over the last `depth`, for the activity band. */
+export function workItemActivityQueryOptions(
+  factory: Factory,
+  depth: WorkItemActivityDepth,
+): UseQueryOptions<
+  WorkItemActivityResponse,
+  Error,
+  WorkItemActivityResponse,
+  ReturnType<typeof factoryKeys.workItemActivity>
+> {
   return queryOptions({
-    queryKey: queryKeys.workItemActivity(factoryProjectId, depth),
+    queryKey: factoryKeys.workItemActivity(factory.factoryProjectId, depth),
     queryFn: ({ signal }) => {
       // From the hour, so the address repeats and the browser can revalidate it; the band drops what falls before its own start.
-      const since = Math.floor(activityStart(depth, Date.now()) / HOUR_MS) * HOUR_MS;
-      return fetchWorkItemActivity(baseUrl, factoryProjectId, since, signal);
+      const since = Math.floor((Date.now() - ACTIVITY_DAYS[depth] * DAY_MS) / HOUR_MS) * HOUR_MS;
+      return factory.activity(since, { signal });
     },
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
@@ -276,16 +287,12 @@ export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: 
  * instead of the board.
  */
 export function sessionWorkItemsQueryOptions(
-  baseUrl: string,
-  factoryProjectId: string | undefined,
+  factory: Factory | undefined,
   sessionId: string | undefined,
-) {
+): UseQueryOptions<BoardSnapshot, Error, WorkItem[], ReturnType<typeof factoryKeys.sessionWorkItems>> {
   return queryOptions({
-    queryKey: queryKeys.sessionWorkItems(factoryProjectId, sessionId),
-    queryFn:
-      factoryProjectId && sessionId
-        ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { sessionId })
-        : skipToken,
+    queryKey: factoryKeys.sessionWorkItems(factory?.factoryProjectId, sessionId),
+    queryFn: factory && sessionId ? ({ signal }) => factory.listWorkItems({ sessionId }, { signal }) : skipToken,
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
     select: selectCards,
@@ -293,21 +300,19 @@ export function sessionWorkItemsQueryOptions(
 }
 
 export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, sessionId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery(sessionWorkItemsQueryOptions(baseUrl, factoryProjectId, sessionId));
+  return useQuery(sessionWorkItemsQueryOptions(useFactory(factoryProjectId), sessionId));
 }
 
 /** One card by id, for a page that shows it off the board. */
 export function workItemQueryOptions(
-  baseUrl: string,
-  factoryProjectId: string | undefined,
+  factory: Factory | undefined,
   workItemId: string | undefined,
-) {
+): UseQueryOptions<BoardSnapshot, Error, WorkItem | null, ReturnType<typeof factoryKeys.workItem>> {
   return queryOptions({
-    queryKey: queryKeys.workItem(factoryProjectId, workItemId),
+    queryKey: factoryKeys.workItem(factory?.factoryProjectId, workItemId),
     queryFn:
-      factoryProjectId && workItemId
-        ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { workItemId: [workItemId] })
+      factory && workItemId
+        ? ({ signal }) => factory.listWorkItems({ workItemId: [workItemId] }, { signal })
         : skipToken,
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
@@ -316,28 +321,24 @@ export function workItemQueryOptions(
 }
 
 export function useWorkItemQuery(factoryProjectId: string | undefined, workItemId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery(workItemQueryOptions(baseUrl, factoryProjectId, workItemId));
+  return useQuery(workItemQueryOptions(useFactory(factoryProjectId), workItemId));
 }
 
 export function useSessionCardsQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
+  return useQuery(sessionCardsQueryOptions(useFactory(factoryProjectId)));
 }
 
 /** One view of a board. Changing the view keeps the phases shown until the new ones answer. */
 export function useBoardPhasesQuery(factoryProjectId: string | undefined, request: BoardPhasesRequest) {
-  const { baseUrl } = useApiConfig();
   return useQuery({
-    ...boardPhasesQueryOptions(baseUrl, factoryProjectId, request),
+    ...boardPhasesQueryOptions(useFactory(factoryProjectId), request),
     placeholderData: keepPreviousData,
   });
 }
 
 /** The labels and people the board's filter menus offer. */
 export function useWorkItemFilterOptionsQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery(workItemFilterOptionsQueryOptions(baseUrl, factoryProjectId));
+  return useQuery(workItemFilterOptionsQueryOptions(useFactory(factoryProjectId)));
 }
 
 /** The snapshot listing `item` on top of the phases it sits in, where it does not list it yet. */
@@ -382,20 +383,19 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
  * on the same issue reuses the card). The cached cards are patched in place.
  */
 export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
+  const factory = useFactory(factoryProjectId);
   const queryClient = useQueryClient();
   return useMutation({
-    mutationKey: cardWriteMutationKey(factoryProjectId),
-    mutationFn: (input: CreateWorkItemInput) =>
-      createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
+    mutationKey: factoryKeys.cardWrite(factoryProjectId),
+    mutationFn: (input: CreateWorkItemInput) => requireFactory(factory).createWorkItem(input),
     onSuccess: item => {
       // A session's cards take the saved card only where they hold it; a new card joins its board alone.
-      patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
+      patchCards(queryClient, factoryKeys.workItems(factoryProjectId), cards =>
         cards.map(card => (card.id === item.id ? item : card)),
       );
       // Only the server knows whether a card matches a search or a filter: the view with neither
       // takes the card, and the server is asked for the others again.
-      const boardKey = queryKeys.boardPhases(factoryProjectId, itemBoard(item));
+      const boardKey = factoryKeys.boardPhases(factoryProjectId, boardIdOf(item));
       queryClient.setQueriesData<BoardPhasesSnapshot>(
         { queryKey: boardKey, predicate: query => isUnnarrowedBoardView(query.queryKey) },
         snapshot => snapshot && withCardOnTop(snapshot, item),
@@ -410,12 +410,13 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
 
 /** Patch non-stage work-item fields. Stage movement uses the transition authority below. */
 export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
+  const factory = useFactory(factoryProjectId);
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(factoryProjectId);
+  const listKey = factoryKeys.workItems(factoryProjectId);
   return useMutation({
-    mutationKey: cardWriteMutationKey(factoryProjectId),
-    mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
+    mutationKey: factoryKeys.cardWrite(factoryProjectId),
+    mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) =>
+      requireFactory(factory).updateWorkItem(id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
@@ -431,7 +432,12 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
     },
     onSuccess: item => {
       patchCards(queryClient, listKey, cards => cards.map(i => (i.id === item.id ? item : i)));
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
+      // An edit can change whether the card matches a search or filter; only the server knows.
+      void queryClient.invalidateQueries({
+        queryKey: factoryKeys.boardPhases(factoryProjectId, boardIdOf(item)),
+        predicate: query => !isUnnarrowedBoardView(query.queryKey),
+      });
+      void queryClient.invalidateQueries({ queryKey: factoryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }
@@ -439,7 +445,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
 type TransitionWorkItemVariables = {
   item: WorkItem;
   board: FactoryBoard;
-  stage: string;
+  stage: FactoryRuleStage;
   cause?: string;
   reenter?: boolean;
 };
@@ -481,10 +487,10 @@ function moveUndone(asked: WorkItem) {
 }
 
 export function useTransitionWorkItemMutation(factoryProjectId: string | undefined, currentUserId?: string) {
-  const { baseUrl } = useApiConfig();
+  const factory = useFactory(factoryProjectId);
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(factoryProjectId);
-  const mutationKey = cardMoveMutationKey(factoryProjectId);
+  const listKey = factoryKeys.workItems(factoryProjectId);
+  const mutationKey = factoryKeys.cardMove(factoryProjectId);
   const mutation = useMutation({
     mutationKey,
     mutationFn: async ({
@@ -495,7 +501,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       reenter,
     }: TransitionWorkItemVariables): Promise<TransitionOutcome> => {
       const askedUnder = moveAnswerStream();
-      const answer = await transitionWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), item.id, {
+      const answer = await requireFactory(factory).transitionWorkItem(item.id, {
         board,
         stage,
         expectedRevision: item.revision,
@@ -559,10 +565,10 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
     // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
     // move pending until the card shows that run, so its button never reappears in between.
     onSettled: async () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
+      void queryClient.invalidateQueries({ queryKey: factoryKeys.sessionRowsRoot(factoryProjectId) });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listKey }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
+        queryClient.invalidateQueries({ queryKey: factoryKeys.decisionsRoot(factoryProjectId) }),
       ]);
     },
   });
@@ -580,7 +586,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
 
 interface PendingTransitionVariables {
   item: { id: string };
-  stage: FactoryRuleStage;
+  stage: string;
 }
 
 function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
@@ -593,12 +599,12 @@ function isPendingTransitionVariables(value: unknown): value is PendingTransitio
 
 /** Remove a work item from the board, dropping it from the cache optimistically. */
 export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
+  const factory = useFactory(factoryProjectId);
   const queryClient = useQueryClient();
-  const listKey = queryKeys.workItems(factoryProjectId);
+  const listKey = factoryKeys.workItems(factoryProjectId);
   return useMutation({
-    mutationKey: cardWriteMutationKey(factoryProjectId),
-    mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
+    mutationKey: factoryKeys.cardWrite(factoryProjectId),
+    mutationFn: (id: string) => requireFactory(factory).deleteWorkItem(id),
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
@@ -614,7 +620,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onSuccess: () => {
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessionRowsRoot(factoryProjectId) });
+      void queryClient.invalidateQueries({ queryKey: factoryKeys.sessionRowsRoot(factoryProjectId) });
     },
   });
 }

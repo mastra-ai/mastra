@@ -216,6 +216,49 @@ export const LoadingNewer: Story = {
   ),
 };
 
+const PAGE_COUNT = 3;
+
+function PagingNewerExample() {
+  const [pages, setPages] = useState(1);
+  const [isFetching, setIsFetching] = useState(false);
+  const lines = Array.from({ length: pages * 5 }, () => logs.map(log => ({ ...log }))).flat();
+  const ids = new Map(lines.map((line, index) => [line, `paging-${index}`]));
+  const fetchNextPage = () => {
+    setIsFetching(true);
+    setTimeout(() => {
+      setPages(count => count + 1);
+      setIsFetching(false);
+    }, 800);
+  };
+
+  return (
+    <LogView>
+      <LogView.Header>
+        <LogView.Title />
+        <LogView.Actions>
+          <LogView.Count count={lines.length} />
+        </LogView.Actions>
+      </LogView.Header>
+      <LogView.List
+        order="oldest-first"
+        nextPage="newer"
+        logs={lines}
+        logIdMap={ids}
+        hasNextPage={pages < PAGE_COUNT}
+        isFetchingNextPage={isFetching}
+        onFetchNextPage={fetchNextPage}
+      />
+    </LogView>
+  );
+}
+
+export const PagingNewer: Story = {
+  render: () => <PagingNewerExample />,
+  parameters: describe(
+    'Scroll to the bottom and the next page loads, starting a little before the end comes into view, three pages in all.',
+  ),
+};
+
 export const Empty: Story = {
   args: { logs: [] },
 };

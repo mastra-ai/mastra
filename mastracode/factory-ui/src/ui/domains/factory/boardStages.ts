@@ -1,8 +1,9 @@
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { boardIdOf, boardLoop, phaseKindOf, phaseOf } from './boardFlow';
+import { boardIdOf, cardHasPullRequest, isPullRequestSource } from '@internal/factory-contract';
+
+import { boardLoop, phaseKindOf, phaseOf } from './boardFlow';
 import type { BoardInfo } from './boardFlow';
-import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
-import type { WorkItem } from './services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { stageLabel } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 

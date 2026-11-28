@@ -2,7 +2,7 @@ import type { InstalledBoardInfo } from '../../../../api/types';
 import type { FactoryProject } from '../../workspaces/services/github';
 import { useCardSessionRepository } from '../hooks/useCardSessionRepository';
 import { linkedSessionRepository } from '../hooks/useSessionRepository';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { CardOverview, OverviewSkeleton } from './CardOverview';
 
 export function CardDraftOverview({

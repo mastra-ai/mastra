@@ -17,7 +17,7 @@ import { ownChangeRequest, sessionChangeRequests } from '../sessionChangeRequest
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
 import { relatedWorkItemIndex } from '../services/relationships';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
-import type { WorkItem } from '../services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import { toMinute } from '../stageStays';
 import { CardDescription } from './CardDescription';
 import { CardSourceRow } from './CardSourceRow';

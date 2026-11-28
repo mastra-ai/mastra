@@ -269,14 +269,15 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const keyPath = async (page: KnowledgePage): Promise<{ keys: string[]; ids: string[] } | null> => {
     const keys: string[] = [];
     const ids: string[] = [];
-    let at: KnowledgePage | null = page;
-    while (at && !at.isScope) {
+    if (page.isScope) return page.id === scope.id ? { keys, ids } : null;
+    const parents = page.parentId ? await storage.getPageParents({ parentId: page.parentId, read: 'all' }) : [];
+    for (const at of [page, ...parents]) {
+      if (at.isScope) return at.id === scope.id ? { keys, ids } : null;
       if (!live(at) || at.key === undefined) return null;
       keys.unshift(at.key);
       ids.unshift(at.id);
-      at = at.parentId ? await storage.getPage({ id: at.parentId, read: 'all' }) : null;
     }
-    return at?.id === scope.id ? { keys, ids } : null;
+    return null;
   };
   const sameKeys = (a: string[], b: string[]) => a.length === b.length && a.every((key, i) => key === b[i]);
 
@@ -477,8 +478,10 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const ref = (keys: string[]) => `${target.scope}#${keys.join('/')}`;
 
   // A link's line, or null while its target has no live page.
-  const linkLine = async (link: KnowledgeImporterNodeLink): Promise<string | null> => {
-    const node = await importers.getNode(binding.id, link.sourceId);
+  const linkLine = async (
+    link: KnowledgeImporterNodeLink,
+    node: KnowledgeImporterNodeRecord | undefined,
+  ): Promise<string | null> => {
     const page = node ? await storage.getPage({ id: node.pageId, read: 'all' }) : null;
     const path = live(page) ? await keyPath(page) : null;
     return path ? `- ${link.rel ? `${link.rel}: ` : ''}[[${ref(path.keys)}]]` : null;
@@ -487,9 +490,30 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const renderLinks = async (links: KnowledgeImporterNodeLink[]) => {
     const lines: string[] = [];
     const unresolved: string[] = [];
+    // Where the targets are, in one read before the pages and one after: another binding's flush
+    // can take a target over and commit while this renders, and its node is then gone. A link
+    // whose node did not survive to the second read waits, as it would have had it been read
+    // last. A store without getNodes (it predates it) reads one getNode per target.
+    const getNodes = async (sourceIds: string[]): Promise<KnowledgeImporterNodeRecord[]> => {
+      if (!sourceIds.length) return [];
+      if (importers.getNodes) return importers.getNodes(binding.id, sourceIds);
+      const nodes: KnowledgeImporterNodeRecord[] = [];
+      for (const sourceId of new Set(sourceIds)) {
+        const node = await importers.getNode(binding.id, sourceId);
+        if (node) nodes.push(node);
+      }
+      return nodes;
+    };
+    const read = async (sourceIds: string[]) => new Map((await getNodes(sourceIds)).map(node => [node.sourceId, node]));
+    const before = await read(links.map(link => link.sourceId));
+    const rendered: { link: KnowledgeImporterNodeLink; line: string | null; pageId?: string }[] = [];
     for (const link of links) {
-      const line = await linkLine(link);
-      if (line) lines.push(line);
+      const node = before.get(link.sourceId);
+      rendered.push({ link, line: await linkLine(link, node), pageId: node?.pageId });
+    }
+    const after = await read(rendered.filter(each => each.line).map(each => each.link.sourceId));
+    for (const { link, line, pageId } of rendered) {
+      if (line && after.get(link.sourceId)?.pageId === pageId) lines.push(line);
       else unresolved.push(encodeLink(link));
     }
     return { section: linkSection(lines), unresolved };

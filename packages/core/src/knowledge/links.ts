@@ -143,14 +143,16 @@ async function pageRefKeys(storage: KnowledgeStorage, page: KnowledgePage): Prom
     if (page.address) keys.push(knowledgeLinkRefKey(page.address));
     return keys;
   }
+  if (!page.key || !page.parentId) return keys;
   const path: string[] = [];
-  let current: KnowledgePage | null = page;
-  while (current && !current.isScope) {
+  for (const current of [page, ...(await storage.getPageParents({ parentId: page.parentId, read: 'all' }))]) {
+    if (current.isScope) {
+      if (current.address) keys.push(knowledgeLinkRefKey(`${current.address}#${path.join('/')}`));
+      return keys;
+    }
     if (!current.key || !current.parentId) return keys;
     path.unshift(current.key);
-    current = await storage.getPage({ id: current.parentId, read: 'all' });
   }
-  if (current?.address) keys.push(knowledgeLinkRefKey(`${current.address}#${path.join('/')}`));
   return keys;
 }
 
