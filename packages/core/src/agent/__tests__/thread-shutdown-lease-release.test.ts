@@ -15,6 +15,9 @@
  * - a partial resume: one of two suspended tool calls is resumed, so the run
  *   is still parked on the other while its resumed segment runs. Shutdown stops that
  *   segment too.
+ * - an in-flight idle wake: a signal admitted the thread and is still starting its
+ *   run, with no run record yet. Shutdown waits for that admission, so the run it
+ *   starts is ended and its thread handed back like any other.
  *
  * Either way, the replica stops renewing the lease once it has shut down.
  */
@@ -39,6 +42,7 @@ import type { ToolAction } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const RESOURCE = 'shutdown-user';
 const LEASE_LOST = 'lost its lease before publishing a terminal event';
@@ -559,6 +563,105 @@ describeForAllEngines('thread runs at shutdown', (engine: EngineVariant) => {
     follower.unsubscribe();
     running.pubsub.dead = true;
     await observer.mastra.shutdown({ drainTimeout: 200 });
+  }, 20_000);
+
+  it('ends a run whose idle wake was still being admitted and frees its thread (5c)', async () => {
+    const threadId = `shutdown-admitting-${engine}`;
+    const key = [RESOURCE, threadId].join('\u0000');
+    for (let i = 0; i < 60; i++) {
+      llm.on(
+        { userMessage: 'wake and keep ticking', sequenceIndex: i },
+        { toolCalls: [{ id: `call_wake_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    const events = new EventEmitter();
+    events.setMaxListeners(0);
+    const memory = new MockMemory();
+    const counter = { ticks: 0 };
+
+    const running = replica(shared, events, memory, { tick: tickTool(counter) });
+
+    // Hold the wake between its admission and its registration. The admission is tracked before the
+    // stream starts, but the run only enters a shutdown records snapshot once `registerRun` stores its
+    // record, so holding there is exactly the window shutdown has to cover. The test releases it, not
+    // a timer, so a shutdown that reads its records without waiting for the admission returns early
+    // and leaves the run's lease and renewal behind.
+    const originalRegisterRun = agentThreadStreamRuntime.registerRun.bind(agentThreadStreamRuntime);
+    let releaseRegistration!: () => void;
+    const registrationHeld = new Promise<void>(resolve => {
+      releaseRegistration = resolve;
+    });
+    let held = false;
+    const registerRunSpy = vi.spyOn(agentThreadStreamRuntime as never, 'registerRun' as never) as unknown as {
+      mockImplementation: (impl: (...args: unknown[]) => unknown) => unknown;
+      mockRestore: () => void;
+    };
+    registerRunSpy.mockImplementation((...args: unknown[]) => {
+      const streamOptions = args[2] as { memory?: { thread?: string | { id?: string } } } | undefined;
+      const thread = streamOptions?.memory?.thread;
+      const targetThreadId = typeof thread === 'string' ? thread : thread?.id;
+      if (!held && targetThreadId === threadId) {
+        held = true;
+        return registrationHeld.then(() => (originalRegisterRun as (...a: unknown[]) => unknown)(...args));
+      }
+      return (originalRegisterRun as (...a: unknown[]) => unknown)(...args);
+    });
+
+    let shutdownDone = false;
+    let shutdown: Promise<unknown> | undefined;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      releaseRegistration();
+    };
+    try {
+      const sent = running.agent.sendSignal(
+        { type: 'user-message', contents: 'wake and keep ticking' },
+        { resourceId: RESOURCE, threadId, ifIdle: { behavior: 'wake' } },
+      );
+      // A woken run advances only while someone consumes its stream; leave it running like an app would.
+      void sent.accepted
+        .then(admission => {
+          const output = (admission as { output?: { consumeStream?: () => Promise<unknown> } }).output;
+          void output?.consumeStream?.().catch(() => undefined);
+        })
+        .catch(() => undefined);
+      await vi.waitFor(() => expect(held).toBe(true), { timeout: 5_000 });
+      expect(shared.owner(key)).toBeDefined();
+
+      shutdown = running.mastra.shutdown({ drainTimeout: 200 }).then(() => {
+        shutdownDone = true;
+      });
+      // Shutdown waits for the admission instead of reading its records and missing the run.
+      // Give a shutdown that ignores the admission real time to return; without the wait it
+      // resolves here, long before the release.
+      const negativeDeadline = Date.now() + 250;
+      while (Date.now() < negativeDeadline) await new Promise(resolve => setImmediate(resolve));
+      expect(shutdownDone).toBe(false);
+
+      release();
+      registerRunSpy.mockRestore();
+      await shutdown;
+      expect(shutdownDone).toBe(true);
+
+      // The thread is free as soon as shutdown returns, not one lease TTL later.
+      expect(shared.owner(key)).toBeUndefined();
+      // Nothing of the admitted run runs once another replica can take the thread, and nothing renews
+      // its lease any more.
+      const ticksAtShutdown = counter.ticks;
+      const renewalsAtShutdown = running.pubsub.renewals;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(counter.ticks).toBe(ticksAtShutdown);
+      expect(running.pubsub.renewals).toBe(renewalsAtShutdown);
+      expect(shared.owner(key)).toBeUndefined();
+    } finally {
+      release();
+      registerRunSpy.mockRestore();
+      await Promise.allSettled([shutdown]);
+      running.pubsub.dead = true;
+    }
   }, 20_000);
 
   it('announces a run parked on an approval as suspended and frees its thread (5)', async () => {

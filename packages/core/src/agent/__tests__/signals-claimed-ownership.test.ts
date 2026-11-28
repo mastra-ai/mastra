@@ -17,8 +17,9 @@ import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
-  createTextStreamModel,
   createBlockingFirstTextStreamModel,
+  createFakeThreadRun,
+  createTextStreamModel,
   nextTick,
   RetainedAsyncCallbackPubSub,
   ControlledLeasePubSub,
@@ -4305,5 +4306,171 @@ describe('Agent signals: claimed thread ownership', () => {
     agentThreadStreamRuntime.resetForTests();
 
     await expect(discovererAgent.discoverThreadPeers({ timeoutMs: 10 })).resolves.toEqual([]);
+  });
+
+  it('waits out a claimed-owner wake still being admitted, then ends it at shutdown', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ids = { resourceId: 'shutdown-claimed-user', threadId: 'shutdown-claimed-thread' };
+    const key = `${ids.resourceId}\u0000${ids.threadId}`;
+    const wokenRunKeepsRunning = new Promise<void>(() => {});
+    let wokenRunId: string | undefined;
+    const ownerAgent = new Agent({
+      id: 'shutdown-claimed-owner',
+      name: 'Shutdown Claimed Owner',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'shutdown-claimed-sender',
+      name: 'Shutdown Claimed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    // Registering the run inside `stream` mirrors a real agent: the claimed-owner path settles its admission when the
+    // lease lands, before the run it starts exists as a record, so shutdown has to wait for that admission instead of
+    // reading records too early.
+    const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
+      const runId = options.runId as string;
+      wokenRunId = runId;
+      await ownerRuntime.registerRun(
+        ownerAgent,
+        createFakeThreadRun(runId, wokenRunKeepsRunning),
+        { memory: { resource: ids.resourceId, thread: ids.threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const streamSpy = vi.spyOn(ownerAgent, 'stream').mockImplementation(stream as any);
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, ids, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, ids, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    // Hold the wake's lease acquisition, the last step before the woken run is registered.
+    const releaseLeaseAcquire = Promise.withResolvers<void>();
+    const acquireStarted = Promise.withResolvers<void>();
+    pubsub.acquireLeaseWait = releaseLeaseAcquire.promise;
+    pubsub.onAcquireLease = () => acquireStarted.resolve();
+
+    try {
+      const signalResult = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake the claimed owner' },
+        { ...ids, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await withTimeout(acquireStarted.promise, 'Timed out waiting for the owner run to reach the lease');
+      expect(stream).not.toHaveBeenCalled();
+
+      let shutdownDone = false;
+      const shutdown = ownerRuntime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+        shutdownDone = true;
+      });
+
+      // Event-loop advance only: with the admission still pending, shutdown must not
+      // finish while the woken run is on its way in.
+      for (let i = 0; i < 20; i += 1) await nextTick();
+      expect(shutdownDone).toBe(false);
+
+      releaseLeaseAcquire.resolve();
+      await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await withTimeout(shutdown, 'Shutdown did not finish after the admission settled');
+
+      expect(shutdownDone).toBe(true);
+      expect(wokenRunId).toBeTypeOf('string');
+      // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
+      expect(pubsub.owners.get(key)).toBeUndefined();
+    } finally {
+      pubsub.acquireLeaseWait = undefined;
+      pubsub.onAcquireLease = undefined;
+      streamSpy.mockRestore();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('waits out a claimed-owner run still registering after its lease landed, then ends it at shutdown', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ids = { resourceId: 'shutdown-claimed-register-user', threadId: 'shutdown-claimed-register-thread' };
+    const key = `${ids.resourceId}\u0000${ids.threadId}`;
+    const wokenRunKeepsRunning = new Promise<void>(() => {});
+    let wokenRunId: string | undefined;
+    const ownerAgent = new Agent({
+      id: 'shutdown-claimed-register-owner',
+      name: 'Shutdown Claimed Register Owner',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'shutdown-claimed-register-sender',
+      name: 'Shutdown Claimed Register Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    // The claimed-owner path settles its admission as soon as the lease lands and only then calls `stream`, which is
+    // where the run's record is created. Holding between the two is exactly the window where a shutdown that waits on
+    // the admission outcome alone reads records before the run exists and hands the thread back to nobody.
+    const registrationStarted = Promise.withResolvers<void>();
+    const releaseRegistration = Promise.withResolvers<void>();
+    const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
+      const runId = options.runId as string;
+      wokenRunId = runId;
+      registrationStarted.resolve();
+      await releaseRegistration.promise;
+      await ownerRuntime.registerRun(
+        ownerAgent,
+        createFakeThreadRun(runId, wokenRunKeepsRunning),
+        { memory: { resource: ids.resourceId, thread: ids.threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const streamSpy = vi.spyOn(ownerAgent, 'stream').mockImplementation(stream as any);
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, ids, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, ids, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    try {
+      const signalResult = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake the claimed owner' },
+        { ...ids, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      // The lease landed and the admission settled, but the woken run has not registered a record yet.
+      await withTimeout(registrationStarted.promise, 'Timed out waiting for the owner run to start registering');
+
+      let shutdownDone = false;
+      const shutdown = ownerRuntime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+        shutdownDone = true;
+      });
+
+      // Event-loop advance only: the run is on its way in, so shutdown must not finish yet.
+      for (let i = 0; i < 20; i += 1) await nextTick();
+      expect(shutdownDone).toBe(false);
+
+      releaseRegistration.resolve();
+      await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await withTimeout(shutdown, 'Shutdown did not finish after the run registered');
+
+      expect(shutdownDone).toBe(true);
+      expect(wokenRunId).toBeTypeOf('string');
+      // The run was registered before shutdown read records, so it was ended with the rest and its lease is free.
+      expect(pubsub.owners.get(key)).toBeUndefined();
+    } finally {
+      releaseRegistration.resolve();
+      streamSpy.mockRestore();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
   });
 });

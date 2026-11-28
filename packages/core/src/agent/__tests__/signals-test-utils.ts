@@ -177,6 +177,8 @@ export class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implement
   onTransferLease: (() => void) | undefined;
   denyLeaseAcquisition = false;
   denyLeaseTransfer = false;
+  /** When set, the next `getLeaseProvider` call throws it once, then clears it. */
+  leaseProviderThrowOnce: Error | undefined;
   rejectPublishedTypes = new Set<string>();
   unsubscribeCount = 0;
 
@@ -186,6 +188,15 @@ export class ControlledLeasePubSub extends RetainedAsyncCallbackPubSub implement
     if (this.rejectPublishedTypes.has(event.data?.type)) {
       throw new Error(`publish rejected after delivery: ${event.data.type}`);
     }
+  }
+
+  getLeaseProvider(): ControlledLeasePubSub {
+    if (this.leaseProviderThrowOnce) {
+      const error = this.leaseProviderThrowOnce;
+      this.leaseProviderThrowOnce = undefined;
+      throw error;
+    }
+    return this;
   }
 
   async acquireLease(key: string, owner: string): Promise<{ acquired: boolean; owner?: string }> {

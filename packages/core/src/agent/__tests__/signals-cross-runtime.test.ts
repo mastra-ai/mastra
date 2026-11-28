@@ -2,13 +2,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Agent } from '../agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
+  createFakeThreadRun,
   createTextStreamModel,
   nextTick,
   ControlledLeasePubSub,
@@ -773,4 +774,231 @@ describe('Agent signals: cross-runtime routing', () => {
       }
     },
   );
+});
+
+describe('Agent signals: shutdown and pending admissions', () => {
+  beforeEach(() => {
+    agentThreadStreamRuntime.resetForTests();
+  });
+
+  const NO_MASTRA = Symbol('no-mastra-instance');
+  /** Just enough Mastra for owner identity checks and the ids derived from it. */
+  const mastraStub = (name: string) => ({ name, generateId: () => `${name}-generated` });
+
+  /**
+   * Sets up the last run of a thread with a follow-up queued behind it, and holds the follow-up's lease handoff.
+   * While the handoff is held the follow-up is admitted — its admission promise is tracked, but the run it starts
+   * does not exist as a record yet, which is the window a shutdown has to account for.
+   */
+  function startHeldIdleDrainAdmission(options: {
+    pubsub: ControlledLeasePubSub;
+    suffix: string;
+    /** Mastra-like owner the admitted run reports; `NO_MASTRA` leaves the agent ownerless, as a plain `Agent` is. */
+    admissionOwner?: unknown | typeof NO_MASTRA;
+  }) {
+    const { pubsub, suffix, admissionOwner = NO_MASTRA } = options;
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = `shutdown-admission-resource-${suffix}`;
+    const threadId = `shutdown-admission-thread-${suffix}`;
+    const key = `${resourceId}\u0000${threadId}`;
+    const activeRunId = `shutdown-admission-active-${suffix}`;
+    const drainedRunKeepsRunning = new Promise<void>(() => {});
+    let drainedRunId: string | undefined;
+    let finishActiveRun!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    // Registering the drained run inside `stream` mirrors a real agent: the drain hands the lease over before the run
+    // it starts exists as a record, so a shutdown that reads records too early would miss it.
+    const stream = vi.fn(async (_signal: unknown, options2: { runId?: string }) => {
+      const runId = options2.runId as string;
+      drainedRunId = runId;
+      await runtime.registerRun(
+        agent,
+        createFakeThreadRun(runId, drainedRunKeepsRunning),
+        { memory: { resource: resourceId, thread: threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const agent = {
+      id: `shutdown-admission-agent-${suffix}`,
+      stream,
+      ...(admissionOwner === NO_MASTRA ? {} : { getMastraInstance: () => admissionOwner }),
+    } as unknown as Agent<any, any, any, any>;
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun(activeRunId, activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+
+    return {
+      runtime,
+      agent,
+      key,
+      activeRunId,
+      get drainedRunId() {
+        return drainedRunId;
+      },
+      /** Queues the follow-up, holds its handoff, then finishes the active run so the drain starts against the hold. */
+      async beginDrain() {
+        const queued = runtime.queueMessage(agent, `drained message ${suffix}`, { resourceId, threadId }, pubsub);
+        await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver' });
+        const handoff = Promise.withResolvers<void>();
+        let handoffStarted = false;
+        pubsub.transferLeaseWait = handoff.promise;
+        pubsub.onTransferLease = () => {
+          handoffStarted = true;
+        };
+        finishActiveRun();
+        await waitForCondition(() => handoffStarted);
+        return { releaseHandoff: () => handoff.resolve() };
+      },
+      clearHold() {
+        pubsub.transferLeaseWait = undefined;
+        pubsub.onTransferLease = undefined;
+      },
+    };
+  }
+
+  it('does not wait for another Mastra instance admission on the same thread', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const otherOwner = mastraStub('other-mastra');
+    const drain = startHeldIdleDrainAdmission({ pubsub, suffix: 'other-owner', admissionOwner: otherOwner });
+    const { releaseHandoff } = await drain.beginDrain();
+
+    try {
+      let shutdownDone = false;
+      const shutdown = drain.runtime.shutdown(pubsub, mastraStub('owning-mastra'), { abortGraceMs: 2_000 }).then(() => {
+        shutdownDone = true;
+      });
+      // Another process's admission is its own to hand back, so this shutdown must not wait on it.
+      for (let i = 0; i < 20; i++) await nextTick();
+      expect(shutdownDone).toBe(true);
+      expect(pubsub.owners.get(drain.key)).toBe(drain.activeRunId);
+
+      releaseHandoff();
+      await waitForCondition(() => drain.drainedRunId !== undefined);
+      // The owner of that admission still gets it handed back.
+      await drain.runtime.shutdown(pubsub, otherOwner, { abortGraceMs: 2_000 });
+      expect(pubsub.owners.get(drain.key)).toBeUndefined();
+    } finally {
+      drain.clearHold();
+    }
+  });
+
+  it('does not wait for an ownerless admission when a Mastra instance shuts down', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const drain = startHeldIdleDrainAdmission({ pubsub, suffix: 'ownerless' });
+    const { releaseHandoff } = await drain.beginDrain();
+
+    try {
+      let shutdownDone = false;
+      const shutdown = drain.runtime.shutdown(pubsub, mastraStub('owning-mastra'), { abortGraceMs: 2_000 }).then(() => {
+        shutdownDone = true;
+      });
+      // A run started outside any Mastra has no owner to hand back to, so this shutdown leaves it alone.
+      for (let i = 0; i < 20; i++) await nextTick();
+      expect(shutdownDone).toBe(true);
+      expect(pubsub.owners.get(drain.key)).toBe(drain.activeRunId);
+
+      releaseHandoff();
+      await waitForCondition(() => drain.drainedRunId !== undefined);
+      // A matching owner (the runtime's own default) still gets it handed back.
+      await drain.runtime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 });
+      expect(pubsub.owners.get(drain.key)).toBeUndefined();
+    } finally {
+      drain.clearHold();
+    }
+  });
+
+  it('does not reject shutdown when an owned admission rejects', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ids = { resourceId: 'shutdown-rejecting-resource', threadId: 'shutdown-rejecting-thread' };
+    const ownerAgent = new Agent({
+      id: 'shutdown-rejecting-owner',
+      name: 'Shutdown Rejecting Owner',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'shutdown-rejecting-sender',
+      name: 'Shutdown Rejecting Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, ids, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, ids, pubsub);
+
+    // Hold the wake on its lease acquisition: the admission is tracked by then, and the lease backend fails once the
+    // hold is released, so the admission rejects while shutdown is waiting on it.
+    const acquireGate = Promise.withResolvers<void>();
+    const acquireStarted = Promise.withResolvers<void>();
+    pubsub.acquireLeaseWait = acquireGate.promise;
+    pubsub.onAcquireLease = () => {
+      pubsub.leaseProviderThrowOnce = new Error('lease backend unavailable');
+      acquireStarted.resolve();
+    };
+
+    try {
+      const signalResult = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake into a failing lease backend' },
+        { ...ids, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      void signalResult.accepted.catch(() => {});
+      await withTimeout(acquireStarted.promise, 'Timed out waiting for the wake to reach the lease');
+
+      let shutdownDone = false;
+      const shutdown = ownerRuntime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+        shutdownDone = true;
+      });
+      for (let i = 0; i < 20; i++) await nextTick();
+      expect(shutdownDone).toBe(false);
+
+      acquireGate.resolve();
+      await expect(
+        withTimeout(shutdown, 'Shutdown did not settle after the admission rejected'),
+      ).resolves.toBeUndefined();
+      expect(shutdownDone).toBe(true);
+    } finally {
+      pubsub.acquireLeaseWait = undefined;
+      pubsub.onAcquireLease = undefined;
+      pubsub.leaseProviderThrowOnce = undefined;
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('abandons an admission that never settles once the grace runs out', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const drain = startHeldIdleDrainAdmission({ pubsub, suffix: 'never-settles' });
+    const { releaseHandoff } = await drain.beginDrain();
+
+    try {
+      const startedAt = Date.now();
+      await expect(
+        withTimeout(
+          drain.runtime.shutdown(pubsub, undefined, { abortGraceMs: 50 }),
+          'Shutdown did not return while the admission hung',
+        ),
+      ).resolves.toBeUndefined();
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      // The hung admission never started a run, so there was nothing for shutdown to end.
+      expect(drain.drainedRunId).toBeUndefined();
+
+      releaseHandoff();
+      await waitForCondition(() => drain.drainedRunId !== undefined);
+      await drain.runtime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 });
+      expect(pubsub.owners.get(drain.key)).toBeUndefined();
+    } finally {
+      drain.clearHold();
+    }
+  });
 });

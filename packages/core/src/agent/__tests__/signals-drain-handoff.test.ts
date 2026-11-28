@@ -1618,4 +1618,148 @@ describe('Agent signals: drain and lease handoff', () => {
 
     expect(stream).not.toHaveBeenCalled();
   });
+
+  it('waits out a follow-up run still being admitted, then ends it at shutdown', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'shutdown-drain-resource';
+    const threadId = 'shutdown-drain-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    let finishActiveRun!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const drainedRunKeepsRunning = new Promise<void>(() => {});
+    // Registering the follow-up inside `stream` mirrors a real agent: the drain hands the lease over before the run it
+    // starts exists as a record, so shutdown has to wait for that admission instead of reading records too early.
+    const registrationStarted = Promise.withResolvers<void>();
+    const releaseRegistration = Promise.withResolvers<void>();
+    const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
+      const runId = options.runId as string;
+      registrationStarted.resolve();
+      await releaseRegistration.promise;
+      await runtime.registerRun(
+        agent,
+        createFakeThreadRun(runId, drainedRunKeepsRunning),
+        { memory: { resource: resourceId, thread: threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const agent = { id: 'shutdown-drain-agent', stream } as unknown as Agent<any, any, any, any>;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('shutdown-drain-active', activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const queued = runtime.sendMessage(agent, 'drained follow-up', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'shutdown-drain-active' });
+
+    // Hold the handoff: the follow-up is admitted — lease in flight, run not yet registered — exactly when shutdown runs.
+    const handoff = Promise.withResolvers<void>();
+    let handoffStarted = false;
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(stream).not.toHaveBeenCalled();
+
+    let shutdownDone = false;
+    const shutdown = runtime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+      shutdownDone = true;
+    });
+    // Shutdown waits for the in-flight admission instead of returning with the follow-up run still on its way in.
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    handoff.resolve();
+    // Past the lease decision the admission has settled, but the run it reserved still has no record: a shutdown that
+    // only waited for the outcome would read records here and let the follow-up escape it.
+    await registrationStarted.promise;
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    releaseRegistration.resolve();
+    await shutdown;
+    expect(shutdownDone).toBe(true);
+    // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
+    expect(pubsub.owners.get(key)).toBeUndefined();
+  });
+
+  it('waits out a continuation still being admitted, then ends it at shutdown', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const resourceId = 'shutdown-continuation-resource';
+    const threadId = 'shutdown-continuation-thread';
+    const key = `${resourceId}\u0000${threadId}`;
+    let finishActiveRun!: () => void;
+    const activeRunFinished = new Promise<void>(resolve => {
+      finishActiveRun = resolve;
+    });
+    const drainedRunKeepsRunning = new Promise<void>(() => {});
+    // Registering the continuation inside `stream` mirrors a real agent: the drain hands the lease over before the run it
+    // starts exists as a record, so shutdown has to wait for that admission instead of reading records too early.
+    const registrationStarted = Promise.withResolvers<void>();
+    const releaseRegistration = Promise.withResolvers<void>();
+    const stream = vi.fn(async (_signal: unknown, options: { runId?: string }) => {
+      const runId = options.runId as string;
+      registrationStarted.resolve();
+      await releaseRegistration.promise;
+      await runtime.registerRun(
+        agent,
+        createFakeThreadRun(runId, drainedRunKeepsRunning),
+        { memory: { resource: resourceId, thread: threadId } } as any,
+        pubsub,
+      );
+      return { runId };
+    });
+    const agent = { id: 'shutdown-continuation-agent', stream } as unknown as Agent<any, any, any, any>;
+
+    runtime.registerRun(
+      agent,
+      createFakeThreadRun('shutdown-continuation-active', activeRunFinished),
+      { memory: { resource: resourceId, thread: threadId } } as any,
+      pubsub,
+    );
+    const continuation = runtime.continueWithMessages(agent, 'drained continuation', { resourceId, threadId }, pubsub);
+    expect(continuation.accepted).toBe(true);
+
+    // Hold the handoff: the continuation is admitted — lease in flight, run not yet registered — exactly when shutdown runs.
+    const handoff = Promise.withResolvers<void>();
+    let handoffStarted = false;
+    pubsub.transferLeaseWait = handoff.promise;
+    pubsub.onTransferLease = () => {
+      handoffStarted = true;
+    };
+
+    finishActiveRun();
+    await waitForCondition(() => handoffStarted);
+    expect(stream).not.toHaveBeenCalled();
+
+    let shutdownDone = false;
+    const shutdown = runtime.shutdown(pubsub, undefined, { abortGraceMs: 2_000 }).then(() => {
+      shutdownDone = true;
+    });
+    // Shutdown waits for the in-flight admission instead of returning with the continuation still on its way in.
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    handoff.resolve();
+    // Past the lease decision the admission has settled, but the continuation's run still has no record: a shutdown
+    // that only waited for the outcome would read records here and let that run escape it.
+    await registrationStarted.promise;
+    for (let i = 0; i < 20; i++) await nextTick();
+    expect(shutdownDone).toBe(false);
+
+    releaseRegistration.resolve();
+    await shutdown;
+    expect(shutdownDone).toBe(true);
+    // The admitted run was ended with the rest of the owner's runs, so its lease is free again right away.
+    expect(pubsub.owners.get(key)).toBeUndefined();
+  });
 });

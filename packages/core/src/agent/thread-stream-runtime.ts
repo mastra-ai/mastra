@@ -677,7 +677,21 @@ type PendingThreadAdmission = {
   runId: string;
   /** The agent whose run holds the reservation. */
   agentId: string;
+  /**
+   * The Mastra instance that owns this reservation, taken from the agent's `getMastraInstance` at
+   * admission time. Shutdown uses it to wait only for its own admissions before handing runs back.
+   */
+  owner: unknown;
   outcome: Promise<ThreadAdmissionOutcome>;
+  /**
+   * Resolves once this reservation is no longer a run on its way in — its record exists, or no local
+   * run will ever be started for it. Shutdown waits on this rather than `outcome`, because a local
+   * outcome only reports that the lease was won, which on the drain and claimed-owner paths happens
+   * before `agent.stream` registers the run.
+   */
+  settled: Promise<void>;
+  /** Ends this admission. Idempotent, and safe to call after the entry has been replaced. */
+  complete: () => void;
 };
 
 /** A claimed-owner message queued for a run in flight, tracked so cancelling it ends the logical message. */
@@ -1441,6 +1455,16 @@ export class AgentThreadStreamRuntime {
     const resolved = this.#getPubSub(pubsub);
     const state = this.#statesByPubSub.get(resolved);
     if (!state) return;
+    // Admissions and hand-backs share one grace: an admission can hold the whole budget by hanging,
+    // so the hand-backs take what is left rather than a second full grace after it.
+    const deadline = Date.now() + abortGraceMs;
+    const remainingGrace = () => Math.max(0, deadline - Date.now());
+    // A reservation this owner is still admitting has no run record yet: `sendSignal` tracks the
+    // wake before `agent.stream` registers the run. Reading records first would miss that run, leave
+    // its lease and renewal running, and free the thread for nobody. Wait for this owner's
+    // admissions to settle first, capped so a stuck admission can't outlast shutdown. Another
+    // process's admission on the same thread is its own to hand back, so it is left alone.
+    await this.#awaitOwnedThreadAdmissions(state, owner, remainingGrace());
     const { provider, isFallback } = this.#resolveLeaseProvider(resolved);
     const records = [...state.threadRunsById.values()].filter(
       record => record.agent.getMastraInstance?.() === owner && !state.shutdownStreams.has(record.streamId),
@@ -1487,7 +1511,7 @@ export class AgentThreadStreamRuntime {
               current => current === leaseOwner,
               () => false,
             ),
-            abortGraceMs,
+            remainingGrace(),
             false,
           ),
         executing
@@ -1497,7 +1521,7 @@ export class AgentThreadStreamRuntime {
                 preparedRun && record.broadcastFinished,
                 ...stepOwners.map(owner => new Promise<void>(resolve => whenRunStepsSettle(owner, resolve))),
               ]).then(() => true),
-              abortGraceMs,
+              remainingGrace(),
               false,
             )
           : true,
@@ -1527,6 +1551,41 @@ export class AgentThreadStreamRuntime {
     };
 
     await Promise.all(records.map(handBack));
+  }
+
+  /**
+   * Wait until every thread admission `owner` is still carrying settles, up to `ms`.
+   *
+   * `sendSignal` reserves a thread and tracks the admission before the run it admits exists as a
+   * record, so a shutdown that reads records first can miss a run already on its way in, leaving its
+   * lease and renewal behind. Only admissions of exactly this owner are awaited: another Mastra
+   * instance's reservation on the same thread is that instance's to hand back.
+   */
+  async #awaitOwnedThreadAdmissions(state: AgentThreadRuntimeState, owner: unknown, ms: number): Promise<void> {
+    const owned: Promise<void>[] = [];
+    for (const admission of state.pendingThreadAdmissions.values()) {
+      if (admission.owner === owner) owned.push(admission.settled);
+    }
+    if (owned.length === 0) return;
+    await this.#withinGrace(
+      Promise.allSettled(owned).then(() => undefined),
+      ms,
+      undefined,
+    );
+  }
+
+  /**
+   * End a tracked admission once the run it reserved has a record, or once that attempt is over
+   * without starting one.
+   *
+   * The drain and claimed-owner paths settle their admission outcome as soon as the lease is won,
+   * which is before `agent.stream` registers the run. Shutdown waits on the admission, not the
+   * outcome, so the site has to report when the run is really there — otherwise shutdown would hand
+   * back a run its own process is still starting.
+   */
+  #completePendingThreadAdmission(state: AgentThreadRuntimeState, key: string, runId: string): void {
+    const pendingAdmission = state.pendingThreadAdmissions.get(key);
+    if (pendingAdmission?.runId === runId) pendingAdmission.complete();
   }
 
   /** `promise`'s value, or `fallback` once `ms` pass first. */
@@ -2154,21 +2213,56 @@ export class AgentThreadStreamRuntime {
     }
   }
 
+  /**
+   * Track a thread reservation that is admitting a run, so shutdown can wait for the run it creates.
+   *
+   * `awaitRegistration` says the outcome settles before the run's record exists (the drain and
+   * claimed-owner paths win the lease and only then call `agent.stream`), so the caller must end the
+   * admission with `#completePendingThreadAdmission` once that record is there. Without it — the idle
+   * wake, where `accepted` settles after `agent.stream` registered the run — the outcome is enough.
+   */
   #trackPendingThreadAdmission(
     state: AgentThreadRuntimeState,
     key: string,
     runId: string,
-    agentId: string,
+    agent: Agent<any, any, any, any>,
     outcome: Promise<ThreadAdmissionOutcome>,
+    { awaitRegistration = false }: { awaitRegistration?: boolean } = {},
   ): void {
-    const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome };
-    state.pendingThreadAdmissions.set(key, pendingAdmission);
-    const clearPendingAdmission = () => {
+    let markSettled!: () => void;
+    const settled = new Promise<void>(resolve => {
+      markSettled = resolve;
+    });
+    let completed = false;
+    const complete = () => {
+      if (completed) return;
+      completed = true;
+      // Only drop the entry we own: a newer reservation may already have replaced it.
       if (state.pendingThreadAdmissions.get(key) === pendingAdmission) {
         state.pendingThreadAdmissions.delete(key);
       }
+      markSettled();
     };
-    void outcome.then(clearPendingAdmission, clearPendingAdmission);
+    const pendingAdmission: PendingThreadAdmission = {
+      runId,
+      agentId: agent.id,
+      owner: agent.getMastraInstance?.(),
+      outcome,
+      settled,
+      complete,
+    };
+    // Replacing an admission on the same thread strands the previous waiter, so end it first.
+    state.pendingThreadAdmissions.get(key)?.complete();
+    state.pendingThreadAdmissions.set(key, pendingAdmission);
+    void outcome.then(
+      result => {
+        // A local outcome can still be a run that has not registered yet. Only a site that reported
+        // the run's record exists (or never will) may end the admission then.
+        if (result.action !== 'local' || !awaitRegistration) complete();
+      },
+      // No outcome at all means no run started here, so nothing is on its way in.
+      complete,
+    );
   }
 
   #threadAdmissionOutcome(runId: string, lease: { acquired: boolean; owner?: string }): ThreadAdmissionOutcome {
@@ -3437,7 +3531,11 @@ export class AgentThreadStreamRuntime {
         settleThreadAdmission = resolve;
         failThreadAdmission = reject;
       });
-      this.#trackPendingThreadAdmission(state, key, runId, owner.agent.id, threadAdmission);
+      this.#trackPendingThreadAdmission(state, key, runId, owner.agent, threadAdmission, {
+        // The outcome settles as soon as the lease is won, which is before `agent.stream` registers
+        // the run, so this site ends the admission once the run exists.
+        awaitRegistration: true,
+      });
       let lease: { acquired: boolean; owner?: string };
       try {
         lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
@@ -3554,6 +3652,10 @@ export class AgentThreadStreamRuntime {
           this.#releaseThreadLease(pubsub, key, runId);
         }
         return { runId, error: message };
+      } finally {
+        // The run's record exists, or this attempt failed before creating one, so it is no longer a
+        // run on its way in that shutdown has to wait for.
+        this.#completePendingThreadAdmission(state, key, runId);
       }
     } finally {
       // An unexpected failure before admission settled (a control subscription that
@@ -4722,6 +4824,9 @@ export class AgentThreadStreamRuntime {
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
+    // End the admissions before dropping them, so a shutdown waiting on one is not parked for its
+    // whole grace by a reset.
+    for (const admission of state.pendingThreadAdmissions.values()) admission.complete();
     state.pendingThreadAdmissions.clear();
     state.handledIdleSignals.clear();
     state.acceptedIdleMessagesByIdentity.clear();
@@ -5780,8 +5885,10 @@ export class AgentThreadStreamRuntime {
           state,
           key,
           reservedRunId,
-          previousRun.agent.id,
+          previousRun.agent,
           ownership.then(lease => this.#threadAdmissionOutcome(reservedRunId, lease)),
+          // The outcome settles at the lease decision, before `agent.stream` registers the run.
+          { awaitRegistration: true },
         );
         const owns = await ownership;
         if (draining.cancelled) {
@@ -5917,7 +6024,12 @@ export class AgentThreadStreamRuntime {
       return;
     } finally {
       if (state.drainingPendingSignalsByThread.get(key) === draining) state.drainingPendingSignalsByThread.delete(key);
-      if (nextRunId) state.startingQueuedRunIds.delete(nextRunId);
+      if (nextRunId) {
+        state.startingQueuedRunIds.delete(nextRunId);
+        // Every exit above either started the drained run or gave up on it, so its admission is no
+        // longer a run on its way in that shutdown has to wait for. A no-op when the entry is gone.
+        this.#completePendingThreadAdmission(state, key, nextRunId);
+      }
       this.#releaseUnusedThreadControlSubscription(state, key);
     }
 
@@ -5964,8 +6076,10 @@ export class AgentThreadStreamRuntime {
         state,
         key,
         pending.runId,
-        pending.agent.id,
+        pending.agent,
         ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
+        // The outcome settles at the lease decision, before `agent.stream` registers the run.
+        { awaitRegistration: true },
       );
       const owns = await ownership;
       if (!owns.acquired) {
@@ -6025,7 +6139,10 @@ export class AgentThreadStreamRuntime {
           if (await this.#drainPendingIdleSignals(state, pubsub, key, pending.runId)) return;
           this.#releaseThreadLease(pubsub, key, pending.runId);
         });
-      });
+      })
+      // The continuation either registered its run or failed before doing so, so it is no longer a
+      // run on its way in that shutdown has to wait for.
+      .finally(() => this.#completePendingThreadAdmission(state, key, pending.runId));
   }
 
   continueWithMessages<OUTPUT = unknown>(
@@ -6114,8 +6231,10 @@ export class AgentThreadStreamRuntime {
         state,
         key,
         pendingIdle.runId,
-        pendingIdle.agent.id,
+        pendingIdle.agent,
         ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
+        // The outcome settles at the lease decision, before `agent.stream` registers the run.
+        { awaitRegistration: true },
       );
       owns = await ownership;
     } catch (err) {
@@ -6226,6 +6345,8 @@ export class AgentThreadStreamRuntime {
         threadId: pendingIdle.threadId,
         streamOptions: pendingIdle.streamOptions ?? {},
       });
+      // The cancelled reservation never starts a run of its own, so nothing is on its way in for shutdown.
+      this.#completePendingThreadAdmission(state, key, pendingIdle.runId);
       return true;
     }
 
@@ -6278,6 +6399,9 @@ export class AgentThreadStreamRuntime {
       });
     } finally {
       state.startingQueuedRunIds.delete(pendingIdle.runId);
+      // The run's record exists, or this attempt failed before creating one, so it is no longer a run
+      // on its way in that shutdown has to wait for.
+      this.#completePendingThreadAdmission(state, key, pendingIdle.runId);
     }
     return true;
   }
@@ -8708,7 +8832,7 @@ export class AgentThreadStreamRuntime {
         state,
         reservedKey,
         reservedRunId,
-        agent.id,
+        agent,
         accepted.then(admission => {
           if (admission.action === 'wake') return { action: 'local' as const, runId: admission.runId };
           if (admission.action === 'deliver') return { action: 'remote' as const, runId: admission.runId };
