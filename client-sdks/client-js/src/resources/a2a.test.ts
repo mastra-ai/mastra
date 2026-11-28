@@ -401,6 +401,7 @@ describe('A2A', () => {
 
           res.writeHead(200, { 'Content-Type': 'text/event-stream' });
           for (const event of streamEvents) {
+            res.write('x-heartbeat\n\nx.heartbeat: alive\n\nx-heartbeat\nevent: ping\n\n');
             res.write(`data: ${JSON.stringify({ jsonrpc: '2.0', result: event })}\n\n`);
           }
           res.end();

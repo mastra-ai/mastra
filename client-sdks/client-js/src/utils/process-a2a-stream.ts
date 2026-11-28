@@ -6,40 +6,47 @@ export type A2AStreamEventData = Message | Task | TaskStatusUpdateEvent | TaskAr
 type ParsedA2AEvent<T> = { done: true; event?: never } | { done?: false; event?: T };
 
 function splitNextEvent(buffer: string): { eventBlock?: string; rest: string } {
-  const normalizedBuffer = buffer.replace(/\x1E/g, '\n\n');
-  const match = normalizedBuffer.match(/\r?\n\r?\n/);
+  const recordStart = buffer.startsWith('\x1E') ? 1 : 0;
+  const match = /\r?\n\r?\n/.exec(buffer);
+  const nextRecord = buffer.indexOf('\x1E', recordStart);
 
-  if (!match || match.index === undefined) {
-    return { rest: normalizedBuffer };
+  if (nextRecord !== -1 && (!match || nextRecord < match.index)) {
+    return { eventBlock: buffer.slice(0, nextRecord), rest: buffer.slice(nextRecord) };
+  }
+  if (!match) {
+    return { rest: buffer };
   }
 
-  const separatorLength = match[0].length;
   return {
-    eventBlock: normalizedBuffer.slice(0, match.index),
-    rest: normalizedBuffer.slice(match.index + separatorLength),
+    eventBlock: buffer.slice(0, match.index),
+    rest: buffer.slice(match.index + match[0].length),
   };
 }
 
-function parseEventBlock<T>(eventBlock: string): ParsedA2AEvent<T> {
-  const trimmedBlock = eventBlock.trim();
+function parseEventBlock<T>(eventBlock: string, isSse: boolean): ParsedA2AEvent<T> {
+  // Explicit JSON records take precedence. For legacy unframed JSON in SSE responses,
+  // JSON-shaped blocks remain payloads; other data-less blocks are SSE metadata.
+  const hasRecordSeparator = eventBlock.startsWith('\x1E');
+  const trimmedBlock = (hasRecordSeparator ? eventBlock.slice(1) : eventBlock).trim();
 
   if (!trimmedBlock) {
     return {};
   }
 
-  const lines = trimmedBlock.split(/\r?\n/);
-  const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
-
-  // A leading SSE comment or standard field identifies the frame regardless of extension fields.
-  const startsWithSseMetadata = /^(?::|(?:event|id|retry|data)(?::|\r?\n|$))/.test(trimmedBlock);
-  if (
-    dataLines.length === 0 &&
-    (startsWithSseMetadata || lines.every(line => /^(?::|[a-zA-Z][\w-]*:|(?:event|id|retry|data)$)/.test(line)))
-  ) {
-    return {};
+  let payload = trimmedBlock;
+  if (!hasRecordSeparator && !/^(?:[\[{"\d-]|(?:true|false|null)(?:\s|$))/.test(trimmedBlock)) {
+    const lines = trimmedBlock.split(/\r?\n/);
+    const dataLines = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart());
+    if (dataLines.length > 0) {
+      payload = dataLines.join('\n').trim();
+    } else if (
+      isSse ||
+      /^(?::|(?:event|id|retry|data)(?::|\r?\n|$))/.test(trimmedBlock) ||
+      lines.every(line => /^(?::|[a-zA-Z][\w-]*:|(?:event|id|retry|data)$)/.test(line))
+    ) {
+      return {};
+    }
   }
-
-  const payload = dataLines.length > 0 ? dataLines.join('\n').trim() : trimmedBlock;
   if (!payload) {
     return {};
   }
@@ -70,7 +77,9 @@ function parseEventBlock<T>(eventBlock: string): ParsedA2AEvent<T> {
 
 export async function* processA2AStream<T = A2AStreamEventData>(
   stream: globalThis.ReadableStream<Uint8Array>,
+  contentType?: string | null,
 ): AsyncGenerator<T, void, undefined> {
+  const isSse = contentType?.split(';', 1)[0]?.trim().toLowerCase() === 'text/event-stream';
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -93,7 +102,7 @@ export async function* processA2AStream<T = A2AStreamEventData>(
           break;
         }
 
-        const parsedEvent = parseEventBlock<T>(eventBlock);
+        const parsedEvent = parseEventBlock<T>(eventBlock, isSse);
 
         if (parsedEvent.done) {
           return;
@@ -110,7 +119,7 @@ export async function* processA2AStream<T = A2AStreamEventData>(
     }
 
     if (buffer.trim()) {
-      const parsedEvent = parseEventBlock<T>(buffer);
+      const parsedEvent = parseEventBlock<T>(buffer, isSse);
 
       if (!parsedEvent.done && parsedEvent.event) {
         yield parsedEvent.event;

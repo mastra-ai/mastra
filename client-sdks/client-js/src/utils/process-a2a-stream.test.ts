@@ -16,7 +16,7 @@ async function readEvents(...chunks: string[]) {
   });
 
   const events = [];
-  for await (const event of processA2AStream(stream)) {
+  for await (const event of processA2AStream(stream, 'text/event-stream; charset=utf-8')) {
     events.push(event);
   }
   return events;
@@ -64,7 +64,7 @@ describe('processA2AStream', () => {
 
   it('accepts raw JSON records and a final record without a delimiter', async () => {
     expect(
-      await readEvents(`\x1e${JSON.stringify({ result: status })}\n\n`, `\x1e${JSON.stringify(artifact, null, 2)}`),
+      await readEvents(`${JSON.stringify({ result: status })}\n\n`, '\x1e', JSON.stringify(artifact, null, 2)),
     ).toEqual([status, artifact]);
   });
 
@@ -72,7 +72,10 @@ describe('processA2AStream', () => {
     expect(await readEvents(eventFrame(status), `${done}\n\n${eventFrame(artifact)}`)).toEqual([status]);
   });
 
-  it.each(['data: {broken}\n\n', '\x1e{\nevent: ping\n}\n\n'])('still reports malformed JSON in %j', async frame => {
-    await expect(readEvents(frame)).rejects.toThrow('Failed to parse A2A stream event');
-  });
+  it.each(['data: {broken}\n\n', '{broken}\n\n', '\x1e{\nevent: ping\n}\n\n', '\x1ex-heartbeat\n\n'])(
+    'still reports malformed JSON in %j',
+    async frame => {
+      await expect(readEvents(frame)).rejects.toThrow('Failed to parse A2A stream event');
+    },
+  );
 });
