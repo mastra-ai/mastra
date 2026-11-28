@@ -219,6 +219,45 @@ describe('createCodeMode limits — maxConcurrentCalls', () => {
 
     expect(peak).toBe(3);
   });
+
+  it('queues a very large backlog without quadratic slowdown', async () => {
+    let active = 0;
+    let peak = 0;
+    // Records the order calls actually start, to confirm FIFO is preserved.
+    const started: number[] = [];
+    const spy = createTool({
+      id: 'ping',
+      description: 'ping',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        started.push(started.length);
+        active -= 1;
+        return { ok: true };
+      },
+    });
+
+    const backlog = 200_000;
+    const transport = scripted(async opts => {
+      await Promise.all(Array.from({ length: backlog }, () => opts.dispatch('ping', {})));
+      return { success: true, logs: [] };
+    });
+
+    const { tool } = createCodeMode({ tools: { ping: spy }, maxConcurrentCalls: 2 }, transport);
+    const startedAt = Date.now();
+    const result = await run(tool, 'ignored');
+    const durationMs = Date.now() - startedAt;
+    expect(result.success).toBe(true);
+    expect(peak).toBeLessThanOrEqual(2);
+    expect(started).toHaveLength(backlog);
+    expect(started[0]).toBe(0);
+    expect(started[backlog - 1]).toBe(backlog - 1);
+    // Guards against per-call work that grows with the queue (e.g. one abort
+    // listener per waiter): quadratic dequeue takes minutes at this size.
+    expect(durationMs).toBeLessThan(8_000);
+  }, 20_000);
 });
 
 describe('createCodeMode limits — maxResultBytes', () => {
@@ -340,6 +379,44 @@ describe('createCodeMode run-scoped cancellation', () => {
 
     expect(nestedSignal).toBeDefined();
     expect(nestedSignal?.aborted).toBe(true);
+  });
+
+  it('rejects calls still queued when the run is aborted, without starting them', async () => {
+    let started = 0;
+    const slow = createTool({
+      id: 'slow',
+      description: 'slow',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => {
+        started += 1;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return { ok: true };
+      },
+    });
+
+    const controller = new AbortController();
+    const settled: Array<'ok' | Error> = [];
+    const transport = scripted(async opts => {
+      const calls = Array.from({ length: 6 }, () =>
+        opts.dispatch('slow', {}).then(
+          () => settled.push('ok'),
+          (error: unknown) => settled.push(error instanceof Error ? error : new Error(String(error))),
+        ),
+      );
+      // Let one call start, then abort while the remaining five sit in the queue.
+      await new Promise(resolve => setTimeout(resolve, 10));
+      controller.abort(new Error('user stopped'));
+      await Promise.all(calls);
+      return { success: false, logs: [], error: { message: 'aborted', name: 'AbortError' } };
+    });
+
+    const { tool } = createCodeMode({ tools: { slow }, maxConcurrentCalls: 1 }, transport);
+    await run(tool, 'ignored', ctx({ abortSignal: controller.signal }));
+
+    expect(started).toBe(1);
+    expect(settled.filter(result => result === 'ok')).toHaveLength(1);
+    expect(settled.filter(result => result instanceof Error)).toHaveLength(5);
   });
 });
 

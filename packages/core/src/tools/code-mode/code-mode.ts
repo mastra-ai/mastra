@@ -52,24 +52,53 @@ function codeModeResultBytes(result: unknown): number {
   return json === undefined ? 0 : utf8Encoder.encode(json).length;
 }
 
+interface CodeModeSemaphoreWaiter {
+  resolve: () => void;
+  reject: (error: unknown) => void;
+}
+
 /**
  * Abort-aware FIFO semaphore. At most `limit` tasks run at once; excess callers
  * wait in arrival order. Every slot is released in `finally`, and waiters reject
  * on abort without running their task.
+ *
+ * Both ends are O(1) amortized and do no work proportional to the queue size:
+ * the run's signal carries a single listener (per-waiter listeners make
+ * `addEventListener`/`removeEventListener` quadratic once thousands of calls are
+ * queued), and the queue is drained by advancing a head index. Guest code
+ * controls how many calls it queues, so a large backlog must stay cheap.
  */
 function createCallSemaphore(limit: number, signal: AbortSignal) {
   const abortReason = () => signal.reason ?? new Error('Code Mode execution aborted');
   let active = 0;
-  const waiters: Array<{ resolve: () => void; reject: (error: unknown) => void; onAbort: () => void }> = [];
+  let waiters: CodeModeSemaphoreWaiter[] = [];
+  let head = 0;
+
+  // One listener for the whole run: on abort, reject every queued waiter at once.
+  signal.addEventListener(
+    'abort',
+    () => {
+      const pending = waiters.slice(head);
+      waiters = [];
+      head = 0;
+      for (const waiter of pending) waiter.reject(abortReason());
+    },
+    { once: true },
+  );
 
   const release = () => {
     active -= 1;
-    const next = waiters.shift();
-    if (next) {
-      signal.removeEventListener('abort', next.onAbort);
-      active += 1;
-      next.resolve();
+    while (head < waiters.length) {
+      const next = waiters[head++];
+      if (next) {
+        active += 1;
+        next.resolve();
+        return;
+      }
     }
+    // Queue drained; drop the consumed entries so they are not retained.
+    waiters = [];
+    head = 0;
   };
 
   const acquire = (): Promise<void> => {
@@ -79,17 +108,7 @@ function createCallSemaphore(limit: number, signal: AbortSignal) {
       return Promise.resolve();
     }
     return new Promise<void>((resolve, reject) => {
-      const waiter = {
-        resolve,
-        reject,
-        onAbort: () => {
-          const index = waiters.indexOf(waiter);
-          if (index >= 0) waiters.splice(index, 1);
-          reject(abortReason());
-        },
-      };
-      waiters.push(waiter);
-      signal.addEventListener('abort', waiter.onAbort, { once: true });
+      waiters.push({ resolve, reject });
     });
   };
 
