@@ -7,7 +7,7 @@ import {
   runThinkingLevel,
   supportsMaxReasoningEffort,
   THINKING_LEVEL_VALUES,
-} from './thinking.js';
+} from './thinking';
 
 const effort = (...values: string[]) => [{ type: 'effort' as const, values }];
 

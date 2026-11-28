@@ -6,11 +6,12 @@ import ts from 'typescript-classic';
 import { afterEach, describe, expect, it } from 'vitest';
 
 // Guards the package's one promise: everything reachable from index.ts loads in a browser.
-// Runtime imports may reach only relative files and zod; type-only imports may also reach
+// Runtime imports may reach only relative files, zod and core's browser-safe entries; type-only imports may also reach
 // @mastra/core, which the build erases.
 
 const SRC = dirname(fileURLToPath(import.meta.url));
-const RUNTIME_PACKAGES = new Set(['zod']);
+// Core entries whose own build guard (browserSafeEntries) proves them browser-safe.
+const RUNTIME_PACKAGES = new Set(['zod', '@mastra/core/error', '@mastra/core/llm/reasoning']);
 const TYPE_PACKAGE_PREFIX = '@mastra/core/';
 
 interface Import {

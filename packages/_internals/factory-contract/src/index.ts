@@ -37,3 +37,6 @@ export * from './rules/identifiers.js';
 export * from './session/session-row-query.js';
 export * from './wire/boards.js';
 export * from './wire/intake.js';
+export * from './run/run-error.js';
+export * from './run/provider-display-name.js';
+export * from './run/default-thinking-level.js';
