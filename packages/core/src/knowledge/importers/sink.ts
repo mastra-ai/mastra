@@ -252,7 +252,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   const { storage, importers, binding, scope, provenance } = input;
   const target = parseKnowledgeImportTarget(binding.target);
   const result: KnowledgeImportSinkResult = {
-    counts: { created: 0, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0 },
+    counts: { created: 0, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0, merged: 0 },
     refused: [],
     changes: [],
     embeds: [],
@@ -420,11 +420,14 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
 
   // Someone deleted the node's page by hand, or moved it into another scope. The source is still the
   // source of truth, so the item is written again as if new at its configured path; a page in another
-  // scope stays there as an ordinary page. A page merged into another is not gone: its content lives
-  // on there.
-  const gone = async (node: KnowledgeImporterNodeRecord) => {
+  // scope stays there as an ordinary page. A page merged into another is not gone but `merged`: its
+  // content lives on in the page it was merged into, so the binding keeps the node and leaves both
+  // pages alone. Its later upserts are skipped and counted, its removal does nothing, an existing
+  // child stays where the merge put it, and a new child is placed as if it were missing.
+  const stateOf = async (node: KnowledgeImporterNodeRecord): Promise<'live' | 'gone' | 'merged'> => {
     const page = await storage.getPage({ id: node.pageId, read: 'all' });
-    return !page || (!!page.deletedAt && !page.mergedInto) || (live(page) && page.scopeId !== scope.id);
+    if (page?.mergedInto) return 'merged';
+    return !page || !!page.deletedAt || page.scopeId !== scope.id ? 'gone' : 'live';
   };
   /**
    * Drops the node of a page that is gone, so its item is written again as new. Pages that linked to
@@ -472,7 +475,7 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   };
   const liveNodeOf = async (sourceId: string | null | undefined) => {
     const node = await nodeOf(sourceId);
-    return node && !(await gone(node)) ? node : null;
+    return node && (await stateOf(node)) === 'live' ? node : null;
   };
 
   const ref = (keys: string[]) => `${target.scope}#${keys.join('/')}`;
@@ -634,14 +637,21 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     hasBody: boolean,
   ) => {
     let existing = await importers.getNode(binding.id, item.sourceId);
-    if (existing && (await gone(existing))) {
+    const state = existing ? await stateOf(existing) : null;
+    if (state === 'merged') return null;
+    if (existing && state === 'gone') {
       await forget(existing);
       existing = null;
     }
     // Where it goes: its parent's page, else its holding item's page, else the anchor. Placed
     // anywhere but under its parent, it waits for a settle slice to move it there.
-    const sourceParent = await liveNodeOf(item.parent);
-    const misplaced = !!item.parent && !sourceParent;
+    const parentRecord = await nodeOf(item.parent);
+    const parentState = parentRecord ? await stateOf(parentRecord) : null;
+    const sourceParent = parentState === 'live' ? parentRecord : null;
+    // A child that already exists stays where the merge of its parent put it, and no child waits
+    // for a merged parent: it never comes back.
+    const parentMerged = parentState === 'merged';
+    const misplaced = !!item.parent && !sourceParent && !parentMerged;
     const parentNode = sourceParent ?? (await liveNodeOf(item.fallbackParent));
     // A flush with writes always has an anchor.
     const destination = parentNode ? await owned(parentNode.pageId, parentNode.sourceId) : anchor!;
@@ -703,8 +713,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
       if (existing.stub && existing.adopted && !REMOVED_BODIES.has(page.body ?? '')) {
         await keepBody(page.id, page.body ?? '');
       }
-      // A page a person moved out of the target stays where they put it.
-      if (!current.outside && page.parentId !== destination.page.id) {
+      // A page a person moved out of the target stays where they put it, and so does the child of
+      // a merged-away parent.
+      if (!current.outside && !parentMerged && page.parentId !== destination.page.id) {
         // A page can't move under its own subtree.
         if (
           destination.keys.length > current.keys.length &&
@@ -787,7 +798,9 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
         if (op.op === 'remove') {
           const node = await importers.getNode(binding.id, sourceId);
           if (!node) return;
-          if (await gone(node)) {
+          const state = await stateOf(node);
+          if (state === 'merged') return;
+          if (state === 'gone') {
             await forget(node);
             result.applied = true;
             return;
@@ -856,7 +869,12 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
           result.applied = true;
           return;
         }
-        const { page, change, moved, relinked } = await write(op.item, op.op === 'upsert');
+        const written = await write(op.item, op.op === 'upsert');
+        if (!written) {
+          result.counts.merged++;
+          return;
+        }
+        const { page, change, moved, relinked } = written;
         recordRelinked(relinked, embeds);
         if (change === 'unchanged') {
           result.counts.unchanged++;
@@ -949,13 +967,20 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   ): Promise<{ moved: boolean; relinked: boolean }> {
     const node = await importers.getNode(binding.id, sourceId);
     if (!node?.unsettled) return { moved: false, relinked: false };
+    if ((await stateOf(node)) === 'merged') {
+      await importers.saveNode({ ...node, unsettled: false });
+      return { moved: false, relinked: false };
+    }
     const current = await owned(node.pageId, sourceId);
     let { page, keys } = current;
     let moved = false;
     let relinked = false;
 
-    const parent = current.outside ? null : await nodeOf(node.parentSourceId);
-    let misplaced = !current.outside && !!node.parentSourceId && !parent;
+    // A parent that was merged away never comes back: its child stops waiting for it.
+    const sourceParent = current.outside ? null : await nodeOf(node.parentSourceId);
+    const parentMerged = !!sourceParent && (await stateOf(sourceParent)) === 'merged';
+    const parent = parentMerged ? null : sourceParent;
+    let misplaced = !current.outside && !!node.parentSourceId && !parent && !parentMerged;
     if (parent && canMove) {
       const destination = await owned(parent.pageId, parent.sourceId);
       if (page.parentId !== destination.page.id) {

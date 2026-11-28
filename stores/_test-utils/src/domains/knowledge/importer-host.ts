@@ -9,6 +9,7 @@ import {
 import type {
   KnowledgeChangeEvent,
   KnowledgeImporterContext,
+  KnowledgeImporterFlushReceipt,
   KnowledgeImporterHost,
   KnowledgeImportItem,
   KnowledgeImporterOp,
@@ -968,6 +969,50 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
       });
     });
 
+    it('replays a receipt stored before the merged count existed with merged: 0, and keeps a stored merged count', async () => {
+      const { knowledge } = setup();
+      const host = knowledge.importers!.host;
+      const storage = await knowledge.getStorage();
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const { runId, generation } = started;
+      const record = async (seq: number, ops: KnowledgeImporterOp[], receipt: Record<string, unknown>) => {
+        const digest = await knowledgeImporterFlushDigest({ ops });
+        await storage.transaction(tx =>
+          tx.importers!.recordFlush({
+            runId,
+            generation,
+            seq,
+            digest,
+            receipt: receipt as unknown as KnowledgeImporterFlushReceipt,
+            counts: {},
+          }),
+        );
+      };
+      // A receipt written by an older host: every count but merged.
+      const older = [upsert({ sourceId: 'p1' })];
+      const olderReceipt = { seq: 1, created: 1, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0 };
+      await record(1, older, { ...olderReceipt, refused: [], pending: false });
+      expect(await flushOnce(host, runId, generation, 1, older)).toEqual({
+        ...olderReceipt,
+        merged: 0,
+        refused: [],
+        pending: false,
+      });
+      // The same replay found only under the run lock: a concurrent identical flush committed after the peek.
+      const getFlush = vi
+        .spyOn(Object.getPrototypeOf(storage.importers!) as { getFlush: () => Promise<unknown> }, 'getFlush')
+        .mockResolvedValueOnce(null);
+      expect(await flushOnce(host, runId, generation, 1, older)).toMatchObject({ seq: 1, merged: 0 });
+      expect(getFlush).toHaveBeenCalledTimes(2);
+      getFlush.mockRestore();
+
+      const newer = [upsert({ sourceId: 'p2' })];
+      const newerReceipt = { ...olderReceipt, seq: 2, created: 0, merged: 3, refused: [], pending: false };
+      await record(2, newer, newerReceipt);
+      expect(await flushOnce(host, runId, generation, 2, newer)).toEqual(newerReceipt);
+    });
+
     it('commits state with its flush, and replays a finish exactly once recorded', async () => {
       const { knowledge } = setup();
       const host = knowledge.importers!.host;
@@ -1705,6 +1750,146 @@ export function createKnowledgeImporterHostTests(createFixture: () => Promise<Kn
         flushOnce(host, started.runId, started.generation, 1, [upsert({ sourceId: 'p1' })]),
       ).rejects.toMatchObject({ status: 409 });
       expect(await page('notion/p1')).toBeNull();
+    });
+  });
+
+  describe('items whose page someone merged into another page', () => {
+    const person = { author: 'agent:dana' };
+
+    /** Imports p1 (with child c1), then merges p1's page into a person's page, as a person or agent would. */
+    async function mergedSetup() {
+      const ctx = setup();
+      await ctx.run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'c1', parent: 'p1' })]);
+      const storage = await ctx.knowledge.getStorage();
+      const [scope] = await storage.getScopesByAddress(['docs:acme']);
+      const keeper = await storage.createPage({
+        parentId: scope!.id,
+        key: 'offsite',
+        name: 'Offsite',
+        body: 'kept',
+        provenance: person,
+      });
+      const source = (await ctx.page('notion/p1'))!;
+      await storage.mergePages({
+        sourceId: source.id,
+        sourceVersion: source.version,
+        targetId: keeper.id,
+        provenance: person,
+      });
+      const reread = async (id: string) => storage.getPage({ id, read: 'all' });
+      return { ...ctx, storage, keeper: (await reread(keeper.id))!, source, reread };
+    }
+
+    it('skips a later upsert of the merged item and counts it merged, leaving both pages as they were', async () => {
+      const { run, keeper, source, reread } = await mergedSetup();
+      const receipt = await run([upsert({ sourceId: 'p1', body: 'changed at the source' })]);
+      expect(receipt).toMatchObject({
+        outcome: 'succeeded',
+        counts: { merged: 1, updated: 0, created: 0, refused: 0 },
+      });
+      expect(await reread(keeper.id)).toMatchObject({ body: keeper.body, version: keeper.version });
+      expect(await reread(source.id)).toMatchObject({ mergedInto: keeper.id });
+    });
+
+    it('does nothing when the source removes the merged item, and still counts its next upsert merged', async () => {
+      const { run, keeper, reread } = await mergedSetup();
+      expect(await run([{ op: 'remove', sourceId: 'p1' }])).toMatchObject({
+        outcome: 'succeeded',
+        counts: { removed: 0, stubbed: 0, refused: 0 },
+      });
+      expect(await reread(keeper.id)).toMatchObject({ body: keeper.body, version: keeper.version });
+      expect(await run([upsert({ sourceId: 'p1' })])).toMatchObject({ counts: { merged: 1, created: 0, refused: 0 } });
+    });
+
+    it("keeps updating a merged item's child where the merge put it, under the page it was merged into", async () => {
+      const { run, page, keeper, reread, storage } = await mergedSetup();
+      const child = (await page('offsite/c1'))!;
+      expect(child).not.toBeNull();
+      const receipt = await run([upsert({ sourceId: 'c1', parent: 'p1', body: 'new child body' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { updated: 1, moved: 0, refused: 0 } });
+      expect(await reread(child.id)).toMatchObject({ parentId: keeper.id, body: 'new child body' });
+      // Nothing waits on a parent that will never come back.
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
+    it("leaves a merged item's child under the keeper when both pages are this binding's", async () => {
+      const { run, knowledge, page } = setup();
+      await run([upsert({ sourceId: 'p1' }), upsert({ sourceId: 'k1' }), upsert({ sourceId: 'c1', parent: 'p1' })]);
+      const storage = await knowledge.getStorage();
+      const source = (await page('notion/p1'))!;
+      const keeper = (await page('notion/k1'))!;
+      await storage.mergePages({
+        sourceId: source.id,
+        sourceVersion: source.version,
+        targetId: keeper.id,
+        provenance: person,
+      });
+      const child = (await page('notion/k1/c1'))!;
+      expect(child).not.toBeNull();
+      const receipt = await run([upsert({ sourceId: 'c1', parent: 'p1', body: 'new child body' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { updated: 1, moved: 0, refused: 0 } });
+      expect(await storage.getPage({ id: child.id, read: 'all' })).toMatchObject({
+        parentId: keeper.id,
+        body: 'new child body',
+      });
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
+    it('stops a child under the folder waiting for a parent that was merged away', async () => {
+      const { run, storage, page } = await mergedSetup();
+      // c2 waits for its link target zz too, so a settle slice visits it.
+      await run([upsert({ sourceId: 'c2', parent: 'p1', links: [{ sourceId: 'zz', rel: 'see' }] })]);
+      await run([upsert({ sourceId: 'zz' })]);
+      expect((await page('notion/c2'))?.body).toContain('[[docs:acme#notion/zz]]');
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
+    it('writes a new child of a merged item under the target, as if its parent were missing', async () => {
+      const { run, page, storage } = await mergedSetup();
+      const receipt = await run([upsert({ sourceId: 'c2', parent: 'p1' })]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { created: 1, refused: 0 } });
+      expect(await page('notion/c2')).not.toBeNull();
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+    });
+
+    it('saves children of a merged item as settled when they have nothing to wait for, before any settle slice runs', async () => {
+      const { knowledge, storage } = await mergedSetup();
+      const host = knowledge.importers!.host;
+      const started = await host.startRun('b1');
+      if (started.status !== 'started') throw new Error('not started');
+      const saveNode = vi.spyOn(
+        Object.getPrototypeOf(storage.importers!) as {
+          saveNode: (node: { sourceId: string; unsettled: boolean }) => Promise<void>;
+        },
+        'saveNode',
+      );
+      // Each node's first save is its item write; the flush's settle slice can only save it after that.
+      try {
+        await flushOnce(host, started.runId, started.generation, 1, [
+          upsert({ sourceId: 'c1', parent: 'p1', body: 'existing child' }),
+          upsert({ sourceId: 'c2', parent: 'p1' }),
+          upsert({ sourceId: 'c3', parent: 'p1', links: [{ sourceId: 'zz', rel: 'see' }] }),
+        ]);
+        const firstSave = (sourceId: string) => saveNode.mock.calls.find(([node]) => node.sourceId === sourceId)?.[0];
+        expect(firstSave('c1')).toMatchObject({ unsettled: false });
+        expect(firstSave('c2')).toMatchObject({ unsettled: false });
+        // A link that doesn't resolve yet still waits for a settle slice.
+        expect(firstSave('c3')).toMatchObject({ unsettled: true });
+      } finally {
+        saveNode.mockRestore();
+      }
+    });
+
+    it('settles a node that was waiting when its page was merged, without refusing it', async () => {
+      const { run, storage, keeper, reread } = await mergedSetup();
+      // Both were waiting for a settle slice when p1's page was merged: p1 itself, and its child c1.
+      for (const sourceId of ['p1', 'c1']) {
+        await storage.importers!.saveNode({ ...(await storage.importers!.getNode('b1', sourceId))!, unsettled: true });
+      }
+      const receipt = await run([]);
+      expect(receipt).toMatchObject({ outcome: 'succeeded', counts: { refused: 0 } });
+      expect((await storage.importers!.listNodes('b1', { unsettled: true })).items).toEqual([]);
+      expect(await reread(keeper.id)).toMatchObject({ body: keeper.body, version: keeper.version });
     });
   });
 
