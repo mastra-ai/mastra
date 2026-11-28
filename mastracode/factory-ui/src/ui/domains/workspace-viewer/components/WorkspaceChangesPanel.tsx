@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
-import { queryKeys } from '../../../../api/keys';
+import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import type { WorkspaceChangesScope } from '../../../../api/types';
 import { setDiffLayout, useDiffLayout } from '../hooks/useDiffLayout';
 import { ChangesBody } from './changes/ChangesBody';
@@ -52,7 +52,7 @@ export function WorkspaceChangesPanel({
             layout={diffLayout}
             onLayoutChange={setDiffLayout}
             onRefresh={() =>
-              void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath) })
+              void queryClient.invalidateQueries({ queryKey: factoryWebKeys.workspaceChanges(workspacePath) })
             }
           />
         </span>

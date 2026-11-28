@@ -4,49 +4,12 @@
  * which resolves its source-control provider; individual-session routes resolve
  * the provider from the durable session row.
  */
-import type { FailedDraft } from '../../chat/services/handoffFiles';
+export { DraftSessionCreateError, isSessionNotFound } from '../../chat/services/sessionErrors';
 import { postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 
-export interface FactoryUserSessionOwner {
-  id: string;
-  name: string;
-  avatarUrl?: string;
-}
+import type { FactoryUserSession } from '@internal/factory-contract';
 
-export interface FactoryUserSession {
-  id: string;
-  sessionId: string;
-  projectRepositoryId: string;
-  orgId: string;
-  userId: string;
-  /**
-   * Memory resource the session runs under (the Factory for runs and Slack
-   * sessions, the owner for user sessions). Only the single-session read reports it.
-   */
-  resourceId?: string;
-  owner?: FactoryUserSessionOwner;
-  visibility: 'org' | 'private';
-  title?: string;
-  branch: string;
-  baseBranch: string;
-  sandboxId: string | null;
-  sandboxWorkdir: string | null;
-  materializedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** What the viewer may do with this session, computed by the server. */
-  capabilities?: {
-    recreateSandbox: boolean;
-    takeOwnership: boolean;
-    switchModel?: boolean;
-    ownershipLock?: SessionOwnershipLock;
-  };
-  /** The cards this session follows: the ones it asked for or subscribed to. Only the list read reports it. */
-  followedWorkItemIds?: readonly string[];
-}
-
-/** Why a session the viewer doesn't own keeps its owner. */
-export type SessionOwnershipLock = 'card' | 'slack-thread' | 'side-session';
+export type { FactoryUserSession, FactoryUserSessionOwner, SessionOwnershipLock } from '@internal/factory-contract';
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
 
@@ -77,23 +40,6 @@ export type CreateUserSessionOptions = (
   visibility?: 'private' | 'org';
 };
 
-/**
- * A draft's session failed to start after its thread opened. The thread route
- * sends the person back to the draft with what they had picked; the draft's
- * images stay stashed under its id.
- */
-export class DraftSessionCreateError extends Error {
-  constructor(
-    message: string,
-    readonly draft: FailedDraft,
-    readonly draftPath: string,
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.name = 'DraftSessionCreateError';
-  }
-}
-
 export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
@@ -115,11 +61,6 @@ export async function getUserSession(baseUrl: string, sessionId: string): Promis
   });
   const body = await readJsonOrThrow<{ session: FactoryUserSessionPayload }>(res, 'Failed to load session');
   return normalizeUserSession(body.session);
-}
-
-/** The server answers a missing session and a teammate's private one with the same 404. */
-export function isSessionNotFound(error: Error): boolean {
-  return 'status' in error && error.status === 404;
 }
 
 export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {

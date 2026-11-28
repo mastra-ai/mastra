@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -35,7 +36,9 @@ describe('parallel tool calls landing at once', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
-        <TranscriptEntries entries={[burst]} running onApprove={() => {}} onRespond={() => {}} />
+        <RouterSessionHost>
+          <TranscriptEntries entries={[burst]} running onApprove={() => {}} onRespond={() => {}} />
+        </RouterSessionHost>
       </MemoryRouter>,
     );
 

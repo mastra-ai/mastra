@@ -1,9 +1,9 @@
+import { useFactoryWeb } from '@mastra/react/hooks/factory';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDeferredValue, useId, useMemo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { useApiConfig } from '../../../../../api/config';
 import type { WorkspaceFileIndex } from '../../../../../api/types';
 import { useWorkspaceFileIndex, workspaceFileIndexQueryOptions } from '../../../../../hooks/use-fs';
 import { findFiles } from './find-files';
@@ -47,7 +47,7 @@ export function useFileFinder({
   onOpen,
 }: UseFileFinderOptions): FileFinder {
   const queryClient = useQueryClient();
-  const { mastra } = useApiConfig();
+  const factoryWeb = useFactoryWeb();
   const listboxId = useId();
   const searched = useDeferredValue(query);
   const finding = searched.trim() !== '';
@@ -91,8 +91,7 @@ export function useFileFinder({
     open: onOpen,
     onKeyDown,
     prefetch: () => {
-      if (visible)
-        void queryClient.prefetchQuery(workspaceFileIndexQueryOptions(mastra.getFactoryWeb(), workspacePath));
+      if (visible) void queryClient.prefetchQuery(workspaceFileIndexQueryOptions(factoryWeb, workspacePath));
     },
   };
 }

@@ -2,12 +2,13 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { WorkspaceFile } from '../../../../../api/types';
-import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
+import type { FactoryUserSession } from '@internal/factory-contract';
 import { SubmitPlanCard } from '../SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';
@@ -115,12 +116,16 @@ function stubRenderedList(rootPath: string | Record<string, string>, { hold = fa
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/f-1/user/threads/${WORKSPACE}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/user/threads/:threadId"
-          element={<SubmitPlanCard toolCallId="call-1" input={{ toolId: 'submit_plan', path: PLAN_PATH }} {...props} />}
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/user/threads/:threadId"
+            element={
+              <SubmitPlanCard toolCallId="call-1" input={{ toolId: 'submit_plan', path: PLAN_PATH }} {...props} />
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

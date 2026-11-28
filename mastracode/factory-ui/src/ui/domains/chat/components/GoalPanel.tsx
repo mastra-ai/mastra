@@ -1,31 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatRuntime } from '../context/useChatRuntime';
-import {
-  useClearAgentControllerGoalMutation,
-  usePauseAgentControllerGoalMutation,
-  useResumeAgentControllerGoalMutation,
-} from '../../../../hooks/useAgentControllerGoalMutations';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border bg-badge-pink-subtle px-4 py-2';
 
 export function GoalPanel() {
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { sessionEnabled } = useChatSessionContext();
   const { goal } = useChatRuntime();
-  const hookArgs = {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  };
-  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
-  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
-  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const goalActions = useChatSessionActions().goal;
 
-  if (!sessionEnabled || !goal) return null;
+  if (!sessionEnabled || !goal || !goalActions) return null;
 
   const progress = `${goal.iteration}/${goal.maxRuns}`;
 
@@ -51,16 +38,16 @@ export function GoalPanel() {
         </Txt>
       )}
       {goal.status === 'active' && (
-        <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
+        <Button size="sm" onClick={() => void goalActions.pause()}>
           Pause
         </Button>
       )}
       {goal.status === 'paused' && (
-        <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
+        <Button variant="primary" size="sm" onClick={() => void goalActions.resume()}>
           Resume
         </Button>
       )}
-      <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
+      <Button size="sm" onClick={() => void goalActions.clear()}>
         Clear
       </Button>
     </div>

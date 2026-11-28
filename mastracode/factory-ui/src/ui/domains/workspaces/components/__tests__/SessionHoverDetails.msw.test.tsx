@@ -3,6 +3,7 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../../chat/context/RouterSessionHost';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ReactNode } from 'react';
@@ -72,12 +73,14 @@ function mockMobileViewport() {
 function renderSection(wrap: (section: ReactNode) => ReactNode = section => section) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}/workspaces/${workSessionId}/threads/${workSessionId}`]}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<ChatSessionConfigProvider>{wrap(<SessionsSection />)}</ChatSessionConfigProvider>}
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+            element={<ChatSessionConfigProvider>{wrap(<SessionsSection />)}</ChatSessionConfigProvider>}
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

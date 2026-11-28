@@ -3,17 +3,14 @@ import { ChatAnnotationsProvider } from '@mastra/playground-ui/components/ai/ann
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { sessionUnavailableError, useUserSessionQuery } from '../../../../hooks/useWorkspaces';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { sessionUnavailableError, isSessionNotFound } from '../services/sessionErrors';
+import type { LinkedRepositoryPayload, FactoryUserSession } from '@internal/factory-contract';
 import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
-import { isSessionNotFound } from '../../workspaces/services/user-sessions';
-import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { readFailedDraft } from '../services/handoffFiles';
 import { opensWithPrompt } from '../services/promptHandoff';
@@ -24,6 +21,7 @@ import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
+import { ChatSessionActionsProvider } from './ChatSessionActionsProvider';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { TranscriptLoading } from '../components/TranscriptLoading';
@@ -50,12 +48,11 @@ export function ChatSessionConfigProvider({
   userScoped?: boolean;
   draftSessionId?: string;
 }) {
-  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const location = useLocation();
+  const { factoryProjectId: factoryId, sessionId, location, data } = useSessionHost();
   const { baseUrl } = useApiConfig();
-  const factoryQuery = useFactoryQuery(factoryId);
+  const factoryQuery = data.useProject(factoryId);
   const isDraft = Boolean(draftSessionId);
-  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
+  const sessionQuery = data.useUserSession(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
   const owner = useMemo(
@@ -187,7 +184,7 @@ export function ChatSessionBoundary({
   deferUntilMessagesReady?: boolean;
 }) {
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
-  const location = useLocation();
+  const { location } = useSessionHost();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
   const transcript = useTranscriptKey({ sessionId, threadId });
   const messagesQuery = useAgentControllerThreadMessages({
@@ -215,29 +212,31 @@ export function ChatSessionBoundary({
   // Above the transcript so the favicon and the stepper read one pending state.
   return (
     <ChatThreadMessagesContext.Provider value={messages}>
-      <TranscriptContinuationContext.Provider value={transcript.continueInto}>
-        <ChatTranscriptProvider
-          // No `isPending` segment: remounting on the pending -> ready flip would drop
-          // the live SSE listener. Results merge into the reducer instead.
-          key={transcript.key}
-          threadId={threadId}
-          initialMessages={messagesQuery.data}
-          hasMoreHistory={messagesQuery.hasMore}
-          isLoadingMoreHistory={messagesQuery.isLoadingMore}
-          loadMoreHistory={messagesQuery.loadMore}
-        >
-          <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
-            <ChatThinkingProvider>
-              <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-                <ComposerImagesProvider initialImages={failedDraft?.files}>
-                  {/* Below the keyed transcript, so each thread starts with no annotations. */}
-                  <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
-                </ComposerImagesProvider>
-              </ChatCommandsProvider>
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatTranscriptProvider>
-      </TranscriptContinuationContext.Provider>
+      <ChatSessionActionsProvider>
+        <TranscriptContinuationContext.Provider value={transcript.continueInto}>
+          <ChatTranscriptProvider
+            // No `isPending` segment: remounting on the pending -> ready flip would drop
+            // the live SSE listener. Results merge into the reducer instead.
+            key={transcript.key}
+            threadId={threadId}
+            initialMessages={messagesQuery.data}
+            hasMoreHistory={messagesQuery.hasMore}
+            isLoadingMoreHistory={messagesQuery.isLoadingMore}
+            loadMoreHistory={messagesQuery.loadMore}
+          >
+            <ChatModelsProvider initialDraftSelection={failedDraft?.modelSelection}>
+              <ChatThinkingProvider>
+                <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+                  <ComposerImagesProvider initialImages={failedDraft?.files}>
+                    {/* Below the keyed transcript, so each thread starts with no annotations. */}
+                    <ChatAnnotationsProvider>{children}</ChatAnnotationsProvider>
+                  </ComposerImagesProvider>
+                </ChatCommandsProvider>
+              </ChatThinkingProvider>
+            </ChatModelsProvider>
+          </ChatTranscriptProvider>
+        </TranscriptContinuationContext.Provider>
+      </ChatSessionActionsProvider>
     </ChatThreadMessagesContext.Provider>
   );
 }

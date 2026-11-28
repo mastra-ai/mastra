@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -13,6 +14,7 @@ import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/use
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { ChatSessionActionsProvider } from '../../context/ChatSessionActionsProvider';
 import { ChatThinkingProvider } from '../../context/ChatThinkingProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
@@ -107,21 +109,25 @@ function ErrorSession({
             loadMore: { hasMore: false, isLoading: false },
           }}
         >
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
+          <ChatSessionActionsProvider>
+            <ChatModelsProvider>
+              <ChatThinkingProvider>
+                <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
+              </ChatThinkingProvider>
+            </ChatModelsProvider>
+          </ChatSessionActionsProvider>
         </ChatTranscriptContext.Provider>
       </ChatConnectionContext.Provider>
     </ChatSessionContext.Provider>
   );
   return (
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<p>New session draft</p>} />
-        <Route path="*" element={session} />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<p>New session draft</p>} />
+          <Route path="*" element={session} />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>
   );
 }

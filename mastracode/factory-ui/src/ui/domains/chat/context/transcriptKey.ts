@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import { threadPath } from '../../workspaces/services/factoryPaths';
 
@@ -38,10 +38,10 @@ export function continuesTranscript(state: unknown): boolean {
 
 export function useContinueIntoThread() {
   const continueInto = useContext(TranscriptContinuationContext);
-  const navigate = useNavigate();
+  const { navigate } = useSessionHost();
   if (!continueInto) throw new Error('useContinueIntoThread must be used within a ChatSessionBoundary');
   return (factoryId: string, thread: ThreadSession, state?: object) => {
     continueInto(thread);
-    void navigate(threadPath(factoryId, thread), { replace: true, state: { ...state, [CONTINUES_TRANSCRIPT]: true } });
+    navigate(threadPath(factoryId, thread), { replace: true, state: { ...state, [CONTINUES_TRANSCRIPT]: true } });
   };
 }

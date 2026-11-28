@@ -4,7 +4,7 @@ import { Factory } from 'lucide-react';
 
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { factoryHomePath } from '../../workspaces/services/factoryPaths';
-import type { FactoryProject } from '../../workspaces/services/github';
+import type { FactoryProject } from '@internal/factory-contract';
 
 function factoryContext(repositorySlugs: string[]): string {
   if (repositorySlugs.length === 0) return 'No repositories linked';

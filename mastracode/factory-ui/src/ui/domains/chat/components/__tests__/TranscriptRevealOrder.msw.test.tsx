@@ -1,6 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -44,7 +45,9 @@ describe('a reply that calls a tool mid-sentence', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
-        <TranscriptEntries entries={[reply]} onApprove={() => {}} onRespond={() => {}} />
+        <RouterSessionHost>
+          <TranscriptEntries entries={[reply]} onApprove={() => {}} onRespond={() => {}} />
+        </RouterSessionHost>
       </MemoryRouter>,
     );
 

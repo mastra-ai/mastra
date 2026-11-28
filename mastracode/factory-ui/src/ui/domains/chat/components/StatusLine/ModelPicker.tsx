@@ -5,7 +5,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import type { ReactNode } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { useSessionHost } from '../../context/SessionHostContext';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import { catalogModelPickerValue, findPickerModel, modelPickerProviders } from '../../../../lib/modelPickerCatalog';
@@ -17,7 +17,7 @@ import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { useChatThinking } from '../../context/useChatThinking';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../../settings/settingsSections';
+import { sessionDefaultsAnchor } from '../../services/sessionSettings';
 import { ModelCredential } from './ModelCredential';
 import { ModelCredentialSummary } from './ModelCredentialSummary';
 import { ModelPackSection } from './ModelPackSection';
@@ -111,7 +111,7 @@ function ModelMenu({
   children,
 }: ModelMenuProps) {
   const { modelsQuery, activeModelId, selectedPack, modelPacks, defaultModelPack, canReset, locked } = modelSwitch;
-  const location = useLocation();
+  const { LinkComponent, links } = useSessionHost();
   const { factoryId, modelScope } = useChatModelScope();
   const organizationScoped = useOrganizationScopedFactory();
   const catalog = modelsQuery.data ?? [];
@@ -150,12 +150,7 @@ function ModelMenu({
           ? {
               // Only organization credentials feed this list, so a personal connection would not show up in it.
               label: organizationScoped ? 'Add an organization credential' : 'Connect a provider',
-              render: (
-                <Link
-                  to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
-                  state={{ from: location }}
-                />
-              ),
+              render: <LinkComponent href={links.settings('models', sessionDefaultsAnchor(modelScope))} returnHere />,
             }
           : undefined
       }
@@ -205,7 +200,7 @@ export function ModelPicker() {
   const { modelLockedReason } = useChatSessionContext();
   const { status } = useChatConnection();
   const { isLoading, error } = useChatModels();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId, LinkComponent, links } = useSessionHost();
   const organizationScoped = useOrganizationScopedFactory();
 
   if (!activeModelId && (isLoading || status === 'connecting')) {
@@ -280,9 +275,9 @@ export function ModelPicker() {
           <Metadata>
             <Metadata.Item>{label}</Metadata.Item>
             <Metadata.Item>
-              <Link to={settingsSectionPath(factoryId, 'models')} className="underline underline-offset-2">
+              <LinkComponent href={links.settings('models')} className="underline underline-offset-2">
                 needs an organization credential
-              </Link>
+              </LinkComponent>
             </Metadata.Item>
           </Metadata>
         </span>

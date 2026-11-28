@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionBoundary, ChatSessionConfigProvider } from './ChatSessionProvider';
+import { RouterSessionHost } from './RouterSessionHost';
 
 export function ChatSessionTestProvider({
   children,
@@ -15,12 +16,14 @@ export function ChatSessionTestProvider({
   deferUntilMessagesReady?: boolean;
 }) {
   return (
-    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
-      <ChatPermissionsProvider>
-        <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={deferUntilMessagesReady}>
-          {children}
-        </ChatSessionBoundary>
-      </ChatPermissionsProvider>
-    </ChatSessionConfigProvider>
+    <RouterSessionHost>
+      <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+        <ChatPermissionsProvider>
+          <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady={deferUntilMessagesReady}>
+            {children}
+          </ChatSessionBoundary>
+        </ChatPermissionsProvider>
+      </ChatSessionConfigProvider>
+    </RouterSessionHost>
   );
 }

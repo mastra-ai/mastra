@@ -3,6 +3,7 @@ import assert from 'node:assert';
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../../chat/context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -54,16 +55,18 @@ function renderSection() {
 function renderAt(path: string, entry: string) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[entry]}>
-      <Routes>
-        <Route
-          path={path}
-          element={
-            <ChatSessionConfigProvider>
-              <SessionsSection />
-            </ChatSessionConfigProvider>
-          }
-        />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route
+            path={path}
+            element={
+              <ChatSessionConfigProvider>
+                <SessionsSection />
+              </ChatSessionConfigProvider>
+            }
+          />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

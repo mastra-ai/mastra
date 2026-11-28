@@ -1,15 +1,11 @@
 import type { PlanResume } from '@mastra/client-js';
 
 import { isPlanReadablePath, usePlanFile } from '../../../../hooks/use-fs';
-import {
-  isEndedPrompt,
-  useRespondAgentControllerSuspensionMutation,
-} from '../../../../hooks/useAgentControllerRunMutations';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
 import { parsePlanMarkdown, resolveInlinePlan } from '../components/submit-plan-source';
-import { useChatSessionContext } from '../context/useChatSessionContext';
+import { isEndedPrompt } from '../context/ChatSessionActionsContext';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { useChatTranscript } from '../context/useChatTranscript';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
 import type { TimelineEntry } from '../services/transcript';
 
 function pendingSubmitPlan(entries: TimelineEntry[]) {
@@ -21,7 +17,6 @@ function pendingSubmitPlan(entries: TimelineEntry[]) {
 }
 
 export function usePendingPlanFeedback() {
-  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const prompt = pendingSubmitPlan(transcript.entries);
   const inline = resolveInlinePlan(prompt?.suspendPayload, undefined);
@@ -37,12 +32,7 @@ export function usePendingPlanFeedback() {
     !fetched &&
     !file.isError &&
     (workspace.isPending || (Boolean(workspace.workspacePath) && file.isPending));
-  const respondMutation = useRespondAgentControllerSuspensionMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
+  const { respondToSuspension, replying } = useChatSessionActions();
 
   const submitFeedback = async (feedback: string) => {
     if (!prompt || !feedback.trim()) return;
@@ -56,7 +46,7 @@ export function usePendingPlanFeedback() {
       ...(plan ? { plan } : {}),
     };
     try {
-      await respondMutation.mutateAsync({ toolCallId: prompt.toolCallId, resumeData, quietWhenEnded: true });
+      await respondToSuspension(prompt.toolCallId, resumeData, { quietWhenEnded: true });
     } catch (error) {
       // Nothing will ever answer a prompt whose run has ended, so drop its card.
       // The caller decides what to do with the text instead.
@@ -69,7 +59,7 @@ export function usePendingPlanFeedback() {
   return {
     pending: Boolean(prompt),
     loading,
-    isSubmitting: respondMutation.isPending,
+    isSubmitting: replying,
     submitFeedback,
   };
 }

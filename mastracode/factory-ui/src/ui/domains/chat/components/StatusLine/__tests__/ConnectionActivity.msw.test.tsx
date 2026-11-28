@@ -1,6 +1,7 @@
 import { ComposerHeader } from '@mastra/playground-ui/components/Composer';
 import { act, cleanup, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../../context/RouterSessionHost';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
@@ -46,16 +47,18 @@ function ActivityFixture({ status, busy }: { status: ChatConnectionApi['status']
   };
   return (
     <MemoryRouter>
-      <ChatSessionContext.Provider value={session}>
-        <ChatConnectionContext.Provider value={{ status }}>
-          <ChatTranscriptContext.Provider value={transcript}>
-            <ComposerHeader open={notice !== undefined}>
-              {notice && <ComposerConnectionNotice notice={notice} />}
-            </ComposerHeader>
-            <ConnectionActivity />
-          </ChatTranscriptContext.Provider>
-        </ChatConnectionContext.Provider>
-      </ChatSessionContext.Provider>
+      <RouterSessionHost>
+        <ChatSessionContext.Provider value={session}>
+          <ChatConnectionContext.Provider value={{ status }}>
+            <ChatTranscriptContext.Provider value={transcript}>
+              <ComposerHeader open={notice !== undefined}>
+                {notice && <ComposerConnectionNotice notice={notice} />}
+              </ComposerHeader>
+              <ConnectionActivity />
+            </ChatTranscriptContext.Provider>
+          </ChatConnectionContext.Provider>
+        </ChatSessionContext.Provider>
+      </RouterSessionHost>
     </MemoryRouter>
   );
 }

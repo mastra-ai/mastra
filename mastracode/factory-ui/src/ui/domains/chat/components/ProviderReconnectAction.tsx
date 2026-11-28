@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link, useLocation } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import type { FactoryAuthState } from '../../auth/services/auth';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
+import type { SessionViewer } from '../context/SessionHostContext';
+import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -12,7 +11,7 @@ import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRig
 function teammatePayingForSession(
   modelScope: 'factory' | 'user' | undefined,
   owner: ThreadOwner | undefined,
-  auth: FactoryAuthState | undefined,
+  auth: SessionViewer | undefined,
 ): ThreadOwner | undefined {
   if (modelScope !== 'user' || !owner || !auth?.authEnabled) return undefined;
   if (owner.id === auth.user?.userId) return undefined;
@@ -20,10 +19,10 @@ function teammatePayingForSession(
 }
 
 export function ProviderReconnectAction() {
-  const location = useLocation();
+  const { LinkComponent, links } = useSessionHost();
   const { factoryId, modelScope, scopeLoading } = useChatModelScope();
   const { owner } = useChatSessionContext();
-  const authQuery = useFactoryAuth();
+  const authQuery = useSessionHost().data.useViewer();
   const payerUnknown = !factoryId || scopeLoading || authQuery.isPending;
   if (payerUnknown) return null;
 
@@ -34,12 +33,7 @@ export function ProviderReconnectAction() {
     <Button
       variant="ghost"
       size="sm"
-      render={
-        <Link
-          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
-          state={{ from: location }}
-        />
-      }
+      render={<LinkComponent href={links.settings('models', sessionDefaultsAnchor(modelScope))} returnHere />}
       iconEnd={<IconArrowRight aria-hidden="true" />}
     >
       Review credentials

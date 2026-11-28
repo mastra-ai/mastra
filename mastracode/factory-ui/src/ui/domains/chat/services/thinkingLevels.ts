@@ -5,7 +5,7 @@ import { DEFAULT_THINKING_LEVEL } from '@mastra/factory/default-thinking-level';
 import type { ThinkingLevelOption } from '@mastra/playground-ui/components/ThinkingLevel';
 import { thinkingLevelOptions } from '@mastra/playground-ui/domains/factory';
 
-import type { FactoryModelScope } from '../../workspaces/services/github';
+import type { FactoryModelScope } from '@internal/factory-contract';
 
 export { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '@mastra/playground-ui/domains/factory';
 

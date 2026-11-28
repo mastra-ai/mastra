@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -40,7 +41,9 @@ const gitStatusExit = exited('git', { exitCode: 128, success: false });
 function renderEntries(entries: TimelineEntry[]) {
   renderWithProviders(
     <MemoryRouter>
-      <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+      <RouterSessionHost>
+        <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }
@@ -50,7 +53,9 @@ describe('Transcript tool outcomes', () => {
     it('counts empty and false results as successful and keeps denied calls failed', async () => {
       renderWithProviders(
         <MemoryRouter>
-          <TranscriptEntries entries={[settledTools]} onApprove={() => {}} onRespond={() => {}} />
+          <RouterSessionHost>
+            <TranscriptEntries entries={[settledTools]} onApprove={() => {}} onRespond={() => {}} />
+          </RouterSessionHost>
         </MemoryRouter>,
       );
 
@@ -67,7 +72,9 @@ describe('Transcript tool outcomes', () => {
     it('keeps the line busy, with no outcome, until the call settles', () => {
       renderWithProviders(
         <MemoryRouter>
-          <TranscriptEntries entries={[runningTools]} running onApprove={() => {}} onRespond={() => {}} />
+          <RouterSessionHost>
+            <TranscriptEntries entries={[runningTools]} running onApprove={() => {}} onRespond={() => {}} />
+          </RouterSessionHost>
         </MemoryRouter>,
       );
 

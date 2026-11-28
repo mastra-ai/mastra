@@ -4,8 +4,7 @@ import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useParams } from 'react-router';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useSessionHost } from '../context/SessionHostContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -23,8 +22,8 @@ function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value
 }
 
 export function EmptyThreadState() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const { data: activeFactory } = useFactoryQuery(factoryId);
+  const { factoryProjectId: factoryId } = useSessionHost();
+  const { data: activeFactory } = useSessionHost().data.useProject(factoryId);
   const { sessionId, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;

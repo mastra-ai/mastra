@@ -8,7 +8,7 @@ import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import { queryKeys } from '../../../../api/keys';
+import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { WakeSandbox } from './WakeSandbox';
 import { useWorkspaceChanges, useWorkspaceTree, useWorkspaceTrees } from '../../../../hooks/use-fs';
 import { changeMarks, NO_CHANGE_MARKS } from './files/change-marks';
@@ -80,7 +80,7 @@ export function WorkspaceFileBrowser({
   const marks = changes.isError ? NO_CHANGE_MARKS : (changes.data ?? NO_CHANGE_MARKS);
   const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
   const marksNotice = changeMarksNotice(changes, root.data?.available === true);
-  const indexHash = hashKey(queryKeys.workspaceFileIndex(workspacePath));
+  const indexHash = hashKey(factoryWebKeys.workspaceFileIndex(workspacePath));
   const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
   const openFound = (path: string) => {
     if (!showHidden && path.split('/').some(segment => segment.startsWith('.'))) onShowHiddenChange(true);
@@ -91,12 +91,12 @@ export function WorkspaceFileBrowser({
   // The index refetches with the tree, but only shows while finding.
   const isRefreshing =
     useIsFetching({
-      queryKey: queryKeys.workspaceTreeScope(workspacePath),
+      queryKey: factoryWebKeys.workspaceTreeScope(workspacePath),
       predicate: query => finder.finding || query.queryHash !== indexHash,
     }) > 0;
   const refresh = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
+    void queryClient.invalidateQueries({ queryKey: factoryWebKeys.workspaceTreeScope(workspacePath) });
+    void queryClient.invalidateQueries({ queryKey: factoryWebKeys.workspaceChanges(workspacePath), exact: true });
   };
   const openPaths = Object.keys(openFolders).filter(path => isOpenAndShown(path, { open: openFolders, showHidden }));
   const results = useWorkspaceTrees(workspacePath, visible ? openPaths : []);

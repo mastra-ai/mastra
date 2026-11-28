@@ -1,22 +1,22 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useDocumentTitle } from '../../../../hooks/useDocumentTitle';
 import { useAgentControllerThreads } from '../../../../hooks/useAgentControllerThreads';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
-import { updateCachedSessionTitle } from '../../../../hooks/useWorkspaces';
-import { useSessionCard } from '../../factory/hooks/useSessionCard';
-import { useSessionRepository } from '../../factory/hooks/useSessionRepository';
 import { workItemReference } from '@mastra/playground-ui/domains/factory';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
+const noSessionCard = () => ({ item: undefined });
+const noSessionRepository = () => ({ repository: undefined });
+
 /** Tab title for the open thread: the session card's reference (`PR #1567`, `ENG-123`), else the thread title. */
 export function PageTitle() {
-  const { factoryId, threadId } = useParams<{ factoryId?: string; threadId?: string }>();
+  const { factoryProjectId: factoryId, threadId, data } = useSessionHost();
+  const useSessionCard = data.useSessionCard ?? noSessionCard;
+  const useSessionRepository = data.useSessionRepository ?? noSessionRepository;
   const { sessionId: chatSessionId, threadTags, baseUrl, resourceReady } = useChatSessionContext();
-  const queryClient = useQueryClient();
   const routeSessionId = useRouteSessionId();
   const { item } = useSessionCard();
   const { repository } = useSessionRepository();
@@ -34,8 +34,8 @@ export function PageTitle() {
 
   useEffect(() => {
     if (!routeSessionId || !threadTitle) return;
-    void updateCachedSessionTitle(queryClient, factoryId, routeSessionId, threadTitle);
-  }, [factoryId, queryClient, routeSessionId, threadTitle]);
+    void data.onSessionTitleChanged(factoryId, routeSessionId, threadTitle);
+  }, [data, factoryId, routeSessionId, threadTitle]);
 
   useDocumentTitle(reference ?? threadTitle);
   return null;

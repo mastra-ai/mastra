@@ -1,10 +1,10 @@
 import { CommandPaletteDialog } from '@mastra/playground-ui/components/CommandPalette';
-import { useParams } from 'react-router';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 
 import { FactoryGlobalSearchContent } from './FactoryGlobalSearchContent';
 
 export function GlobalSearchDialog({ closeSearch }: { closeSearch: () => void }) {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const updateOpen = (open: boolean) => {
     if (!open) closeSearch();
   };

@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useLocation, useNavigate } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useVoiceSettings } from '../../../../hooks/use-voice-settings';
-import { VOICE_INPUT_ANCHOR, settingsSectionPath } from '../../settings/settingsSections';
+import { VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
 import { voiceDictationSupported } from './useVoiceDictation';
 import type { VoiceDictation, VoiceDictationState } from './useVoiceDictation';
 import { IconMicrophone } from '@mastra/playground-ui/icons/central/IconMicrophone';
@@ -28,8 +28,7 @@ function VoiceIcon({ state }: { state: VoiceDictationState }) {
 }
 
 function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { navigate, links } = useSessionHost();
   const settingsQuery = useVoiceSettings(factoryId);
   const { state, start, stop } = dictation;
   const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === null;
@@ -41,9 +40,7 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
         variant="ghost"
         size="icon-sm"
         tooltip="Set up voice input in settings"
-        onClick={() =>
-          navigate(settingsSectionPath(factoryId, 'models', VOICE_INPUT_ANCHOR), { state: { from: location } })
-        }
+        onClick={() => navigate(links.settings('models', VOICE_INPUT_ANCHOR), { returnHere: true })}
       >
         <IconMicrophoneOff />
       </Button>

@@ -1,6 +1,6 @@
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useOverlays } from '../../../lib/overlays';
-import { useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useGlobalSearchControls } from '../../search/hooks/useGlobalSearchControls';
@@ -9,7 +9,7 @@ import { useAbortAgentControllerMutation } from '../../../../hooks/useAgentContr
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryProjectId: factoryId } = useSessionHost();
   const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const { closeSearch } = useGlobalSearchControls();

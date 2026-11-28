@@ -1,3 +1,4 @@
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { memo, useState } from 'react';
@@ -6,8 +7,6 @@ import type { UseQueryResult } from '@tanstack/react-query';
 
 import type { WorkspaceChanges, WorkspaceChangesScope } from '../../../../api/types';
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelPage, WorkspaceSectionSlots } from '../context/WorkspacePanelContext';
 import { overviewClass } from '../layout';
 import type { WorkspacePanelSize } from '../layout';
@@ -79,7 +78,8 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
   sessionId,
   page,
 }: WorkspaceViewerPanelProps) {
-  const session = useUserSessionQuery(sessionId);
+  const { data } = useSessionHost();
+  const session = data.useUserSession(sessionId);
   const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
@@ -90,7 +90,7 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
   // Asking for changes or opening a view wakes the sandbox, so the overview may then read changes freely.
   const [wokeSandbox, setWokeSandbox] = useState(false);
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible && (readsChanges || wokeSandbox) });
-  const factory = useFactoryQuery(factoryProjectId);
+  const factory = data.useProject(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
     : undefined;

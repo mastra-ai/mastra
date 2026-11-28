@@ -5,7 +5,7 @@ import {
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { useSessionHost } from './SessionHostContext';
 
 import {
   useClearAgentControllerGoalMutation,
@@ -19,8 +19,7 @@ import {
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, isSlashCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -41,10 +40,8 @@ function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const factoryQuery = useFactoryQuery(factoryId);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { factoryProjectId: factoryId, navigate, links } = useSessionHost();
+  const factoryQuery = useSessionHost().data.useProject(factoryId);
   const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
@@ -70,10 +67,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { thinkingDefault, setLevel, resetLevel } = useChatThinking();
 
   const openSessionDefaults = () => {
-    if (factoryId)
-      void navigate(settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope)), {
-        state: { from: location },
-      });
+    if (factoryId) navigate(links.settings('models', sessionDefaultsAnchor(modelScope)), { returnHere: true });
   };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;

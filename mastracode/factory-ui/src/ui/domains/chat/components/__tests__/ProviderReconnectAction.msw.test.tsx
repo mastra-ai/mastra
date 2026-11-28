@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -44,9 +45,11 @@ function serveSession(modelScope: 'factory' | 'user') {
 function renderAction(session: ChatSessionContextApi) {
   renderWithProviders(
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
-      <ChatSessionContext.Provider value={session}>
-        <ProviderReconnectAction />
-      </ChatSessionContext.Provider>
+      <RouterSessionHost>
+        <ChatSessionContext.Provider value={session}>
+          <ProviderReconnectAction />
+        </ChatSessionContext.Provider>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

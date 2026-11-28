@@ -3,10 +3,13 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import { RejectedReplyError, isEndedPrompt } from '../ui/domains/chat/context/ChatSessionActionsContext';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
 } from '../ui/domains/chat/services/agentControllerClient';
+
+export { RejectedReplyError, isEndedPrompt };
 
 interface AgentControllerRunMutationArgs {
   agentControllerId: string;
@@ -94,21 +97,6 @@ export function useRespondAgentControllerSuspensionMutation(args: AgentControlle
       void invalidateSession();
     },
   });
-}
-
-export class RejectedReplyError extends Error {
-  constructor(readonly reason: string | undefined) {
-    super(
-      reason === 'no_pending_suspension'
-        ? 'This request is no longer waiting for a reply. Its run has ended.'
-        : 'Your reply was not delivered. Someone may have already answered it.',
-    );
-  }
-}
-
-/** True when nothing will ever answer the prompt, so its card should go. */
-export function isEndedPrompt(error: unknown): boolean {
-  return error instanceof RejectedReplyError && error.reason === 'no_pending_suspension';
 }
 
 /** The server answers a reply it can't deliver with 200 and `ok: false`. */

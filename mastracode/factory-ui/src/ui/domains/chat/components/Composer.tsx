@@ -9,23 +9,17 @@ import { useComposerCommands } from '@mastra/playground-ui/components/Composer';
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { SessionComposer } from '@mastra/playground-ui/domains/chat/transcript';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
-import { useQueryClient } from '@tanstack/react-query';
 import { useContext, useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
-import { useMatch, useNavigate, useParams } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
-import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import {
-  isEndedPrompt,
-  useAbortAgentControllerMutation,
-  useSendAgentControllerMessageMutation,
-} from '../../../../hooks/useAgentControllerRunMutations';
-import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useChatConnection } from '../context/useChatConnection';
 import { DraftSessionStartContext } from '../context/DraftSessionStartContext';
 import { useChatModels } from '../context/useChatModels';
+import { isEndedPrompt } from '../context/ChatSessionActionsContext';
+import { useChatSessionActions } from '../context/useChatSessionActions';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
@@ -34,7 +28,6 @@ import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
 import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession, isSlashCommand } from '../services/commands';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { mergeDictation } from '../services/dictation';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
 import { StatusLine } from './StatusLine';
@@ -63,13 +56,11 @@ function sendTitleFor(state: {
 
 export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
-  const { factoryId } = useParams<{ factoryId: string }>();
-  const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
-  const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
+  const { factoryProjectId: factoryId, routeKind, navigate, links } = useSessionHost();
+  const onDraftComposer = routeKind === 'draft';
+  const onUserDraft = routeKind === 'user-draft';
   const draftStart = useContext(DraftSessionStartContext);
   const onDraft = onUserDraft || draftStart !== undefined;
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const connectionNotice = useComposerConnectionNotice(status);
   const connectionLost = connectionNotice !== undefined;
@@ -86,16 +77,8 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
     runComposerCommand,
   } = useChatCommands();
 
-  const hookArgs = {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  };
   const { annotations, takeAnnotations, restoreAnnotations } = useChatAnnotations();
-  const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
-  const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
-  const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const actions = useChatSessionActions();
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
@@ -149,7 +132,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   });
 
   const createThread = async () => {
-    const thread = await createThreadMutation.mutateAsync(undefined);
+    const thread = await actions.createThread();
     reset(thread.id);
     return thread.id;
   };
@@ -167,10 +150,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
         ],
       },
     };
-    queryClient.setQueryData(
-      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, sessionId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
-      [message],
-    );
+    actions.seedThreadMessages?.(threadId, [message]);
   };
 
   const send = async (text: string, files: PendingImage[]) => {
@@ -179,14 +159,14 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
     if (onDraftComposer) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
-      await sendMutation.mutateAsync({ text, files: outgoing });
+      await actions.send({ text, files: outgoing });
       clearPendingHandoff(sessionId);
       seedThreadMessageCache(threadId, text, files);
-      void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
+      navigate(links.channelThread(threadId), { replace: true });
       return;
     }
     localUser(text, false, outgoing);
-    await sendMutation.mutateAsync({ text, files: outgoing });
+    await actions.send({ text, files: outgoing });
     clearPendingHandoff(sessionId);
   };
 
@@ -207,7 +187,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
     const localId = localUser(text, true);
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
-      await sendMutation.mutateAsync({ text });
+      await actions.send({ text });
       clearPendingHandoff(sessionId);
     } catch (error) {
       failLocalUser(localId);
@@ -351,7 +331,7 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
       showAbort={liveRun && !hasSubmittableDraft}
       sendDisabled={sendDisabled || !hasSubmittableDraft}
       sendTitle={sendTitle}
-      onAbort={() => void abortMutation.mutateAsync()}
+      onAbort={() => void actions.abort()}
       status={<StatusLine>{statusLead}</StatusLine>}
     />
   );

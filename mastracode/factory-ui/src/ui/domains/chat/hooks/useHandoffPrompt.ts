@@ -1,6 +1,6 @@
 import type { ModelSelectionRequest } from '@internal/factory-contract';
 import { useEffect, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { useSessionHost } from '../context/SessionHostContext';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
@@ -75,8 +75,7 @@ export function clearPendingHandoff(sessionId: string): void {
 }
 
 export function useHandoffPrompt(): void {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { location, navigate } = useSessionHost();
   const { sessionId, resourceId, sessionThreadId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { transcript, localUser, clearPending, pushNotice } = useChatTranscript();
   const { restoreComposerDraft } = useChatCommands();
@@ -111,7 +110,7 @@ export function useHandoffPrompt(): void {
     // be being created; it sends once the session exists.
     if (prompt !== undefined && !shown.current) {
       if (!unsentHandoffs.has(sessionId)) {
-        void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+        navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
         return;
       }
       shown.current = true;
@@ -140,7 +139,7 @@ export function useHandoffPrompt(): void {
     unsentHandoffs.delete(sessionId);
     const files = takeHandoffFiles(sessionId);
     // Never auto-resend after an interruption: the server may already have accepted the message.
-    void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+    navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     if (!prompt && files.length === 0) return;
     const outgoing = toOutgoing(files);
     void (async () => {

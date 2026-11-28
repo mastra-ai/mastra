@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
+import { RouterSessionHost } from '../../../context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
@@ -112,27 +113,29 @@ function renderPicker({ modelId, modelSelection }: { modelId: string; modelSelec
   );
   const rendered = renderWithProviders(
     <MemoryRouter>
-      <ChatSessionContext.Provider value={session}>
-        <ChatConnectionContext.Provider
-          value={{
-            status: 'ready',
-            state: {
-              controllerId: AGENT_CONTROLLER_ID,
-              sessionId: 'session-1',
-              resourceId: 'user-1',
-              modeId: 'build',
-              modelId,
-            },
-          }}
-        >
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <ModelPicker />
-              <Toaster position="bottom-right" />
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatConnectionContext.Provider>
-      </ChatSessionContext.Provider>
+      <RouterSessionHost>
+        <ChatSessionContext.Provider value={session}>
+          <ChatConnectionContext.Provider
+            value={{
+              status: 'ready',
+              state: {
+                controllerId: AGENT_CONTROLLER_ID,
+                sessionId: 'session-1',
+                resourceId: 'user-1',
+                modeId: 'build',
+                modelId,
+              },
+            }}
+          >
+            <ChatModelsProvider>
+              <ChatThinkingProvider>
+                <ModelPicker />
+                <Toaster position="bottom-right" />
+              </ChatThinkingProvider>
+            </ChatModelsProvider>
+          </ChatConnectionContext.Provider>
+        </ChatSessionContext.Provider>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
   return { ...rendered, requests, catalogReads: () => catalogReads };

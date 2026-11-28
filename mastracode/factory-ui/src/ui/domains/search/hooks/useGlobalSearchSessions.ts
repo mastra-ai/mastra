@@ -1,7 +1,7 @@
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { useSessionHost } from '../../chat/context/SessionHostContext';
 
 export function useGlobalSearchSessions(factoryId: string | undefined) {
-  const query = useWorkspacesQuery(factoryId);
+  const query = useSessionHost().data.useSessionList(factoryId);
 
   return {
     repositories: query.data ? [query.data] : [],

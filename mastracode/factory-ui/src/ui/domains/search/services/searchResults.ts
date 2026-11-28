@@ -1,5 +1,6 @@
+import type { SessionList } from '../../chat/context/SessionHostContext';
 import { cardContextSessions } from '@internal/factory-contract';
-import type { CardContextSession, WorkItem, WorkItemSessionRef } from '@internal/factory-contract';
+import type { CardContextSession, WorkItem, WorkItemSessionRef, FactoryUserSession } from '@internal/factory-contract';
 import { workItemNumber } from '@mastra/factory/work-items/card-number';
 import { matchesSearch, searchableCard } from '@mastra/factory/work-items/search-terms';
 import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/search-terms';
@@ -12,10 +13,8 @@ import {
   CARD_SOURCES,
 } from '@mastra/playground-ui/domains/factory';
 import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
-import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import { relationshipPath } from '../../factory/services/relationshipPath';
 import { threadPath } from '../../workspaces/services/factoryPaths';
-import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {
   getFactorySessionKind,
   getReviewBranchIdentifier,
@@ -202,7 +201,7 @@ function workItemsBySessionId(
 
 export function createSessionSearchGroups(input: {
   factoryId: string;
-  repositories: WorkspacesData[];
+  repositories: SessionList[];
   workItems: WorkItem[];
   /** The project's boards, once loaded, so each session reads by the phase it runs. */
   boards?: readonly BoardInfo[];

@@ -3,6 +3,7 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
+import { RouterSessionHost } from '../../context/RouterSessionHost';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -14,10 +15,12 @@ const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 function inFactory(ui: ReactElement, path = '/factories/fp-1/sessions/s-1') {
   return renderWithProviders(
     <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/factories/:factoryId/sessions/:sessionId" element={ui} />
-        <Route path="/sessions/:sessionId" element={ui} />
-      </Routes>
+      <RouterSessionHost>
+        <Routes>
+          <Route path="/factories/:factoryId/sessions/:sessionId" element={ui} />
+          <Route path="/sessions/:sessionId" element={ui} />
+        </Routes>
+      </RouterSessionHost>
     </MemoryRouter>,
   );
 }

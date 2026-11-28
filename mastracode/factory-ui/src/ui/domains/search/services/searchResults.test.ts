@@ -1,8 +1,7 @@
 import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItem } from '@internal/factory-contract';
-import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
+import type { WorkItem, FactoryUserSession } from '@internal/factory-contract';
 import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from './searchResults';
 
 const FACTORY_ID = 'factory-1';

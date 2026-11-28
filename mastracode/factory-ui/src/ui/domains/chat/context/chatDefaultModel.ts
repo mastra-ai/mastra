@@ -1,9 +1,8 @@
 import { defaultModelPack } from '@internal/factory-contract';
-import type { ModelPackSet } from '@internal/factory-contract';
+import type { ModelPackSet, FactoryModelScope, FactoryProject } from '@internal/factory-contract';
 import type { PersonalModelDefaultsResponse } from '@mastra/factory/routes/config';
 
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
-import type { FactoryModelScope, FactoryProject } from '../../workspaces/services/github';
 
 const NO_MODEL_PACKS: ModelPackSet = { modelPacks: [], defaultModelPackId: null };
 
