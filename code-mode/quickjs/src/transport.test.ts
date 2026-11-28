@@ -17,6 +17,7 @@ import { DEBUG_SYNC, TestQuickJSWASMModule, newQuickJSWASMModuleFromVariant } fr
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { QuickJsCodeModeTransport } from './transport';
+import type { QuickJsCodeModeTransportOptions } from './transport';
 
 function run(
   program: string,
@@ -68,6 +69,39 @@ describe('QuickJsCodeModeTransport', () => {
     `);
     expect(result.success).toBe(true);
     expect(result.result).toEqual([2, 4, 6]);
+  });
+
+  it('uses an injected stripTypes function instead of the default', async () => {
+    // The hosted-runtime escape hatch: a caller whose environment cannot load
+    // `ts-blank-space` (its `typescript` dependency reads CommonJS globals such
+    // as `__filename` at module init, which workerd does not provide) passes its
+    // own stripper. Prove it receives the whole program, that its output is what
+    // runs, and that the default is bypassed entirely — the input carries real
+    // TypeScript annotations, so a default-stripped run would return 1, not the
+    // sentinel.
+    const stripTypes = vi.fn((_code: string) => `(async () => { return 'injected'; })`);
+    const result = await run(`const value: number = 1; return value;`, {
+      transport: new QuickJsCodeModeTransport({ stripTypes }),
+    });
+
+    expect(result).toEqual({ success: true, result: 'injected', logs: [] });
+    expect(stripTypes).toHaveBeenCalledTimes(1);
+
+    const source = stripTypes.mock.calls[0]![0];
+    expect(source).toContain('const value: number = 1;');
+    // Receives the program wrapped in an async arrow, ready to `return`.
+    expect(source).toMatch(/^\(async \(\) => \{/);
+  });
+
+  it('treats an injected stripTypes function as the only stripper, even for plain JavaScript', async () => {
+    // An identity stripper should be used verbatim — proving the default is not
+    // also consulted and its result discarded.
+    const stripTypes = vi.fn((code: string) => code);
+    const result = await run(`return 40 + 2;`, {
+      transport: new QuickJsCodeModeTransport({ stripTypes }),
+    });
+    expect(result).toEqual({ success: true, result: 42, logs: [] });
+    expect(stripTypes).toHaveBeenCalledTimes(1);
   });
 
   it('captures console output as logs', async () => {
@@ -225,6 +259,133 @@ describe('QuickJsCodeModeTransport', () => {
     const result = await run(`while (true) {}`, { timeout: 300 });
     expect(result.success).toBe(false);
     expect(result.error?.name).toBe('TimeoutError');
+  });
+
+  // A hosted runtime can freeze or unreliably advance `Date.now()`, which makes
+  // the wall-clock timeout unable to stop a spinning program. These tests pin the
+  // clock-independent guards: the interrupt-tick budget and the `shouldInterrupt`
+  // predicate. With fake timers, neither the clock nor a host timer can fire, so
+  // the only way a `while (true) {}` can end is the guard under test.
+  describe('hosted-safe interruption (frozen clock)', () => {
+    const withFrozenClock = async <T>(fn: () => Promise<T>): Promise<T> => {
+      // Freeze both the system clock and host timers: neither `Date.now()` nor a
+      // `setTimeout` may fire, so the guard under test is the only exit.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+      try {
+        return await fn();
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it('interrupts a synchronous loop on maxInterruptTicks', async () => {
+      const result = await withFrozenClock(() =>
+        run(`while (true) {}`, {
+          transport: new QuickJsCodeModeTransport({ maxInterruptTicks: 2_000 }),
+          // Generous, and irrelevant: the frozen clock means it can never fire.
+          timeout: 5_000,
+        }),
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error?.name).toBe('ExecutionLimitError');
+      expect(result.error?.message).toMatch(/maxInterruptTicks/);
+      // Still fail-fast rather than hanging to the timeout.
+      expect(result.error?.name).not.toBe('TimeoutError');
+    });
+
+    it('interrupts a synchronous loop on shouldInterrupt', async () => {
+      const shouldInterrupt = vi.fn(() => true);
+      const result = await withFrozenClock(() =>
+        run(`while (true) {}`, {
+          transport: new QuickJsCodeModeTransport({ shouldInterrupt }),
+          timeout: 5_000,
+        }),
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error?.name).toBe('InterruptError');
+      expect(result.error?.message).toMatch(/shouldInterrupt/);
+      expect(shouldInterrupt).toHaveBeenCalled();
+    });
+
+    it('interrupts a program that only spins after an await', async () => {
+      // The interrupt handler reaches guest code between operations, so it must
+      // still fire after the program has yielded once.
+      const result = await withFrozenClock(() =>
+        run(`await Promise.resolve(); while (true) {}`, {
+          transport: new QuickJsCodeModeTransport({ shouldInterrupt: () => true }),
+          timeout: 5_000,
+        }),
+      );
+      expect(result.success).toBe(false);
+      expect(result.error?.name).toBe('InterruptError');
+    });
+
+    it('fails closed with InterruptError when shouldInterrupt throws', async () => {
+      // A throwing predicate must surface as an ordinary result, never a host
+      // crash or an unhandled rejection.
+      const result = await withFrozenClock(() =>
+        run(`while (true) {}`, {
+          transport: new QuickJsCodeModeTransport({
+            shouldInterrupt: () => {
+              throw new Error('predicate blew up');
+            },
+          }),
+          timeout: 5_000,
+        }),
+      );
+      expect(result.success).toBe(false);
+      expect(result.error?.name).toBe('InterruptError');
+    });
+
+    it('lets a program below the tick budget finish', async () => {
+      // The budget must not turn short programs into false positives.
+      const result = await withFrozenClock(() =>
+        run(`let sum = 0; for (let i = 0; i < 100; i++) sum += i; return sum;`, {
+          transport: new QuickJsCodeModeTransport({ maxInterruptTicks: 10_000_000 }),
+          timeout: 5_000,
+        }),
+      );
+      expect(result.success).toBe(true);
+      expect(result.result).toBe(4950);
+    });
+
+    it('counts the tick budget with an inclusive bound (>= maxInterruptTicks)', async () => {
+      // Pin the exact boundary: a run interrupts once its tick count reaches the
+      // budget. Counting predicate calls (which happen on every tick that does
+      // not hit the budget) at two adjacent budgets yields exactly one more call
+      // for the larger budget, independent of how many ticks the bootstrap
+      // consumes — a single absolute number would be brittle to that.
+      const predicateCallsAt = async (maxInterruptTicks: number): Promise<number> => {
+        let calls = 0;
+        const result = await withFrozenClock(() =>
+          run(`while (true) {}`, {
+            transport: new QuickJsCodeModeTransport({
+              maxInterruptTicks,
+              shouldInterrupt: () => {
+                calls += 1;
+                return false;
+              },
+            }),
+            timeout: 10_000,
+          }),
+        );
+        expect(result.error?.name).toBe('ExecutionLimitError');
+        return calls;
+      };
+
+      const atBudget = await predicateCallsAt(2_000);
+      const atBudgetPlusOne = await predicateCallsAt(2_001);
+      expect(atBudgetPlusOne - atBudget).toBe(1);
+    });
+
+    it('rejects a non-positive or non-integer maxInterruptTicks', () => {
+      expect(() => new QuickJsCodeModeTransport({ maxInterruptTicks: 0 })).toThrow(RangeError);
+      expect(() => new QuickJsCodeModeTransport({ maxInterruptTicks: -1 })).toThrow(RangeError);
+      expect(() => new QuickJsCodeModeTransport({ maxInterruptTicks: 1.5 })).toThrow(RangeError);
+    });
   });
 
   it('terminates a program that exceeds the memory limit', async () => {
@@ -451,10 +612,13 @@ describe('QuickJsCodeModeTransport handle disposal', () => {
    * process is a slow, hard-to-attribute memory bug. The debug build ships a
    * leak sanitizer, so assert against it directly rather than trusting review.
    */
-  async function expectNoLeaks(exercise: (transport: QuickJsCodeModeTransport) => Promise<unknown>) {
+  async function expectNoLeaks(
+    exercise: (transport: QuickJsCodeModeTransport) => Promise<unknown>,
+    options: Partial<QuickJsCodeModeTransportOptions> = {},
+  ) {
     const wasm = await newQuickJSWASMModuleFromVariant(DEBUG_SYNC);
     const sanitizer = new TestQuickJSWASMModule(wasm);
-    await exercise(new QuickJsCodeModeTransport({ module: wasm }));
+    await exercise(new QuickJsCodeModeTransport({ module: wasm, ...options }));
     expect(() => sanitizer.assertNoMemoryAllocated()).not.toThrow();
   }
 
@@ -496,6 +660,36 @@ describe('QuickJsCodeModeTransport handle disposal', () => {
       const result = await run(`while (true) {}`, { transport, timeout: 200 });
       expect(result.error?.name).toBe('TimeoutError');
     });
+  });
+
+  it('leaves nothing allocated after a tick-budget interruption with a job still queued', async () => {
+    // Fail-first against the pre-tick-budget transport, which ignores
+    // `maxInterruptTicks` and would report TimeoutError here instead. It is not
+    // evidence about the teardown drain in particular: the guest job is consumed
+    // by the pump that runs after evaluation, so the drain never sees it (see the
+    // teardown notes in the PR).
+    await expectNoLeaks(
+      async transport => {
+        const dispatched: string[] = [];
+        const result = await run(
+          `
+            Promise.resolve().then(() => external_late({}));
+            while (true) {}
+          `,
+          {
+            transport,
+            toolIds: ['late'],
+            dispatch: async tool => {
+              dispatched.push(tool);
+              return tool;
+            },
+          },
+        );
+        expect(result.error?.name).toBe('ExecutionLimitError');
+        expect(dispatched).toEqual(['late']);
+      },
+      { maxInterruptTicks: 200 },
+    );
   });
 });
 
