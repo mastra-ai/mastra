@@ -330,6 +330,7 @@ export function KnowledgePageDetail({
   mentionedBy = [],
   notesMore,
   childPages,
+  sequence,
   activity,
   links,
   onOpenPage,
@@ -354,6 +355,8 @@ export function KnowledgePageDetail({
   notesMore?: ReactNode;
   /** The page's children, when the host can list them. */
   childPages?: ReactNode;
+  /** A sequence page's items, shown under the body. */
+  sequence?: ReactNode;
   activity?: KnowledgePageActivityPayload[];
 }) {
   const firstHighlighted = useRef<HTMLLIElement | null>(null);
@@ -607,9 +610,11 @@ export function KnowledgePageDetail({
               <div ref={bodyRef} data-testid="knowledge-page-body" className="max-w-3xl">
                 {body}
               </div>
-            ) : (
+            ) : sequence ? null : (
               noBody
             )}
+
+            {sequence}
 
             {notes.length > 0 || notesMore ? (
               <KnowledgeDetailSection label="Notes" count={notesMore ? undefined : notes.length}>

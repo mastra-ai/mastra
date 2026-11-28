@@ -4,14 +4,25 @@ import type {
   KnowledgePageView,
   KnowledgeTreeChildren,
 } from '@mastra/core/knowledge';
-import type { KnowledgePageActivityEvent, KnowledgePageSearchHit } from '@mastra/core/storage';
+import type {
+  KnowledgePageActivityEvent,
+  KnowledgePageSearchHit,
+  KnowledgeSequenceItemRecord,
+  KnowledgeSequenceRecord,
+} from '@mastra/core/storage';
 import type { ClientOptions, Serialized } from '../types';
 import { createSseJsonTransform } from '../utils/stream-transforms';
 
 import { BaseResource } from './base';
 
 export type KnowledgeTreeResponse = Serialized<KnowledgeTreeChildren>;
-export type KnowledgePageResponse = Serialized<KnowledgePageView>;
+export type KnowledgePageResponse = Serialized<KnowledgePageView> & {
+  /**
+   * Set when the page is a sequence: how it orders its items and the property schemas it declares.
+   * Read its items with `sequence()`. Absent from older servers.
+   */
+  sequence?: Omit<KnowledgeSequenceRecord, 'pageId'>;
+};
 export type KnowledgeGraphResponse = Serialized<KnowledgePageGraph> & {
   /** Declared access grants onto the scopes shown; absent from servers on an older core. */
   grants?: Array<KnowledgeGraphScopeGrant & { principalLabel?: string }>;
@@ -32,6 +43,11 @@ export interface KnowledgeSearchResponse {
 export interface KnowledgeActivityResponse {
   events: Serialized<KnowledgePageActivityEvent>[];
   nextCursor?: string;
+}
+export interface KnowledgeSequenceResponse {
+  items: Serialized<KnowledgeSequenceItemRecord>[];
+  /** Null when there are no more items, and always null for a keyword search. */
+  nextCursor: string | null;
 }
 
 /** One committed write the caller can read. Ids they can't read are left out; re-read what changed. */
@@ -113,6 +129,32 @@ export class Knowledge extends BaseResource {
     params: { scopeId?: string; pageId?: string; cursor?: string; limit?: number } = {},
   ): Promise<KnowledgeActivityResponse> {
     return this.request(`${this.base}/activity${query(params)}`);
+  }
+
+  /**
+   * A sequence page's items in the sequence's order (newest first on a timeline, first position first on a
+   * position sequence), paged with `cursor`, narrowed to `since`/`until` (ISO date-times, timeline sequences
+   * only), one `parent` item, or item `types` and `untyped`. With `q`, the items matching those keywords
+   * instead, best first and not paged. Rejects with 400 for a date range on a position sequence, 404 when the
+   * page is not a sequence, and 501 where the store has no sequences.
+   */
+  sequence(
+    pageId: string,
+    params: {
+      since?: string;
+      until?: string;
+      order?: 'desc' | 'asc';
+      parent?: string;
+      types?: string[];
+      untyped?: boolean;
+      q?: string;
+      cursor?: string;
+      limit?: number;
+    } = {},
+  ): Promise<KnowledgeSequenceResponse> {
+    const { types, untyped, ...rest } = params;
+    const search = query({ ...rest, type: types, untyped: untyped === undefined ? undefined : String(untyped) });
+    return this.request(`${this.base}/pages/${encodeURIComponent(pageId)}/sequence${search}`);
   }
 
   /**

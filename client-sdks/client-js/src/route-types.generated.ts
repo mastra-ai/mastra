@@ -184,7 +184,7 @@ type InputShared_Auxiliary_283 =
           };
     };
 
-type InputShared_Auxiliary_740 =
+type InputShared_Auxiliary_741 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -229,27 +229,27 @@ type InputShared_Auxiliary_740 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_740[];
+      args: InputShared_Auxiliary_741[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_740;
+      arg: InputShared_Auxiliary_741;
     };
 
-type InputShared_Auxiliary_814 = {
+type InputShared_Auxiliary_815 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_814[] | undefined;
+  children?: InputShared_Auxiliary_815[] | undefined;
 };
 
-type Shared_Auxiliary_799 = {
+type Shared_Auxiliary_800 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_799[] | undefined;
+  children?: Shared_Auxiliary_800[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1861,7 +1861,7 @@ type InputShared_Type_90 = {
       }
     | undefined;
   steps: InputShared_Type_85[];
-  predicates: InputShared_Auxiliary_740[];
+  predicates: InputShared_Auxiliary_741[];
 };
 
 type InputShared_Type_91 = {
@@ -1875,7 +1875,7 @@ type InputShared_Type_91 = {
     | undefined;
   step: InputShared_Type_85;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_740;
+  predicate: InputShared_Auxiliary_741;
 };
 
 type InputShared_Type_92 =
@@ -4528,7 +4528,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_799[] | undefined;
+  files?: Shared_Auxiliary_800[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -13779,6 +13779,58 @@ export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /knowledge/:knowledgeKey/pages/:pageId/sequence
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams = GetKnowledgeKnowledgeKeyPagesPageId_PathParams;
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams = {
+  /** Items that happened at or after this ISO 8601 date-time; timeline sequences only */
+  since?: string | undefined;
+  /** Items that happened before this ISO 8601 date-time; timeline sequences only */
+  until?: string | undefined;
+  /** Along the sequence order: newest first on a timeline and first position first on a position sequence by default */
+  order?: ('desc' | 'asc') | undefined;
+  /** One parent item's externalId: that item and the items under it */
+  parent?: string | undefined;
+  /** Only items of these types; repeat the param for each, at most 20 */
+  type?: (string | string[]) | undefined;
+  /** Only untyped items, or with type also the untyped ones */
+  untyped?: ('true' | 'false') | undefined;
+  /** Keywords to match in item titles, bodies, link titles and property values; results are ranked, not paged */
+  q?: string | undefined;
+  cursor?: string | undefined;
+  limit?: number | undefined;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_Response = {
+  items: {
+    [key: string]: unknown;
+  }[];
+  nextCursor: string | null;
+};
+
+export type GetKnowledgeKnowledgeKeyPagesPageIdSequence_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams }) &
+    (GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams extends never
+      ? {}
+      : {} extends GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams
+        ? { query?: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams }
+        : { query: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyPagesPageIdSequence_PathParams;
+  queryParams: GetKnowledgeKnowledgeKeyPagesPageIdSequence_QueryParams;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyPagesPageIdSequence_Request;
+  response: GetKnowledgeKnowledgeKeyPagesPageIdSequence_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /knowledge/:knowledgeKey/events
 // ============================================================================
 export type GetKnowledgeKnowledgeKeyEvents_PathParams = GetKnowledgeKnowledgeKeyTree_PathParams;
@@ -19974,7 +20026,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_814[] | undefined;
+  files?: InputShared_Auxiliary_815[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -20032,7 +20084,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_814[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_815[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -25806,6 +25858,7 @@ export interface RouteTypes {
   'GET /knowledge/:knowledgeKey/pages/:pageId/links': GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
   'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
   'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
+  'GET /knowledge/:knowledgeKey/pages/:pageId/sequence': GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract;
   'GET /knowledge/:knowledgeKey/events': GetKnowledgeKnowledgeKeyEvents_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
@@ -26559,6 +26612,9 @@ export interface Client {
   };
   '/knowledge/:knowledgeKey/pages/:pageId/links': {
     GET: GetKnowledgeKnowledgeKeyPagesPageIdLinks_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/pages/:pageId/sequence': {
+    GET: GetKnowledgeKnowledgeKeyPagesPageIdSequence_RouteContract;
   };
   '/knowledge/:knowledgeKey/search': {
     GET: GetKnowledgeKnowledgeKeySearch_RouteContract;

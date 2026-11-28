@@ -5,6 +5,9 @@ import type {
   KnowledgeExplorerPageDetail,
   KnowledgeExplorerQueryState,
   KnowledgeExplorerSource,
+  KnowledgeExplorerSequenceInfo,
+  KnowledgeExplorerSequenceItem,
+  KnowledgeExplorerSequenceRequest,
   KnowledgeExplorerView,
 } from './KnowledgePageExplorer';
 import { KnowledgePageExplorer } from './KnowledgePageExplorer';
@@ -77,7 +80,147 @@ const gateway = page('gateway', 'projects', {
   key: 'gateway',
   position: 'a1',
 });
-const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway];
+const general = page('general', 'workspace', {
+  name: '#general',
+  key: 'general',
+  position: 'a2',
+  description: 'Messages from the #general Slack channel.',
+});
+const runbook = page('runbook', 'documents', { name: 'Refund runbook', key: 'refund-runbook' });
+const approve = page('approve', 'runbook', { name: 'Approve the refund', key: 'approve' });
+const pages = [linear, workspace, projects, documents, launch, roadmap, studio, gateway, general, runbook, approve];
+
+const SLACK = 'importer:slack';
+function item(
+  externalId: string,
+  hoursAgo: number,
+  name: string,
+  body: string,
+  extra: Partial<KnowledgeExplorerSequenceItem> = {},
+): KnowledgeExplorerSequenceItem {
+  return {
+    id: `e-${externalId}`,
+    sequenceId: 'general',
+    externalId,
+    occurredAt: HOURS_AGO(hoursAgo),
+    position: null,
+    writtenAt: HOURS_AGO(hoursAgo),
+    editedAt: null,
+    deletedAt: null,
+    author: { sourceId: `U-${name}`, name },
+    externalParentId: null,
+    type: null,
+    title: null,
+    body,
+    links: [],
+    properties: null,
+    pageId: null,
+    version: 1,
+    writtenBy: SLACK,
+    ...extra,
+  };
+}
+
+const ITEMS = [
+  item('1700000400.000100', 1, 'Ana', 'Release notes for 1.84 are drafted; please read them before 3pm.'),
+  item('1700000300.000200', 2, 'Ben', 'Looks good. One fix: the memory section should mention the new TTL.', {
+    externalParentId: '1700000100.000100',
+    editedAt: HOURS_AGO(1.5),
+    version: 2,
+  }),
+  item('deploy-184', 2.5, 'CI', '', {
+    type: 'deploy',
+    title: 'Deployed 1.84 to production',
+    body: null,
+    links: [{ url: 'https://github.com/mastra-ai/mastra/actions', title: 'Release workflow' }],
+    properties: { env: 'production', durationSeconds: 412, commit: 'b056717e' },
+    writtenBy: 'importer:ci',
+  }),
+  item('1700000200.000300', 3, 'Cleo', '', {
+    body: null,
+    deletedAt: HOURS_AGO(2.5),
+    externalParentId: '1700000100.000100',
+  }),
+  item('1700000100.000100', 5, 'Ana', 'Thread for 1.84 release notes review.'),
+  item('1699990000.000100', 30, 'Dev', 'CI is green again after the lease TTL flake fix.'),
+];
+
+const SEQUENCE: KnowledgeExplorerSequenceInfo = {
+  orderBy: 'timeline',
+  propertiesSchema: null,
+  itemTypes: {
+    deploy: {
+      label: 'Deploy',
+      propertiesSchema: {
+        type: 'object',
+        properties: { env: { type: 'string' }, durationSeconds: { type: 'number' } },
+      },
+    },
+  },
+};
+
+const RUNBOOK: KnowledgeExplorerSequenceInfo = {
+  orderBy: 'position',
+  propertiesSchema: null,
+  itemTypes: {
+    step: { label: 'Step', propertiesSchema: { type: 'object', properties: { owner: { type: 'string' } } } },
+  },
+};
+
+const STEPS: KnowledgeExplorerSequenceItem[] = [
+  item('check', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a0',
+    type: 'step',
+    title: 'Check the order and the payment',
+    body: 'Find the order in the admin and confirm the payment cleared.',
+    properties: { owner: 'Support', slaMinutes: 30 },
+  }),
+  item('page:approve', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a1',
+    title: 'Approve the refund',
+    body: null,
+    pageId: 'approve',
+  }),
+  item('notify', 0, 'Cleo', '', {
+    occurredAt: null,
+    position: 'a2',
+    type: 'step',
+    title: 'Tell the customer',
+    body: null,
+    links: [{ url: 'https://example.com/templates/refund', title: 'Refund email template' }],
+    properties: { owner: 'Support' },
+  }),
+];
+
+function runbookFor(request: KnowledgeExplorerSequenceRequest) {
+  let items = STEPS.filter(
+    item =>
+      (!request.types || (item.type !== null && request.types.includes(item.type))) && (!request.untyped || !item.type),
+  );
+  if (request.order === 'desc') items = [...items].reverse();
+  return { items, nextCursor: null };
+}
+
+function sequenceFor(request: KnowledgeExplorerSequenceRequest) {
+  let items = ITEMS.filter(
+    item =>
+      (!request.parent || item.externalParentId === request.parent || item.externalId === request.parent) &&
+      (!request.since || (item.occurredAt ?? '') >= request.since) &&
+      (!request.until || (item.occurredAt ?? '') < request.until) &&
+      (!request.types ||
+        (item.type !== null && request.types.includes(item.type)) ||
+        (request.untyped && !item.type)) &&
+      (!request.untyped || request.types || !item.type) &&
+      (!request.q || `${item.title ?? ''} ${item.body ?? ''}`.toLowerCase().includes(request.q.toLowerCase())),
+  );
+  if (request.order === 'asc') items = [...items].reverse();
+  if (request.q) return { items, nextCursor: null };
+  const start = request.cursor ? Number(request.cursor) : 0;
+  const page = items.slice(start, start + 4);
+  return { items: page, nextCursor: start + 4 < items.length ? String(start + 4) : null };
+}
 
 const notes: KnowledgeNotePayload[] = [
   {
@@ -108,7 +251,13 @@ function detail(target: KnowledgePagePayload): KnowledgeExplorerPageDetail {
     ancestors.unshift(parent);
     at = parent.parentId;
   }
-  return { page: target, notes: target.id === 'launch' ? notes : [], ancestors, related: pages };
+  return {
+    page: target,
+    notes: target.id === 'launch' ? notes : [],
+    ancestors,
+    related: pages,
+    sequence: target.id === 'general' ? SEQUENCE : target.id === 'runbook' ? RUNBOOK : undefined,
+  };
 }
 
 const SEARCH_HITS = [
@@ -158,6 +307,8 @@ function source(state: 'ready' | 'loading' | 'error'): KnowledgeExplorerSource {
           },
         ],
       }),
+    useSequence: (pageId, requests) =>
+      requests.map(request => ok(pageId === 'runbook' ? runbookFor(request) : sequenceFor(request))),
   };
 }
 
@@ -217,3 +368,7 @@ export const LongPageName: Story = { args: { view: 'page', pageId: 'gateway' } }
 export const Loading: Story = { args: { view: 'page', pageId: 'launch', state: 'loading' } };
 
 export const PageError: Story = { args: { view: 'page', pageId: 'launch', state: 'error' } };
+
+export const Sequence: Story = { args: { view: 'page', pageId: 'general' } };
+
+export const PositionSequence: Story = { args: { view: 'page', pageId: 'runbook' } };
