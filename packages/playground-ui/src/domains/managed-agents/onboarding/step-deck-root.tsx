@@ -44,14 +44,14 @@ export function StepDeckRoot({ children, current, label = 'Steps', actions }: St
   const headings = useRef<Array<HTMLHeadingElement | undefined>>([]);
   const [heights, setHeights] = useState<number[]>([]);
   const firstRender = useRef(true);
+  const stepKeys = steps.map(step => step.key).join(' ');
 
   useLayoutEffect(() => {
-    const observer = new ResizeObserver(() =>
-      setHeights(bodies.current.map(body => body?.getBoundingClientRect().height ?? 0)),
-    );
+    // offsetHeight ignores the scale on queued cards, so a card does not keep its shrunken height once active.
+    const observer = new ResizeObserver(() => setHeights(bodies.current.map(body => body?.offsetHeight ?? 0)));
     for (const body of bodies.current) if (body) observer.observe(body);
     return () => observer.disconnect();
-  }, [steps.length]);
+  }, [stepKeys]);
 
   useEffect(() => {
     if (firstRender.current) {

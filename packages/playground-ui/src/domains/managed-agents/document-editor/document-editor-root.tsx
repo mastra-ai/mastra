@@ -5,14 +5,18 @@ import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { PanelEdgeIcon } from '@/lib/resize/panel-edge-icon';
 
-export interface DocumentEditorProps {
+interface DocumentEditorFrameProps {
   breadcrumbs: ReactNode;
   title: string;
-  details?: ReactNode;
-  detailsOpen?: boolean;
-  onDetailsOpenChange?: (open: boolean) => void;
   children: ReactNode;
 }
+
+/** Details is controlled: a Details card comes with its open state, so its toggles always work. */
+type DocumentEditorDetailsState =
+  | { details?: undefined; detailsOpen?: undefined; onDetailsOpenChange?: undefined }
+  | { details: ReactNode; detailsOpen: boolean; onDetailsOpenChange: (open: boolean) => void };
+
+export type DocumentEditorProps = DocumentEditorFrameProps & DocumentEditorDetailsState;
 
 export function DocumentEditorRoot({
   breadcrumbs,

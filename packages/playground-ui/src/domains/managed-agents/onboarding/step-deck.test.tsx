@@ -1,12 +1,31 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StepDeck } from './step-deck';
 
+const observers = new Set<ResizeObserverStub>();
+
 class ResizeObserverStub implements ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+  readonly targets = new Set<Element>();
+  constructor(readonly callback: ResizeObserverCallback) {
+    observers.add(this);
+  }
+  observe(target: Element) {
+    this.targets.add(target);
+  }
+  unobserve(target: Element) {
+    this.targets.delete(target);
+  }
+  disconnect() {
+    this.targets.clear();
+    observers.delete(this);
+  }
+}
+
+function resize(target: Element) {
+  for (const observer of observers) {
+    if (observer.targets.has(target)) act(() => observer.callback([], observer));
+  }
 }
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', ResizeObserverStub));
@@ -58,5 +77,28 @@ describe('StepDeck', () => {
     expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Name' }).value).toBe('Support');
     rerender(deck(1));
     expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Instructions' }).value).toBe('Keep drafts.');
+  });
+
+  it('sizes a replaced step to its full, untransformed height when it grows', () => {
+    const replaced = (key: string) => (
+      <StepDeck current={1} label="New agent steps">
+        <StepDeck.Step key="basics" title="Basics">
+          <p>Basics</p>
+        </StepDeck.Step>
+        <StepDeck.Step key={key} title="Tools">
+          <p>{key} content</p>
+        </StepDeck.Step>
+      </StepDeck>
+    );
+    const { rerender } = render(replaced('tools'));
+    rerender(replaced('connections'));
+
+    const body = screen.getByText('connections content').parentElement;
+    if (!body) throw new Error('Missing step body');
+    Object.defineProperty(body, 'offsetHeight', { configurable: true, value: 500 });
+    body.getBoundingClientRect = () => DOMRect.fromRect({ height: 470 });
+    resize(body);
+
+    expect(screen.getByRole('region', { name: 'New agent steps' }).style.height).toBe('500px');
   });
 });

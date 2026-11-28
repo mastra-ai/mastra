@@ -1,17 +1,24 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatLayout } from './chat-layout';
 
 let mobile = false;
+const breakpointListeners = new Set<() => void>();
+
+function crossBreakpoint(next: boolean) {
+  mobile = next;
+  act(() => breakpointListeners.forEach(listener => listener()));
+}
 
 beforeEach(() => {
   mobile = false;
+  breakpointListeners.clear();
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
     matches: mobile && query.includes('max-width'),
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
+    addEventListener: (_type: string, listener: () => void) => breakpointListeners.add(listener),
+    removeEventListener: (_type: string, listener: () => void) => breakpointListeners.delete(listener),
   }));
 });
 
@@ -46,6 +53,26 @@ function DefaultThreadsLayout() {
 }
 
 describe('ChatLayout', () => {
+  it('keeps the draft message when the window crosses the mobile breakpoint', () => {
+    render(
+      <ChatLayout
+        threads={<nav aria-label="Threads">Threads</nav>}
+        details={<aside aria-label="Details">Details</aside>}
+        detailsOpen={false}
+        onDetailsOpenChange={() => undefined}
+      >
+        <textarea aria-label="Message" defaultValue="" />
+      </ChatLayout>,
+    );
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Draft reply' } });
+
+    crossBreakpoint(true);
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' }).value).toBe('Draft reply');
+
+    crossBreakpoint(false);
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Message' }).value).toBe('Draft reply');
+  });
+
   it('closes the default-open desktop threads with the keyboard and opens them again', () => {
     render(<DefaultThreadsLayout />);
     expect(screen.getByText('Threads').closest('[inert]')).toBeNull();

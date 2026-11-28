@@ -3,8 +3,10 @@ import { Avatar } from '@/ds/components/Avatar';
 import { Txt } from '@/ds/components/Txt';
 import { IconLock } from '@/ds/icons/central/IconLock';
 import { Icon } from '@/ds/icons/Icon';
+import { useLinkComponent } from '@/lib/framework';
 
 export interface ThreadRowAgent {
+  id: string;
   name: string;
   avatar?: string;
 }
@@ -19,16 +21,17 @@ export interface ThreadRowProps {
 }
 
 export function ThreadRow({ href, title, updated, agents, current, private: isPrivate }: ThreadRowProps) {
+  const { Link } = useLinkComponent();
   return (
     <li>
-      <a
+      <Link
         href={href}
         aria-current={current ? 'page' : undefined}
         className="flex items-center gap-2 rounded-lg p-1.5 text-muted-foreground hover:bg-fill-subtle aria-[current=page]:bg-fill aria-[current=page]:text-foreground"
       >
         <Avatar.Group size="inline" className="shrink-0">
           {agents.map(agent => (
-            <Avatar key={agent.name} name={agent.name} src={agent.avatar} size="inline" />
+            <Avatar key={agent.id} name={agent.name} src={agent.avatar} size="inline" />
           ))}
         </Avatar.Group>
         <Txt as="span" variant="body-sm" className="min-w-0 flex-1 truncate">
@@ -44,7 +47,7 @@ export function ThreadRow({ href, title, updated, agents, current, private: isPr
         <Txt as="span" variant="caption" tone="muted" className="shrink-0 tabular-nums">
           {updated}
         </Txt>
-      </a>
+      </Link>
     </li>
   );
 }

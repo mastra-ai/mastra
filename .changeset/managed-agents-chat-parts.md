@@ -12,7 +12,14 @@ Added the parts for a managed agent's chat page, and a few small additions they 
 - `SearchInput` takes an `action` for a control at the end of the field, and `ProviderLogo` takes `tinted` for one-color logos that should follow the text color.
 
 ```tsx
-<ChatLayout threads={<ThreadsCard>…</ThreadsCard>} details={<DetailsCard>…</DetailsCard>} detailsOpen onDetailsOpenChange={setOpen}>
+const [detailsOpen, setDetailsOpen] = useState(true);
+
+<ChatLayout
+  threads={<ThreadsCard>…</ThreadsCard>}
+  details={<DetailsCard>…</DetailsCard>}
+  detailsOpen={detailsOpen}
+  onDetailsOpenChange={setDetailsOpen}
+>
   {conversation}
-</ChatLayout>
+</ChatLayout>;
 ```
