@@ -205,8 +205,8 @@ jobs:
           # The check only needs pnpm workspace discovery, git and network.
           install-dependencies: 'false'
 
-      - name: Test npm package existence check, publish and placeholder scripts
-        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs .github/scripts/sync-docs.test.mjs
+      - name: Test npm package existence check, publish, release guard and placeholder scripts
+        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs .github/scripts/release-guards.test.mjs scripts/npm-placeholder-publish.test.mjs .github/scripts/sync-docs.test.mjs
 
       - name: Test the test-tier scripts
         run: node --test scripts/test-tiers/*.test.mjs

@@ -1,4 +1,7 @@
 name: Publish to npm
+# Dane finds the run it dispatched by this title, and the stable guard uses it
+# to tell an alpha publish from a stable one on the same commit.
+run-name: npm publish ${{ inputs.publish_type }} on ${{ github.ref_name }}
 
 permissions:
   contents: write
@@ -17,6 +20,7 @@ on:
           - enter-prerelease
           - snapshot
           - playground-snapshot
+          - rollback
         default: prerelease
       tag:
         description: 'npm tag (for snapshot: custom tag, otherwise auto-determined)'
@@ -27,28 +31,31 @@ on:
         required: false
         type: boolean
         default: false
-  push:
-    branches:
-      - main
+      rollback_versions:
+        description: 'rollback: comma-separated <package>@<version> list to point latest back at'
+        required: false
+        type: string
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   # ===========================================
-  # PRERELEASE: Triggered on push to main/0.x
+  # PRERELEASE: Dane dispatches it on the open release branch once the
+  # branch head's checks are green. Nothing publishes alphas from main.
   # ===========================================
   prerelease:
     if: |
       github.repository == 'mastra-ai/mastra' &&
-      (
-        (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: version packages') && github.event.head_commit.author.username == 'dane-ai-mastra[bot]') ||
-        (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_type == 'prerelease')
-      )
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish_type == 'prerelease'
     runs-on: ubuntu-latest
     permissions:
+      actions: read
+      checks: read
       contents: read
       issues: write
       id-token: write
+      statuses: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -58,6 +65,17 @@ jobs:
           # Partial clone: full history without every historical file version.
           filter: blob:none
           persist-credentials: false
+
+      # Alphas come only from the one open release branch, and only for a head
+      # whose checks passed. Another alpha versioned anywhere else conflicts in
+      # every package.json when the branch merges back.
+      - name: Guard - only the open release branch publishes
+        run: node .github/scripts/release-guards.mjs branch --ref "$GITHUB_REF_NAME"
+
+      - name: Guard - checks on the release branch head (or the code under its version commit) are green
+        run: node .github/scripts/release-guards.mjs checks --sha "$GITHUB_SHA"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
@@ -167,7 +185,8 @@ jobs:
           REPO: ${{ github.event.repository.name }}
 
   # ===========================================
-  # STABLE RELEASE: Manual trigger only
+  # STABLE RELEASE: the published alpha on the open release branch plus one
+  # version commit. Publishes under pre-latest, then moves latest.
   # ===========================================
   stable:
     if: |
@@ -176,6 +195,7 @@ jobs:
       github.event.inputs.publish_type == 'stable'
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: read
       id-token: write
     outputs:
@@ -189,6 +209,9 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Guard - only the open release branch publishes
+        run: node .github/scripts/release-guards.mjs branch --ref "$GITHUB_REF_NAME"
+
       - name: Dane App Auth
         id: app-auth
         uses: ./.github/actions/app-auth
@@ -199,30 +222,30 @@ jobs:
           permission-contents: write
           permission-issues: write
 
-      - name: Re-checkout main with app token
+      # The dispatched commit, not the branch tip: what was approved is what ships.
+      - name: Re-checkout the release branch with app token
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
           token: ${{ steps.app-auth.outputs.token }}
-          ref: main
+          ref: ${{ github.sha }}
           # Changesets looks up the commit that added each pending changeset (and
-          # its parent) to write changelog links, so it needs main's history back
-          # to the last stable release. Partial clone: full history without every
+          # its parent) to write changelog links, so it needs history back to the
+          # last stable release. Partial clone: full history without every
           # historical file version.
           fetch-depth: 0
           filter: blob:none
           fetch-tags: true
           persist-credentials: true
 
-      - name: Check for pre.json file existence
-        id: check_files
-        shell: bash
+      # "Re-run" keeps the dispatched (alpha) commit; if an earlier attempt already pushed the
+      # stable version commit on top of it, build on that commit instead of versioning again
+      # (a second version commit could not be pushed).
+      - name: Guard - stable builds on the approved commit
+        id: head
         run: |
-          if [[ -f .changeset/pre.json ]]; then
-            echo "files_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "files_exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          node .github/scripts/release-guards.mjs stable-head --sha "$GITHUB_SHA" --ref "$GITHUB_REF_NAME"
+          git checkout -q "$(git rev-parse FETCH_HEAD)"
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
         name: Install pnpm
@@ -257,8 +280,20 @@ jobs:
       - name: Preflight - verify publishable packages exist on npm and trust this workflow
         run: node .github/scripts/check-npm-packages-exist.mjs --oidc --retry-404 300000
 
+      # Stable promotes a published alpha: every version at the alpha commit is
+      # on npm and a prerelease publish succeeded for it. A commit pushed after
+      # the alpha (even one without a changeset) is refused. On a rerun the
+      # dispatched commit is the already-pushed version commit; its parent is
+      # the alpha.
+      - name: Guard - the release branch head is the published alpha
+        id: alpha
+        run: node .github/scripts/release-guards.mjs alpha --sha "$HEAD_SHA"
+        env:
+          HEAD_SHA: ${{ steps.head.outputs.sha }}
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Exit prerelease mode
-        if: steps.check_files.outputs.files_exists == 'true'
+        if: steps.alpha.outputs.versioned == 'false'
         run: |
           pnpm changeset-cli pre exit
           pnpm changeset-cli version
@@ -268,21 +303,44 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
+      # The stable commit is not run through the suite; this is what backs
+      # "stable is the tested alpha".
+      - name: Guard - stable only changes versions, changelogs and changesets
+        run: node .github/scripts/release-guards.mjs diff --base "$ALPHA_SHA"
+        env:
+          ALPHA_SHA: ${{ steps.alpha.outputs.alpha_sha }}
+
       - name: Build packages
         run: pnpm build
 
       - name: Push version changes
-        if: steps.check_files.outputs.files_exists == 'true' && !inputs.dry_run
-        run: git push origin HEAD:main
+        if: steps.alpha.outputs.versioned == 'false' && !inputs.dry_run
+        run: git push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
-      - name: Publish packages
+      # Off latest, so users see nothing while this runs or if it fails; a rerun
+      # skips what is already published.
+      - name: Publish packages under pre-latest
         if: ${{ !inputs.dry_run }}
-        run: node .github/scripts/publish-packages.mjs
+        run: node .github/scripts/publish-packages.mjs --tag pre-latest
         env:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
+
+      - name: Verify every stable version is on npm
+        if: ${{ !inputs.dry_run }}
+        run: node .github/scripts/release-guards.mjs published
+
+      # One `npm dist-tag add` per package, skipping packages already on the
+      # new version, so a rerun finishes a partial move. npm has no
+      # all-or-nothing tag move. dist-tag needs a token: npm OIDC only covers
+      # publish.
+      - name: Move latest to the stable versions
+        if: ${{ !inputs.dry_run }}
+        run: node .github/scripts/release-guards.mjs move-latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
 
       - name: Get CLI version
         id: cli-version
@@ -336,7 +394,9 @@ jobs:
 
       - name: Publish packages - dry run
         if: ${{ inputs.dry_run }}
-        run: node .github/scripts/publish-packages.mjs --dry-run
+        run: |
+          node .github/scripts/publish-packages.mjs --tag pre-latest --dry-run
+          node .github/scripts/release-guards.mjs move-latest --dry-run
 
       - name: Add tags
         if: ${{ !inputs.dry_run }}
@@ -389,16 +449,13 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$(jq -n --arg coreVersion "$CORE_VERSION" '{inputData: {coreVersion: $coreVersion}}')"
 
+  # Manual only. After a stable, main stays out of prerelease mode: the next
+  # release cut enters it on its own branch.
   enter_prerelease:
-    needs: stable
     if: |
-      always() &&
       github.repository == 'mastra-ai/mastra' &&
       github.event_name == 'workflow_dispatch' &&
-      (
-        (github.event.inputs.publish_type == 'stable' && !inputs.dry_run && needs.stable.result == 'success') ||
-        github.event.inputs.publish_type == 'enter-prerelease'
-      )
+      github.event.inputs.publish_type == 'enter-prerelease'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -464,6 +521,47 @@ jobs:
           git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+
+  # ===========================================
+  # ROLLBACK: point latest back at earlier versions after a bad stable. No
+  # build and no publish; the same per-package dist-tag move stable uses.
+  # ===========================================
+  rollback:
+    if: |
+      github.repository == 'mastra-ai/mastra' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.publish_type == 'rollback'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js 24.x
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
+        with:
+          node-version: 24.22.1
+          registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
+
+      - name: Move latest back
+        run: |
+          if [[ -z "$ROLLBACK_VERSIONS" ]]; then
+            echo "::error::rollback needs rollback_versions, e.g. @mastra/core@1.84.0,mastra@1.39.0"
+            exit 1
+          fi
+          args=(move-latest --versions "$ROLLBACK_VERSIONS")
+          if [[ "$DRY_RUN" == 'true' ]]; then args+=(--dry-run); fi
+          node .github/scripts/release-guards.mjs "${args[@]}"
+        env:
+          ROLLBACK_VERSIONS: ${{ inputs.rollback_versions }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_DIST_TAG_TOKEN }}
 
   # ===========================================
   # PLAYGROUND SNAPSHOT: UI library, observability, and their workspace dependencies only
