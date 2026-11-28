@@ -570,7 +570,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     }
 
     const group = options?.group;
-    const hadMembership = this.#hasLocalMembership(topic, group);
+    // A subscription that is mid-unsubscribe no longer holds the broker
+    // membership, so it must not stop this one from subscribing.
+    const hadMembership = [...subscriptions.values()].some(
+      s => s.group === group && !this.#leavingSubscriptions.has(s),
+    );
     const wasConnected = Boolean(this.#clientSocket && !this.#clientSocket.destroyed);
     subscriptions.set(cb, { callback: cb, group });
     this.#subscriptions.set(topic, subscriptions);

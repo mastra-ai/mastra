@@ -1,5 +1,57 @@
 # @mastra/pg
 
+## 1.39.0-alpha.1
+
+### Minor Changes
+
+- Added `transactionTimeoutHeadroomMs` to `PostgresStore`, so transactions with a deadline make fewer round trips to the database. ([#31746](https://github.com/mastra-ai/mastra/pull/31746))
+
+  A transaction with a deadline sets its statement and lock timeouts before every statement, which doubles its round trips. With headroom, it sets them a little shorter than the time left and reuses them for that long. A statement may stop up to the headroom earlier, never later. Only the store's own statements reuse the timeouts. Your own SQL in the transaction (for example through `pgKnowledgeTransactionClient`) may change them, so the store sets them again after each of your statements. The default `0` keeps the current behavior.
+
+  ```ts
+  const store = new PostgresStore({
+    id: 'knowledge',
+    connectionString,
+    transactionTimeoutHeadroomMs: 1000,
+  });
+  ```
+
+### Patch Changes
+
+- Importer flushes now read an item's link targets in batches instead of one storage call per link: one read before the target pages are rendered, and one after to check that another importer has not taken a target over meanwhile. Pages with many links cost fewer database round trips. PostgreSQL and LibSQL read the nodes with one query. ([#31748](https://github.com/mastra-ai/mastra/pull/31748))
+
+  Knowledge importer storage gets a new optional `getNodes(bindingId, sourceIds)` method. Adapters that leave it out keep compiling and working: the importer then reads one `getNode` per link, as before.
+
+  ```ts
+  class MyImportersStorage extends KnowledgeImportersStorage {
+    // ...existing methods, getNode included...
+
+    // Optional: return the binding's nodes for these source IDs in one round trip.
+    async getNodes(bindingId: string, sourceIds: string[]) {
+      return db.importerNodes.findMany({ where: { bindingId, sourceId: { in: sourceIds } } });
+    }
+  }
+  ```
+
+- Importer flushes and link refreshes now read a page's parents in one storage call instead of one per level, so deep pages cost fewer database round trips. PostgreSQL and LibSQL answer it with one recursive query. ([#31747](https://github.com/mastra-ai/mastra/pull/31747))
+
+  Knowledge storage adapters get a new `getPageParents({ parentId, read })` method. It returns the parent and its ancestors, nearest first, up to the scope page. The base class implements it with one `getPage` per level, so adapters that do not override it keep working unchanged.
+
+  ```ts
+  const knowledge = await storage.getStore('knowledge');
+  if (page.parentId) {
+    // Nearest first: [parent, grandparent, ..., scope page]. Deleted parents are included, and the
+    // list ends early at a parent that is missing or outside `read`.
+    const parents = await knowledge!.getPageParents({ parentId: page.parentId, read: 'all' });
+    const breadcrumb = parents.reverse().map(parent => parent.name);
+  }
+  ```
+
+- Added storage for the stored-scorer versions an experiment pins (`scorerVersions`). Existing experiments tables gain the column automatically on startup. ([#31550](https://github.com/mastra-ai/mastra/pull/31550))
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+
 ## 1.39.0-alpha.0
 
 ### Minor Changes
