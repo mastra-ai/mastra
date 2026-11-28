@@ -824,7 +824,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
-  const observationalMemory = isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
+  // A call-level OM opt-in counts only if it is still on after merging with the Memory instance's
+  // config; otherwise the run saves through finalize like any other. Instance-only OM (#28886) still
+  // reads as off here; durable relies on the finalize flush for output-processor edits.
+  const observationalMemory =
+    isObservationalMemoryEnabled(memoryConfig?.observationalMemory) &&
+    isObservationalMemoryEnabled(
+      (memory ? memory.getMergedThreadConfig(memoryConfig) : memoryConfig)?.observationalMemory,
+    );
   if (execOptions.isTaskComplete) await loadDefaultOptions();
 
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
