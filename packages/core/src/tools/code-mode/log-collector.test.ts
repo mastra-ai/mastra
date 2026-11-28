@@ -36,6 +36,16 @@ describe('createCodeModeLogCollector — byte cap', () => {
       { maxLogBytes: 40 },
       ['a'.repeat(10), MARKER],
     ],
+    // An empty line has no bytes of its own; charging at least one byte keeps a
+    // finite byte cap bounding the line count too. Cap 30 leaves room for the
+    // 26-byte marker plus four one-byte lines.
+    [
+      'charges at least one byte per empty line',
+      Array.from({ length: 100 }, () => ''),
+      { maxLogBytes: 30 },
+      ['', '', '', '', MARKER],
+    ],
+    ['a zero-byte cap cannot retain even an empty line', [''], { maxLogBytes: 0 }, []],
   ])('%s', (_name, lines, options, expected) => {
     expect(collect(lines, options)).toEqual(expected);
   });
