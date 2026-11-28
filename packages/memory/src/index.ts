@@ -129,7 +129,39 @@ export type {
  * Returns the options object if enabled, undefined if disabled.
  * Inlined here to avoid importing runtime exports that don't exist on older @mastra/core versions.
  */
-type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model' | 'observation' | 'reflection'> & {
+type RetrievalOptions = {
+  vector?: boolean;
+  scope?: 'thread' | 'resource';
+  instructions?: string;
+  /**
+   * How long recall search waits, in milliseconds, for the query to be embedded and the vector store to answer.
+   * A slower search is cancelled and the agent is told to browse messages instead.
+   * @default 30000
+   */
+  searchTimeoutMs?: number;
+};
+
+// The largest delay Node timers accept; above it a timeout fires after 1 ms.
+const MAX_SEARCH_TIMEOUT_MS = 2_147_483_647;
+
+function resolveSearchTimeoutMs(retrieval: boolean | RetrievalOptions | undefined) {
+  const searchTimeoutMs = typeof retrieval === 'object' ? retrieval.searchTimeoutMs : undefined;
+  if (
+    searchTimeoutMs !== undefined &&
+    !(Number.isInteger(searchTimeoutMs) && searchTimeoutMs > 0 && searchTimeoutMs <= MAX_SEARCH_TIMEOUT_MS)
+  ) {
+    throw new Error(
+      `\`retrieval.searchTimeoutMs\` must be a whole number of milliseconds from 1 to ${MAX_SEARCH_TIMEOUT_MS}, received ${searchTimeoutMs}.`,
+    );
+  }
+  return searchTimeoutMs;
+}
+
+type MemoryObservationalMemoryOptions = Omit<
+  ObservationalMemoryOptions,
+  'model' | 'observation' | 'reflection' | 'retrieval'
+> & {
+  retrieval?: boolean | RetrievalOptions;
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
@@ -143,6 +175,13 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
   /** @deprecated Subconscious was removed; attach `Knowledge` to the agent instead. Setting it throws. */
   experimental_subconscious?: unknown;
+};
+
+/** A per-call memory config, as passed to `listTools`. Its `retrieval` also takes `searchTimeoutMs`. */
+type MemoryCallConfig = Omit<MemoryConfigInternal, 'observationalMemory'> & {
+  observationalMemory?:
+    | boolean
+    | (Omit<ObservationalMemoryOptions, 'retrieval'> & { retrieval?: boolean | RetrievalOptions });
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -159,9 +198,7 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
   observationalMemory?: boolean | MemoryObservationalMemoryOptions;
 };
 
-type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
-};
+type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions;
 
 /*
  * Compatibility note: the working-memory and system-reminder helpers below are
@@ -688,6 +725,7 @@ export class Memory extends MastraMemory {
         );
       }
     }
+    resolveSearchTimeoutMs(omConfig?.retrieval);
   }
 
   /**
@@ -1563,7 +1601,7 @@ ${workingMemory}`;
     }
   >({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
   private firstEmbed: Promise<any> | undefined;
-  protected async embedMessageContent(content: string) {
+  protected async embedMessageContent(content: string, abortSignal?: AbortSignal) {
     // Key by the content hash (not the content itself) to keep keys small. Use the
     // 64-bit hash: h32 is only 32 bits, so distinct contents collide after ~tens of
     // thousands of entries, which would return another message's cached embeddings.
@@ -1574,7 +1612,7 @@ ${workingMemory}`;
       return cached;
     }
     const chunks = this.chunkText(content);
-    const { embeddings, usage } = await this.embedValues(chunks);
+    const { embeddings, usage } = await this.embedValues(chunks, undefined, abortSignal);
 
     const result = {
       embeddings,
@@ -1633,18 +1671,33 @@ ${workingMemory}`;
   private async embedValues(
     values: string[],
     { embedder, embedderOptions }: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = this,
+    abortSignal?: AbortSignal,
   ) {
     if (typeof embedder === `undefined`) {
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
     // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
     const isFastEmbed = embedder.provider === `fastembed`;
-    if (isFastEmbed && this.firstEmbed instanceof Promise) {
-      // so wait for the first one
-      await this.firstEmbed;
+    // so wait for the first one. If it fails, the first waiter to wake up becomes the first embed and the rest
+    // wait for it in turn.
+    while (isFastEmbed && this.firstEmbed) {
+      const gate: Promise<void> = this.firstEmbed;
+      // A caller that gives up stops waiting right away instead of when the first embed finishes.
+      await new Promise<void>((resolve, reject) => {
+        abortSignal?.throwIfAborted();
+        const onAbort = () => reject(abortSignal!.reason);
+        abortSignal?.addEventListener('abort', onAbort, { once: true });
+        void gate.then(() => {
+          abortSignal?.removeEventListener('abort', onAbort);
+          resolve();
+        });
+      });
+      if (this.firstEmbed === gate) break;
     }
+    // A caller that gave up while waiting doesn't get an embed it no longer wants.
+    abortSignal?.throwIfAborted();
 
-    const options = { values, maxRetries: 3 };
+    const options = { values, maxRetries: 3, ...(abortSignal ? { abortSignal } : {}) };
     // Options share a public union; select the SDK-specific options alongside the model version.
     const model = embedder;
     let promise;
@@ -1679,7 +1732,16 @@ ${workingMemory}`;
         break;
     }
 
-    if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
+    if (isFastEmbed && !this.firstEmbed) {
+      // Later calls wait for the first one to finish but don't inherit its failure (e.g. a caller cancelling it).
+      const gate: Promise<void> = Promise.resolve(promise).then(
+        () => undefined,
+        () => {
+          if (this.firstEmbed === gate) this.firstEmbed = undefined;
+        },
+      );
+      this.firstEmbed = gate;
+    }
     const { embeddings, usage } = await promise;
     return { embeddings, usage };
   }
@@ -2667,6 +2729,7 @@ Notes:
     resourceId,
     topK = 10,
     filter,
+    abortSignal,
   }: {
     query: string;
     resourceId: string;
@@ -2676,6 +2739,8 @@ Notes:
       observedAfter?: Date;
       observedBefore?: Date;
     };
+    /** Cancels embedding the query, e.g. when a caller stops waiting for a slow embedder. */
+    abortSignal?: AbortSignal;
   }): Promise<{
     results: Array<{
       threadId: string;
@@ -2691,6 +2756,13 @@ Notes:
       throw new Error('searchMessages requires a vector store. Configure vector and embedder on your Memory instance.');
     }
 
+    // Name the step that failed, so a log tells an embedder outage apart from a vector store fault.
+    // A cancelled search keeps its own reason.
+    const failedAt = (step: string) => (error: unknown) => {
+      if (abortSignal?.aborted) throw error;
+      throw new Error(`${step} failed: ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    };
+
     // A self-embedding store takes the search string itself and embeds it with the model that
     // embedded the observations.
     const queries: Array<{ queryVector: number[] } | { queryText: string }> = [];
@@ -2698,11 +2770,16 @@ Notes:
     if (this.isSelfEmbedding) {
       queries.push({ queryText: query });
     } else {
-      const embedResult = await this.embedMessageContent(query);
+      const embedResult = await this.embedMessageContent(query, abortSignal).catch(failedAt('Embedding the query'));
       dimension = embedResult.dimension;
       queries.push(...embedResult.embeddings.map(queryVector => ({ queryVector })));
     }
-    const { indexName } = await this.createObservationEmbeddingIndex(dimension);
+    // An embedder can ignore the signal and answer late. Nobody waits for this search any more, so don't start
+    // more work for it.
+    abortSignal?.throwIfAborted();
+    const { indexName } = await this.createObservationEmbeddingIndex(dimension).catch(
+      failedAt('Opening the vector index'),
+    );
 
     const vectorFilter: VectorFilter = { resource_id: resourceId };
     if (filter?.threadId) {
@@ -2725,6 +2802,7 @@ Notes:
       observedAt?: Date;
     }> = [];
 
+    abortSignal?.throwIfAborted();
     await Promise.all(
       queries.map(async params => {
         // `queryText` is accepted only by self-embedding stores, so it is not on the shared
@@ -2734,7 +2812,7 @@ Notes:
           ...params,
           topK,
           filter: vectorFilter,
-        } as never);
+        } as never).catch(failedAt('Querying the vector store'));
         for (const r of results) {
           if (!r.metadata?.thread_id) {
             continue;
@@ -3026,7 +3104,7 @@ Notes:
     return !!retrieval.vector && !!this.vector && (!!this.embedder || this.isSelfEmbedding);
   }
 
-  public listTools(config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
+  public listTools(config?: MemoryCallConfig): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(config);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
@@ -3047,6 +3125,9 @@ Notes:
       tools.recall = recallTool(mergedConfig, {
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
+        // Validated again here: a per-call memory config never went through the constructor.
+        searchTimeoutMs: resolveSearchTimeoutMs(omConfig.retrieval),
+        logger: this.logger,
         getOMEngine: async () => {
           const om = await this.omEngine;
           return om?.getStorage().supportsObservationalMemoryHistorySearch ? om : null;

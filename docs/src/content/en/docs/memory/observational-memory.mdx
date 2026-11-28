@@ -342,7 +342,7 @@ Observations drop the original wording. With retrieval mode, each observation gr
 
 `retrieval: true` lets the agent browse raw messages, list the resource's threads and read other threads. No vector store is needed.
 
-`retrieval: { vector: true }` adds semantic search over observation groups, using the vector store and embedder configured on `Memory`. With a vector store that generates embeddings itself, leave the `embedder` out. See [server-side embeddings](/docs/memory/semantic-recall#server-side-embeddings). New observation groups are indexed in the background as they're created.
+`retrieval: { vector: true }` adds semantic search over observation groups, using the vector store and embedder configured on `Memory`. With a vector store that generates embeddings itself, leave the `embedder` out. See [server-side embeddings](/docs/memory/semantic-recall#server-side-embeddings). New observation groups are indexed in the background as they're created. When a search fails or takes longer than 30 seconds, the `recall` tool stops waiting, cancels the query embedding, and tells the agent to browse messages instead. The limit leaves room for the embedder to retry after rate limits. Raise it with `retrieval: { vector: true, searchTimeoutMs: 60_000 }` for a slow embedder, such as a local model on CPU. With fastembed, the first search on a new machine also downloads the model, so it can fall back to browsing. Later searches work normally.
 
 ```typescript
 const memory = new Memory({
