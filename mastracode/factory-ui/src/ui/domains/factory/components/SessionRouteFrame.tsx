@@ -8,6 +8,7 @@ import { WorkspaceFilesProvider } from '../../workspace-viewer/context/Workspace
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { useCardDraftFrame } from '../hooks/useCardDraftFrame';
 import { useThreadFrame } from '../hooks/useThreadFrame';
+import { RouterCardPanelHost } from './RouterCardPanelHost';
 import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 
 export interface SessionFrameSlots {
@@ -19,6 +20,15 @@ export interface SessionFrameSlots {
 
 /** One frame for a card draft and its thread, so a Start keeps the header and panel mounted. */
 export function SessionRouteFrame({ children }: { children: ReactNode }) {
+  const { factoryId = '' } = useParams<{ factoryId: string }>();
+  return (
+    <RouterCardPanelHost factoryId={factoryId}>
+      <SessionFrame>{children}</SessionFrame>
+    </RouterCardPanelHost>
+  );
+}
+
+function SessionFrame({ children }: { children: ReactNode }) {
   const { workItemId } = useParams<{ workItemId?: string }>();
   const thread = useThreadFrame();
   const { panel, title, titleMenu, headerCenter } = useCardDraftFrame(workItemId) ?? thread;

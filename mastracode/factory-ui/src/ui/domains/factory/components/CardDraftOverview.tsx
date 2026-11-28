@@ -24,7 +24,6 @@ export function CardDraftOverview({
     <CardOverview
       item={item}
       sessionItems={[item]}
-      factoryId={factory.id}
       boards={boards}
       boardsFailed={boardsFailed}
       repository={repository}

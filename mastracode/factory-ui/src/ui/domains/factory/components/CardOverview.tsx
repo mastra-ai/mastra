@@ -10,14 +10,11 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 
-import type { InstalledBoardInfo } from '../../../../api/types';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
-import { WorkspaceSectionSkeleton } from '../../workspace-viewer/components/WorkspaceSection';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { repositoryProvider } from '../hooks/useSessionRepository';
-import { cardProjectRepositoryId } from '../boardRepository';
-import type { PullRequestSubscription } from '../services/githubSubscriptions';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+import type { PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
+
+import { useCardPanelHost } from '../cardPanelHost';
+import type { CardPanelRepository, CardWorkspaceSlot } from '../cardPanelHost';
 import type { WorkItem } from '@internal/factory-contract';
 import { toMinute } from '../stageStays';
 import { CardDescription } from './CardDescription';
@@ -32,13 +29,13 @@ import { SectionLoadError } from './SectionLoadError';
 export { overviewSectionClass } from '@mastra/playground-ui/domains/factory';
 
 export function OverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
-  return <SharedOverviewSkeleton workspace={workspace ? <WorkspaceSectionSkeleton /> : null} />;
+  const host = useCardPanelHost();
+  return <SharedOverviewSkeleton workspace={workspace ? (host.workspaceSkeleton ?? null) : null} />;
 }
 
 export function CardOverview({
   item,
   sessionItems,
-  factoryId,
   boards,
   boardsFailed,
   repository,
@@ -49,18 +46,16 @@ export function CardOverview({
 }: {
   item: WorkItem;
   sessionItems: readonly WorkItem[];
-  factoryId: string;
   boards: readonly InstalledBoardInfo[] | undefined;
   boardsFailed: boolean;
-  repository: LinkedRepositoryPayload | undefined;
+  repository: CardPanelRepository | undefined;
   repositoryFailed: boolean;
   subscriptions: readonly PullRequestSubscription[];
   pullRequestsFailed: boolean;
-  workspace?: WorkspaceSlot;
+  workspace?: CardWorkspaceSlot;
 }) {
-  const factoryQuery = useFactoryQuery(factoryId);
   const now = useClock(toMinute);
-  const provider = repositoryProvider(repository);
+  const provider = repository?.provider === 'gitlab' ? 'gitlab' : 'github';
   const related = relatedWorkItemIndex(sessionItems)(item);
   const ownRequest = ownChangeRequest(item, repository?.slug, subscriptions);
   const sourceUrl = genericExternalWorkItemUrl(item);
@@ -82,18 +77,7 @@ export function CardOverview({
         ) : null
       }
       source={<CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
-      description={
-        <CardDescription
-          item={item}
-          projectRepositoryId={cardProjectRepositoryId(
-            factoryQuery.data?.repositories ?? [],
-            item,
-            repository?.projectRepositoryId,
-          )}
-          factoryId={factoryId}
-          repositoryFailed={repositoryFailed}
-        />
-      }
+      description={<CardDescription item={item} repository={repository} repositoryFailed={repositoryFailed} />}
       workspace={workspace?.({
         repository: repository && { slug: repository.slug, provider },
         changeRequest: ownRequest && {
@@ -115,7 +99,6 @@ export function CardOverview({
             <RelatedCards
               related={related}
               boards={boards}
-              factoryId={factoryId}
               repository={repository?.slug}
               subscriptions={subscriptions}
             />

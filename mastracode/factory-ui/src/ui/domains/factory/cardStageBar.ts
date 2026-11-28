@@ -1,6 +1,6 @@
 import { cardChangeRequest, contextLabel, phaseContext, isPullRequestSource } from '@internal/factory-contract';
 
-import type { InstalledPhaseInfo } from '../../../api/types';
+import type { InstalledPhaseInfo } from '@mastra/client-js';
 import { formatDuration } from '../../../lib/date/formatDuration';
 import {
   allowsMove,
@@ -13,8 +13,7 @@ import {
   isOpenChangeRequest,
   changeRequestReference,
 } from '@mastra/playground-ui/domains/factory';
-import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
-import type { PullRequestSubscription } from './services/githubSubscriptions';
+import type { BoardInfo, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 type Phase = InstalledPhaseInfo;

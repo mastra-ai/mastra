@@ -15,24 +15,20 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import type { InstalledBoardInfo } from '../../../../api/types';
-import { HrefLink } from '../../../ui/HrefLink';
-import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relationshipPath } from '../services/relationshipPath';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+import type { PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
+import { useCardPanelHost } from '../cardPanelHost';
 import type { WorkItem } from '@internal/factory-contract';
-import { threadPath } from '../../workspaces/services/factoryPaths';
 
 export function RelatedCardLink({
   item,
   boards,
-  factoryId,
   repository,
   liveSessions,
   subscriptions,
 }: {
   item: WorkItem;
   boards: readonly InstalledBoardInfo[] | undefined;
-  factoryId: string;
   repository: string | undefined;
   liveSessions: readonly string[];
   subscriptions: readonly PullRequestSubscription[];
@@ -40,7 +36,8 @@ export function RelatedCardLink({
   const session = Object.values(item.sessions)
     .filter(candidate => liveSessions.includes(candidate.sessionId))
     .at(-1);
-  const to = session ? threadPath(factoryId, session) : relationshipPath(item, factoryId);
+  const host = useCardPanelHost();
+  const to = host.relatedCardHref(item, session);
   const board = boardOf(boards, item);
   const stage = boards === undefined ? undefined : currentItemStage(item, board);
   const kind = stage === undefined ? undefined : boardPhaseIconKind(board, stage);
@@ -72,7 +69,7 @@ export function RelatedCardLink({
               label: phase,
             }
       }
-      LinkComponent={HrefLink}
+      LinkComponent={host.LinkComponent}
     />
   );
 }

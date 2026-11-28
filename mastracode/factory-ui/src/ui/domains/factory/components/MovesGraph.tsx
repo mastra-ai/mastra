@@ -1,7 +1,7 @@
 import { MovesGraph as SharedMovesGraph } from '@mastra/playground-ui/domains/factory';
 import type { MovesGraphLabels } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo } from '../../../../api/types';
+import type { InstalledBoardInfo } from '@mastra/client-js';
 import { trackMomentLabel, trackStartLabel } from '../../workspaces/services/sessionTrack';
 import { elapsedLabel } from '../cardStageBar';
 import { movesGraphPhases } from '../movesGraph';

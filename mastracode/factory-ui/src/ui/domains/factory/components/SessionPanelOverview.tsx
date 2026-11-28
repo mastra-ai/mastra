@@ -53,7 +53,6 @@ export function SessionPanelOverview({ workspace }: { workspace: WorkspaceSlot |
     <CardOverview
       item={card.item}
       sessionItems={card.sessionItems}
-      factoryId={factoryId}
       boards={card.boards}
       boardsFailed={card.boardsFailed}
       repository={repository}

@@ -6,7 +6,7 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import type { MovesGraphPhase } from '@mastra/playground-ui/domains/factory';
 
-import type { InstalledBoardInfo } from '../../../api/types';
+import type { InstalledBoardInfo } from '@mastra/client-js';
 import type { WorkItemStageEntry } from '@internal/factory-contract';
 
 /**
