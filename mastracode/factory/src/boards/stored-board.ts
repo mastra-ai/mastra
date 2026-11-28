@@ -1,57 +1,10 @@
-import { cardRuleGroupSchema } from '@internal/factory-contract';
+import { storedBoardFields, storedPhaseInputSchema, storedBoardDefinitionSchema } from '@internal/factory-contract';
 
 import { z } from 'zod';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { BoardDefinitionError, compileBoardDefinition, declarationOf, FACTORY_PHASE_TOOLS } from './define-board.js';
+import { BoardDefinitionError, compileBoardDefinition, declarationOf } from './define-board.js';
 import type { AnyBoardConfig, BoardPhase, BoardPhaseDefinition } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
-
-const storedRunnerSchema = z
-  .object({
-    skill: z.string().optional(),
-    context: z.string().optional(),
-    instructions: z.string().optional(),
-    goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).strict().optional(),
-  })
-  .strict();
-
-const storedExitToolSchema = z
-  .object({
-    id: z.string(),
-    autoApprove: z.boolean().optional(),
-    autoApproveWhen: cardRuleGroupSchema.optional(),
-  })
-  .strict();
-
-export const storedPhaseInputSchema = z
-  .object({
-    key: z.string(),
-    name: z.string(),
-    description: z.string().nullish(),
-    kind: z.enum(['resting', 'working', 'terminal']),
-    runner: storedRunnerSchema.nullish(),
-    nextPhases: z.array(z.string()).nullish(),
-    autoStart: z.boolean().optional(),
-    autoStartWhen: cardRuleGroupSchema.nullish(),
-    exitTool: storedExitToolSchema.nullish(),
-    tools: z.array(z.enum(FACTORY_PHASE_TOOLS)).nullish(),
-    outcomes: z.array(z.object({ key: z.string(), label: z.string(), to: z.string() }).strict()).nullish(),
-  })
-  .strict();
-
-function storedBoardFields() {
-  return {
-    name: z.string(),
-    description: z.string().nullish(),
-    phases: z.array(storedPhaseInputSchema).min(1, 'A board must define at least one phase.'),
-  };
-}
-
-/**
- * A board's editable fields without its key, the shape of a replace. Only the shape: the board
- * rules run once the key is known, through {@link storedBoardInputSchema}.
- */
-export const storedBoardDefinitionSchema = z.object(storedBoardFields()).strict();
 
 /**
  * A board as the API accepts it. Beyond the shape, it holds every rule `defineBoard()` enforces

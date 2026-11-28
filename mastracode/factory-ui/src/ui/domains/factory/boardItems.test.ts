@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { isPersistedCandidate, itemSessionSpec, metadataLabelColors, persistedSourceKeys } from './boardItems';
-import { workItemMeta } from './services/relationships';
+import {
+  isPersistedCandidate,
+  itemSessionSpec,
+  metadataLabelColors,
+  persistedSourceKeys,
+  workItemMeta,
+} from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {

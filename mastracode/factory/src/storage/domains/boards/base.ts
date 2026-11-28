@@ -10,11 +10,10 @@ import {
   reconcileIntakeOrder,
   routeEventsProblem,
 } from '@internal/factory-contract';
-import type { ArrivalKind, RouteArrivals, RouteEvent, RuleGroup } from '@internal/factory-contract';
+import type { ArrivalKind, RouteArrivals, RouteEvent, RuleGroup, FactoryPhaseTool } from '@internal/factory-contract';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
-import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import {
   DEFAULT_INTAKE_ROUTES,
   LINKED_PULL_REQUEST_ROUTE_KEY,

@@ -1,0 +1,168 @@
+import type { FactoryDecisionSummary, WorkItem } from '@internal/factory-contract';
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
+import type { ReactElement } from 'react';
+
+import { BoardStageIcon } from '../board';
+import { CARD_SOURCES } from '../board/card-sources';
+import { canMoveTo, canStartRun } from './board-card-state';
+import type { BoardCardOwner } from './board-card-state';
+import { boardLoop } from './board-flow';
+import { ActionIcon } from './board-icons';
+import { itemBoard, itemStageOptions } from './board-stages';
+import { awaitsTriageDecision, triageDecisions } from './card-primary-action';
+import type { CardMove } from './card-primary-action';
+import type { BoardStageId } from './stages';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconArrowBoxRight } from '@/ds/icons/central/IconArrowBoxRight';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
+
+export interface WorkItemMenuProps {
+  item: WorkItem;
+  columnStage: BoardStageId;
+  moves: CardMove[];
+  proposal?: FactoryDecisionSummary;
+  proposedRunLabel?: string;
+  approvingDecisionId?: string;
+  owner: BoardCardOwner;
+  /** Whether `owner` is what the board read, not a guess: a suggested run starts only then. */
+  ownerCurrent?: boolean;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
+  onMove: (toStage: string) => void;
+  /** Moves the card to a phase on another installed board. */
+  onMoveToBoard: (toBoard: string, toStage: string) => void;
+  onRemove: () => void;
+}
+
+/** A lane's available move. Plan approval remains a separate human decision. */
+function moveItem(move: CardMove, onMove: WorkItemMenuProps['onMove'], disabled: boolean): ReactElement {
+  return (
+    <DropdownMenu.Item key={move.label} disabled={disabled} onClick={() => onMove(move.stage)}>
+      <ActionIcon label={move.label} />
+      <span>{move.label}</span>
+    </DropdownMenu.Item>
+  );
+}
+
+export function WorkItemMenuItems({
+  item,
+  columnStage,
+  moves,
+  proposal,
+  proposedRunLabel,
+  approvingDecisionId,
+  owner,
+  ownerCurrent = true,
+  onApproveProposal,
+  onDismissProposal,
+  onMove,
+  onMoveToBoard,
+  onRemove,
+}: WorkItemMenuProps): ReactElement {
+  const catalog = useBoardCatalog(item.githubProjectId);
+  const boardId = itemBoard(item);
+  const board = catalog.data?.find(candidate => candidate.id === boardId);
+  // A board without a pull request loop moves cards only where the current phase declares.
+  const loop = boardLoop(board);
+  const custom = loop === undefined;
+  const targets = board?.phases.find(phase => phase.id === columnStage)?.transitions ?? [];
+  const stages = custom
+    ? (board?.phases
+        .filter(phase => targets.some(target => target.to === phase.id))
+        .map(phase => ({ id: phase.id, label: phase.name ?? phase.title, kind: phase.kind })) ?? [])
+    : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
+  const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
+  const decisions = triageDecisions(board);
+  // Every run-starting action would accept a held card as a side effect, so triage choices replace them.
+  const awaitsTriage = decisions.length > 0 && awaitsTriageDecision(item, columnStage, board);
+  const runsBlocked = !canStartRun(owner.kind);
+  const yourRequestInFlight = owner.kind === 'you';
+  const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
+  const otherBoards = catalog.data?.filter(candidate => candidate.id !== boardId) ?? [];
+  return (
+    <>
+      {awaitsTriage &&
+        decisions.map(choice => (
+          <DropdownMenu.Item
+            key={choice.stage}
+            disabled={!canMoveTo(owner.kind, phaseKind(choice.stage))}
+            onClick={() => onMove(choice.stage)}
+          >
+            <BoardStageIcon stage={choice.stage} />
+            <span>{choice.label}</span>
+          </DropdownMenu.Item>
+        ))}
+      {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
+      {suggestionForThisBoard !== undefined && !awaitsTriage && (
+        <DropdownMenu.Item
+          disabled={runsBlocked || !ownerCurrent}
+          onClick={() => onApproveProposal(suggestionForThisBoard.id)}
+        >
+          <ActionIcon label={proposedRunLabel ?? 'Start run'} />
+          <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
+        </DropdownMenu.Item>
+      )}
+      {suggestionForThisBoard !== undefined && (
+        <DropdownMenu.Item disabled={yourRequestInFlight} onClick={() => onDismissProposal(suggestionForThisBoard.id)}>
+          <IconCircleBanSign aria-hidden />
+          <span>Dismiss suggested run</span>
+        </DropdownMenu.Item>
+      )}
+      {item.url !== null && (
+        <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+          <IconArrowUpRight aria-hidden />
+          <span>{CARD_SOURCES[item.source].linkLabel}</span>
+        </DropdownMenu.Item>
+      )}
+      {stages
+        .filter(stage => stage.id !== columnStage)
+        .filter(stage => !awaitsTriage || !decisions.some(choice => choice.stage === stage.id))
+        .map(stage => (
+          <DropdownMenu.Item
+            key={stage.id}
+            disabled={!canMoveTo(owner.kind, phaseKind(stage.id))}
+            onClick={() => onMove(stage.id)}
+          >
+            <BoardStageIcon stage={stage.id} kind={stage.kind} decorative />
+            <span>
+              {stage.id === board?.flow?.completed ? `Mark ${stage.label.toLowerCase()}` : `Move to ${stage.label}`}
+            </span>
+          </DropdownMenu.Item>
+        ))}
+      {otherBoards.length > 0 && (
+        <DropdownMenu.Sub>
+          <DropdownMenu.SubTrigger disabled={yourRequestInFlight}>
+            <IconArrowBoxRight aria-hidden />
+            <span>Move to board</span>
+          </DropdownMenu.SubTrigger>
+          <DropdownMenu.SubContent>
+            {otherBoards.map(target => (
+              <DropdownMenu.Sub key={target.id}>
+                <DropdownMenu.SubTrigger>
+                  <span>{target.name ?? target.title}</span>
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.SubContent>
+                  {/* A card finishes on its own board, so another board's terminal phases are not offered. */}
+                  {target.phases
+                    .filter(phase => phase.kind !== 'terminal')
+                    .map(phase => (
+                      <DropdownMenu.Item key={phase.id} onClick={() => onMoveToBoard(target.id, phase.id)}>
+                        <BoardStageIcon stage={phase.id} kind={phase.kind} decorative />
+                        <span>{phase.name ?? phase.title}</span>
+                      </DropdownMenu.Item>
+                    ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Sub>
+            ))}
+          </DropdownMenu.SubContent>
+        </DropdownMenu.Sub>
+      )}
+      <DropdownMenu.Item disabled={yourRequestInFlight} onClick={onRemove}>
+        <TrashIcon aria-hidden />
+        <span>Remove</span>
+      </DropdownMenu.Item>
+    </>
+  );
+}

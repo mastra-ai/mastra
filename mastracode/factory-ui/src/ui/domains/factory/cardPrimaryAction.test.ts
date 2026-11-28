@@ -5,9 +5,14 @@ import {
   shipBoard,
   workBoardInfo as work,
 } from '../../../../e2e/ui/board-catalog';
-import { boardCardState } from './boardCardState';
-import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
-import type { CardAction, CardMove } from './cardPrimaryAction';
+import {
+  boardCardState,
+  cardActions,
+  cardMoves,
+  cardPrimaryAction,
+  resumeStage,
+} from '@mastra/playground-ui/domains/factory';
+import type { CardAction, CardMove } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem, WorkItemSessionRef, WorkItemSourceRow } from '@internal/factory-contract';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };

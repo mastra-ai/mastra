@@ -287,22 +287,6 @@ describe('Board card buttons move the card', () => {
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
   });
 
-  it("keeps Work's moves against a server older than the board loop", async () => {
-    const { flow: _flow, ...olderWork } = workBoardInfo;
-    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
-        HttpResponse.json({ boards: [olderWork] }),
-      ),
-    );
-    renderWorkBoard();
-
-    await moveFromCard('Fix login bug', 'Investigate');
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
-  });
-
   it('offers Prepare approval on a triaged card that needs approval', async () => {
     stubBoardEndpoints({
       workItems: [

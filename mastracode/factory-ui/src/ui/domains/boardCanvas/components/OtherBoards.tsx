@@ -1,10 +1,9 @@
-import { OtherBoards as SharedOtherBoards } from '@mastra/playground-ui/domains/factory';
+import { OtherBoards as SharedOtherBoards, boardName, phaseName } from '@mastra/playground-ui/domains/factory';
 import type { FlowRuleLine, OtherBoardMove } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
 import { HrefLink } from '../../../ui/HrefLink';
 import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
-import { boardName, phaseName } from '../../boardRules/ruleTargets';
 import type { Emphasis, RuleLine } from '../canvasModel';
 import { flowIncomingRule, flowRuleLine } from '../flowLines';
 import type { LaneOrder } from '../flowLines';

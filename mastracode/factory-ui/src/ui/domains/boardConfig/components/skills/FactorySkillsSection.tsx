@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -15,11 +16,9 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { Link } from 'react-router';
 
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../../api/types';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useFactorySkillsQuery } from '../../../../../hooks/useFactorySkills';
-import { boardName } from '../../../boardRules/ruleTargets';
+import { boardName, installedPhaseName } from '@mastra/playground-ui/domains/factory';
 import { orderedBoards } from '../../../factory/boardCatalog';
-import { phaseName } from '../../../factory/boardStages';
 import { SettingsSubsection } from '../../../settings/components/SettingsSubsection';
 import { useSettingsLinkState } from '../../../settings/hooks/useSettingsOpen';
 import { newSkillPath, skillPath } from '../../../settings/settingsSections';
@@ -35,7 +34,7 @@ function skillUses(boards: readonly InstalledBoardInfo[]): Map<string, SkillUse[
   for (const board of orderedBoards(boards)) {
     for (const phase of board.phases) {
       if (!phase.skill) continue;
-      const use = { boardId: board.id, board: boardName(board), phaseKey: phase.id, phase: phaseName(phase) };
+      const use = { boardId: board.id, board: boardName(board), phaseKey: phase.id, phase: installedPhaseName(phase) };
       uses.set(phase.skill, [...(uses.get(phase.skill) ?? []), use]);
     }
   }

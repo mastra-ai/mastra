@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -5,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../api/types';
-import { useBoardCatalog } from './useBoardCatalog';
 
 const catalog: BoardCatalogResponse = {
   boards: [

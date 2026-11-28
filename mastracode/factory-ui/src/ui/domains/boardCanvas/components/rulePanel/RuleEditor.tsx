@@ -1,5 +1,17 @@
-import { RuleEditorView } from '@mastra/playground-ui/domains/factory';
-import type { RuleTargetBoard } from '@mastra/playground-ui/domains/factory';
+import {
+  RuleEditorView,
+  LANE_SECTIONS,
+  LEGACY_OPENED_EVENT,
+  everythingOn,
+  isOpenedLane,
+  laneText,
+  placesArrival,
+  boardName,
+  phaseName,
+  phaseOptions,
+  intakeRouteFacts,
+} from '@mastra/playground-ui/domains/factory';
+import type { RuleTargetBoard, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { matchesOutsiderPullRequests } from '@internal/factory-contract';
 import type { RuleCondition } from '@internal/factory-contract';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -10,17 +22,6 @@ import { useIntakeDryRunPreview, useIntakeDryRunQuery } from '../../../../../hoo
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../../../hooks/useIntakeOrder';
 import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
-import {
-  LANE_SECTIONS,
-  LEGACY_OPENED_EVENT,
-  everythingOn,
-  isOpenedLane,
-  laneText,
-  placesArrival,
-} from '../../../boardRules/ruleLanes';
-import type { RuleEvent } from '../../../boardRules/ruleLanes';
-import { boardName, phaseName, phaseOptions } from '../../../boardRules/ruleTargets';
-import { intakeRouteFacts } from '../../../settings/components/conditionFields';
 import { boardRulesOf, ruleLines, ruleNotes, triggerFallback } from '../../canvasModel';
 import type { RuleSkips } from '../../canvasModel';
 import { MAX_RULE_NAME, draftRoutes, editOf, newEdit, resolveEdit, targetPhases, withCondition } from '../../ruleDraft';

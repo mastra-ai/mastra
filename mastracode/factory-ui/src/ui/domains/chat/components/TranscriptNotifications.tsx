@@ -28,7 +28,7 @@ import { invalidateSessionQueries } from '../../../../hooks/useWorkspaces';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
-import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import { PullRequestStatusIcon } from '@mastra/playground-ui/domains/factory';
 import type { NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
 import { IconBell2 } from '@mastra/playground-ui/icons/central/IconBell2';
 

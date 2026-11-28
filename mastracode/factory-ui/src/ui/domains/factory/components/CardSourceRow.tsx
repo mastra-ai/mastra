@@ -1,11 +1,14 @@
-import { CardSourceRow as SharedCardSourceRow } from '@mastra/playground-ui/domains/factory';
+import {
+  CardSourceRow as SharedCardSourceRow,
+  cardLabels,
+  sourceMetadata,
+  workItemReference,
+  sourceState,
+  CardMetadataLabels,
+} from '@mastra/playground-ui/domains/factory';
 
-import { cardLabels, sourceMetadata } from '../boardItems';
 import { CARD_SOURCES } from '../cardSources';
-import { workItemReference } from '../services/relationships';
-import { sourceState } from '../services/workItemPresentation';
 import type { WorkItem } from '@internal/factory-contract';
-import { MetadataLabels } from './BoardCardParts';
 
 export function CardSourceRow({
   item,
@@ -22,7 +25,7 @@ export function CardSourceRow({
       reference={workItemReference(item, repository) ?? CARD_SOURCES[item.source].label}
       url={url}
       state={sourceState(item)}
-      labels={cardLabels(metadata).length > 0 ? <MetadataLabels metadata={metadata} /> : undefined}
+      labels={cardLabels(metadata).length > 0 ? <CardMetadataLabels metadata={metadata} /> : undefined}
     />
   );
 }

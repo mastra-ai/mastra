@@ -1,5 +1,9 @@
 import { fromWireWorkItem, toWireCreateInput } from '@internal/factory-contract';
 import type {
+  BoardCatalogResponse,
+  IntakeRouteListResponse,
+  ReplaceBoardBody,
+  StoredBoardResponse,
   BoardPhasesRequest,
   BoardPhasesResponse,
   BoardSnapshot,
@@ -30,6 +34,13 @@ import { MastraClientError } from '../types';
 import { BaseResource } from './base';
 
 export type {
+  BoardCatalogResponse,
+  InstalledBoardInfo,
+  InstalledPhaseInfo,
+  IntakeRouteInfo,
+  IntakeRouteListResponse,
+  ReplaceBoardBody,
+  StoredBoardResponse,
   BoardPhasesFilter,
   BoardPhasesRequest,
   BoardPhasesResponse,
@@ -42,6 +53,10 @@ export type {
   FactoryDecisionStatus,
   FactoryDecisionSummary,
   FactoryRuleStage,
+  RuleCondition,
+  RuleGroup,
+  RuleOperator,
+  RuleValue,
   FactoryTransitionResult,
   RunQueueResponse,
   SessionActivityResponse,
@@ -91,6 +106,27 @@ interface Read {
   signal?: AbortSignal;
 }
 
+/** A request Factory refused, keeping its error code (such as `revision_mismatch`) and, when it lists them, each conflict. */
+export class FactoryRequestError extends MastraClientError {
+  readonly code: string | undefined;
+  readonly conflicts: string[];
+
+  constructor(status: number, statusText: string, message: string, body?: unknown) {
+    super(status, statusText, message, body);
+    this.name = 'FactoryRequestError';
+    const refusal = body as { error?: unknown; conflicts?: unknown } | undefined;
+    this.code = typeof refusal?.error === 'string' ? refusal.error : undefined;
+    this.conflicts = Array.isArray(refusal?.conflicts)
+      ? refusal.conflicts.filter((conflict): conflict is string => typeof conflict === 'string')
+      : [];
+  }
+
+  /** The server's own reasons when it lists them, its message otherwise. */
+  get reasons(): string {
+    return this.conflicts.length > 0 ? this.conflicts.join(' ') : this.message;
+  }
+}
+
 /**
  * One Factory project's board: its cards, phases, moves, decisions and run queue.
  * Every host (Factory itself, Platform) serves the same routes, under its own `basePath`.
@@ -117,7 +153,7 @@ export class Factory extends BaseResource {
       const body = error.body as { message?: unknown; error?: unknown } | undefined;
       const said = typeof body?.message === 'string' ? body.message : body?.error;
       const message = typeof said === 'string' && said ? said : `Request failed (${error.status})`;
-      throw new MastraClientError(error.status, error.statusText, message, error.body);
+      throw new FactoryRequestError(error.status, error.statusText, message, error.body);
     }
   }
 
@@ -266,5 +302,25 @@ export class Factory extends BaseResource {
   /** Which sessions are running or parked, and which cards they hold. */
   sessionActivity({ signal }: Read = {}): Promise<SessionActivityResponse> {
     return this.request(`${this.project}/session-activity`, { signal });
+  }
+
+  /** The boards the project has installed, with each board's phases. */
+  boardCatalog({ signal }: Read = {}): Promise<BoardCatalogResponse> {
+    return this.request(`${this.project}/boards`, { signal });
+  }
+
+  /** One board's stored definition, with the revision to send back when saving it. */
+  board(boardKey: string, { signal }: Read = {}): Promise<StoredBoardResponse> {
+    return this.request(`${this.project}/boards/${encodeURIComponent(boardKey)}`, { signal });
+  }
+
+  /** Replaces a board's definition; refuses with `revision_mismatch` when someone saved it first. */
+  replaceBoard(boardKey: string, body: ReplaceBoardBody): Promise<StoredBoardResponse> {
+    return this.request(`${this.project}/boards/${encodeURIComponent(boardKey)}`, { method: 'PATCH', body });
+  }
+
+  /** The project's intake routes in the order they are tried, and whether the caller may change them. */
+  intakeRoutes({ signal }: Read = {}): Promise<IntakeRouteListResponse> {
+    return this.request(`${this.project}/intake-routes`, { signal });
   }
 }

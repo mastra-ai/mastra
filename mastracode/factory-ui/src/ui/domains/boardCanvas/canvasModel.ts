@@ -6,8 +6,8 @@ import type {
   IntakeTestResponse,
   StoredPhaseInfo,
 } from '../../../api/types';
-import { boardFlow } from '../boardRules/boardFlow';
 import {
+  boardFlow,
   arrivalFallback,
   catchAllIndex,
   everythingOn,
@@ -19,9 +19,12 @@ import {
   movesCardsOnly,
   shadowedBy,
   skipsOutsidersOn,
-} from '../boardRules/ruleLanes';
-import type { RuleEvent } from '../boardRules/ruleLanes';
-import { defaultOutcomes, DEFAULT_SESSION, exitToolOutcome, nextPhasesOf } from '../boardConfig/boardDraft';
+  defaultOutcomes,
+  DEFAULT_SESSION,
+  exitToolOutcome,
+  nextPhasesOf,
+} from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 
 export type RuleSkips = IntakeSkippedResponse['skipped'][number];
 export type BoardFlowParts = NonNullable<InstalledBoardInfo['flow']>;

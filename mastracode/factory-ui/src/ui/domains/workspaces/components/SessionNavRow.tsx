@@ -9,20 +9,23 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import type { Location } from 'react-router';
 
-import { SourceIcon } from '../../factory/components/BoardIcons';
-import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
+import {
+  SourceIcon,
+  PullRequestStatusIcon,
+  sessionBeltLabel,
+  relativeTime,
+  changeRequestStatusLabel,
+  changeRequestNumberLabel,
+  changeRequestReference,
+} from '@mastra/playground-ui/domains/factory';
 import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionExternalLink } from '../services/sessionRows';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
-import { sessionBeltLabel } from '@mastra/playground-ui/domains/factory';
 import { SessionActionsMenu } from './SessionActionsMenu';
 import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
-import { relativeTime } from '../../../../lib/date/relativeTime';
-import { changeRequestStatusLabel } from '../../factory/changeRequestState';
-import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { isPullRequestSource } from '@internal/factory-contract';
 import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';

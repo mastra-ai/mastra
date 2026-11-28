@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { boardCardState, canMoveTo } from './boardCardState';
-import type { BoardCardOwner, BoardCardStateInput } from './boardCardState';
-import { cardActions } from './cardPrimaryAction';
+import { boardCardState, canMoveTo, cardActions } from '@mastra/playground-ui/domains/factory';
+import type { BoardCardOwner, BoardCardStateInput } from '@mastra/playground-ui/domains/factory';
 import type { FactoryDecisionSummary } from '@internal/factory-contract';
 
 function decision(overrides: Partial<FactoryDecisionSummary> = {}): FactoryDecisionSummary {

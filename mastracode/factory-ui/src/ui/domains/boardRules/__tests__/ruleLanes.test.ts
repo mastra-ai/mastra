@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { rule } from './fixtures/rulesServer';
-import { describeRule } from '../../settings/components/conditionFields';
-import { arrivalFallback, nameRepeats, newItemRules } from '../ruleLanes';
+import { describeRule, arrivalFallback, nameRepeats, newItemRules } from '@mastra/playground-ui/domains/factory';
 
 const order = [
   { boardKey: 'ship', name: 'Ship' },

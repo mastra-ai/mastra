@@ -9,9 +9,9 @@ import {
   itemAppearsInStage,
   itemStageOptions,
   pullRequestMayEnter,
-} from './boardStages';
+  BOARD_STAGES,
+} from '@mastra/playground-ui/domains/factory';
 import { selfReviewWorkBoardInfo, shipBoard, workBoardInfo as work } from '../../../../e2e/ui/board-catalog';
-import { BOARD_STAGES } from './stages';
 
 function workItem(source: WorkItemSource, stages: string[]): WorkItem {
   return {

@@ -6,7 +6,7 @@ import {
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hooks/useSandboxEnvs';
-import { relativeTime } from '../../../../../lib/date/relativeTime';
+import { relativeTime } from '@mastra/playground-ui/domains/factory';
 
 /** Opens the add dialog; rendered as the Environment variables subsection action. */
 export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {

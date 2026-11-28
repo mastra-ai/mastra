@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { workBoard } from '../../../../e2e/ui/board-catalog';
-import { reasonSummary, reworkReason } from './reworkReason';
-import type { AuditEvent } from './services/audit';
+import { reasonSummary, reworkReason } from '@mastra/playground-ui/domains/factory';
+import type { AuditEvent } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 
 type Card = Pick<WorkItem, 'id' | 'stages' | 'stageHistory' | 'metadata'>;

@@ -4,9 +4,13 @@ import {
   CONDITION_OPERATORS,
   isPresenceField,
   legacyConditionFields,
-} from '../../../settings/components/conditionFields';
-import { VALUELESS, canNest, emptyRow, isGroup, newKey } from '../../../settings/components/conditionTree';
-import type { Group, Item, Row } from '../../../settings/components/conditionTree';
+  VALUELESS,
+  canNest,
+  emptyRow,
+  isGroup,
+  newKey,
+} from '@mastra/playground-ui/domains/factory';
+import type { Group, Item, Row } from '@mastra/playground-ui/domains/factory';
 import { narrowSuggestions } from '../../../settings/components/sourceSuggestions';
 
 const LEGACY_FIELDS = legacyConditionFields();

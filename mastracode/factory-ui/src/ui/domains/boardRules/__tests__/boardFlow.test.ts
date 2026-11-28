@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { rule } from './fixtures/rulesServer';
-import { boardFlow } from '../boardFlow';
-import type { BoardFlow } from '../boardFlow';
+import { boardFlow } from '@mastra/playground-ui/domains/factory';
+import type { BoardFlow } from '@mastra/playground-ui/domains/factory';
 
 const security = {
   operator: 'AND' as const,

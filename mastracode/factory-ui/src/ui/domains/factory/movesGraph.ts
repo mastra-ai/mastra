@@ -1,10 +1,12 @@
-import { movesGraph as layoutMovesGraph } from '@mastra/playground-ui/domains/factory';
+import {
+  movesGraph as layoutMovesGraph,
+  phaseOf,
+  phaseLabel,
+  boardPhaseIconKind,
+} from '@mastra/playground-ui/domains/factory';
 import type { MovesGraphPhase } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo } from '../../../api/types';
-import { phaseOf } from './boardFlow';
-import { phaseLabel } from './boardStages';
-import { boardPhaseIconKind } from './components/BoardIcons';
 import type { WorkItemStageEntry } from '@internal/factory-contract';
 
 /**

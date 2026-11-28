@@ -9,7 +9,7 @@ import type {
   IntakeRouteAgainResponse,
   IntakeSkippedResponse,
 } from '../api/types';
-import type { BoardRequestError } from './useBoardEditor';
+import type { FactoryRequestError } from '@mastra/client-js';
 import { sendRouteRequest } from './useIntakeRoutes';
 
 const NOT_ROUTED_PAGE = 20;
@@ -33,7 +33,7 @@ export function useIntakeOrderQuery(factoryProjectId: string | undefined) {
 export function useSaveIntakeOrder(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<IntakeOrderResponse, BoardRequestError, string[]>({
+  return useMutation<IntakeOrderResponse, FactoryRequestError, string[]>({
     mutationFn: boardKeys =>
       sendRouteRequest<IntakeOrderResponse>(baseUrl, projectPath(factoryProjectId!, '/intake-order'), {
         method: 'PUT',
@@ -67,7 +67,7 @@ export function useNotRoutedQuery(factoryProjectId: string | undefined) {
 export function useRouteAgain(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<IntakeRouteAgainResponse, BoardRequestError, string>({
+  return useMutation<IntakeRouteAgainResponse, FactoryRequestError, string>({
     mutationFn: decisionId =>
       sendRouteRequest<IntakeRouteAgainResponse>(
         baseUrl,

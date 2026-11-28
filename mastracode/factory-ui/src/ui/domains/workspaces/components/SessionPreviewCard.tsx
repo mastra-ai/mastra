@@ -1,3 +1,4 @@
+import { HrefLink } from '../../../ui/HrefLink';
 import type { SessionRowStatus } from '@internal/factory-contract';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
@@ -6,10 +7,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
 import type { RefObject } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
-import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
+import { useBoardCatalog, useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
+import { PullRequestStatusIcon, RelatedWorkItemLink } from '@mastra/playground-ui/domains/factory';
 import { toMinute } from '../../factory/stageStays';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
@@ -110,6 +109,7 @@ function SessionPreview({
           />
           {card?.url != null && (
             <RelatedWorkItemLink
+              LinkComponent={HrefLink}
               item={card}
               href={card.url}
               kind="external"

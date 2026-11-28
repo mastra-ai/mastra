@@ -1,8 +1,6 @@
-import { useBoardCatalog } from '../../../hooks/useBoardCatalog';
 import { useIntakeDryRunQuery } from '../../../hooks/useIntakeDryRun';
 import { useIntakeOrderQuery, useSkippedRulesQuery } from '../../../hooks/useIntakeOrder';
-import { useIntakeRoutesQuery } from '../../../hooks/useIntakeRoutes';
-import { useBoardPhasesQuery } from '@mastra/react/hooks/factory';
+import { useBoardCatalog, useBoardPhasesQuery, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { boardFiltersFromParams } from '../factory/boardFilters';
 import { boardPhasesRequest } from '../factory/boardPhasesRequest';
 import { DEFAULT_BOARD_SORT } from '../factory/boardSort';

@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 /**
  * SPA route table (React Router v8, data mode).
  *
@@ -23,7 +24,6 @@ import { NEW_SKILL_PAGE, newSkillPath, settingsSectionPath, skillPath } from './
 import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 import { CustomBoardPage, WorkBoardPage } from './pages/BoardPage';
 
-import { useBoardCatalog } from '../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';

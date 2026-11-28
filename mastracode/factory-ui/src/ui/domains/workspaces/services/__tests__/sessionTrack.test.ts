@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { AuditEvent } from '../../../factory/services/audit';
+import type { AuditEvent } from '@mastra/playground-ui/domains/factory';
 import type { WorkItemStageEntry } from '@internal/factory-contract';
 import { auditOwnerChanges, auditRunIntervals, layoutSessionTrack } from '../sessionTrack';
 

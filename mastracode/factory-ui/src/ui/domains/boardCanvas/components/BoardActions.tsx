@@ -3,13 +3,13 @@ import { useNavigate } from 'react-router';
 
 import type { InstalledBoardInfo, StoredBoardResponse } from '../../../../api/types';
 import { useDeleteBoardMutation, useResetBoardMutation } from '../../../../hooks/useBoardEditor';
-import type { BoardRequestError } from '../../../../hooks/useBoardEditor';
+import type { FactoryRequestError } from '@mastra/client-js';
 import { boardPath, orderedBoards } from '../../factory/boardCatalog';
 
 /** The board's reset and delete, each sent with the revision it was read at. */
 export interface BoardActionWrites {
-  reset: UseMutationResult<StoredBoardResponse, BoardRequestError, number>;
-  remove: UseMutationResult<void, BoardRequestError, number>;
+  reset: UseMutationResult<StoredBoardResponse, FactoryRequestError, number>;
+  remove: UseMutationResult<void, FactoryRequestError, number>;
 }
 
 /** Resetting and deleting the board. A deleted board's page moves on to the first board left, or to Work. */

@@ -17,7 +17,7 @@ import {
   stubFactory,
 } from '../../boardConfig/__tests__/fixtures/factory-app';
 import { storedWorkBoard } from '../../boardConfig/__tests__/fixtures/work-board';
-import type { CardRule } from '../../boardConfig/boardDraft';
+import type { CardRule } from '@mastra/playground-ui/domains/factory';
 
 const CONFIG = `/factories/${FACTORY_ID}/work/config`;
 

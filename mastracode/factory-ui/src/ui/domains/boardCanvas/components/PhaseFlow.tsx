@@ -1,11 +1,16 @@
-import { PhaseFlow as SharedPhaseFlow } from '@mastra/playground-ui/domains/factory';
+import {
+  PhaseFlow as SharedPhaseFlow,
+  keyFromName,
+  keyProblem,
+  nextPhasesOf,
+  approvalText,
+  toolLabel,
+} from '@mastra/playground-ui/domains/factory';
 import type { PhaseFlowModel } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillInfo, InstalledBoardInfo, IntakeOrderResponse } from '../../../../api/types';
 import { HrefLink } from '../../../ui/HrefLink';
 import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
-import { keyFromName, keyProblem, nextPhasesOf } from '../../boardConfig/boardDraft';
-import { approvalText, toolLabel } from '../../boardConfig/phaseSummary';
 import { intakeSentence, movesOnItsOwn, sessionSpans } from '../canvasModel';
 import type { CanvasEmphasis, CanvasModel } from '../canvasModel';
 import { flowIncomingRule, flowRuleLine } from '../flowLines';

@@ -1,3 +1,9 @@
+import {
+  storedBoardQueryOptions,
+  useFactory,
+  useBoardCatalog,
+  useIntakeRoutesQuery,
+} from '@mastra/react/hooks/factory';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -8,13 +14,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
-import { useApiConfig } from '../../api/config';
-import { useBoardCatalog } from '../../hooks/useBoardCatalog';
-import { storedBoardQueryOptions, useCreateBoardMutation } from '../../hooks/useBoardEditor';
-import { useIntakeRoutesQuery } from '../../hooks/useIntakeRoutes';
+import { useCreateBoardMutation } from '../../hooks/useBoardEditor';
 import { boardConfigPath } from '../domains/boardConfig/boardConfigPaths';
-import { draftOf, keyFromName, keyProblem, starterBoard } from '../domains/boardConfig/boardDraft';
-import type { BoardDraft } from '../domains/boardConfig/boardDraft';
+import { draftOf, keyFromName, keyProblem, starterBoard } from '@mastra/playground-ui/domains/factory';
+import type { BoardDraft } from '@mastra/playground-ui/domains/factory';
 import { IntakeNote } from '../domains/boardConfig/components/IntakeNote';
 import { orderedBoards } from '../domains/factory/boardCatalog';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -39,7 +42,7 @@ export function NewBoardPage() {
   const [copyError, setCopyError] = useState<string>();
   const [copying, setCopying] = useState(false);
   const create = useCreateBoardMutation(factory.id);
-  const { baseUrl } = useApiConfig();
+  const factoryClient = useFactory(factory.id);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const id = useId();
@@ -70,7 +73,7 @@ export function NewBoardPage() {
     }
     setCopying(true);
     try {
-      const { board } = await queryClient.fetchQuery(storedBoardQueryOptions(baseUrl, factory.id, value));
+      const { board } = await queryClient.fetchQuery(storedBoardQueryOptions(factoryClient, value));
       setPhases(draftOf(board));
     } catch (error) {
       // The phases are still the previous source's, so the form says so.

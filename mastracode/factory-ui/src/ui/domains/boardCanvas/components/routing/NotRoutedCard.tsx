@@ -1,9 +1,9 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { NotRoutedItem, NotRoutedCard as SharedNotRoutedCard } from '@mastra/playground-ui/domains/factory';
 import { useLocation } from 'react-router';
 
 import type { IntakeDecisionInfo } from '../../../../../api/types';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useNotRoutedQuery, useRouteAgain } from '../../../../../hooks/useIntakeOrder';
 import { NOT_ROUTED_ANCHOR } from '../../../boardConfig/boardConfigPaths';
 import { isIntakeProvider } from '../../../factory/boardSourceFilters';

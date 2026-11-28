@@ -11,7 +11,7 @@ import { IconUnpin } from '@mastra/playground-ui/icons/central/IconUnpin';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 import { Link } from 'react-router';
 
-import { SourceIcon } from '../../factory/components/BoardIcons';
+import { SourceIcon } from '@mastra/playground-ui/domains/factory';
 import type { SessionExternalLink } from '../services/sessionRows';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';

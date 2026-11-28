@@ -138,6 +138,10 @@ export type {
   FactoryDecisionSummary,
   FactoryOptions,
   FactoryRuleStage,
+  RuleCondition,
+  RuleGroup,
+  RuleOperator,
+  RuleValue,
   FactoryTransitionResult,
   RunQueueResponse,
   SessionActivityResponse,
@@ -155,4 +159,12 @@ export type {
   WorkItemStageEntry,
   WorkItemStartersResponse,
   WireAuditPage,
+  BoardCatalogResponse,
+  InstalledBoardInfo,
+  InstalledPhaseInfo,
+  IntakeRouteInfo,
+  IntakeRouteListResponse,
+  ReplaceBoardBody,
+  StoredBoardResponse,
 } from './resources/factory';
+export { FactoryRequestError } from './resources/factory';

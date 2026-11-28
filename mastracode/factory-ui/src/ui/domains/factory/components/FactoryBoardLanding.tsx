@@ -1,9 +1,9 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { LoadErrorState } from '../../../ui/LoadErrorState';
 import { useSidebarHeaderSlots } from '../../chat/components/useSidebarHeaderSlots';
 import { orderedBoards } from '../boardCatalog';

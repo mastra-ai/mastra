@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-import type { RuleField } from '../boardConfig/boardDraft';
+import type { RuleField } from '@mastra/playground-ui/domains/factory';
 
 /**
  * The rule fields with a half-filled condition row on the open phase panel. Those rows live in the panel's editors,

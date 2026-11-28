@@ -1,3 +1,4 @@
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
 import {
   CommandPaletteBody,
@@ -9,7 +10,6 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { useState } from 'react';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';

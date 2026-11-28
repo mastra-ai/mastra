@@ -4,12 +4,16 @@ import { workItemNumber } from '@mastra/factory/work-items/card-number';
 import { matchesSearch, searchableCard } from '@mastra/factory/work-items/search-terms';
 import type { SearchableCard, SearchTerm } from '@mastra/factory/work-items/search-terms';
 
-import { boardOf } from '../../factory/boardFlow';
-import type { BoardInfo } from '../../factory/boardFlow';
+import {
+  boardOf,
+  currentItemStageLabel,
+  relationshipLabel,
+  workItemIdentifier,
+} from '@mastra/playground-ui/domains/factory';
+import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
-import { currentItemStageLabel } from '../../factory/boardStages';
 import { CARD_SOURCES } from '../../factory/cardSources';
-import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
+import { relationshipPath } from '../../factory/services/relationshipPath';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stageTintClass } from './components/BoardIcons';
-import { stageTone } from './stages';
+import { stageTintClass, stageTone } from '@mastra/playground-ui/domains/factory';
 
 describe('stage tones', () => {
   it('matches open and merged pull request colors for Reviewing and Done', () => {

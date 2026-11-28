@@ -1,17 +1,25 @@
 import { cardChangeRequest } from '@internal/factory-contract';
-import { RelatedCardLink as SharedRelatedCardLink } from '@mastra/playground-ui/domains/factory';
+import {
+  RelatedCardLink as SharedRelatedCardLink,
+  boardOf,
+  currentItemStage,
+  phaseLabel,
+  changeRequestStatus,
+  changeRequestStatusLabel,
+  relatedCardName,
+  workItemReference,
+  WorkItemSourceIcon,
+  BoardStageIcon,
+  boardPhaseIconKind,
+  stageColorClass,
+} from '@mastra/playground-ui/domains/factory';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
 import { HrefLink } from '../../../ui/HrefLink';
-import { boardOf } from '../boardFlow';
-import { currentItemStage, phaseLabel } from '../boardStages';
-import { changeRequestStatus, changeRequestStatusLabel } from '../changeRequestState';
 import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import { relatedCardName, relationshipPath, workItemReference } from '../services/relationships';
+import { relationshipPath } from '../services/relationshipPath';
 import type { WorkItem } from '@internal/factory-contract';
-import { WorkItemSourceIcon } from './BoardCardParts';
-import { BoardStageIcon, boardPhaseIconKind, stageColorClass } from './BoardIcons';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 
 export function RelatedCardLink({

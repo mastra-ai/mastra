@@ -46,6 +46,13 @@ import {
   workItemListResponseSchema,
   workItemSessionRepositoryResponseSchema,
   workItemStartersResponseSchema,
+  boardCatalogResponseSchema,
+  intakeRouteListResponseSchema,
+  intakeRouteResponseSchema,
+  intakeRouteSchema,
+  replaceBoardBodySchema,
+  storedBoardResponseSchema,
+  storedPhaseInputSchema,
 } from '@internal/factory-contract';
 import type {
   SessionActivityResponse,
@@ -61,7 +68,7 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
-import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
+import { storedBoardInputSchema } from '../boards/stored-board.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import {
@@ -135,41 +142,8 @@ const boardRevisionSchema = z.number().int().min(1);
 /** Send the `revision` you read so a concurrent edit is not overwritten. */
 export const boardResetBodySchema = z.object({ expectedRevision: boardRevisionSchema });
 /** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
-export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
 export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
-const storedBoardResponseSchema = z.object({
-  board: z.object({
-    key: z.string(),
-    name: z.string(),
-    description: z.string().nullable(),
-    /** In order; the first phase is where cards start. */
-    phases: z.array(storedPhaseInputSchema),
-    /**
-     * Send it back as `expectedRevision` when editing or resetting. Null for the legacy Review
-     * board, which is read-only and not stored.
-     */
-    revision: z.number().int().nullable(),
-    source: z.enum(['builtin', 'app', 'stored']),
-    /**
-     * True for every board: the boards the project created, the built-in Work board and app boards,
-     * whose code behaviour stays attached. Only the retired Review board was read-only.
-     */
-    editable: z.boolean(),
-    /**
-     * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
-     * phase stays with its kind and the moves code makes from it stay in nextPhases. Null for
-     * stored boards.
-     */
-    codeBehaviour: z
-      .record(z.string(), z.object({ requiredNextPhases: z.array(z.string()) }))
-      .nullable()
-      .optional(),
-    /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
-    problems: z.array(z.string()),
-  }),
-  /** Whether the caller may edit or reset this board: organization admins, or anyone with auth disabled. */
-  canEdit: z.boolean().optional(),
-});
+
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
 const boardIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
 const intakeRouteTargetSchema = z
@@ -260,46 +234,7 @@ export const intakeRouteReorderBodySchema = z
     message: `A board has at most ${MAX_INTAKE_ROUTES_PER_BOARD} intake rules.`,
     path: ['ids'],
   });
-const intakeRouteSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  enabled: z.boolean(),
-  /** 0 is evaluated first. */
-  position: z.number().int(),
-  when: intakeRouteWhenSchema.nullable(),
-  target: z.object({
-    boardKey: z.string(),
-    phaseKey: z.string().nullable(),
-    joinClosedIssue: z.boolean(),
-    moveToBoardKey: z.string().nullable(),
-  }),
-  on: z.array(z.enum(ROUTE_EVENTS)),
-  /**
-   * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and
-   * files no pull request, through every edit. Add a route to file pull requests.
-   */
-  pullRequestOpenedMovesOnly: z.literal(true).optional(),
-  /**
-   * True on a route stored before card-move rules decided outsiders' pull requests: its card moves
-   * skip an outside author's pull request unless its conditions test `pullRequest.trusted`. Edits
-   * keep it; only an explicit `outsiderPullRequestsGated: false` patch clears it.
-   */
-  outsiderPullRequestsGated: z.literal(true).optional(),
-  /** Send it back as `expectedRevision` when editing or deleting. */
-  revision: z.number().int(),
-  createdBy: z.string(),
-  createdAt: z.string(),
-  updatedBy: z.string(),
-  updatedAt: z.string(),
-  /** Why the route's target can't take cards right now, such as a deleted board; such a route is skipped. */
-  problems: z.array(z.string()),
-});
-const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({
-  intakeRoutes: z.array(intakeRouteSchema),
-  /** Whether the caller may add, edit, reorder, or delete routes. */
-  canEdit: z.boolean(),
-});
+
 const intakeRerouteResponseSchema = z.object({
   total: z.number().int(),
   moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
@@ -1467,76 +1402,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     path: '/web/factory/projects/:id/boards',
     description: 'List installed Factory boards',
     pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      boards: z.array(
-        z.object({
-          id: z.string(),
-          /** Absent from servers older than the phase fields. */
-          name: z.string().optional(),
-          /** @deprecated Use `name`. */
-          title: z.string(),
-          description: z.string().optional(),
-          /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
-          source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** True for every board; only the retired Review board was read-only. */
-          editable: z.boolean().optional(),
-          /** Problems with the board, such as a runner skill that does not exist. */
-          problems: z.array(z.string()).optional(),
-          initialPhase: z.string(),
-          /**
-           * Which phase plays each part of the pull request loop, read from what the phases declare.
-           * A part the board has no phase for is absent. Absent from servers older than the loop.
-           */
-          flow: z
-            .object({
-              triage: z.string().optional(),
-              build: z.string().optional(),
-              selfReview: z.string().optional(),
-              pullRequestReview: z.string().optional(),
-              completed: z.string().optional(),
-              canceled: z.string().optional(),
-            })
-            .optional(),
-          phases: z.array(
-            z.object({
-              id: z.string(),
-              name: z.string().optional(),
-              /** @deprecated Use `name`. */
-              title: z.string(),
-              description: z.string().optional(),
-              kind: z.enum(['resting', 'working', 'terminal']),
-              nextPhases: z.array(z.string()).optional(),
-              /** The session context a working phase runs in. */
-              context: z.string().optional(),
-              /** @deprecated Use `context`. */
-              role: z.string().optional(),
-              /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
-              skill: z.string().optional(),
-              /** The objective the phase's runs pursue as a goal (`runner.goal`). */
-              goal: z.object({ objective: z.string(), maxRuns: z.number().optional() }).optional(),
-              autoStart: z.boolean().optional(),
-              /** Cards the phase starts on its own for; absent means every card. */
-              autoStartWhen: cardRuleGroupSchema.optional(),
-              exitTool: z
-                .object({
-                  id: z.string(),
-                  autoApprove: z.boolean(),
-                  /** Cards the exit tool is approved for; absent means every card. */
-                  autoApproveWhen: cardRuleGroupSchema.optional(),
-                })
-                .optional(),
-              /** Factory tools the phase grants the session working the card there. */
-              tools: z.array(z.string()).optional(),
-              /** The outcomes the phase's session may report; one per next phase when the board lists none. */
-              outcomes: z.array(z.object({ key: z.string(), label: z.string(), to: z.string() })).optional(),
-              transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
-            }),
-          ),
-        }),
-      ),
-      /** Stored boards that could not be loaded or that a code board serves in their place, and why. */
-      problems: z.array(z.string()).optional(),
-    }),
+    responseSchema: boardCatalogResponseSchema,
   },
   boardGet: {
     method: 'GET',

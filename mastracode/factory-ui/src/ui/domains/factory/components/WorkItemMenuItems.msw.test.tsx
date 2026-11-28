@@ -8,10 +8,9 @@ import { builtinBoardCatalog, releaseBoard, shipBoard } from '../../../../../e2e
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
-import type { BoardCardOwner } from '../boardCardState';
+import type { BoardCardOwner, WorkItemMenuProps } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
-import type { WorkItemMenuProps } from './WorkItemMenuItems';
-import { WorkItemMenuItems } from './WorkItemMenuItems';
+import { WorkItemMenuItems } from '@mastra/playground-ui/domains/factory';
 
 const item: WorkItem = {
   id: 'release-1',

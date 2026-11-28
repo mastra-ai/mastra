@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
-import { changeRequestStatus } from '../../factory/changeRequestState';
+import { changeRequestStatus } from '@mastra/playground-ui/domains/factory';
 import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import { useAnswerParkedApproval } from '../hooks/useAnswerParkedApproval';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';

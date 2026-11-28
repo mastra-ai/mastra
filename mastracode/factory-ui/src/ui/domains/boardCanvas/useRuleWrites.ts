@@ -1,14 +1,14 @@
+import { useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../api/keys';
 import type { IntakeRouteInfo, IntakeRouteListResponse } from '../../../api/types';
-import { BoardRequestError } from '../../../hooks/useBoardEditor';
-import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../hooks/useIntakeRoutes';
+import { FactoryRequestError } from '@mastra/client-js';
+import { useIntakeRouteWrites } from '../../../hooks/useIntakeRoutes';
 import type { RouteWrite } from '../../../hooks/useIntakeRoutes';
-import { laneRules } from '../boardRules/ruleLanes';
-import type { RuleEvent } from '../boardRules/ruleLanes';
-import { reorderWithin } from '../boardRules/ruleTargets';
+import { laneRules, reorderWithin } from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { boardRulesOf } from './canvasModel';
 import { slotAboveCatchAll } from './ruleDraft';
 import type { RuleDraft } from './ruleDraft';
@@ -24,7 +24,7 @@ export const CHANGED_FIRST =
 export const DELETED_FIRST = 'Someone else deleted this rule first.';
 
 function isStale(error: unknown): boolean {
-  return error instanceof BoardRequestError && error.code !== undefined && STALE_CODES[error.code] === true;
+  return error instanceof FactoryRequestError && error.code !== undefined && STALE_CODES[error.code] === true;
 }
 
 function failureMessage(error: unknown): string {
@@ -103,7 +103,7 @@ export function useRuleWrites(factoryId: string): RuleWrites {
         return true;
       },
       error => {
-        const gone = error instanceof BoardRequestError && error.code === 'intake_route_not_found';
+        const gone = error instanceof FactoryRequestError && error.code === 'intake_route_not_found';
         toast.error(gone ? DELETED_FIRST : failureMessage(error));
         return gone;
       },

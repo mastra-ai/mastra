@@ -2,10 +2,18 @@ import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ruleGroupSchema } from '@
 import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo, IntakeDryRunBody, IntakeRouteInfo } from '../../../api/types';
-import { describeRule } from '../settings/components/conditionFields';
-import { LANE_EVENTS, laneRules, laneText, placesArrival, shadowedBy } from '../boardRules/ruleLanes';
-import type { RuleEvent } from '../boardRules/ruleLanes';
-import { boardName, phaseName, reorderWithin } from '../boardRules/ruleTargets';
+import {
+  describeRule,
+  LANE_EVENTS,
+  laneRules,
+  laneText,
+  placesArrival,
+  shadowedBy,
+  boardName,
+  phaseName,
+  reorderWithin,
+} from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 
 type DraftRoute = NonNullable<IntakeDryRunBody['boards']>[number]['routes'][number];
 

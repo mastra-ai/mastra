@@ -1,3 +1,4 @@
+import type { FactoryPhaseTool } from '@internal/factory-contract';
 import type {
   BoardMigrationContext,
   StoredBoardInput,
@@ -7,7 +8,6 @@ import type {
   StoredPhaseRecord,
 } from '../storage/domains/boards/base.js';
 import { REVIEW_CONTEXT } from './define-board.js';
-import type { FactoryPhaseTool } from './define-board.js';
 import { boardDefinitionOf } from './stored-board.js';
 import { workSeedWithTriage } from './work-seeds.js';
 import { BUILD_OBJECTIVE, OWN_CARD_HAND_OFF, workBoard } from './work.js';

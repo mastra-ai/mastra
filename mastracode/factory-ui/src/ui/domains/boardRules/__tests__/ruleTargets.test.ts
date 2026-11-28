@@ -2,9 +2,8 @@ import { DEFAULT_INTAKE_ROUTES } from '@mastra/factory/boards/work-routes';
 import { describe, expect, it } from 'vitest';
 
 import { workBoardInfo } from '../../../../../e2e/ui/board-catalog';
-import type { IntakeRouteInfo } from '../../../../api/types';
-import { describeConditions, describeRule } from '../../settings/components/conditionFields';
-import { phaseOptions } from '../ruleTargets';
+import type { IntakeRouteInfo } from '@mastra/client-js';
+import { describeConditions, describeRule, phaseOptions } from '@mastra/playground-ui/domains/factory';
 
 /** The routes a new project is seeded with, as the route API lists them. */
 function seededRoutes(): IntakeRouteInfo[] {

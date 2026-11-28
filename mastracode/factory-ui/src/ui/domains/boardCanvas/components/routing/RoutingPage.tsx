@@ -1,3 +1,4 @@
+import { useBoardCatalog, useIntakeRoutesQuery } from '@mastra/react/hooks/factory';
 import {
   AddRuleRow,
   BoardStatsRow,
@@ -13,6 +14,7 @@ import {
   StackLink,
   TestInput,
   UnsavedPill,
+  phaseName,
 } from '@mastra/playground-ui/domains/factory';
 import type { BoardStats } from '@mastra/playground-ui/domains/factory';
 import { Notice } from '@mastra/playground-ui/components/Notice';
@@ -20,9 +22,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useNavigate, useSearchParams } from 'react-router';
 
 import type { IntakeDryRunResponse } from '../../../../../api/types';
-import { useBoardCatalog } from '../../../../../hooks/useBoardCatalog';
 import { useIntakeDryRunQuery } from '../../../../../hooks/useIntakeDryRun';
-import { useIntakeRoutesQuery } from '../../../../../hooks/useIntakeRoutes';
 import { HrefLink } from '../../../../ui/HrefLink';
 import {
   boardConfigPath,
@@ -31,7 +31,6 @@ import {
   readCanvasFocus,
 } from '../../../boardConfig/boardConfigPaths';
 import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
-import { phaseName } from '../../../boardRules/ruleTargets';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
 import { BoardSettingsTabs } from '../BoardSettingsTabs';
 import { NotRoutedCard } from './NotRoutedCard';

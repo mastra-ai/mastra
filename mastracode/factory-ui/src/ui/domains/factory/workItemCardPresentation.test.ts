@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { CardMove } from './cardPrimaryAction';
+import type { CardMove } from '@mastra/playground-ui/domains/factory';
 import type { WorkItemSessionRef } from '@internal/factory-contract';
-import { primaryCardMove } from './workItemCardPresentation';
+import { primaryCardMove } from '@mastra/playground-ui/domains/factory';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const plan: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };

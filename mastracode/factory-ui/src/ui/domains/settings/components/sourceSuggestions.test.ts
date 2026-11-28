@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { limitedProviders } from '../services/rules';
+import { limitedProviders } from '@mastra/playground-ui/domains/factory';
 import { narrowSuggestions, sourceSuggestions } from './sourceSuggestions';
 
 describe('sourceSuggestions', () => {

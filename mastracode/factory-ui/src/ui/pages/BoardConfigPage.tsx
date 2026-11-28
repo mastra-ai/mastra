@@ -1,9 +1,10 @@
+import { useBoardQuery } from '@mastra/react/hooks/factory';
 import { BoardHeaderSkeleton, CanvasFrame, PhaseFlowSkeleton } from '@mastra/playground-ui/domains/factory';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
-import { BoardRequestError, useBoardQuery } from '../../hooks/useBoardEditor';
+import { FactoryRequestError } from '@mastra/client-js';
 import { BoardCanvas } from '../domains/boardCanvas/components/BoardCanvas';
 import { BoardSettingsTabs } from '../domains/boardCanvas/components/BoardSettingsTabs';
 import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
@@ -40,7 +41,7 @@ function BoardConfigBody() {
       </CanvasFrame>
     );
   }
-  if (query.isError && query.error instanceof BoardRequestError && query.error.code === 'board_not_found') {
+  if (query.isError && query.error instanceof FactoryRequestError && query.error.code === 'board_not_found') {
     return (
       <StatusFrame factoryId={factory.id} boardId={boardId}>
         <EmptyState

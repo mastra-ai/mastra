@@ -1,8 +1,7 @@
 import { useParams } from 'react-router';
 
-import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
-import { boardOf } from '../boardFlow';
+import { useBoardCatalog, useSessionWorkItemsQuery } from '@mastra/react/hooks/factory';
+import { boardOf } from '@mastra/playground-ui/domains/factory';
 
 export function useSessionCard() {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();

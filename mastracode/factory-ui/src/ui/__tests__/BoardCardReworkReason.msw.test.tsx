@@ -8,7 +8,7 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createQueryClient } from '../../query-client';
-import type { AuditEvent, AuditEventPage } from '../domains/factory/services/audit';
+import type { AuditEvent, AuditEventPage } from '@mastra/playground-ui/domains/factory';
 import type { WorkItem } from '@internal/factory-contract';
 import { createAppRoutes } from '../router';
 

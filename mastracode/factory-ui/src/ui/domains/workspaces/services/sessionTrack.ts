@@ -2,7 +2,7 @@ import { isHumanActorId } from '@internal/factory-contract';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { differenceInCalendarDays } from 'date-fns';
 
-import type { AuditEvent } from '../../factory/services/audit';
+import type { AuditEvent } from '@mastra/playground-ui/domains/factory';
 import { stageMoves, stageStays } from '../../factory/stageStays';
 import type { WorkItem } from '@internal/factory-contract';
 

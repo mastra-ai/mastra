@@ -4,7 +4,7 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { activityDepth, activityStart } from '../periodActivity';
 import type { ActivityPeriod, RunStarts } from '../periodActivity';
-import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '../services/audit';
+import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '@mastra/playground-ui/domains/factory';
 
 const MAX_PAGES = 20;
 

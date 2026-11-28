@@ -1,9 +1,12 @@
-import { CardStageSummary as SharedCardStageSummary } from '@mastra/playground-ui/domains/factory';
+import {
+  CardStageSummary as SharedCardStageSummary,
+  currentItemStage,
+  phaseLabel,
+  boardPhaseIconKind,
+} from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { currentItemStage, phaseLabel } from '../boardStages';
 import type { WorkItem } from '@internal/factory-contract';
-import { boardPhaseIconKind } from './BoardIcons';
 
 export function CardStageSummary({
   item,

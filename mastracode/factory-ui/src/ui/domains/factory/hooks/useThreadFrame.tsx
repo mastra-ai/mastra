@@ -11,7 +11,7 @@ import { UserSessionSharing } from '../../workspaces/components/UserSessionShari
 import { threadPath } from '../../workspaces/services/factoryPaths';
 import type { WorkspacePanelPage } from '../../workspace-viewer/context/WorkspacePanelContext';
 import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
-import { currentItemStage } from '../boardStages';
+import { currentItemStage } from '@mastra/playground-ui/domains/factory';
 import { CardStageBar } from '../components/CardStageBar';
 import { CardStageSummary } from '../components/CardStageSummary';
 import { SessionContextMenu } from '../components/SessionContextMenu';

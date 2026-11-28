@@ -1,7 +1,7 @@
 import type { CardChangeRequest } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
-import { changeRequestStatus } from './changeRequestState';
+import { changeRequestStatus } from '@mastra/playground-ui/domains/factory';
 import type { PullRequestSubscription } from './services/githubSubscriptions';
 
 const URL_42 = 'https://github.com/acme/app/pull/42';

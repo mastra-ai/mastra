@@ -1,6 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 
-import { stageLabel, stageTone } from '../stages';
+import { stageLabel, stageTone } from '@mastra/playground-ui/domains/factory';
 
 /** A stage as a colour first and a word second, so a list of them scans. */
 export function StageBadge({ stage, live, className }: { stage: string; live?: boolean; className?: string }) {

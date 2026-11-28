@@ -4,15 +4,15 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 
-import type { BoardInfo } from '../../factory/boardFlow';
-import { phaseLabel } from '../../factory/boardStages';
-import { elapsedLabel } from '../../factory/cardStageBar';
+import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
 import {
+  phaseLabel,
   boardPhaseIconKind,
   stageStrongTintClass,
   stageTintClass,
   unfocusedStageClass,
-} from '../../factory/components/BoardIcons';
+} from '@mastra/playground-ui/domains/factory';
+import { elapsedLabel } from '../../factory/cardStageBar';
 import type { TrailPerson } from '../hooks/useSessionTrail';
 import { trackMomentLabel, trackStartLabel } from '../services/sessionTrack';
 import type { TrackLayout, TrackPin, TrackSpan, TrackStage } from '../services/sessionTrack';

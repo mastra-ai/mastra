@@ -1,11 +1,15 @@
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
-import type { FlowEmphasis, FlowIncomingRule, FlowRuleLine } from '@mastra/playground-ui/domains/factory';
+import type { FlowEmphasis, FlowIncomingRule, FlowRuleLine, RuleEvent } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../api/types';
-import { everythingOn, isOpenedLane, laneText } from '../boardRules/ruleLanes';
-import type { RuleEvent } from '../boardRules/ruleLanes';
-import { boardName, phaseOptions } from '../boardRules/ruleTargets';
-import { describeConditions } from '../settings/components/conditionFields';
+import {
+  everythingOn,
+  isOpenedLane,
+  laneText,
+  boardName,
+  phaseOptions,
+  describeConditions,
+} from '@mastra/playground-ui/domains/factory';
 import { ruleNotes } from './canvasModel';
 import type { RuleLine } from './canvasModel';
 

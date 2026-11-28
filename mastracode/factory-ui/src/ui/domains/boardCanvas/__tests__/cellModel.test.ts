@@ -2,8 +2,8 @@ import { MAX_RULE_GROUP_DEPTH } from '@internal/factory-contract';
 import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
-import { fromRule, isGroup, toRule } from '../../settings/components/conditionTree';
-import type { Group, Row } from '../../settings/components/conditionTree';
+import { fromRule, isGroup, toRule } from '@mastra/playground-ui/domains/factory';
+import type { Group, Row } from '@mastra/playground-ui/domains/factory';
 import { addCondition, canJoin, joinRow, replaceRow, setLogic } from '../components/conditions/cellModel';
 
 const BUG: RuleCondition = { field: 'item.labels', operator: 'contains', value: 'bug' };

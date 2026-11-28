@@ -1,17 +1,7 @@
 import { queryOptions, skipToken } from '@tanstack/react-query';
+import type { ChangeRequestProvider, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
 
-/** Which source-control provider serves the subscriptions route. */
-export type ChangeRequestProvider = 'github' | 'gitlab';
-
-export interface PullRequestSubscription {
-  id: string;
-  repoFullName: string;
-  pullRequestNumber: number;
-  status: 'open' | 'closed' | 'merged';
-  /** Absent on older servers. */
-  updatedAt?: string;
-  url: string;
-}
+export type { ChangeRequestProvider, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
 
 export function pullRequestSubscriptionsQueryKey(
   sessionId: string,

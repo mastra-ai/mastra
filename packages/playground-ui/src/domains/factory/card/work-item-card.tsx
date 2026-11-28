@@ -1,0 +1,270 @@
+import { cardThreadSession, itemThreadSession } from '@internal/factory-contract';
+import type { SessionRowStatus, WorkItem, FactoryDecisionSummary } from '@internal/factory-contract';
+import { useBoardCatalog } from '@mastra/react/hooks/factory';
+import type { ReactElement } from 'react';
+import { BoardCard, useBoardNavigation } from '../board';
+import type { DragPayload } from '../board/board-drag';
+import type { BoardLayout } from '../board/board-layout';
+
+import type { AuditEventPage } from './audit';
+import { REVEAL_ON_CARD_HOVER } from './board-card-parts';
+import type { BoardCardOwner } from './board-card-state';
+import { itemBoard } from './board-stages';
+import { cardControls } from './card-controls';
+import { RelatedWorkItemLink } from './related-work-item-link';
+import { relationshipBoardId } from './relationships';
+import { reworkReason } from './rework-reason';
+import type { BoardStageId } from './stages';
+import { workItemActivity } from './work-item-activity';
+import { WorkItemCardRows } from './work-item-card-rows';
+import { WorkItemListRow } from './work-item-list-row';
+import type { WorkItemMenuProps } from './work-item-menu-items';
+import { WorkItemMenuItems } from './work-item-menu-items';
+import { WorkItemUpstreamLinks } from './work-item-upstream-links';
+import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconDotGrid1x3Vertical } from '@/ds/icons/central/IconDotGrid1x3Vertical';
+
+export function WorkItemCard({
+  item,
+  deepLinkRef,
+  highlighted,
+  columnStage,
+  relatedItems,
+  activityPage,
+  evaluatingStage,
+  transitionReason,
+  decision,
+  proposal,
+  approvingDecisionId,
+  retryingDecisionId,
+  queuePosition,
+  onApproveProposal,
+  onDismissProposal,
+  onRetryDecision,
+  sessionStatus,
+  sessionHolds,
+  ownerCurrent = true,
+  onMove,
+  onMoveToBoard,
+  onRemove,
+  layout,
+  repository,
+}: {
+  item: WorkItem;
+  // Hands the card's own control to the board, which scrolls to it and focuses it when the card is deeplinked.
+  deepLinkRef: (element: HTMLElement | null) => void;
+  highlighted: boolean;
+  columnStage: BoardStageId;
+  /** Cards linked to this one, resolved once for the whole board. */
+  relatedItems: WorkItem[];
+  activityPage?: AuditEventPage;
+  /** Destination stage of an in-flight transition; undefined = not moving. */
+  evaluatingStage?: string;
+  transitionReason?: string;
+  decision?: FactoryDecisionSummary;
+  /** The decision's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
+  /** Run a rule wants to start on this card, waiting for someone to release it. */
+  proposal?: FactoryDecisionSummary;
+  approvingDecisionId?: string;
+  retryingDecisionId?: string;
+  onApproveProposal: (decisionId: string) => void;
+  onDismissProposal: (decisionId: string) => void;
+  onRetryDecision: (decisionId: string) => void;
+  /** The card's marker, resolved once for the whole board: the status its row in the sidebar shows. */
+  sessionStatus?: SessionRowStatus;
+  /** One of the card's sessions is coming up, running, or parked on a person. */
+  sessionHolds?: boolean;
+  /**
+   * Whether the board read everything that says who holds the card. When it has not, the card
+   * refuses no move up front and the server, which holds the rule too, decides. A suggested run
+   * skips that rule on the server, so the card holds it back instead.
+   */
+  ownerCurrent?: boolean;
+  onMove: (toStage: string) => void;
+  onMoveToBoard: (toBoard: string, toStage: string) => void;
+  onRemove: () => void;
+  layout: BoardLayout;
+  /** The project's repository when it has exactly one, so references to it drop the repo name. */
+  repository?: string;
+}) {
+  const { LinkComponent, cardHref, sessionHref, boardHref } = useBoardNavigation();
+  const catalog = useBoardCatalog(item.githubProjectId);
+  const boardId = itemBoard(item);
+  const definition = catalog.data?.find(board => board.id === boardId);
+  const {
+    moves,
+    proposedRunLabel,
+    state,
+    actions: offered,
+  } = cardControls({
+    item,
+    definition,
+    columnStage,
+    evaluatingStage,
+    transitionReason,
+    decision,
+    queuePosition,
+    proposal,
+    approvingDecisionId,
+    retryingDecisionId,
+    sessionStatus,
+    sessionHolds,
+    onApproveProposal,
+    onRetryDecision,
+    onMove,
+  });
+  const href = cardHref(item.id, cardThreadSession(item, definition?.phases, columnStage));
+  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
+  const activity = workItemActivity(item, activityPage);
+  const { status, owner, wick } = state;
+  const hasSession = Object.keys(item.sessions).length > 0;
+  const lockedByYou = owner.kind === 'you';
+  const busy = lockedByYou || owner.kind === 'automation';
+  // Your own move in flight is known here for certain; anyone else's hold only once the board read it.
+  const movesOwner: BoardCardOwner = ownerCurrent || lockedByYou ? owner : { kind: 'free' };
+  const actions =
+    ownerCurrent || status.kind !== 'waiting' ? offered : offered.map(action => ({ ...action, disabled: true }));
+  const dragPayload: DragPayload | undefined = lockedByYou
+    ? undefined
+    : { kind: 'work-item', id: item.id, fromStage: columnStage, ownerKind: movesOwner.kind };
+
+  const menu: WorkItemMenuProps = {
+    item,
+    columnStage,
+    moves,
+    proposal,
+    proposedRunLabel,
+    approvingDecisionId,
+    owner: movesOwner,
+    ownerCurrent,
+    onApproveProposal,
+    onDismissProposal,
+    onMove,
+    onMoveToBoard,
+    onRemove,
+  };
+
+  const relatedLink = (related: WorkItem): ReactElement => {
+    const relatedSession = itemThreadSession(related.sessions);
+    const link = { item: related, contextRepository: repository };
+
+    if (relatedSession !== undefined) {
+      return (
+        <RelatedWorkItemLink
+          key={related.id}
+          {...link}
+          LinkComponent={LinkComponent}
+          href={sessionHref(relatedSession)}
+          kind="session"
+        />
+      );
+    }
+
+    if (related.url !== null) {
+      return (
+        <RelatedWorkItemLink
+          key={related.id}
+          {...link}
+          LinkComponent={LinkComponent}
+          href={related.url}
+          kind="external"
+        />
+      );
+    }
+
+    return (
+      <RelatedWorkItemLink
+        key={related.id}
+        {...link}
+        LinkComponent={LinkComponent}
+        href={boardHref(relationshipBoardId(related))}
+        kind="board"
+      />
+    );
+  };
+  const relatedLinks = relatedItems.map(relatedLink);
+  const upstreamLinks = (
+    <WorkItemUpstreamLinks
+      item={item}
+      shownAsRelated={relatedItems.flatMap(related => related.url ?? [])}
+      short={layout === 'list'}
+    />
+  );
+
+  if (layout === 'list') {
+    return (
+      <WorkItemListRow
+        item={item}
+        href={href}
+        columnStage={columnStage}
+        deepLinkRef={deepLinkRef}
+        highlighted={highlighted}
+        activityStatus={wick}
+        hasSession={hasSession}
+        relatedLinks={relatedLinks}
+        upstreamLinks={upstreamLinks}
+        locked={lockedByYou}
+        busy={busy}
+        dragPayload={dragPayload}
+        activity={activity}
+        actors={activityPage?.actors ?? {}}
+        status={status}
+        actions={actions}
+        menu={<WorkItemMenuItems {...menu} />}
+        rework={rework}
+      />
+    );
+  }
+
+  return (
+    <BoardCard
+      title={item.title}
+      href={href}
+      linkRef={deepLinkRef}
+      dragPayload={dragPayload}
+      busy={busy}
+      locked={lockedByYou}
+      highlighted={highlighted}
+      related={relatedItems.length > 0}
+      activityStatus={wick}
+      LinkComponent={LinkComponent}
+    >
+      <WorkItemCardRows
+        item={item}
+        repository={repository}
+        columnStage={columnStage}
+        relatedLinks={relatedLinks}
+        upstreamLinks={upstreamLinks}
+        activity={activity}
+        actors={activityPage?.actors ?? {}}
+        status={status}
+        actions={actions}
+        hasSession={hasSession}
+        rework={rework}
+        controls={
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  disabled={lockedByYou}
+                  aria-label={`Actions for ${item.title}`}
+                  className={REVEAL_ON_CARD_HOVER}
+                >
+                  <IconDotGrid1x3Vertical aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              <WorkItemMenuItems {...menu} />
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        }
+      />
+    </BoardCard>
+  );
+}

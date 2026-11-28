@@ -1,7 +1,7 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import { isOpenedLane, LANE_EVENTS, laneText } from '../../../boardRules/ruleLanes';
-import type { RuleEvent } from '../../../boardRules/ruleLanes';
+import { isOpenedLane, LANE_EVENTS, laneText } from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
 
 /** The triggers new issues and pull requests arrive on, the only ones the intake order asks boards about. */
 export const ARRIVAL_EVENTS: readonly RuleEvent[] = LANE_EVENTS.filter(isOpenedLane);
