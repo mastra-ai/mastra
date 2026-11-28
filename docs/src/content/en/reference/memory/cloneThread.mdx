@@ -186,6 +186,7 @@ const memory = await agent.getMemory()
 const { thread: fullClone } = await memory.cloneThread({
   sourceThreadId: 'original-thread-123',
   title: 'Alternative Conversation Path',
+  options: { fullThread: true },
 })
 
 // Clone with a custom ID
