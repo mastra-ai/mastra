@@ -156,6 +156,54 @@ function hostedToolOnlyModel() {
   });
 }
 
+/** Every tool is provider-executed and the first call also emits a file part before its reasoning. */
+function hostedToolWithFileModel() {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const first = call++ === 0;
+      return {
+        stream: convertArrayToReadableStream(
+          (first
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model', timestamp: new Date(0) },
+                { type: 'file', data: 'base64file', mediaType: 'text/plain' },
+                { type: 'reasoning-start', id: 'r-1' },
+                { type: 'reasoning-delta', id: 'r-1', delta: 'Read the file first.' },
+                { type: 'reasoning-end', id: 'r-1' },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_9',
+                  toolName: 'web_search',
+                  input: '{"query":"hosted"}',
+                  providerExecuted: true,
+                },
+                { type: 'finish', finishReason: 'tool-calls', usage: testUsage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-2', modelId: 'mock-model', timestamp: new Date(0) },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_9',
+                  toolName: 'web_search',
+                  result: { answer: 'hosted results' },
+                  providerExecuted: true,
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'done' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: testUsage },
+              ]) as any[],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
 /** Provider tool-call whose result never arrives before the run finishes. */
 function abandonedProviderToolModel() {
   return new MockLanguageModelV2({
@@ -310,6 +358,22 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     // only boundary — without it the second call replays the first call's output.
     const [firstCall, secondCall] = stepSpans;
     expect(partTypes(firstCall)).toEqual([['tool-call']]);
+    expect(partTypes(secondCall)).toEqual([['text']]);
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
+  it('keeps each model call to its own messages when the earlier call holds a file part', async () => {
+    const { agent, testExporter } = buildAgent(hostedToolWithFileModel());
+    await runToCompletion(agent, testExporter);
+
+    const stepSpans = testExporter.getSpansByType('model_step' as any);
+    expect(stepSpans).toHaveLength(2);
+
+    // A file part has no comparable identity, so the first call's message cannot be matched
+    // by what it holds. The step history still marks the boundary, so the second call must
+    // not carry over the first call's file, reasoning or provider tool result.
+    const [firstCall, secondCall] = stepSpans;
+    expect(partTypes(firstCall)).toEqual([['file', 'reasoning', 'tool-call']]);
     expect(partTypes(secondCall)).toEqual([['text']]);
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });

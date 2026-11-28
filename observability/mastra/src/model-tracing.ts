@@ -400,12 +400,12 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
  * content independent:
  *
  * - When the payload carries the step history (`output.steps`), the previous step's
- *   list is the boundary: everything the previous call had already produced is
- *   dropped. A message that only grew still belongs to the earlier call — a provider
- *   that runs a tool mid-turn merges the result into the assistant message it already
- *   sent — so messages are compared by role and part identity, not by exact equality.
- *   A message whose parts cannot be keyed stops the match, and the tool boundary below
- *   is used instead of assuming the rest is new.
+ *   length is the boundary: everything the previous call had already produced is
+ *   dropped. The history only ever grows, so the count is exact; matching the messages
+ *   themselves is not usable, because a step can hold a part with no comparable identity
+ *   (a file or source), and a message that only grew — the provider merged a result into
+ *   the assistant message it already sent — would then look new and replay the earlier
+ *   call's output.
  * - Otherwise (a single step result) the last message that carries content and is not
  *   the model's own response (a locally executed tool result) is the cut; empty
  *   placeholders carry nothing and do not cut.
@@ -425,87 +425,13 @@ function currentStepResponseMessages(output?: {
   if (!messages) return undefined;
 
   const previous = previousStepResponseMessages(output);
-  const consumed = previous ? previousMessagesLength(previous, messages) : 0;
-  // Only trust the previous step's list when it matched all the way through; a partial
-  // match means an unreadable message stopped it, so cut at the tool boundary instead.
-  const from = previous && consumed === previous.length ? consumed : lastToolBoundary(messages);
+  // A step only ever appends, so a longer previous list cannot happen; fall back to the
+  // tool boundary rather than slicing at a count the list does not reach.
+  const from = previous && previous.length <= messages.length ? previous.length : lastToolBoundary(messages);
 
   const current = messages.slice(from).filter(isResponseMessage);
   return current.length > 0 ? current : undefined;
 }
-
-/**
- * How many of `messages` the previous call had already produced. Messages are compared by
- * role and part identity — a provider result merged into an earlier call keeps the call's
- * identity — so a message that only grew still counts as already sent. The count stops at
- * the first message that does not continue the previous one, or whose parts cannot be keyed;
- * the caller treats a short count as "cannot tell" rather than as new output.
- */
-function previousMessagesLength(previous: unknown[], messages: unknown[]): number {
-  let from = 0;
-  while (from < previous.length && from < messages.length && continuesMessage(messages[from], previous[from])) {
-    from += 1;
-  }
-  return from;
-}
-
-/** Whether `message` is the earlier `sent` message, possibly with parts the provider added since. */
-function continuesMessage(message: unknown, sent: unknown): boolean {
-  const sentKeys = partKeys(sent);
-  const keys = partKeys(message);
-  if (!sentKeys || !keys || roleOf(message) !== roleOf(sent)) return false;
-
-  // Every part of the sent message must still be there, in order. Extra parts (a tool
-  // result merged into the call) are what the provider added afterwards.
-  let from = 0;
-  for (const key of sentKeys) {
-    const at = keys.indexOf(key, from);
-    if (at === -1) return false;
-    from = at + 1;
-  }
-  return true;
-}
-
-/** The identity of each part of a message, or `undefined` for a message with an unknown part. */
-function partKeys(message: unknown): string[] | undefined {
-  if (typeof message !== 'object' || message === null) return undefined;
-  const { content } = message as { content?: unknown };
-  if (typeof content === 'string') return [`text:${content}`];
-  if (!Array.isArray(content)) return undefined;
-
-  const keys: string[] = [];
-  for (const part of content) {
-    const key = partKey(part);
-    if (key === undefined) return undefined;
-    keys.push(key);
-  }
-  return keys;
-}
-
-/**
- * The identity of one provider content part. Text and reasoning count by their content, a
- * tool call and its result by the id they share, so a call still matches once its result
- * was merged in. Anything else has no identity to compare.
- */
-function partKey(part: unknown): string | undefined {
-  if (typeof part !== 'object' || part === null) return undefined;
-  const p = part as { type?: unknown; text?: unknown; toolCallId?: unknown };
-  switch (p.type) {
-    case 'text':
-      return typeof p.text === 'string' ? `text:${p.text}` : undefined;
-    case 'reasoning':
-      return typeof p.text === 'string' ? `reasoning:${p.text}` : undefined;
-    case 'tool-call':
-      return typeof p.toolCallId === 'string' ? `call:${p.toolCallId}` : undefined;
-    case 'tool-result':
-      return typeof p.toolCallId === 'string' ? `result:${p.toolCallId}` : undefined;
-    default:
-      return undefined;
-  }
-}
-
-const roleOf = (message: unknown): unknown =>
-  typeof message === 'object' && message !== null ? (message as { role?: unknown }).role : undefined;
 
 /** The messages the previous step had produced, when the payload carries the step history. */
 function previousStepResponseMessages(output?: {

@@ -2145,8 +2145,12 @@ describe('ModelSpanTracker', () => {
 
       const tracker = new ModelSpanTracker(modelSpan);
 
+      // The step history is cumulative: a step appends to the previous step's messages.
       const firstStepMessages = [{ role: 'assistant', content: [{ type: 'text', text: 'first step' }] }];
-      const currentStepMessages = [{ role: 'assistant', content: [{ type: 'text', text: 'current step' }] }];
+      const currentStepMessages = [
+        ...firstStepMessages,
+        { role: 'assistant', content: [{ type: 'text', text: 'current step' }] },
+      ];
 
       const chunks = [
         { type: 'step-start', payload: { messageId: 'msg-1' } },
@@ -2172,7 +2176,7 @@ describe('ModelSpanTracker', () => {
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual(currentStepMessages);
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([currentStepMessages[1]]);
       }
     });
 
@@ -2292,6 +2296,73 @@ describe('ModelSpanTracker', () => {
 
       for (const span of [stepSpan!, inferenceSpan!]) {
         expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
+        expect(JSON.stringify(span.output)).not.toContain('search results');
+      }
+    });
+
+    it('does not replay an earlier call whose message carries an unkeyable part', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // A file part has no comparable identity, so the earlier call's message cannot be
+      // recognised by its parts. The step history still marks where the second call begins,
+      // so none of the first call's output — its reasoning included — may reach this call.
+      const earlierCall = {
+        role: 'assistant',
+        content: [
+          { type: 'file', data: 'base64file', mimeType: 'text/plain' },
+          { type: 'reasoning', text: 'Read the file first.' },
+          { type: 'tool-call', toolCallId: 'srvtoolu_9', toolName: 'web_search', input: { query: 'AI news' } },
+        ],
+      };
+      const earlierCallWithResult = {
+        role: 'assistant',
+        content: [
+          ...(earlierCall.content as unknown[]),
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_9',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'search results' } },
+          },
+        ],
+      };
+      const answer = { role: 'assistant', content: [{ type: 'text', text: 'done' }] };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'done' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'done',
+              usage: { totalTokens: 10 },
+              steps: [
+                { response: { messages: [earlierCall] } },
+                { response: { messages: [earlierCallWithResult, answer] } },
+              ],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
+        expect(JSON.stringify(span.output)).not.toContain('Read the file first.');
         expect(JSON.stringify(span.output)).not.toContain('search results');
       }
     });
