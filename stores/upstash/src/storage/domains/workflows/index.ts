@@ -277,6 +277,13 @@ export class WorkflowsUpstash extends WorkflowsStorage {
    * one. Those copies cannot be named, so `discover` asks for a scan; the MATCH
    * prefix is escaped and every hit is re-checked against the literal prefix, so
    * a runId containing `*`, `?` or `[` cannot widen the scan to other runs.
+   *
+   * A key can carry the literal prefix and still belong to a *different* run
+   * whose id embeds `:resourceId:`: run `a`'s legacy key and run
+   * `a:resourceId:r`'s canonical key are the same string. The stored record,
+   * not the key, is the run's identity, so every candidate is read back and
+   * kept only when it is a copy of this run (`run_id` and `workflow_name`
+   * match). Otherwise fold-in and delete would act on an unrelated run.
    */
   async #legacySnapshotKeys({
     namespace,
@@ -292,18 +299,24 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     discover: boolean;
   }): Promise<string[]> {
     const prefix = legacySnapshotPrefix(namespace, workflowName, runId);
-    const keys = new Set(
+    const candidates = new Set(
       knownResourceIds.filter((resourceId): resourceId is string => !!resourceId).map(id => `${prefix}${id}`),
     );
 
     if (discover) {
       const scanned = await this.#db.scanKeys(`${escapeRedisGlob(prefix)}*`);
       for (const key of scanned) {
-        if (key.startsWith(prefix)) keys.add(key);
+        if (key.startsWith(prefix)) candidates.add(key);
       }
     }
 
-    return [...keys];
+    const keys: string[] = [];
+    for (const key of candidates) {
+      const record = await this.client.get<WorkflowRunRecord>(key);
+      if (record?.run_id === runId && record.workflow_name === workflowName) keys.push(key);
+    }
+
+    return keys;
   }
 
   async updateWorkflowResults({
@@ -658,12 +671,27 @@ export class WorkflowsUpstash extends WorkflowsStorage {
     const check = this.#runFenceCheck(params.fence, runId, 'persistWorkflowSnapshot');
     try {
       const now = new Date();
-      // Snapshots live under the canonical key; a legacy resource-suffixed copy,
-      // if the caller names its resourceId, is removed in the same atomic write.
-      // Persist never scans: a run without a resourceId has no legacy sibling
-      // (its legacy key is the canonical key), so there is nothing to look for.
+      // Snapshots live under the canonical key; a legacy resource-suffixed copy
+      // is removed in the same atomic write. A caller that names the resourceId
+      // points straight at its legacy key. A caller that does not may still be
+      // writing a run that a pre-fix release split across a canonical copy and a
+      // legacy one, so read the canonical copy and, when it carries no
+      // resourceId, scan for a legacy sibling to fold in.
       const canonicalKey = canonicalSnapshotKey(namespace, workflowName, runId);
-      const legacyKeys = resourceId ? [legacySnapshotKey(namespace, workflowName, runId, resourceId)] : [];
+      let knownResourceIds: Array<string | undefined> = [resourceId];
+      let discover = false;
+      if (!resourceId) {
+        const existing = await this.client.get<WorkflowRunRecord>(canonicalKey);
+        knownResourceIds = [existing?.resourceId];
+        discover = !!existing && !existing.resourceId;
+      }
+      const legacyKeys = await this.#legacySnapshotKeys({
+        namespace,
+        workflowName,
+        runId,
+        knownResourceIds,
+        discover,
+      });
 
       const record = {
         namespace,
@@ -682,24 +710,40 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local legacyCount = tonumber(ARGV[1])
         local next = cjson.decode(ARGV[2])
 
-        -- Preserve metadata from the canonical record, else from a legacy copy.
-        local existing = redis.call("GET", canonicalKey)
-        for i = 2, 1 + legacyCount do
-          if not existing then
-            existing = redis.call("GET", KEYS[i])
-          else
-            break
-          end
-        end
-        if existing then
-          local current = cjson.decode(existing)
+        -- Metadata precedence: the canonical copy wins for createdAt. A canonical
+        -- copy written before the resource-aware fix has no resourceId, so adopt
+        -- it from a legacy sibling before that sibling is dropped. When there is
+        -- no canonical copy, the first legacy sibling that carries the metadata
+        -- supplies it (parity with the pre-fix read-then-overwrite behaviour).
+        local createdAtLocked = false
+        local canonicalRaw = redis.call("GET", canonicalKey)
+        if canonicalRaw then
+          local current = cjson.decode(canonicalRaw)
           if current["createdAt"] then
             next["createdAt"] = current["createdAt"]
+            createdAtLocked = true
           end
           if next["resourceId"] == nil and current["resourceId"] then
             next["resourceId"] = current["resourceId"]
           end
         end
+
+        for i = 2, 1 + legacyCount do
+          if (not createdAtLocked) or next["resourceId"] == nil then
+            local legacyRaw = redis.call("GET", KEYS[i])
+            if legacyRaw then
+              local copy = cjson.decode(legacyRaw)
+              if not createdAtLocked and copy["createdAt"] then
+                next["createdAt"] = copy["createdAt"]
+                createdAtLocked = true
+              end
+              if next["resourceId"] == nil and copy["resourceId"] then
+                next["resourceId"] = copy["resourceId"]
+              end
+            end
+          end
+        end
+
         redis.call("SET", canonicalKey, cjson.encode(next))
         for i = 2, 1 + legacyCount do
           redis.call("DEL", KEYS[i])
@@ -892,7 +936,10 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       const byRun = new Map<string, { key: string; record: Record<string, any> }>();
       for (const entry of entries) {
         const { record } = entry;
-        const identity = `${record.namespace ?? WORKFLOW_NAMESPACE}:${record.workflow_name}:${record.run_id}`;
+        // Identity is the run's fields, not its key: a run id or workflow name
+        // containing the separator would otherwise make two distinct runs (e.g.
+        // `wf` / `a:b` and `wf:a` / `b`) collapse into one entry.
+        const identity = JSON.stringify([record.namespace ?? WORKFLOW_NAMESPACE, record.workflow_name, record.run_id]);
         const kept = byRun.get(identity);
         if (!kept) {
           byRun.set(identity, entry);
