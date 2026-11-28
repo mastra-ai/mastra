@@ -1,0 +1,342 @@
+---
+title: 'Reference: ConnectClient | Connect'
+description: 'API reference for ConnectClient in @mastra/connect: list project connections, read credentials, call providers through the proxy, and start connect sessions.'
+packages:
+  - '@mastra/connect'
+---
+
+# ConnectClient
+
+`ConnectClient` is a typed client for the Mastra platform integrations API. Use it when your code manages connections itself: it lists a project's connections, reads credentials and connection context, calls providers through the platform proxy, and starts connect sessions. To receive provider events as they arrive, use [`ConnectEvents`](/reference/connect/events).
+
+To give an agent tools, use [`tools()`](/reference/connect/tools) instead.
+
+## Usage example
+
+```typescript title="src/sync.ts"
+import { ConnectClient } from '@mastra/connect'
+
+const connect = new ConnectClient()
+
+const [jira] = await connect.listConnections({ providerKeys: ['jira'] })
+if (jira) {
+  const issue = await connect.proxy(jira.id, {
+    method: 'GET',
+    path: '/rest/api/3/issue/ENG-1',
+  })
+}
+```
+
+The client reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from the environment, the same as `tools()`.
+
+## Constructor parameters
+
+`new ConnectClient(config?)` takes an optional `ConnectClientConfig` object. Every field is optional. Without arguments, the client reads its settings from the environment.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'accessToken',
+    type: 'string',
+    description:
+      'Platform access token. Falls back to `MASTRA_PLATFORM_ACCESS_TOKEN`, then `MASTRA_PLATFORM_SECRET_KEY`.',
+    isOptional: true,
+  },
+  {
+    name: 'orgId',
+    type: 'string',
+    description: 'Organization ID, sent as the `x-organization-id` header. Falls back to `MASTRA_ORG_ID`.',
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description:
+      'Project the client lists, links, and creates connections for. Falls back to `MASTRA_PROJECT_ID`. Project methods also accept a `projectId` per call.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      'End-user resource key the client acts for, sent as the `x-mastra-resource-id` header. It must be 1 to 256 characters after trimming. It has no environment variable fallback.',
+    isOptional: true,
+  },
+  {
+    name: 'baseUrl',
+    type: 'string',
+    description:
+      'Integrations API base URL. Falls back to `MASTRA_INTEGRATIONS_API_URL`, then the regional default from `MASTRA_PLATFORM_REGION` (`us` or `eu`), then `https://integrations.mastra.ai`. A trailing `/v1` is removed, so legacy URLs such as `https://platform.mastra.ai/v1` keep working.',
+    isOptional: true,
+  },
+  {
+    name: 'fetch',
+    type: 'typeof globalThis.fetch',
+    description: 'Fetch implementation, for testing or custom transports.',
+    isOptional: true,
+    defaultValue: 'globalThis.fetch',
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    description:
+      "Timeout in milliseconds for every call this client makes, including proxy calls and reading the response body. Must be a positive whole number no larger than `2147483647`, otherwise the constructor throws `invalid_options`. A call that takes longer throws `MastraConnectError` with code `timeout`. Raise it for large proxy downloads. `tools()` and `channels()` aren't affected.",
+    isOptional: true,
+    defaultValue: '15000 (15 seconds)',
+  },
+]}
+/>
+
+The default timeout is exported as `DEFAULT_CONNECT_CLIENT_TIMEOUT_MS`.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  { name: 'baseUrl', type: 'string', description: 'The integrations API base URL the client calls.' },
+  {
+    name: 'projectId',
+    type: 'string | undefined',
+    description: 'The project the client lists and links connections for.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string | undefined',
+    description: 'The end-user resource key the client sends, when scoped.',
+  },
+]}
+/>
+
+## Methods
+
+### `listConnections(input?)`
+
+Returns the connections linked to the project as `Promise<ProjectConnection[]>`. Each connection has `id`, `integrationId`, `status`, and optional `accountLabel`, `connectedAt`, `createdAt`, `connectedByUserId`, and `resourceId`. A `resourceId` of `null` marks a connection shared by all users of the project.
+
+Only connections linked to the project are returned. Connections that belong to the organization but aren't linked to the project are left out. Use `linkConnection()` to add them.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input.providerKeys',
+    type: 'readonly string[]',
+    description: "Keep only connections whose `integrationId` is one of these, such as `['jira', 'linear']`.",
+    isOptional: true,
+  },
+  {
+    name: 'input.projectId',
+    type: 'string',
+    description: "List another project's connections instead of the client's project.",
+    isOptional: true,
+  },
+]}
+/>
+
+### `linkConnection(connectionId, input?)`
+
+Links an organization connection to the project, so `listConnections()` returns it and its events reach the project's topics. Linking an already linked connection succeeds. Pass `input.projectId` to link to another project. Returns `Promise<void>`.
+
+### `listIntegrations()`
+
+Returns the integration catalog as `Promise<IntegrationCatalogEntry[]>`. Each entry has an `id`, such as `linear`, and `capabilities.mcp`, which is `true` for providers served over MCP. Entries can also include `displayName`, `logoUrl`, `authType`, and `authFields`.
+
+### `getCredential(connectionId)`
+
+Returns the connection's raw credential as `Promise<ConnectionCredential>`, the same type as [`credential()`](/reference/connect/credential).
+
+### `getContext(connectionId)`
+
+Returns `Promise<{ connection_config, metadata }>` for the connection. Both are provider-specific records or `null`. For example, a GitHub App connection stores its installation ID in `connection_config`.
+
+### `proxy(connectionId, request)`
+
+Calls the provider through the platform proxy and returns its parsed body as `Promise<unknown>`. A body that isn't valid JSON is returned as text. The platform adds credentials, so they never reach your code.
+
+<PropertiesTable
+  content={[
+  { name: 'request.method', type: "'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'", description: 'HTTP method.' },
+  {
+    name: 'request.path',
+    type: 'string',
+    description: "Path relative to the provider's API base URL. Paths with `.` or `..` segments are rejected.",
+  },
+  {
+    name: 'request.query',
+    type: 'Record<string, string | number | boolean | Array<...> | undefined>',
+    description: 'Query parameters. Arrays repeat the key.',
+    isOptional: true,
+  },
+  {
+    name: 'request.headers',
+    type: 'Record<string, string>',
+    description: 'Extra headers. Authorization, organization, project, and resource headers are dropped.',
+    isOptional: true,
+  },
+  {
+    name: 'request.body',
+    type: 'unknown',
+    description:
+      'Request body. Strings are sent as `text/plain`, `ArrayBuffer` and `Uint8Array` as `application/octet-stream`, and other values as JSON. For a string or bytes, set a `content-type` header to send another type, such as form data.',
+    isOptional: true,
+  },
+  {
+    name: 'request.baseUrlOverride',
+    type: 'string',
+    description:
+      'Absolute HTTPS base URL for providers with more than one API host. The platform only allows hosts configured for the provider.',
+    isOptional: true,
+  },
+  {
+    name: 'request.responseType',
+    type: "'arraybuffer'",
+    description: 'Return the body as an `ArrayBuffer`, for binary downloads.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `proxyWithResponse(connectionId, request)`
+
+Same as `proxy()`, but returns `Promise<{ data, status, headers }>` so you can read the provider's status and headers. `data` is the parsed body.
+
+### `createConnectSession(integrationId, input?)`
+
+Starts a session to connect a new account. The resulting connection is linked to the project. Pass `input.projectId` to use another project. On a client created with `withResource()`, the connection belongs to that end user.
+
+Returns `Promise<ConnectSession>` with `connectionId`, `integrationId`, `connectUrl`, `sessionToken`, and `expiresAt`. Send the user to `connectUrl` to finish connecting. For sessions scoped to an end user, `connectUrl` and `sessionToken` are `null`. Call `getConnectUrl()` to get the link.
+
+### `createReconnectSession(connectionId)`
+
+Starts a session to re-authorize an existing connection whose status is `active` or `needs_reauth`. Returns `Promise<ConnectSession>`.
+
+### `getConnectUrl(connectionId)`
+
+Returns `Promise<{ connectUrl, expiresAt }>` for a connection scoped to an end user. Call it on a client created with `withResource()`, with the same resource key that started the session. The link is available only while the session is pending and unexpired. Otherwise, the call throws `connection_not_found`.
+
+### `disconnect(connectionId)`
+
+Disconnects the connection. The platform removes it from the provider in the background. Returns `Promise<void>`.
+
+### `withResource(resourceId)`
+
+Returns a new `ConnectClient` that sends `resourceId` as the end-user resource key. The original client is unchanged. Use it for connections scoped to one of your users.
+
+### `request(method, path, init?)`
+
+Calls a platform route that the typed methods don't cover, and returns `Promise<T>` with the parsed JSON body, or `undefined` for an empty body. `method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, or `DELETE`. `path` must start with a single `/` and can't contain `.` or `..` segments. A response outside the 2xx range throws `MastraConnectError`.
+
+<PropertiesTable
+  content={[
+  { name: 'init.body', type: 'unknown', description: 'Sent as JSON.', isOptional: true },
+  {
+    name: 'init.headers',
+    type: 'Record<string, string>',
+    description:
+      'Extra headers for this call only. Authorization, organization, project, and resource headers are ignored.',
+    isOptional: true,
+  },
+  {
+    name: 'init.query',
+    type: 'Record<string, string | undefined>',
+    description: 'Query parameters. `undefined` values are skipped.',
+    isOptional: true,
+  },
+  {
+    name: 'init.signal',
+    type: 'AbortSignal',
+    description: 'Cancels the call. The client timeout still applies.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `fetchRaw(method, path, init?)`
+
+Same as `request()`, but doesn't follow redirects and returns `Promise<Response>` without checking its status. Use it for routes that answer with a redirect.
+
+## Errors
+
+Every method throws `MastraConnectError`, exported from `@mastra/connect`. It has these fields:
+
+<PropertiesTable
+  content={[
+  { name: 'code', type: 'MastraConnectErrorCode', description: 'What went wrong. See the table below.' },
+  {
+    name: 'status',
+    type: 'number | undefined',
+    description: 'HTTP status of the response, when there was one.',
+  },
+  {
+    name: 'response',
+    type: '{ status: number } | undefined',
+    description: 'The same status in the shape Axios uses, set only when `status` is set.',
+  },
+  {
+    name: 'detail',
+    type: 'string | undefined',
+    description: 'The response body or problem detail, cut to 2,000 characters. Access tokens are redacted.',
+  },
+  {
+    name: 'source',
+    type: "'platform' | 'provider' | undefined",
+    description:
+      'Whether the platform or the provider sent the error response. Unset for errors raised before a response, such as a timeout or an invalid argument.',
+  },
+  {
+    name: 'problemCode',
+    type: 'string | undefined',
+    description:
+      "The platform's problem type, set only when `source` is `'platform'`. For example, `connection_needs_reauth` means the connection must be re-authorized with `createReconnectSession()`.",
+  },
+  {
+    name: 'retryAfterMs',
+    type: 'number | undefined',
+    description: 'How long to wait before retrying, read from the `Retry-After` header of a 429 or 503 response.',
+  },
+]}
+/>
+
+Check `problemCode` rather than `code` to detect a platform condition. A proxied call that fails because the connection needs re-authorization throws `proxy_error` with `problemCode` set to `connection_needs_reauth`:
+
+```typescript
+import { MastraConnectError } from '@mastra/connect'
+
+try {
+  await connect.proxy(connectionId, { method: 'GET', path: '/me' })
+} catch (error) {
+  if (
+    error instanceof MastraConnectError &&
+    error.source === 'platform' &&
+    error.problemCode === 'connection_needs_reauth'
+  ) {
+    const session = await connect.createReconnectSession(connectionId)
+    // Send the user to session.connectUrl
+  }
+}
+```
+
+`code` is one of these values. The last group comes from other `@mastra/connect` APIs that throw the same error class.
+
+| Code | When |
+| - | - |
+| `missing_access_token` | No platform token is configured |
+| `missing_project_id` | A project call has no project from the call, the client, or `MASTRA_PROJECT_ID` |
+| `invalid_options` | An argument is invalid, such as a path with `..` segments, an empty `resourceId`, or a non-positive `timeoutMs` |
+| `timeout` | A call took longer than `timeoutMs` |
+| `unauthorized` | The platform rejected the token (401 or 403) |
+| `connection_not_found` | The connection doesn't exist or isn't accessible, or `getConnectUrl()` found no pending session |
+| `proxy_error` | A proxied call failed. Check `source` to see whether the platform or the provider answered |
+| `unsupported_credential_type` | `getCredential()` received a credential type this package doesn't support |
+| `platform_error` | Any other platform failure, including a response with an unexpected shape |
+| `invalid_cursor` | The events service rejected a resume cursor. See [`ConnectEvents`](/reference/connect/events) |
+| `invalid_response` | The events service sent a frame that doesn't match its contract |
+| `missing_connection_id` | A provider toolset was created without a connection ID |
+| `no_active_connection` | [`channels()`](/reference/connect/channels) found no active connection for a channel provider |
+| `unknown_connection` | A tool call named a `connection_name` that matches no active connection |
+
+## Related
+
+- [Connect](/docs/mastra-platform/connect)
+- [`ConnectEvents`](/reference/connect/events)
+- [`credential()`](/reference/connect/credential)
+- [`tools()`](/reference/connect/tools)
