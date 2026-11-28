@@ -4361,6 +4361,7 @@ export class Session<TState = unknown> {
    */
   readonly #tags: Record<string, string>;
   readonly #workspace: Workspace | undefined;
+  readonly #defaultToolApprovalPolicy: PermissionPolicy;
   browser?: MastraBrowser;
 
   constructor({
@@ -4371,6 +4372,7 @@ export class Session<TState = unknown> {
     tags,
     workspace,
     browser,
+    defaultToolApprovalPolicy = 'ask',
   }: {
     resourceId: string;
     state?: SessionStateOptions<TState>;
@@ -4379,7 +4381,9 @@ export class Session<TState = unknown> {
     tags?: Record<string, string>;
     workspace?: Workspace;
     browser?: MastraBrowser;
+    defaultToolApprovalPolicy?: PermissionPolicy;
   }) {
+    this.#defaultToolApprovalPolicy = defaultToolApprovalPolicy;
     this.#tags = tags
       ? Object.fromEntries(Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)))
       : {};
@@ -4882,8 +4886,9 @@ export class Session<TState = unknown> {
   /**
    * Resolve the effective approval policy for a tool: explicit per-tool deny
    * wins, then session-wide yolo, then an explicit per-tool policy, then a
-   * grant, then the tool's category grant/policy, falling back to "ask". Pure
-   * session state plus the injected category resolver.
+   * grant, then the tool's category grant/policy, falling back to the
+   * controller's default policy. Pure session state plus the injected category
+   * resolver.
    *
    * `scope` names the thread whose rules and grants apply. Pass a thread id to
    * read that thread's grants against the session's current rules, or a run's
@@ -4916,7 +4921,7 @@ export class Session<TState = unknown> {
       if (categoryPolicy) return categoryPolicy;
     }
 
-    return 'ask';
+    return this.#defaultToolApprovalPolicy;
   }
 
   /**

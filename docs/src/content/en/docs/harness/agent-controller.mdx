@@ -276,7 +276,15 @@ await session.state.set({ activeProject: 'docs-site' })
 
 ## Approve tools and resume suspensions
 
-Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Map custom tools to categories with `toolCategoryResolver` on the controller:
+Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Tools without a more specific Session policy default to `ask`. Set `defaultToolApprovalPolicy` on the controller to change that fallback for initial runs and resumed continuations:
+
+```typescript
+const controller = new AgentController({
+  defaultToolApprovalPolicy: 'allow',
+})
+```
+
+Explicit tool and category policies still take precedence. Map custom tools to categories with `toolCategoryResolver` on the controller:
 
 ```typescript
 const controller = new AgentController({

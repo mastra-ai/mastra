@@ -45,6 +45,7 @@ describe('AgentController notification signals', () => {
       id: 'controller-1',
       resourceId: 'resource-1',
       maxSteps: 100,
+      defaultToolApprovalPolicy: 'allow',
       modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
     });
     await controller.init();
@@ -87,5 +88,9 @@ describe('AgentController notification signals', () => {
         }),
       }),
     );
+
+    expect(session.resolveToolApproval('execute_command')).toBe('allow');
+    const [, signalOptions] = agent.sendNotificationSignal.mock.calls[0] as [unknown, any];
+    expect(await signalOptions.ifIdle.streamOptions.requireToolApproval({ toolName: 'execute_command' })).toBe(false);
   });
 });

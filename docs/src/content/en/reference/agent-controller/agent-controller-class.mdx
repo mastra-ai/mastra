@@ -178,6 +178,13 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     defaultValue: '1000',
   },
   {
+    name: 'defaultToolApprovalPolicy',
+    type: "'allow' | 'ask' | 'deny'",
+    description: 'Fallback approval policy for tools without a more specific session tool or category policy.',
+    isOptional: true,
+    defaultValue: "'ask'",
+  },
+  {
     name: 'instructions',
     type: 'string',
     description: 'Controller instructions layered with the current mode instructions.',
