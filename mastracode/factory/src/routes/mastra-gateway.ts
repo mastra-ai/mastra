@@ -1,7 +1,9 @@
+import type { MastraGatewayCredits } from '@internal/factory-contract';
 import type { Context } from 'hono';
-import { z } from 'zod';
 
+import { z } from 'zod';
 import type { RouteAuth } from './route.js';
+export type { MastraGatewayCredits } from '@internal/factory-contract';
 
 const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects.mastra.ai';
 
@@ -129,15 +131,6 @@ async function billingCustomer(auth: RouteAuth, c: Context, failure: string) {
 
 function addCreditsUrl(orgId: string): string {
   return `${MASTRA_PROJECTS_URL}/add-credits/${encodeURIComponent(orgId)}`;
-}
-
-export interface MastraGatewayCredits {
-  /** Dollars (1 credit = $1); absent when the platform reports no balance for the pool. */
-  remaining?: number;
-  unlimited: boolean;
-  /** Mastra lets only organization admins buy credits. */
-  canAddCredits: boolean;
-  addCreditsUrl: string;
 }
 
 function remainingCredits(balance: z.infer<typeof CustomerBalance> | null | undefined): number | undefined {

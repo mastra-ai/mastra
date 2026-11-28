@@ -1,3 +1,4 @@
+import type { CredentialScope, LoginSessionKind } from '@internal/factory-contract';
 /**
  * Model provider credentials domain — tenant-scoped OAuth tokens and API keys
  * for model providers (Anthropic/Claude Max, OpenAI Codex, GitHub Copilot,
@@ -36,7 +37,7 @@ export interface CredentialTenant {
 }
 
 /** Which tenancy level a credential row lives at. */
-export type CredentialScope = 'user' | 'org';
+export type { CredentialScope } from '@internal/factory-contract';
 
 /** One stored credential, annotated with its scope. */
 export interface CredentialRecord {
@@ -56,7 +57,7 @@ export interface ResolvedCredential {
 }
 
 /** Kind of pending web login flow a session row tracks. */
-export type LoginSessionKind = 'paste-code' | 'device-code';
+export type { LoginSessionKind } from '@internal/factory-contract';
 
 /** Scope the completed credential should be written to. */
 export type LoginCredentialScope = 'user' | 'org';
