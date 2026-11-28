@@ -5,7 +5,13 @@ import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createStep, createWorkflow } from '../workflows';
 import type { SuspendOptions } from '../workflows';
 import type { BackgroundTaskManager } from './manager';
-import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
+import {
+  BACKGROUND_TASK_WORKFLOW_ID,
+  nextAttemptStart,
+  suspendEnvelope,
+  toolSuspendPayload,
+  unwrapSuspendData,
+} from './workflow-id';
 
 export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
@@ -146,50 +152,52 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
               abortController.abort(new Error(`Task timed out after ${task.timeoutMs}ms`));
             }, task.timeoutMs);
 
-      // Wrap the workflow runtime's `suspend` so we persist
-      // `status: 'suspended'` + `suspendPayload`, fire the per-task
-      // suspend hook (so the bg-task's `onResult` updates the agent's
-      // message list), and publish the lifecycle event before
-      // delegating. The runtime's `suspend` does not throw — it sets a
-      // flag the step-executor reads after `execute` returns. We
-      // capture the args here and call the runtime's suspend from the
-      // step body after the executor returns, so `wrappedSuspend` can
-      // safely run all its side effects synchronously inside the
-      // tool's call.
+      // Capture the tool's `suspend` call; the step body suspends the run
+      // after the executor returns. The manager stores the task as
+      // `suspended`, runs the suspend hooks and publishes `task.suspended`
+      // only once the run's suspended snapshot is saved, so a stored
+      // suspension can always be resumed. Recording the payload right away
+      // also tells shutdown not to cancel a task that has asked (#30226).
       let pendingSuspend: { data?: unknown; suspendOptions?: SuspendOptions } | undefined;
       const wrappedSuspend = async (data?: unknown, suspendOptions?: SuspendOptions) => {
-        // Suspend is non-terminal but still fenced on ownership: a superseded
-        // worker must not park a task another worker is now running. Clearing
-        // the lease marks the task unowned while it waits to be resumed.
-        const suspended = await storage.updateTask(
-          taskId,
-          {
-            status: 'suspended',
-            suspendPayload: data,
-            suspendedAt: new Date(),
-            ownerId: undefined,
-            leaseExpiresAt: undefined,
-          },
-          { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
-        );
-        if (!suspended) return;
-        const suspendedTask = await storage.getTask(taskId);
-        if (suspendedTask) {
-          // Suspend is non-terminal — DO NOT use `runLocalCompletionHooks`
-          // here. That helper deregisters the task context in its `finally`
-          // block, which would strand the resume call (the workflow step
-          // body re-enters and looks up `manager.taskContexts.get(taskId)`).
-          await manager.runLocalSuspendHooks(suspendedTask);
-          await manager.publishLifecycleEvent('task.suspended', suspendedTask);
-        }
         pendingSuspend = { data, suspendOptions };
+        manager.noteSuspendRequested(taskId, data);
+      };
+      const suspendRun = async ({ data, suspendOptions }: { data?: unknown; suspendOptions?: SuspendOptions }) => {
+        // A worker whose task was cancelled or taken over must not save its
+        // suspension over what the task holds now.
+        const current = await storage.getTask(taskId);
+        if (current?.status !== 'running' || current.ownerId !== manager.ownerId) {
+          return { taskId, outcome: 'cancelled' as const };
+        }
+        // Agent-as-tool delegations carry the nested sub-agent's runId in
+        // `suspendOptions.runId` (with `isAgentSuspend: true`), never in the
+        // suspend payload. The resume path below restores it from the step's
+        // persisted `suspendData.suspendedToolRunId`, so bridge it into the
+        // engine suspend data here. Keep the user-facing `suspendPayload`
+        // stored by the manager untouched — this only augments the internal snapshot.
+        const agentRunId =
+          suspendOptions?.isAgentSuspend && typeof suspendOptions.runId === 'string' ? suspendOptions.runId : undefined;
+        const engineData = !agentRunId
+          ? data
+          : data && typeof data === 'object'
+            ? { ...(data as Record<string, unknown>), suspendedToolRunId: agentRunId }
+            : { suspendedToolRunId: agentRunId };
+        // Named by the attempt this step started (its claim's owner and
+        // `startedAt`). Crash recovery restores only a suspension saved by the
+        // attempt the task still names, so an answered or superseded one is
+        // never asked again.
+        return suspend(
+          suspendEnvelope(engineData, { ownerId: manager.ownerId, startedAt: task.startedAt?.getTime() ?? 0 }),
+          suspendOptions as SuspendOptions,
+        );
       };
 
       try {
         const args = { ...task.args };
         delete args.suspendedToolRunId;
         const suspendedToolRunId = resolveSuspendedToolRunId(
-          (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
+          (unwrapSuspendData(suspendData) as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId,
         );
         if (resumeData !== undefined && suspendedToolRunId) {
           args.suspendedToolRunId = suspendedToolRunId;
@@ -197,11 +205,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // The payload this task suspended with, so the resumed tool knows which
         // request it is answering. The step's suspend data may carry the internal
         // `suspendedToolRunId` bridge (see below); strip it back off.
-        let suspendPayload: unknown = suspendData;
-        if (suspendPayload && typeof suspendPayload === 'object' && 'suspendedToolRunId' in suspendPayload) {
-          const { suspendedToolRunId: _bridge, ...rest } = suspendPayload as Record<string, unknown>;
-          suspendPayload = Object.keys(rest).length > 0 ? rest : undefined;
-        }
+        const suspendPayload = toolSuspendPayload(suspendData);
 
         const result = await executor.execute(args, {
           abortSignal: abortController.signal,
@@ -214,22 +218,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           suspendPayload: resumeData !== undefined ? suspendPayload : undefined,
         });
 
-        if (pendingSuspend) {
-          // Agent-as-tool delegations carry the nested sub-agent's runId in
-          // `suspendOptions.runId` (with `isAgentSuspend: true`), never in the
-          // suspend payload. The resume path above restores it from the step's
-          // persisted `suspendData.suspendedToolRunId`, so bridge it into the
-          // engine suspend data here. Keep the user-facing `suspendPayload`
-          // stored above untouched — this only augments the internal snapshot.
-          const opts = pendingSuspend.suspendOptions;
-          const agentRunId = opts?.isAgentSuspend && typeof opts.runId === 'string' ? opts.runId : undefined;
-          const engineData = !agentRunId
-            ? pendingSuspend.data
-            : pendingSuspend.data && typeof pendingSuspend.data === 'object'
-              ? { ...(pendingSuspend.data as Record<string, unknown>), suspendedToolRunId: agentRunId }
-              : { suspendedToolRunId: agentRunId };
-          return suspend(engineData, opts as SuspendOptions);
-        }
+        if (pendingSuspend) return suspendRun(pendingSuspend);
 
         return { taskId, outcome: 'success' as const, result };
       } catch (error: any) {
@@ -243,6 +232,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         // `running` so retryable tasks can be recovered by the next process;
         // non-retryable tasks are persisted as cancelled by manager.shutdown().
         if (manager.isShuttingDown()) {
+          // A tool that asked before shutdown aborted it keeps its question.
+          if (pendingSuspend) return suspendRun(pendingSuspend);
           manager.deregisterTaskContext(taskId);
           return { taskId, outcome: 'cancelled' as const };
         }
@@ -355,7 +346,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           {
             retryCount: task.retryCount + 1,
             error: undefined,
-            startedAt: new Date(),
+            startedAt: nextAttemptStart(task.startedAt),
           },
           { expectedStatus: 'running', expectedOwnerId: manager.ownerId },
         );
