@@ -40,5 +40,10 @@
     "mastra": "latest",
     "oxfmt": "0.80.0",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "readdir-glob": {
+      "minimatch": "11.0.9"
+    }
   }
 }

@@ -110,7 +110,7 @@
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "vite": "^8.3.5",
+    "vite": "^8.3.7",
     "vite-plugin-singlefile": "^2.3.4",
     "vitest": "catalog:",
     "zod": "catalog:"

@@ -114,7 +114,7 @@
     "tailwindcss": "^4.3.3",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vite": "^8.3.5",
+    "vite": "^8.3.7",
     "vitest": "catalog:",
     "zod": "^4.6.7"
   },

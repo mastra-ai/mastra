@@ -298,7 +298,7 @@
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",
-    "vite": "^8.3.5",
+    "vite": "^8.3.7",
     "vite-plugin-lib-inject-css": "^2.2.2",
     "vitest": "catalog:"
   },

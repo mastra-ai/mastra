@@ -9,7 +9,7 @@ overrides:
   # Vanta 2026-10-26: CVE-2026-111181 (body-parser <1.20.9), via verdaccio -> express 4
   body-parser@<1.20.9: 1.20.9
   # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
-  'vite@>=8.0.0 <8.3.3': 8.3.4
+  'vite@>=8.0.0 <8.3.3': 8.3.8
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1

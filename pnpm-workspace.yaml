@@ -364,6 +364,9 @@ trustPolicyExclude:
   # flags it because modal stopped attaching provenance after 0.7.2.
   - 'modal@0.11.1'
 overrides:
+  # Dependabot #3570 / GHSA-48c2-rrv3-qjmp (yaml >=1.0.0 <1.10.3, deep-nesting stack overflow). openapi-to-postmanv2
+  # (docs, via docusaurus-plugin-openapi-docs) pins yaml 1.10.2 exactly, even in its latest 6.4.5; 1.10.3 is the same-major fix.
+  'yaml@>=1.0.0 <1.10.3': 1.10.3
   # Vanta 2026-11-13: hono <4.13.16 advisories; 4.13.18 is the latest 4.x
   hono@<4.13.18: 4.13.18
   # @mastra/server imports @mastra/mcp-apps-components only when an app installs it (an optional peer).
