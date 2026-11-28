@@ -80,6 +80,100 @@ const clientRacingNextWrite = (inner: GlideValkeyClient, race: () => Promise<voi
   }) as ValkeyClient;
 };
 
+/**
+ * Wraps a client so `race()` runs exactly once, either just before the next read of `canonicalKey`
+ * *after the first*, or just before the next write batch — whichever comes first. A read-decide-write
+ * used to read the key once to pick its metadata and again as its guard target; firing on the second
+ * read reproduces a record that lands after the decision but before the write, and firing on the
+ * batch handles the code where the decision and the guard share one read and only the batch remains.
+ */
+const clientRacingSecondReadOf = (
+  inner: GlideValkeyClient,
+  canonicalKey: string,
+  race: () => Promise<void>,
+): ValkeyClient => {
+  let armed = true;
+  let canonicalReads = 0;
+  const fire = async () => {
+    if (!armed) return;
+    armed = false;
+    await race();
+  };
+
+  const multi = (): ValkeyMulti => {
+    const batch = inner.multi();
+    const wrapped: ValkeyMulti = {
+      set: (key, value) => {
+        batch.set(key, value);
+        return wrapped;
+      },
+      del: key => {
+        batch.del(key);
+        return wrapped;
+      },
+      zAdd: (key, value) => {
+        batch.zAdd(key, value);
+        return wrapped;
+      },
+      zRem: (key, value) => {
+        batch.zRem(key, value);
+        return wrapped;
+      },
+      exec: async () => {
+        await fire();
+        return batch.exec();
+      },
+    };
+    return wrapped;
+  };
+
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === 'multi') return multi;
+      if (prop === 'eval') {
+        return async (script: string, options: { keys: string[]; arguments: string[] }) => {
+          await fire();
+          return target.eval(script, options);
+        };
+      }
+      if (prop === 'get') {
+        return async (key: string) => {
+          if (key === canonicalKey) {
+            canonicalReads += 1;
+            if (canonicalReads === 2) await fire();
+          }
+          return target.get(key);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as ValkeyClient;
+};
+
+/**
+ * Wraps a client so `race()` runs exactly once, immediately before the next `mGet` — the point a load
+ * reads its legacy snapshot candidates, after it scanned for them.
+ */
+const clientRacingNextRead = (inner: GlideValkeyClient, race: () => Promise<void>): ValkeyClient => {
+  let armed = true;
+  return new Proxy(inner, {
+    get(target, prop, receiver) {
+      if (prop === 'mGet') {
+        return async (keys: string[]) => {
+          if (armed) {
+            armed = false;
+            await race();
+          }
+          return target.mGet(keys);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver) as unknown;
+      return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  }) as ValkeyClient;
+};
+
 describe('WorkflowsValkey resourceId keying', () => {
   let client: GlideValkeyClient;
   let store: WorkflowsValkey;
@@ -371,6 +465,45 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(JSON.parse(contested!).run_id).toBe('a:resourceId:b');
   });
 
+  // `<workflow_name>:<wf>:run_id:<run>` is not unique per run: a reserved marker in either free-form
+  // part makes two distinct (workflowName, runId) pairs name one key.
+  const sharedKey = (wf: string, run: string) =>
+    getKey(TABLE_WORKFLOW_SNAPSHOT, { namespace: 'workflows', workflow_name: wf, run_id: run });
+
+  it('keeps a run whose key another workflow-and-run pair collides with', async () => {
+    // A per-run token keeps the pair on keys no other run uses, while still colliding with each other.
+    const token = randomUUID();
+    const [wfA, runA] = [`${token}-sales`, `daily:run_id:${token}-close`];
+    const [wfB, runB] = [`${token}-sales:run_id:daily`, `${token}-close`];
+    expect(sharedKey(wfA, runA)).toBe(sharedKey(wfB, runB));
+
+    await store.persistWorkflowSnapshot({ workflowName: wfA, runId: runA, snapshot: snapshot(runA) });
+
+    // The second write cannot share the key without destroying the first run, so it must not land.
+    await expect(
+      store.persistWorkflowSnapshot({ workflowName: wfB, runId: runB, snapshot: snapshot(runB) }),
+    ).rejects.toThrow();
+
+    expect((await store.loadWorkflowSnapshot({ workflowName: wfA, runId: runA }))?.runId).toBe(runA);
+  });
+
+  it('validates the contested key for a run ID that carries no resourceId segment', async () => {
+    const token = randomUUID();
+    const [wfA, runA] = [`${token}:run_id:a`, `${token}b`];
+    const [wfB, runB] = [token, `a:run_id:${token}b`];
+    expect(sharedKey(wfA, runA)).toBe(sharedKey(wfB, runB));
+    // `runB` is colon-named but carries no `:resourceId:`, so a shape-gated check would skip it.
+    expect(runB.includes(':resourceId:')).toBe(false);
+
+    await store.persistWorkflowSnapshot({ workflowName: wfA, runId: runA, snapshot: snapshot(runA) });
+
+    await expect(
+      store.persistWorkflowSnapshot({ workflowName: wfB, runId: runB, snapshot: snapshot(runB) }),
+    ).rejects.toThrow();
+
+    expect((await store.loadWorkflowSnapshot({ workflowName: wfA, runId: runA }))?.runId).toBe(runA);
+  });
+
   it('does not delete the legacy run when deleting the colon-named run whose canonical key it occupies', async () => {
     await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
 
@@ -517,6 +650,130 @@ describe('WorkflowsValkey resourceId keying', () => {
     } finally {
       await writer.quit();
     }
+  });
+
+  it("does not keep a key's old metadata when a fresh record lands after the persist read it", async () => {
+    const runId = randomUUID();
+    const freshCreatedAt = new Date('2025-03-01T00:00:00Z');
+
+    const writer = new GlideValkeyClient({
+      addresses: [{ host: 'localhost', port: 6382 }],
+      credentials: { password: 'valkey_password' },
+    });
+    await writer.connect();
+    const writerStore = new WorkflowsValkey({ client: writer });
+    try {
+      const racing = new WorkflowsValkey({
+        client: clientRacingSecondReadOf(client, canonicalKey(runId), async () => {
+          // A record for the same run appears after the persist read the key as its metadata donor
+          // but before the guarded write that was based on that read.
+          await writerStore.persistWorkflowSnapshot({
+            workflowName,
+            runId,
+            resourceId: 'r1',
+            createdAt: freshCreatedAt,
+            snapshot: snapshot(runId, 'running'),
+          });
+        }),
+      });
+
+      await racing.persistWorkflowSnapshot({ workflowName, runId, snapshot: snapshot(runId) });
+
+      // The write must rebuild from the fresh record, not stamp it with the metadata read before it existed.
+      const run = await store.getWorkflowRunById({ workflowName, runId });
+      expect(run?.resourceId).toBe('r1');
+      expect(run?.createdAt.toISOString()).toBe(freshCreatedAt.toISOString());
+    } finally {
+      await writer.quit();
+    }
+  });
+
+  it("does not keep a legacy donor's old metadata when the donor changes mid-persist", async () => {
+    const donor = (createdAt: Date) =>
+      JSON.stringify({
+        namespace: 'workflows',
+        workflow_name: workflowName,
+        run_id: 'r',
+        resourceId: 'x',
+        snapshot: snapshot('r'),
+        createdAt: createdAt.toISOString(),
+        updatedAt: createdAt.toISOString(),
+      });
+    const newerCreatedAt = new Date('2025-06-01T00:00:00Z');
+    await client.set(legacyKey('r', 'x'), donor(new Date('2025-01-01T00:00:00Z')));
+
+    const racing = new WorkflowsValkey({
+      client: clientRacingNextWrite(client, async () => {
+        // The legacy donor is updated after the persist read its `createdAt` but before the batch.
+        await client.set(legacyKey('r', 'x'), donor(newerCreatedAt));
+      }),
+    });
+
+    await racing.persistWorkflowSnapshot({ workflowName, runId: 'r', resourceId: 'x', snapshot: snapshot('r') });
+
+    // The donor read is guarded, so the stale `createdAt` must not be written to the canonical key.
+    const run = await store.getWorkflowRunById({ workflowName, runId: 'r' });
+    expect(run?.createdAt.toISOString()).toBe(newerCreatedAt.toISOString());
+    expect(run?.resourceId).toBe('x');
+  });
+
+  it('finds a run a relocation moved to its canonical key while the legacy candidates were read', async () => {
+    // Run `r`'s record sits under the legacy key that run `r:resourceId:x` will write its canonical key to.
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+
+    const writer = new GlideValkeyClient({
+      addresses: [{ host: 'localhost', port: 6382 }],
+      credentials: { password: 'valkey_password' },
+    });
+    await writer.connect();
+    const writerStore = new WorkflowsValkey({ client: writer });
+    try {
+      const racing = new WorkflowsValkey({
+        client: clientRacingNextRead(client, async () => {
+          // Persisting the colon-named run relocates run `r`'s record onto its canonical key and takes
+          // the legacy key — after this load scanned the legacy key but before it read it.
+          await writerStore.persistWorkflowSnapshot({
+            workflowName,
+            runId: collidingRunId,
+            resourceId: 'other',
+            snapshot: snapshot(collidingRunId),
+          });
+        }),
+      });
+
+      // The load must re-check the canonical key before reporting a miss, or it returns null for a run
+      // that is now present.
+      expect((await racing.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.runId).toBe('r');
+    } finally {
+      await writer.quit();
+    }
+  });
+
+  it('does not list a run stored under a namespace that merely starts with the default one', async () => {
+    const runId = randomUUID();
+    await store.persistWorkflowSnapshot({
+      namespace: 'workflows:archive',
+      workflowName,
+      runId,
+      snapshot: snapshot(runId),
+    });
+
+    // The unscoped scan pattern matches this key, but it belongs to another namespace.
+    const listed = await store.listWorkflowRuns({});
+    expect(listed.runs.some(run => run.runId === runId && run.workflowName === workflowName)).toBe(false);
+  });
+
+  it('keeps runs apart whose only difference is the delimiter a joined key would fold on', async () => {
+    const token = randomUUID();
+    const [wfA, runA] = [`${token}a`, 'b\u0000c'];
+    const [wfB, runB] = [`${token}a\u0000b`, 'c'];
+    await store.persistWorkflowSnapshot({ workflowName: wfA, runId: runA, snapshot: snapshot(runA) });
+    await store.persistWorkflowSnapshot({ workflowName: wfB, runId: runB, snapshot: snapshot(runB) });
+
+    // A `workflow_name\u0000run_id` join folds these two distinct runs into one; both must be listed.
+    const listed = await store.listWorkflowRuns({});
+    expect(listed.runs.some(run => run.workflowName === wfA && run.runId === runA)).toBe(true);
+    expect(listed.runs.some(run => run.workflowName === wfB && run.runId === runB)).toBe(true);
   });
 
   it('treats glob metacharacters in the workflow name literally', async () => {
