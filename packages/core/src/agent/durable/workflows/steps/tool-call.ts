@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MastraFGAPermissions } from '../../../../auth/ee';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
+import { sanitizeToolArguments } from '../../../../background-tasks/resolve-config';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
@@ -892,6 +893,19 @@ export function createDurableToolCallStep() {
           });
         }
         return { ...typedInput, error };
+      }
+
+      // Drop a `_background` override the resolved policy disallows (#31614, #31612) before the
+      // args reach schema validation, the approval checks, `beforeApproval`, and execute, so a
+      // stray model field cannot fail a strict schema or leak into the tool. An allowed override
+      // is left in place for the background dispatch extraction below.
+      if (typeof args === 'object' && args !== null) {
+        args = sanitizeToolArguments({
+          args,
+          toolName,
+          toolConfig: (tool as { backgroundConfig?: ToolBackgroundConfig } | undefined)?.backgroundConfig,
+          agentConfig: registryEntry?.backgroundTasksConfig,
+        });
       }
 
       // Get memory-related state for message persistence. Fall back to the
