@@ -9,7 +9,7 @@ When a person or agent merges an imported page into another page, the merged pag
 - a later upsert of that item is skipped and counted in the new `merged` count on the run's counts and flush receipts
 - removing the item does nothing
 - the page it was merged into is never touched
-- a child whose parent item was merged is placed as if its parent were missing, and no longer waits for it
+- an existing child of a merged item stays where the merge put it and is updated in place; a new child is created in the importer's folder as if its parent were missing, and nothing waits for it
 
 ```ts
 const receipt = await knowledge.importers!.run('notion');

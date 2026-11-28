@@ -422,8 +422,8 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
   // source of truth, so the item is written again as if new at its configured path; a page in another
   // scope stays there as an ordinary page. A page merged into another is not gone but `merged`: its
   // content lives on in the page it was merged into, so the binding keeps the node and leaves both
-  // pages alone. Its later upserts are skipped and counted, its removal does nothing, and its
-  // children are placed as if it were missing.
+  // pages alone. Its later upserts are skipped and counted, its removal does nothing, an existing
+  // child stays where the merge put it, and a new child is placed as if it were missing.
   const stateOf = async (node: KnowledgeImporterNodeRecord): Promise<'live' | 'gone' | 'merged'> => {
     const page = await storage.getPage({ id: node.pageId, read: 'all' });
     if (page?.mergedInto) return 'merged';
