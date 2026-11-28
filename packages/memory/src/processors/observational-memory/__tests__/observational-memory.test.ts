@@ -9735,12 +9735,13 @@ describe('Resource Scope: other-conversation blocks after observation', () => {
     const omContent = omContents.join('\n\n');
 
     expect(omContents[0]).toContain(
-      'The following observations block contains your memory of past conversations with this user.',
+      'The following observations blocks contain your memory of past conversations with this user.',
     );
-    expect(omContents).toContain('<observations>');
-    expect(omContents).toContain(`<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>`);
     expect(omContents).toContain(
-      `<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>`,
+      `<observations>\n<thread id="thread-A">\n- 🔴 User's favorite color is blue\n</thread>\n</observations>`,
+    );
+    expect(omContents).toContain(
+      `<observations>\n<thread id="thread-A">\n- 🔴 User is debugging observational memory prompt ordering\n</thread>\n</observations>`,
     );
 
     // KEY ASSERTION: Thread A's already-observed messages (≤ lastObservedAt) should NOT
