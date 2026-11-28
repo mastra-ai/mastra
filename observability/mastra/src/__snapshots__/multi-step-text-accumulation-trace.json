@@ -250,10 +250,6 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": []
                     }
                   ]
                 }
@@ -457,10 +453,6 @@
                               }
                             }
                           ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": []
                         }
                       ]
                     }
@@ -643,46 +635,6 @@
                   "text": "The result of 5 + 3 is 8.",
                   "toolCalls": [],
                   "responseMessages": [
-                    {
-                      "role": "assistant",
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "Let me calculate that for you. "
-                        },
-                        {
-                          "type": "tool-call",
-                          "toolCallId": "call-calc-1",
-                          "toolName": "calculator",
-                          "input": {
-                            "operation": "add",
-                            "a": 5,
-                            "b": 3
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": [
-                        {
-                          "type": "tool-result",
-                          "toolCallId": "call-calc-1",
-                          "toolName": "calculator",
-                          "output": {
-                            "type": "json",
-                            "value": {
-                              "result": 8
-                            }
-                          },
-                          "input": {
-                            "operation": "add",
-                            "a": 5,
-                            "b": 3
-                          }
-                        }
-                      ]
-                    },
                     {
                       "role": "assistant",
                       "content": [
@@ -954,46 +906,6 @@
                       "text": "The result of 5 + 3 is 8.",
                       "toolCalls": [],
                       "responseMessages": [
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "text",
-                              "text": "Let me calculate that for you. "
-                            },
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": 8
-                                }
-                              },
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        },
                         {
                           "role": "assistant",
                           "content": [

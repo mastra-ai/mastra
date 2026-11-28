@@ -689,6 +689,69 @@ describe('getAttributes - one span per model call', () => {
     expect(outputMessages([{ role: 'assistant', content: [{ type: 'unknown-part' }] }])).toEqual(summary);
   });
 
+  it('keeps the expressible parts of a response message with an unsupported sibling', () => {
+    const outputMessages = (sent: unknown) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'tool-calls' }),
+          output: {
+            text: '',
+            toolCalls: [{ toolCallId: 'ws_1', toolName: 'web_search', args: {} }],
+            responseMessages: sent,
+          },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    // A part gen_ai cannot express (a file) and a tool result with no readable value must
+    // not discard the reasoning and provider-executed result around them.
+    expect(
+      outputMessages([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'file', mediaType: 'image/png' },
+            { type: 'reasoning', text: 'Search first.' },
+            { type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search', input: { query: 'Paris' } },
+            { type: 'tool-result', toolCallId: 'ws_1', toolName: 'web_search', output: null },
+            { type: 'text', text: 'Done.' },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [
+          { type: 'reasoning', content: 'Search first.' },
+          { type: 'tool_call', id: 'ws_1', name: 'web_search', arguments: JSON.stringify({ query: 'Paris' }) },
+          { type: 'text', content: 'Done.' },
+        ],
+        finish_reason: 'tool_call',
+      },
+    ]);
+  });
+
+  it('skips a response message that has no expressible part', () => {
+    const outputMessages = (sent: unknown) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'stop' }),
+          output: {
+            text: 'Checking.',
+            toolCalls: [],
+            responseMessages: sent,
+          },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    // The unusable message is dropped, the usable one is kept.
+    expect(
+      outputMessages([
+        { role: 'assistant', content: [{ type: 'unknown-part' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'Kept.' }] },
+      ]),
+    ).toEqual([{ role: 'assistant', parts: [{ type: 'text', content: 'Kept.' }], finish_reason: 'stop' }]);
+  });
+
   it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {
     const attrs = getAttributes(
       span(SpanType.MODEL_GENERATION, { model: 'gpt-4o', provider: 'openai', finishReason: 'stop', usage }),

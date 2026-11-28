@@ -319,10 +319,6 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": []
                     }
                   ]
                 }
@@ -593,10 +589,6 @@
                               }
                             }
                           ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": []
                         }
                       ]
                     }
@@ -762,42 +754,6 @@
                   "text": "Mock V2 stream response",
                   "toolCalls": [],
                   "responseMessages": [
-                    {
-                      "role": "assistant",
-                      "content": [
-                        {
-                          "type": "tool-call",
-                          "toolCallId": "call-calc-1",
-                          "toolName": "calculator",
-                          "input": {
-                            "operation": "add",
-                            "a": 5,
-                            "b": 3
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": [
-                        {
-                          "type": "tool-result",
-                          "toolCallId": "call-calc-1",
-                          "toolName": "calculator",
-                          "output": {
-                            "type": "json",
-                            "value": {
-                              "result": 8
-                            }
-                          },
-                          "input": {
-                            "operation": "add",
-                            "a": 5,
-                            "b": 3
-                          }
-                        }
-                      ]
-                    },
                     {
                       "role": "assistant",
                       "content": [
@@ -1132,42 +1088,6 @@
                       "text": "Mock V2 stream response",
                       "toolCalls": [],
                       "responseMessages": [
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-calc-1",
-                              "toolName": "calculator",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": 8
-                                }
-                              },
-                              "input": {
-                                "operation": "add",
-                                "a": 5,
-                                "b": 3
-                              }
-                            }
-                          ]
-                        },
                         {
                           "role": "assistant",
                           "content": [

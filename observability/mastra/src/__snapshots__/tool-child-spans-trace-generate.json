@@ -235,10 +235,6 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": []
                     }
                   ]
                 }
@@ -428,10 +424,6 @@
                               }
                             }
                           ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": []
                         }
                       ]
                     }
@@ -611,38 +603,6 @@
                   "text": "Mock V2 generate response",
                   "toolCalls": [],
                   "responseMessages": [
-                    {
-                      "role": "assistant",
-                      "content": [
-                        {
-                          "type": "tool-call",
-                          "toolCallId": "call-child-span-1",
-                          "toolName": "childSpanTool",
-                          "input": {
-                            "input": "test-data"
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": [
-                        {
-                          "type": "tool-result",
-                          "toolCallId": "call-child-span-1",
-                          "toolName": "childSpanTool",
-                          "output": {
-                            "type": "json",
-                            "value": {
-                              "output": "Tool processed: test-data"
-                            }
-                          },
-                          "input": {
-                            "input": "test-data"
-                          }
-                        }
-                      ]
-                    },
                     {
                       "role": "assistant",
                       "content": [
@@ -892,38 +852,6 @@
                       "text": "Mock V2 generate response",
                       "toolCalls": [],
                       "responseMessages": [
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-child-span-1",
-                              "toolName": "childSpanTool",
-                              "input": {
-                                "input": "test-data"
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-child-span-1",
-                              "toolName": "childSpanTool",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "output": "Tool processed: test-data"
-                                }
-                              },
-                              "input": {
-                                "input": "test-data"
-                              }
-                            }
-                          ]
-                        },
                         {
                           "role": "assistant",
                           "content": [

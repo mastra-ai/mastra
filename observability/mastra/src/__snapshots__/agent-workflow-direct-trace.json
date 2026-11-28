@@ -261,10 +261,6 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": []
                     }
                   ]
                 }
@@ -478,10 +474,6 @@
                               }
                             }
                           ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": []
                         }
                       ]
                     }
@@ -705,55 +697,6 @@
                   "text": "Mock V2 stream response",
                   "toolCalls": [],
                   "responseMessages": [
-                    {
-                      "role": "assistant",
-                      "content": [
-                        {
-                          "type": "tool-call",
-                          "toolCallId": "call-workflow-1",
-                          "toolName": "workflow-simpleWorkflow",
-                          "input": {
-                            "inputData": {
-                              "input": "test input"
-                            }
-                          },
-                          "providerOptions": {
-                            "mastra": {
-                              "workflowTool": true
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": [
-                        {
-                          "type": "tool-result",
-                          "toolCallId": "call-workflow-1",
-                          "toolName": "workflow-simpleWorkflow",
-                          "output": {
-                            "type": "json",
-                            "value": {
-                              "result": {
-                                "output": "test input processed"
-                              },
-                              "runId": "<runId-2>"
-                            }
-                          },
-                          "providerOptions": {
-                            "mastra": {
-                              "workflowTool": true
-                            }
-                          },
-                          "input": {
-                            "inputData": {
-                              "input": "test input"
-                            }
-                          }
-                        }
-                      ]
-                    },
                     {
                       "role": "assistant",
                       "content": [
@@ -1057,55 +1000,6 @@
                       "text": "Mock V2 stream response",
                       "toolCalls": [],
                       "responseMessages": [
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflow-simpleWorkflow",
-                              "input": {
-                                "inputData": {
-                                  "input": "test input"
-                                }
-                              },
-                              "providerOptions": {
-                                "mastra": {
-                                  "workflowTool": true
-                                }
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflow-simpleWorkflow",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": {
-                                    "output": "test input processed"
-                                  },
-                                  "runId": "<runId-2>"
-                                }
-                              },
-                              "providerOptions": {
-                                "mastra": {
-                                  "workflowTool": true
-                                }
-                              },
-                              "input": {
-                                "inputData": {
-                                  "input": "test input"
-                                }
-                              }
-                            }
-                          ]
-                        },
                         {
                           "role": "assistant",
                           "content": [

@@ -390,14 +390,52 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
 }
 
 /**
- * The model messages the provider produced for the current step, read from the
- * step output: either directly (`output.response.messages`, a single step
- * result) or from the latest step of a full inference
- * (`output.steps.at(-1).response.messages`).
+ * The run's provider response messages, trimmed to what the current model
+ * invocation produced. They arrive as a step-finish carries them: either
+ * directly (`output.response.messages`, a single step result) or from the latest
+ * step of a full inference (`output.steps.at(-1).response.messages`).
  *
- * They carry parts the `{ text, toolCalls }` summary cannot express — reasoning,
- * provider-executed tool calls and their results — so MODEL_STEP and
+ * The list is cumulative — a step appends its messages to the previous step's, so
+ * the front is history/input to the current call. The last message that carries
+ * content and is not the model's own response (a locally executed tool result) is
+ * the cut: everything up to and including it belongs to an earlier step. Empty
+ * placeholders carry nothing and do not cut. Only the model's own messages are
+ * kept: locally executed tool results are dropped, because their payloads are what
+ * output processors redact, so exporting them would leak what the summary withheld.
+ * The rest carries parts the `{ text, toolCalls }` summary cannot express —
+ * reasoning, provider-executed tool calls and their results — so MODEL_STEP and
  * MODEL_INFERENCE keep them before `prepareSpanOutput` strips the step history.
+ *
+ * Trade-off: a single invocation can produce more than one assistant message (the
+ * provider runs a tool mid-turn and the model continues), so all trailing assistant
+ * messages are kept. When every tool is provider-executed no locally executed tool
+ * result separates two calls, and the earlier call's assistant message stays in the
+ * list. Locally executed tool results — the payloads processors redact — are always
+ * dropped, which is what the redaction invariant (#29818) depends on.
+ */
+function currentStepResponseMessages(output?: {
+  response?: { messages?: unknown };
+  steps?: ReadonlyArray<{ response?: { messages?: unknown } }>;
+}): unknown[] | undefined {
+  const messages = extractCurrentStepResponseMessages(output);
+  if (!messages) return undefined;
+
+  let from = 0;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (!isResponseMessage(messages[i]) && hasContent(messages[i])) {
+      from = i + 1;
+      break;
+    }
+  }
+
+  const current = messages.slice(from).filter(isResponseMessage);
+  return current.length > 0 ? current : undefined;
+}
+
+/**
+ * The run's provider response messages as a step-finish carries them: either
+ * directly (`output.response.messages`, a single step result) or from the latest
+ * step of a full inference (`output.steps.at(-1).response.messages`).
  */
 function extractCurrentStepResponseMessages(output?: {
   response?: { messages?: unknown };
@@ -409,6 +447,19 @@ function extractCurrentStepResponseMessages(output?: {
   const fromLatestStep = output?.steps?.at(-1)?.response?.messages;
   return Array.isArray(fromLatestStep) && fromLatestStep.length > 0 ? fromLatestStep : undefined;
 }
+
+/** A message with a body; an empty placeholder message carries nothing. */
+const hasContent = (message: unknown): boolean => {
+  if (typeof message !== 'object' || message === null) return false;
+  const { content } = message as { content?: unknown };
+  return typeof content === 'string' ? content.length > 0 : Array.isArray(content) && content.length > 0;
+};
+
+/** A provider message reports the model's own response, not a tool result fed back into it. */
+const isResponseMessage = (message: unknown): boolean => {
+  if (typeof message !== 'object' || message === null) return false;
+  return (message as { role?: unknown }).role === 'assistant' && hasContent(message);
+};
 
 /**
  * Chunks that come from the model provider. The first one marks the response's
@@ -738,6 +789,15 @@ export class ModelSpanTracker {
   }
 
   /**
+   * The current invocation's provider messages for a step-finish payload.
+   * MODEL_INFERENCE and MODEL_STEP both ask for them; the read is pure, so both
+   * get the same list.
+   */
+  #responseMessagesFor(payload: StepFinishPayload<any, any>): unknown[] | undefined {
+    return currentStepResponseMessages(payload.output);
+  }
+
+  /**
    * End the current MODEL_INFERENCE span.
    *
    * With `captureOutput: false` (the raw provider stream's `finish`), the span is
@@ -767,7 +827,7 @@ export class ModelSpanTracker {
 
     const pending = this.#pendingInferenceFinish;
     const { usage: _usage, ...stepOutput } = payload.output ?? {};
-    const responseMessages = extractCurrentStepResponseMessages(payload.output);
+    const responseMessages = this.#responseMessagesFor(payload);
     // Keep the existing choice between the step summary and the streamed content,
     // then attach the current step's messages without changing either.
     const summary = 'text' in stepOutput || 'toolCalls' in stepOutput ? stepOutput : this.#inferenceContent;
@@ -996,7 +1056,7 @@ export class ModelSpanTracker {
     // Extract all data from step-finish chunk
     const output = payload.output;
     const { usage: rawUsage, ...otherOutput } = output;
-    const responseMessages = extractCurrentStepResponseMessages(output);
+    const responseMessages = this.#responseMessagesFor(payload);
     const stepResult = payload.stepResult;
     const metadata = payload.metadata;
 

@@ -281,10 +281,6 @@
                           }
                         }
                       ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": []
                     }
                   ]
                 }
@@ -515,10 +511,6 @@
                               }
                             }
                           ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": []
                         }
                       ]
                     }
@@ -750,46 +742,6 @@
                   "text": "Mock V2 stream response",
                   "toolCalls": [],
                   "responseMessages": [
-                    {
-                      "role": "assistant",
-                      "content": [
-                        {
-                          "type": "tool-call",
-                          "toolCallId": "call-workflow-1",
-                          "toolName": "workflowExecutor",
-                          "input": {
-                            "workflowId": "simpleWorkflow",
-                            "input": {
-                              "input": "test input"
-                            }
-                          }
-                        }
-                      ]
-                    },
-                    {
-                      "role": "tool",
-                      "content": [
-                        {
-                          "type": "tool-result",
-                          "toolCallId": "call-workflow-1",
-                          "toolName": "workflowExecutor",
-                          "output": {
-                            "type": "json",
-                            "value": {
-                              "result": {
-                                "output": "test input processed"
-                              }
-                            }
-                          },
-                          "input": {
-                            "workflowId": "simpleWorkflow",
-                            "input": {
-                              "input": "test input"
-                            }
-                          }
-                        }
-                      ]
-                    },
                     {
                       "role": "assistant",
                       "content": [
@@ -1090,46 +1042,6 @@
                       "text": "Mock V2 stream response",
                       "toolCalls": [],
                       "responseMessages": [
-                        {
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool-call",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflowExecutor",
-                              "input": {
-                                "workflowId": "simpleWorkflow",
-                                "input": {
-                                  "input": "test input"
-                                }
-                              }
-                            }
-                          ]
-                        },
-                        {
-                          "role": "tool",
-                          "content": [
-                            {
-                              "type": "tool-result",
-                              "toolCallId": "call-workflow-1",
-                              "toolName": "workflowExecutor",
-                              "output": {
-                                "type": "json",
-                                "value": {
-                                  "result": {
-                                    "output": "test input processed"
-                                  }
-                                }
-                              },
-                              "input": {
-                                "workflowId": "simpleWorkflow",
-                                "input": {
-                                  "input": "test input"
-                                }
-                              }
-                            }
-                          ]
-                        },
                         {
                           "role": "assistant",
                           "content": [

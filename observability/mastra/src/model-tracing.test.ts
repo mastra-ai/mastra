@@ -2176,6 +2176,108 @@ describe('ModelSpanTracker', () => {
       }
     });
 
+    it('exports only the current call from a cumulative response message list', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      const previousStep = { role: 'assistant', content: [{ type: 'text', text: 'previous step' }] };
+      // A locally executed tool result: its payload is what output processors redact, so it
+      // must not be exported (issue #29818). Only the model's own response is kept.
+      const localToolResult = {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'lookup', output: { type: 'json', value: 42 } },
+        ],
+      };
+      const currentCall = { role: 'assistant', content: [{ type: 'reasoning', text: 'thinking' }] };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: '',
+              usage: { totalTokens: 10 },
+              steps: [{ response: { messages: [previousStep, localToolResult, currentCall] } }],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([currentCall]);
+        expect(JSON.stringify(span.output)).not.toContain('42');
+      }
+    });
+
+    it('keeps every assistant message of one provider exchange', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // A single call can produce several assistant messages when the provider runs a tool
+      // mid-turn (reasoning + provider-executed tool call + result, then the final text).
+      // With no locally executed tool result between them there is no cut, so both stay.
+      const withProviderTool = {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'Search first.' },
+          { type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search', input: { query: 'Paris' } },
+          {
+            type: 'tool-result',
+            toolCallId: 'ws_1',
+            toolName: 'web_search',
+            output: { type: 'json', value: { results: ['Sunny'] } },
+          },
+        ],
+      };
+      const finalText = { role: 'assistant', content: [{ type: 'text', text: 'It is sunny.' }] };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'It is sunny.',
+              usage: { totalTokens: 10 },
+              steps: [{ response: { messages: [withProviderTool, finalText] } }],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([withProviderTool, finalText]);
+      }
+    });
+
     it('promotes response messages given directly on the step output', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

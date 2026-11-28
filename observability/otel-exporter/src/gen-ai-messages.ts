@@ -103,23 +103,7 @@ const isMastraMessage = (m: unknown): m is MastraMessage => {
  */
 const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage => {
   const parts: GenAIMessagePart[] = Array.isArray(m.content)
-    ? m.content.map((c): GenAIMessagePart => {
-        switch (c.type) {
-          case 'text':
-            return { type: 'text', content: c.text };
-          case 'tool-call':
-            return { type: 'tool_call', id: c.toolCallId, name: c.toolName, arguments: JSON.stringify(c.input) };
-          case 'tool-result':
-            return {
-              type: 'tool_call_response',
-              id: c.toolCallId,
-              name: c.toolName,
-              response: JSON.stringify(c.output.value),
-            };
-          case 'reasoning':
-            return { type: 'reasoning', content: c.text };
-        }
-      })
+    ? m.content.map(toGenAIMessagePart).filter((p): p is GenAIMessagePart => p !== undefined)
     : [{ type: 'text', content: m.content }];
   return withFinishReason({ role: m.role, parts }, finishReason);
 };
@@ -159,6 +143,55 @@ const toGenAIOutputMessage = (output: MastraModelOutput, finishReason?: string):
 const withFinishReason = (message: GenAIMessage, finishReason: string | undefined): GenAIMessage =>
   finishReason === undefined ? message : { ...message, finish_reason: finishReason };
 
+/**
+ * Map one Mastra content part, validating its shape. Returns `undefined` for a part
+ * that is not one gen_ai can express, or whose fields are unusable, so its supported
+ * siblings are kept instead of the whole message being dropped.
+ */
+const toGenAIMessagePart = (part: unknown): GenAIMessagePart | undefined => {
+  if (typeof part !== 'object' || part === null) return undefined;
+  const p = part as Record<string, unknown>;
+  switch (p.type) {
+    case 'text':
+      return typeof p.text === 'string' ? { type: 'text', content: p.text } : undefined;
+    case 'reasoning':
+      return typeof p.text === 'string' ? { type: 'reasoning', content: p.text } : undefined;
+    case 'tool-call':
+      return typeof p.toolCallId === 'string' && typeof p.toolName === 'string'
+        ? { type: 'tool_call', id: p.toolCallId, name: p.toolName, arguments: JSON.stringify(p.input) }
+        : undefined;
+    case 'tool-result': {
+      if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') return undefined;
+      // A result with no readable value is skipped rather than failing the message.
+      const output = p.output;
+      if (typeof output !== 'object' || output === null || !('value' in output)) return undefined;
+      return {
+        type: 'tool_call_response',
+        id: p.toolCallId,
+        name: p.toolName,
+        response: JSON.stringify((output as { value: unknown }).value),
+      };
+    }
+    default:
+      return undefined;
+  }
+};
+
+/** Map a provider response message leniently, skipping parts it cannot express. */
+const toGenAIResponseMessage = (m: unknown, finishReason?: string): GenAIMessage | undefined => {
+  if (typeof m !== 'object' || m === null) return undefined;
+  const { role, content } = m as { role?: unknown; content?: unknown };
+  if (typeof role !== 'string') return undefined;
+  const parts: GenAIMessagePart[] =
+    typeof content === 'string'
+      ? [{ type: 'text', content }]
+      : Array.isArray(content)
+        ? content.map(toGenAIMessagePart).filter((p): p is GenAIMessagePart => p !== undefined)
+        : [];
+  if (parts.length === 0) return undefined;
+  return withFinishReason({ role, parts }, finishReason);
+};
+
 /** Returns `undefined` when the value is not in a shape that maps to messages. */
 const convert = (inputOutputString: string, finishReason?: string): string | undefined => {
   try {
@@ -178,8 +211,13 @@ const convert = (inputOutputString: string, finishReason?: string): string | und
     // drops, so they win. Anything unusable falls through to the summary below.
     if ('responseMessages' in parsedIO) {
       const responseMessages = (parsedIO as MastraModelOutput).responseMessages;
-      if (Array.isArray(responseMessages) && responseMessages.length > 0 && responseMessages.every(isMastraMessage)) {
-        return JSON.stringify(responseMessages.map(m => toGenAIMessage(m, finishReason)));
+      if (Array.isArray(responseMessages) && responseMessages.length > 0) {
+        const messages = responseMessages
+          .map(m => toGenAIResponseMessage(m, finishReason))
+          .filter((m): m is GenAIMessage => m !== undefined);
+        if (messages.length > 0) {
+          return JSON.stringify(messages);
+        }
       }
     }
     // Model output `{ text, toolCalls }` becomes one assistant message with a
