@@ -3302,10 +3302,13 @@ Notes:
    * @param args.resourceId - Resource ID for the new thread (defaults to source thread's resourceId)
    * @param args.title - Title for the new cloned thread
    * @param args.metadata - Additional metadata to merge with clone metadata
-   * @param args.options - Options for filtering which messages to include
+   * @param args.options - Options for filtering which messages to include. Without a filter or
+   *   limit, every message is copied.
    * @param args.options.messageLimit - Maximum number of messages to copy (from most recent)
-   * @param args.options.messageFilter - Filter messages by date range or specific IDs. With observational
-   *   memory and no filter or limit, only the messages after `lastObservedAt` are copied; pass `{}` for all.
+   * @param args.options.messageFilter - Filter messages by date range or specific IDs
+   * @param args.options.contextWindowOnly - With observational memory, copy only the messages after
+   *   `lastObservedAt`, the ones still in the context window. Can't be combined with `messageFilter`
+   *   or `messageLimit`.
    * @param memoryConfig - Optional memory configuration override
    * @returns The newly created thread and the cloned messages
    *
@@ -3382,7 +3385,7 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // Fetch source thread once for the default message filter, working memory and OM cloning
+    // Fetch source thread once for the context-window filter, working memory and OM cloning
     const sourceThread = await this.getThreadById({ threadId: args.sourceThreadId });
     const sourceResourceId = sourceThread?.resourceId;
 
