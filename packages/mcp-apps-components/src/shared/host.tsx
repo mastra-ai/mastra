@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { frameFillStyle, frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import type { App, McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
-import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 /** The `_meta` key the built-in MCP server puts Studio's base URL under, when it knows it. */
@@ -48,12 +48,15 @@ export function AppHost({
   app,
   name,
   studioUrl,
+  onContext,
   children,
 }: {
   app: App;
   /** The app's name, as the user sees it. */
   name: string;
   studioUrl?: string;
+  /** Called with what's on screen once the view settles, whether or not the host takes model context. */
+  onContext?: (context: string) => void;
   children: ReactNode;
 }) {
   const [parts, setParts] = useState<ReadonlyMap<string, Part>>(new Map());
@@ -85,11 +88,16 @@ export function AppHost({
     return () => app.removeEventListener('hostcontextchanged', onChange);
   }, [app]);
 
+  const onContextRef = useRef(onContext);
+  onContextRef.current = onContext;
   useEffect(() => {
-    if (!context || !app.getHostCapabilities()?.updateModelContext) return;
+    if (!context) return;
     const timer = setTimeout(() => {
+      onContextRef.current?.(context);
       // Best effort: a host that turns the update down still shows the app.
-      app.updateModelContext({ content: [{ type: 'text', text: context }] }).catch(() => {});
+      if (app.getHostCapabilities()?.updateModelContext) {
+        app.updateModelContext({ content: [{ type: 'text', text: context }] }).catch(() => {});
+      }
     }, CONTEXT_DELAY_MS);
     return () => clearTimeout(timer);
   }, [app, context]);
