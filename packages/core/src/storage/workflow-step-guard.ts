@@ -13,7 +13,7 @@ export type WorkflowStepStartGuard = {
    * `expectedStartedBy`, so the worker that started it can no longer save it. Any other record of
    * that occurrence is answered `completed` and left as stored. A saved result is then kept, but a
    * `suspended` record or a `failed` attempt awaiting its retry is run again by the restart's own
-   * delivery of the step.
+   * delivery of the step. It refuses any record of a run that is no longer active.
    */
   takeover?: boolean;
   /** Prune the predecessor only after this delivery has durably claimed its input. */
@@ -57,6 +57,10 @@ export function assertWorkflowStepGuard({
   if (!startGuard && !completionGuard) return;
   if (!snapshot) throw new WorkflowStepConflictError('missing');
   const stored = snapshot.context[stepId];
+  // Checked under the store's lock: a run that ended since the restart read it keeps its records.
+  if (startGuard?.takeover && !['running', 'waiting', 'pending'].includes(snapshot.status)) {
+    throw new WorkflowStepConflictError('stale', stored);
+  }
   const startedBy = stored?.metadata?.startedBy;
   // Older workers do not stamp occurrences, so their rows retain unguarded behavior.
   if (stored && !startedBy) return;

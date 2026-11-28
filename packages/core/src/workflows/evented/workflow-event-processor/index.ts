@@ -1340,7 +1340,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         eventId,
         requestContext,
       });
-      if (!claim) return;
+      if (!claim) {
+        // Every claim was refused: another restart or the run took the steps, or the run ended since.
+        const stored = await runStorage.loadHeader();
+        if (stored && !['running', 'waiting', 'pending'].includes(stored.status)) {
+          return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow, restartToken });
+        }
+        return;
+      }
       stepResults = claim.stepResults;
       // The header records the restart event, so a delivery of it again does not move the run back
       // to where this one found it. Its claims still settle a race with a first delivery that has not
@@ -1371,14 +1378,18 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
       }
       // When every claimed step had saved its result, the header's cursor is left as it is: the
-      // finished-step check reads from it whether the run already went past those steps. Only the
-      // restart's request context is written, which the continuation from those results reads.
+      // finished-step check reads from it whether the run already went past those steps. The
+      // restart's request context is written for the continuation from those results, only while
+      // the run is still where the restart's caller read it; past that, the stored one is a later
+      // step's.
       if (claim.outcome === 'all saved') {
-        await runStorage.updateHeader({
-          status: header.status,
-          requestContext: withoutAuthToken(requestContext),
-          expectedStatus: header.status,
-        });
+        if (samePath(header.activePaths, restart.activePaths)) {
+          await runStorage.updateHeader({
+            status: header.status,
+            requestContext: withoutAuthToken(requestContext),
+            expectedStatus: header.status,
+          });
+        }
       } else if (!applied) {
         const updated = await runStorage.updateHeader({
           status: 'running',
@@ -2741,7 +2752,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    *
    * Returns the step results the restart publishes, with `outcome`: `'nothing to claim'` when no
    * step carries an occurrence, `'all saved'` when no claimed step was running any more, or
-   * `'claimed'`. Returns `undefined` when another restart or the run took every claimed step first.
+   * `'claimed'`. Returns `undefined` when every claim was refused: another restart or the run took
+   * the steps first, or the run is no longer active.
    */
   async #takeOverRestartTargets({
     workflow,
@@ -2791,7 +2803,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
     if (refused.length === targets.length) {
-      this.mastra.getLogger()?.warn('Not restarting a workflow run: its steps were taken over first', {
+      this.mastra.getLogger()?.warn('Not restarting a workflow run: every step it restarts was refused', {
         workflowId,
         runId,
         eventId,
