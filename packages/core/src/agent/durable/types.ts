@@ -418,6 +418,13 @@ export interface DurableLLMStepOutput {
     request?: LanguageModelRequestMetadata;
     /** Set when a processOutputStep processor rejected this step */
     tripwire?: StepTripwireData;
+    /**
+     * Set when a `processToolResult` hook rejected a tool result. The loop keeps
+     * its own continuation decision for a blocked result, so unlike `tripwire`
+     * this one is not the run's outcome: it only tells finalization which
+     * `persist` policy the rejecting hook asked for.
+     */
+    toolResultTripwire?: StepTripwireData;
   };
   /** Response metadata from the model */
   metadata: {

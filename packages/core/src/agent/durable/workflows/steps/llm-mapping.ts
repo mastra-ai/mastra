@@ -497,6 +497,11 @@ export function createDurableLLMMappingStep() {
         stepResult: {
           ...llmOutput.stepResult,
           isContinued,
+          // The tool-call step holds the tripwire when a `processToolResult` hook rejected a
+          // result. Carry it here so it reaches finalization: the loop keeps its own
+          // continuation decision for a blocked result, so this is usually not the last
+          // iteration, and only the hook's `persist` says whether the turn is rolled back.
+          ...(tripwire ? { toolResultTripwire: tripwire } : {}),
         },
         toolResults,
         output: {

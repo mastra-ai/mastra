@@ -1167,6 +1167,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     retry: error.options?.retry,
                     metadata: error.options?.metadata,
                     processorId: error.processorId,
+                    persist: error.options?.persist,
                   };
                   endTripwireSpans(error);
                   logger?.warn?.('Streaming input processor tripwire triggered', {
@@ -1184,6 +1185,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         reason: error.message,
                         retry: error.options?.retry,
                         metadata: error.options?.metadata,
+                        persist: error.options?.persist,
                       },
                     });
                   }
@@ -1350,6 +1352,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         reason: error.message,
                         retry: error.options?.retry,
                         metadata: error.options?.metadata,
+                        persist: error.options?.persist,
                       },
                     });
                   }
@@ -1844,6 +1847,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // provider tool results.
             let toolResultTripwire: TripWire | null = null;
             let outputStreamBlocked = false;
+            // What the aborter asked memory to keep when an output-stream processor blocked a
+            // chunk. The blocked chunk itself is never collected, so the policy has to be
+            // recorded here or the bail below cannot tell a keep from the default rollback.
+            let blockedStreamPersist: 'none' | 'partial' | undefined;
             // Tool results of earlier steps a processor held until this stream ended.
             const releasedToolResultIds: string[] = [];
             let toolResultRunner: ProcessorRunner | undefined;
@@ -1958,6 +1965,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (chunk.type === 'tripwire') {
                             endTripwireSpans(chunk.payload);
                             outputStreamBlocked = true;
+                            blockedStreamPersist = chunk.payload?.persist;
                           }
                           try {
                             if (chunk.type === 'step-start') {
@@ -2250,6 +2258,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (chunk.type === 'tripwire') {
                             endTripwireSpans(chunk.payload);
                             outputStreamBlocked = true;
+                            blockedStreamPersist = chunk.payload?.persist;
                           }
                           recordProcessedChunk(chunk);
                           trackOpenReasoning(chunk, openReasoningIds);
@@ -2577,27 +2586,35 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 for (const r of released) {
                   if (r.blocked) {
                     outputStreamBlocked = true;
+                    blockedStreamPersist = r.tripwireOptions?.persist;
                     endTripwireSpans({
                       reason: r.reason || 'Output processor blocked content',
                       processorId: r.processorId,
                       metadata: r.tripwireOptions?.metadata,
                     });
-                    await emitChunkEvent(
-                      pubsub,
-                      runId,
-                      {
-                        type: 'tripwire',
+                    // A tool-result tripwire already stopped this attempt, and the bail below
+                    // publishes its chunk. A consumer ends on the first tripwire chunk it sees,
+                    // so publishing this one first would show the held part's reason and persist
+                    // while the run keeps or rolls back by the tool-result tripwire's choice.
+                    if (!toolResultTripwire) {
+                      await emitChunkEvent(
+                        pubsub,
                         runId,
-                        from: ChunkFrom.AGENT,
-                        payload: {
-                          reason: r.reason || 'Output processor blocked content',
-                          retry: r.tripwireOptions?.retry,
-                          metadata: r.tripwireOptions?.metadata,
-                          processorId: r.processorId,
+                        {
+                          type: 'tripwire',
+                          runId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            reason: r.reason || 'Output processor blocked content',
+                            retry: r.tripwireOptions?.retry,
+                            metadata: r.tripwireOptions?.metadata,
+                            processorId: r.processorId,
+                            persist: r.tripwireOptions?.persist,
+                          },
                         },
-                      },
-                      true,
-                    );
+                        true,
+                      );
+                    }
                     break;
                   }
                   if (r.part == null) continue;
@@ -2786,6 +2803,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // chunk was already published by processAndEmitChunk.
             if (toolResultTripwire || outputStreamBlocked) {
               if (toolResultTripwire) endTripwireSpans(toolResultTripwire);
+              // The keep decision belongs to whichever hook stopped the run: a rejected tool
+              // result carries it on the TripWire, a blocked chunk only in the payload it
+              // published (the chunk itself is never collected). Both can be set in one
+              // attempt, so the tripwire that exists decides: a keep needs one of them to
+              // ask for it rather than inheriting the other's.
+              const tripwirePersist = toolResultTripwire ? toolResultTripwire.options?.persist : blockedStreamPersist;
               if (toolResultTripwire && pubsub) {
                 await emitChunkEvent(pubsub, runId, {
                   type: 'tripwire',
@@ -2796,9 +2819,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     reason: toolResultTripwire.message,
                     retry: toolResultTripwire.options?.retry,
                     metadata: toolResultTripwire.options?.metadata,
+                    persist: tripwirePersist,
                   },
                 });
               }
+              // The serialized transcript is the only channel to finish-time persistence, so a run
+              // that keeps its messages has to materialize the text accepted before the trip first,
+              // like the abort returns above (#22593). Rolling the turn back stays the default.
+              if (tripwirePersist === 'partial') materializeStreamedMessages();
               return {
                 ...(await storeStepTranscript()),
                 text: textDeltas.join(''),
@@ -2864,9 +2892,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         reason: error.message,
                         retry: error.options?.retry,
                         metadata: error.options?.metadata,
+                        persist: error.options?.persist,
                       },
                     });
                   }
+                  // Same as the tool-result bail above: the keep needs the accepted text in the
+                  // serialized transcript, the default rollback does not.
+                  if (error.options?.persist === 'partial') materializeStreamedMessages();
                   return {
                     ...(await storeStepTranscript()),
                     text: textDeltas.join(''),
@@ -3012,6 +3044,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   retry: processOutputStepTripwire.options?.retry,
                   metadata: processOutputStepTripwire.options?.metadata,
                   processorId: processOutputStepTripwire.processorId,
+                  persist: processOutputStepTripwire.options?.persist,
                 }
               : undefined;
 

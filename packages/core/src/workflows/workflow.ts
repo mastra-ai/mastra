@@ -3900,6 +3900,7 @@ export class Workflow<
         {
           retry: tripwire?.retry,
           metadata: tripwire?.metadata,
+          persist: tripwire?.persist,
         },
         tripwire?.processorId,
       );

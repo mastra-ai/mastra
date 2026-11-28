@@ -24,11 +24,12 @@ import {
   resolveProcessorWriterMessageId,
 } from '../../../stream/base/output';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
-import type { ChunkType } from '../../../stream/types';
+import type { ChunkType, StepTripwireData } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
+import { persistPartialTurn } from '../../save-queue/persist-partial-turn';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -60,6 +61,13 @@ export interface DurableFinishSideEffectsOptions {
    * the run, so `initData.messageId` can name an earlier reply. Defaults to that id.
    */
   messageId?: string;
+  /**
+   * Set when a `processToolResult` hook rejected a tool result. Unlike the `tripwire` this function
+   * returns, it is not how the run ended: the loop keeps its own continuation decision for a
+   * blocked result, and the rejected value never reaches the transcript. It only carries the hook's
+   * `persist`, which decides here whether the turn is rolled back or kept.
+   */
+  toolResultTripwire?: StepTripwireData;
 }
 
 export interface DurableFinishSideEffectsResult {
@@ -90,12 +98,16 @@ export interface DurableFinishSideEffectsResult {
    * matching the in-process loop.
    */
   outputResultChunks?: ChunkType[];
-  /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
+  /**
+   * Set when an output processor aborted in `processOutputResult`. The aborted reply is rolled back
+   * unless the processor passed `persist: 'partial'`, which keeps what the run already saved.
+   */
   tripwire?: {
     reason: string;
     processorId?: string;
     retry?: boolean;
     metadata?: unknown;
+    persist?: 'none' | 'partial';
   };
 }
 
@@ -153,6 +165,7 @@ export async function runDurableFinishSideEffects({
   tracingContext,
   logger,
   outputResult,
+  toolResultTripwire,
   messageId = initData.messageId,
 }: DurableFinishSideEffectsOptions): Promise<DurableFinishSideEffectsResult> {
   const effectiveLogger = logger ?? mastra?.getLogger?.() ?? noopLogger;
@@ -410,17 +423,68 @@ export async function runDurableFinishSideEffects({
       }
     } catch (error) {
       if (error instanceof TripWire) {
-        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
-        // and remove any response messages this run already saved.
-        await undoSavedResponseMessages({
-          memory: registryEntry?.memory ?? rebuiltMemory,
-          threadId: durableState?.threadId,
-          memoryConfig: durableState?.memoryConfig,
-          messageList,
-          saveQueueManager: registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager,
-          logger: effectiveLogger,
-          runId,
-        });
+        const tripwireMemory = registryEntry?.memory ?? rebuiltMemory;
+        const tripwireSaveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
+        if (error.options?.persist === 'partial') {
+          // The aborter asked to keep the run's messages instead of rolling them back. Check write
+          // access first: this is a memory write like the save below, which insists on both ids.
+          const keepResourceId =
+            durableState?.resourceId ??
+            (effectiveRequestContext.get('MastraMemory') as { resourceId?: string } | undefined)?.resourceId;
+          if (!durableState?.threadId || !keepResourceId) {
+            effectiveLogger.warn(
+              '[DurableAgent] The blocked turn is not kept: no thread or resource id to authorize the save',
+              { runId, threadId: durableState?.threadId },
+            );
+          } else {
+            const keepThreadId = durableState.threadId;
+            await persistPartialTurn({
+              memory: tripwireMemory,
+              threadId: keepThreadId,
+              memoryConfig: durableState.memoryConfig,
+              messageList,
+              saveQueueManager: tripwireSaveQueueManager,
+              authorize: async () => {
+                await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+                  mastra,
+                  user: effectiveRequestContext.get('user'),
+                  threadId: keepThreadId,
+                  resourceId: keepResourceId,
+                  agentId: initData.agentId,
+                  requestContext: effectiveRequestContext,
+                  permission: MastraFGAPermissions.MEMORY_WRITE,
+                  actor: initData.options?.actor,
+                });
+                if (!durableState.threadExists) {
+                  await tripwireMemory?.createThread?.({
+                    threadId: keepThreadId,
+                    resourceId: keepResourceId,
+                    memoryConfig: durableState.memoryConfig,
+                  });
+                }
+              },
+              // The same fence the save below passes: a superseded execution must not write the
+              // kept turn either (#23734), and losing the fence has to end the run here rather
+              // than be logged — the normal save rethrows it for the same reason.
+              beforePersist: assertOwned,
+              rethrow: isExecutionFenceError,
+              logger: effectiveLogger,
+              runId,
+            });
+          }
+        } else {
+          // Match Agent: a tripwire rejects the answer, so skip persistence and title generation,
+          // and remove any response messages this run already saved.
+          await undoSavedResponseMessages({
+            memory: tripwireMemory,
+            threadId: durableState?.threadId,
+            memoryConfig: durableState?.memoryConfig,
+            messageList,
+            saveQueueManager: tripwireSaveQueueManager,
+            logger: effectiveLogger,
+            runId,
+          });
+        }
         const outputText = resolveOutputText(messageList);
         return {
           messageListState: messageList.serialize(),
@@ -432,6 +496,7 @@ export async function runDurableFinishSideEffects({
             processorId: error.processorId,
             retry: error.options?.retry,
             metadata: error.options?.metadata,
+            persist: error.options?.persist,
           },
         };
       }
@@ -440,6 +505,33 @@ export async function runDurableFinishSideEffects({
       // its final write and skips that flush, so its failure must propagate here.
       if (durableState?.observationalMemory) throw error;
     }
+  }
+
+  // A `processToolResult` hook can reject a result while the loop carries on, so the rejection
+  // arrives here as a carried tripwire rather than as this run's outcome. The turn is still whole
+  // at this point, so apply the hook's policy the way the `processOutputResult` branch above does:
+  // anything but `'partial'` removes the response messages the run already saved. The save below
+  // skips them, since output processors marked them persisted.
+  if (toolResultTripwire && toolResultTripwire.persist !== 'partial') {
+    await undoSavedResponseMessages({
+      memory: registryEntry?.memory ?? rebuiltMemory,
+      threadId: durableState?.threadId,
+      memoryConfig: durableState?.memoryConfig,
+      messageList,
+      saveQueueManager: registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager,
+      logger: effectiveLogger,
+      runId,
+    });
+    // Return before the save below, which would write the rolled-back reply straight back — the
+    // same reason the `processOutputResult` branch above returns instead of falling through. Only
+    // memory drops the turn; the text the caller already streamed is unchanged.
+    const rolledBackText = resolveOutputText(messageList);
+    return {
+      messageListState: messageList.serialize(),
+      outputText: rolledBackText,
+      outputTextChanged: rolledBackText !== outputTextBeforeProcessing,
+      outputResultChunks,
+    };
   }
 
   // SaveQueueManager may reclassify flushed response messages as persisted
@@ -806,8 +898,49 @@ export async function runDurableDeadlineOutputPass({
         },
       );
     } catch (processorError) {
-      // A tripwire rejects the turn, as it does at finish: remove response messages already saved.
+      // A tripwire rejects the turn, as it does at finish: remove response messages already saved,
+      // or keep them when the aborter opted in.
       if (processorError instanceof TripWire) {
+        if (processorError.options?.persist === 'partial') {
+          // The keep is a memory write, so it needs the same write access as any other save here.
+          // The pre-pass above only checked when both ids were present, so fail closed on the rest.
+          const keepThreadId = durableState?.threadId;
+          if (!keepThreadId || !resourceId) {
+            logger.warn(
+              '[DurableAgent] The turn cut off at the total deadline is not kept: no thread or resource id to authorize the save',
+              { runId, threadId: keepThreadId },
+            );
+          } else {
+            await persistPartialTurn({
+              memory: entry.memory,
+              threadId: keepThreadId,
+              memoryConfig: durableState.memoryConfig,
+              messageList,
+              saveQueueManager: entry.saveQueueManager,
+              authorize: async () => {
+                // Same threads and same per-thread grant as the pre-pass: the run's cached check
+                // covers its own thread, a thread the request context points at is checked anew.
+                const threadIds = new Set([keepThreadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
+                for (const threadId of threadIds) {
+                  const checks = threadId === keepThreadId ? getDurableMemoryAuthorizationChecks(entry) : new Map();
+                  await authorizeDurableMemory(checks, {
+                    mastra,
+                    user: requestContext.get('user'),
+                    threadId,
+                    resourceId,
+                    agentId: initData.agentId,
+                    requestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: initData.options?.actor,
+                  });
+                }
+              },
+              logger,
+              runId,
+            });
+          }
+          return;
+        }
         await undoSavedResponseMessages({
           memory: entry.memory,
           threadId: durableState?.threadId,

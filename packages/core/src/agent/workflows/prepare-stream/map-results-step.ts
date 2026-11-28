@@ -19,6 +19,7 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { persistPartialTurn } from '../../save-queue/persist-partial-turn';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -363,17 +364,44 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
         // deadline turn: it holds the streamed text a processor before the tripwire may have saved.
-        onDeadlineTripwire: (turn: MessageList) =>
-          undoSavedResponseMessages({
+        // When the aborter opts to keep the turn, save it instead of rolling it back.
+        onDeadlineTripwire: async (turn: MessageList, tripwire?: StepTripwireData) => {
+          const deadlineThreadId = memoryData.thread?.id ?? threadIdFromArgs;
+          if (tripwire?.persist === 'partial') {
+            await persistPartialTurn({
+              memory,
+              threadId: deadlineThreadId,
+              memoryConfig,
+              messageList: turn,
+              saveQueueManager,
+              authorize: async () => {
+                const memoryContext = parseMemoryRequestContext(requestContext);
+                const threadIds = new Set(
+                  [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter(
+                    (id): id is string => !!id,
+                  ),
+                );
+                for (const threadId of threadIds) {
+                  await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+                }
+              },
+              logger: capabilities.logger,
+              runId,
+            });
+            return;
+          }
+
+          await undoSavedResponseMessages({
             memory,
-            threadId: memoryData.thread?.id ?? threadIdFromArgs,
+            threadId: deadlineThreadId,
             memoryConfig,
             messageList: turn,
             saveQueueManager,
             earlierTurnSnapshot,
             logger: capabilities.logger,
             runId,
-          }),
+          });
+        },
         onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
@@ -464,16 +492,33 @@ export function createMapResultsStep<OUTPUT = undefined>({
             agentSpan?.end({ outcome: 'abort', stopReason: 'caller_cancelled', endTree: true });
           } else {
             if (context?.outputResultTripwire) {
-              await undoSavedResponseMessages({
-                memory,
-                threadId: memoryData.thread?.id ?? threadIdFromArgs,
-                memoryConfig,
-                messageList,
-                saveQueueManager,
-                earlierTurnSnapshot,
-                logger: capabilities.logger,
-                runId,
-              });
+              if (context.outputResultTripwire.persist === 'partial') {
+                // The aborter asked to keep the run's messages instead of rolling them back.
+                await persistPartialTurn({
+                  memory,
+                  threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                  memoryConfig,
+                  messageList,
+                  saveQueueManager,
+                  authorize: async () => {
+                    await ensureThreadExists();
+                    if (result.threadId) await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+                  },
+                  logger: capabilities.logger,
+                  runId,
+                });
+              } else {
+                await undoSavedResponseMessages({
+                  memory,
+                  threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                  memoryConfig,
+                  messageList,
+                  saveQueueManager,
+                  earlierTurnSnapshot,
+                  logger: capabilities.logger,
+                  runId,
+                });
+              }
             }
 
             try {

@@ -99,6 +99,8 @@ export interface StepTripwireInfo {
   retry?: boolean;
   metadata?: Record<string, unknown>;
   processorId?: string;
+  /** What memory keeps for the blocked turn; `'partial'` keeps the run's saved messages */
+  persist?: 'none' | 'partial';
 }
 
 export type StepFailure<P, R, S, T> = {

@@ -168,6 +168,7 @@ export async function runAgentEntry(
         {
           retry: tripwireChunk.payload?.retry,
           metadata: tripwireChunk.payload?.metadata,
+          persist: tripwireChunk.payload?.persist,
         },
         tripwireChunk.payload?.processorId,
       );

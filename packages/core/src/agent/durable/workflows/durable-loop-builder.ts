@@ -1195,6 +1195,10 @@ export class DurableAgenticLoopBuilder extends BaseAgenticLoopBuilder {
               tracingContext: agentSpan ? { currentSpan: agentSpan } : tracingContext,
               logger,
               messageId: state.messageId,
+              // A `processToolResult` hook can reject a result mid-run while the loop carries on.
+              // Finalization applies that hook's `persist` to the turn, which is the only place
+              // the whole turn is in one piece.
+              toolResultTripwire: state.toolResultTripwire,
               outputResult: {
                 text: finalText ?? '',
                 usage: state.accumulatedUsage,
