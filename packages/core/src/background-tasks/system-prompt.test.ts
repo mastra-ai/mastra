@@ -173,4 +173,27 @@ describe('generateBackgroundTaskSystemPrompt', () => {
       expect(prompt).not.toContain('_background');
     });
   });
+
+  describe('prompt stability against recorded fixtures', () => {
+    it('keeps the long-standing wording while every listed tool accepts overrides', () => {
+      // The durable-agent-background-tools recordings replay requests exactly, so
+      // this text is pinned: a per-tool policy that already produced it keeps
+      // producing it byte for byte, and only a listed non-overridable tool scopes
+      // the guidance to the accepting policies.
+      const prompt = generateBackgroundTaskSystemPrompt(
+        { fetchRecord: { background: { enabled: true } } },
+        { tools: { fetchRecord: true } },
+      );
+
+      expect(prompt).toContain('- fetchRecord (default: background)');
+      expect(prompt).toContain('For any of these tools, you can include a "_background" field');
+      expect(prompt).toContain(
+        'Tools listed with "default: background" run in the background unless you set "disposition": "foreground".' +
+          ' Tools listed with "default: foreground" run inline unless you explicitly request "deferred" or "awaited"' +
+          ' — for those tools, omitting "_background" never starts background work.',
+      );
+      expect(prompt).not.toContain('For the tools listed with');
+      expect(prompt).not.toContain('For any tool,');
+    });
+  });
 });

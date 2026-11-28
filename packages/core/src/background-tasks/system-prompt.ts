@@ -55,9 +55,23 @@ const EMPTY_FIELD_NOTE =
 const PLACEHOLDER_NOTE =
   'you receive a placeholder result with a task ID and are notified when the task completes. You can reference the task ID in your response to the user.';
 
-/** Where the model is told it may pass `_background`, phrased for the tools that accept it. */
-function describeAcceptingTools(policies: Set<ToolPromptPolicy>, uniform: boolean): string {
-  if (uniform) return 'For any tool,';
+/**
+ * The `_background` instructions, minus the sentence that names which tools
+ * accept the field.
+ */
+function overrideIntro(subject: string): string {
+  return `${subject} you can include a "_background" field in the tool arguments to override the default:
+  ${OVERRIDE_SHAPE}
+
+All fields in "_background" are optional. Only include what you want to override.`;
+}
+
+/**
+ * Where the model is told it may pass `_background`, named by the policies that
+ * accept it. Used only when a tool that never accepts `_background` is listed
+ * alongside the tools that do.
+ */
+function describeAcceptingTools(policies: Set<ToolPromptPolicy>): string {
   const listed = LIST_ORDER.filter(policy => policy !== 'fixed' && policies.has(policy)).map(
     policy => `"default: ${policy}"`,
   );
@@ -68,25 +82,42 @@ function describeAcceptingTools(policies: Set<ToolPromptPolicy>, uniform: boolea
 /**
  * Explains what omitting `_background` means for each accepting policy, so the
  * model never reads a blanket "you can override anything" instruction.
+ *
+ * `generic` is used when the guidance names no tools at all (a uniform
+ * `tools: 'all'` policy), where "tools listed with ..." would have no referent.
  */
-function describeDefaults(policies: Set<ToolPromptPolicy>, uniform: boolean): string {
+function describeDefaults(policies: Set<ToolPromptPolicy>, generic: boolean): string {
   const sentences: string[] = [];
   if (policies.has('background')) {
     sentences.push(
-      uniform
+      generic
         ? 'Tools run in the background unless you set "disposition": "foreground".'
         : 'Tools listed with "default: background" run in the background unless you set "disposition": "foreground".',
     );
   }
   if (policies.has('foreground')) {
     sentences.push(
-      uniform
+      generic
         ? 'Tools run inline unless you explicitly request "deferred" or "awaited" — omitting "_background" never starts background work.'
-        : 'Tools listed with "default: foreground" run inline unless you explicitly request "deferred" or "awaited" — omitting "_background" never starts background work.',
+        : 'Tools listed with "default: foreground" run inline unless you explicitly request "deferred" or "awaited" — for those tools, omitting "_background" never starts background work.',
     );
   }
   return sentences.length > 0 ? ` ${sentences.join(' ')}` : '';
 }
+
+/**
+ * Wording used when every listed tool accepts `_background`: "these tools" is
+ * then accurate for the whole list. Built from both overridable policies so it
+ * stays in step with `describeDefaults`.
+ *
+ * It is kept verbatim (a listed non-overridable tool is what narrows the
+ * guidance): a per-tool policy that already produced this text must keep
+ * producing it, or recordings made against it stop replaying.
+ */
+const ALL_TOOLS_ACCEPT_OVERRIDES_DEFAULTS = describeDefaults(
+  new Set<ToolPromptPolicy>(['background', 'foreground']),
+  false,
+);
 
 /**
  * Generates the system prompt section that tells the LLM about background task capabilities.
@@ -150,17 +181,21 @@ export function generateBackgroundTaskSystemPrompt(
 ${subject} in the background: ${PLACEHOLDER_NOTE}`;
   }
 
-  const overrideSection = `${describeAcceptingTools(acceptedPolicies, uniform)} you can include a "_background" field in the tool arguments to override the default:
-  ${OVERRIDE_SHAPE}
-
-All fields in "_background" are optional. Only include what you want to override.${describeDefaults(
-    acceptedPolicies,
-    uniform,
-  )}${hasFixed ? `\n\nTools marked "always runs in the background" do not accept "_background".` : ''}`;
+  // A tool that never accepts `_background` is listed next to tools that do, so
+  // the override guidance names the policies that accept it instead of calling
+  // out "these tools" as a whole. While every listed tool accepts an override
+  // that blanket phrasing is accurate, and it is kept verbatim so an unchanged
+  // policy keeps producing the exact prompt its fixtures were recorded against.
+  const overrideSection = uniform
+    ? `${overrideIntro('For any tool,')}${describeDefaults(acceptedPolicies, true)}`
+    : hasFixed
+      ? `${overrideIntro(describeAcceptingTools(acceptedPolicies))}${describeDefaults(acceptedPolicies, false)}`
+      : `${overrideIntro('For any of these tools,')}${ALL_TOOLS_ACCEPT_OVERRIDES_DEFAULTS}`;
+  const fixedNote = hasFixed ? `\n\nTools marked "always runs in the background" do not accept "_background".` : '';
 
   return `${intro}
 
-${overrideSection}
+${overrideSection}${fixedNote}
 
 ${DISPOSITIONS}
 
