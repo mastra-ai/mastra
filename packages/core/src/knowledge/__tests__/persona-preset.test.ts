@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { MockMemory } from '../../memory/mock';
+import { isProcessorWorkflow } from '../../processors/is-processor-workflow';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { compileKnowledgeScopes, knowledgeMemoryScopes } from '../declarations';
 import { Knowledge, knowledgeAgentScopes, knowledgePersonaScopes } from '../index';
+import { PinnedStateProcessor } from '../pinned-state-processor';
 
 describe('knowledgePersonaScopes', () => {
   it('opts in to viewer access and short config pins on the three base scopes only', () => {
@@ -105,6 +107,112 @@ describe('knowledgePersonaScopes', () => {
     expect(JSON.stringify(prompt)).toContain('Sam is calm.');
     if (persona) expect(metadata).toHaveBeenCalled();
     else expect(metadata).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('uses the execution context for pins (listed with context: %s)', async withContext => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      pinnedContext: true,
+      scopes: { ...knowledgeMemoryScopes(), ...knowledgePersonaScopes() },
+    });
+    for (const role of ['support', 'sales']) {
+      await knowledge.upsertPage({
+        scope: `agent:persona:role:${role}`,
+        path: 'rules',
+        name: 'Rules',
+        body: `${role} rules`,
+      });
+    }
+    const contextFor = (role: string) => {
+      const context = new RequestContext();
+      context.set('role', role);
+      setRunAgentScopes(context, ['org:acme']);
+      return context;
+    };
+    const metadata = vi.fn(({ requestContext }) => ({ persona: { role: requestContext.get('role') } }));
+    const agent = new Agent({
+      id: 'sam',
+      name: 'sam',
+      instructions: 'x',
+      model: 'openai/gpt-4o-mini',
+      memory: new MockMemory(),
+      knowledge,
+      metadata,
+    });
+    const processors = await agent.listInputProcessors(withContext ? contextFor('support') : undefined);
+    const processor = processors
+      .flatMap(p => (isProcessorWorkflow(p) ? (p.__stateSignalProcessors ?? []) : [p]))
+      .find(p => p instanceof PinnedStateProcessor) as PinnedStateProcessor;
+    for (const role of ['sales', 'support']) {
+      const requestContext = contextFor(role);
+      const signal = await processor.computeStateSignal({
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        stepNumber: 0,
+        requestContext,
+        contextWindow: { hasSnapshot: false },
+        deltasSinceSnapshot: [],
+      } as Parameters<PinnedStateProcessor['computeStateSignal']>[0]);
+      expect(signal?.contents).toContain(`${role} rules`);
+      expect(signal?.contents).not.toContain(`${role === 'sales' ? 'support' : 'sales'} rules`);
+    }
+  });
+
+  it('uses one persona observation for the memo key and delivered pins', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      pinnedContext: true,
+      scopes: { ...knowledgeMemoryScopes(), ...knowledgePersonaScopes() },
+    });
+    for (const role of ['support', 'sales']) {
+      await knowledge.upsertPage({
+        scope: `agent:persona:role:${role}`,
+        path: 'rules',
+        name: 'Rules',
+        body: `${role} rules`,
+      });
+    }
+    const requestContext = new RequestContext();
+    setRunAgentScopes(requestContext, ['org:acme']);
+    const metadata = vi
+      .fn()
+      .mockReturnValueOnce({ persona: { role: 'support' } })
+      .mockReturnValue({ persona: { role: 'sales' } });
+    const agent = new Agent({
+      id: 'sam',
+      name: 'sam',
+      instructions: 'x',
+      model: 'openai/gpt-4o-mini',
+      memory: new MockMemory(),
+      knowledge,
+      metadata,
+    });
+    const processors = await agent.listInputProcessors(requestContext);
+    const processor = processors
+      .flatMap(p => (isProcessorWorkflow(p) ? (p.__stateSignalProcessors ?? []) : [p]))
+      .find(p => p instanceof PinnedStateProcessor) as PinnedStateProcessor;
+    const signal = await processor.computeStateSignal({
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      stepNumber: 0,
+      requestContext,
+      contextWindow: { hasSnapshot: false },
+      deltasSinceSnapshot: [],
+    } as Parameters<PinnedStateProcessor['computeStateSignal']>[0]);
+    expect(metadata).toHaveBeenCalledTimes(1);
+    expect(signal?.contents).toContain('support rules');
+    expect(signal?.contents).not.toContain('sales rules');
+    const nextSignal = await processor.computeStateSignal({
+      threadId: 'thread-1',
+      resourceId: 'user-1',
+      stepNumber: 1,
+      requestContext,
+      contextWindow: { hasSnapshot: false },
+      deltasSinceSnapshot: [],
+    } as Parameters<PinnedStateProcessor['computeStateSignal']>[0]);
+    expect(metadata).toHaveBeenCalledTimes(2);
+    expect(nextSignal?.contents).toContain('sales rules');
+    expect(nextSignal?.contents).not.toContain('support rules');
   });
 
   it('lets a host-passed :edit form write its role rules while a plain role holder only reads', async () => {

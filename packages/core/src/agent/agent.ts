@@ -32,6 +32,7 @@ import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
 import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
+import type { KnowledgeRunContext } from '../knowledge/run';
 import type { CoreMessage } from '../llm';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -2519,7 +2520,6 @@ export class Agent<
   #getKnowledgeProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     hasMemory: boolean,
-    requestContext: RequestContext | undefined,
   ): InputProcessorOrWorkflow[] {
     const knowledge = this.getKnowledge();
     if (!knowledge) return [];
@@ -2542,26 +2542,25 @@ export class Agent<
         }
         return processors;
       }
+      // Both callbacks receive the same fresh context object for one pin computation.
+      // Share its metadata observation without carrying identity across computations.
+      const contexts = new WeakMap<KnowledgeRunContext, Promise<KnowledgeRunContext>>();
+      const pinContext = (context: KnowledgeRunContext): Promise<KnowledgeRunContext> => {
+        let resolved = contexts.get(context);
+        if (!resolved) {
+          const requestContext = context.requestContext instanceof RequestContext ? context.requestContext : undefined;
+          resolved = this.resolveKnowledgePersona(knowledge, requestContext).then(persona => ({
+            ...context,
+            agent: { ...context.agent, agentId: this.id, persona },
+          }));
+          contexts.set(context, resolved);
+        }
+        return resolved;
+      };
       processors.push(
         new PinnedStateProcessor({
-          principalsKey: async context =>
-            knowledge.__principalsKey({
-              ...context,
-              agent: {
-                ...context.agent,
-                agentId: this.id,
-                persona: await this.resolveKnowledgePersona(knowledge, requestContext),
-              },
-            }),
-          readPins: async context =>
-            knowledge.__deliveredPins({
-              ...context,
-              agent: {
-                ...context.agent,
-                agentId: this.id,
-                persona: await this.resolveKnowledgePersona(knowledge, requestContext),
-              },
-            }),
+          principalsKey: async context => knowledge.__principalsKey(await pinContext(context)),
+          readPins: async context => knowledge.__deliveredPins(await pinContext(context)),
           ...knowledge.__toolGroups,
         }),
       );
@@ -3124,7 +3123,7 @@ export class Agent<
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
 
     // Knowledge usage instructions, and pins when there is a Memory thread to carry their state signal
-    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory), requestContext);
+    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory));
 
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);

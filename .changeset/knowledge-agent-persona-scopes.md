@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added automatic Knowledge identities for agents. Spread `knowledgeAgentScopes()` into your Knowledge `scopes` and every agent run holds `agent:<agentId>`, its per-org and per-user forms, and role and team scopes read from `metadata.persona`. These identities grant nothing until an access rule names them.
+Added automatic Knowledge identities for agents. Spread `knowledgeAgentScopes()` into your Knowledge `scopes` and every agent run holds `agent:<agentId>`. Per-org identities require an `org:` run scope, and per-user identities require a Memory resource. Role and team scopes come from `metadata.persona` when those fields are present. These identities grant nothing until an access rule names them.
 
 ```ts
 const knowledge = new Knowledge({ storage, scopes: { ...knowledgeMemoryScopes(), ...knowledgeAgentScopes() } });
