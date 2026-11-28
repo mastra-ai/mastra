@@ -1,5 +1,14 @@
 # @mastra/mysql
 
+## 0.17.3-alpha.2
+
+### Patch Changes
+
+- Fixed background tasks losing non-object results: a string, number or boolean written to result, error, suspendPayload or metadata now reads back exactly as written instead of being rejected or turned into an object. Scalar JSON values are encoded and decoded consistently in Postgres, MySQL, MSSQL, Cloudflare D1, Cloudflare, Lance and DynamoDB. Fixes #31613 ([#31802](https://github.com/mastra-ai/mastra/pull/31802))
+
+- Updated dependencies [[`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`a6dfa7b`](https://github.com/mastra-ai/mastra/commit/a6dfa7b8cde36c40fe54e34d01350c7eeae2d918), [`70daf9a`](https://github.com/mastra-ai/mastra/commit/70daf9acfb7e69ed3921eb7d8b0250cce318330f)]:
+  - @mastra/core@1.87.0-alpha.6
+
 ## 0.17.3-alpha.1
 
 ### Patch Changes

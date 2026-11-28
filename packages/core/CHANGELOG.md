@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.87.0-alpha.6
+
+### Patch Changes
+
+- Added agent-wide `defaultDisposition` and `modelOverrides` to `backgroundTasks`, so tools opted in through `tools: 'all'` (or a named entry) can share one policy instead of repeating it per tool. ([#31813](https://github.com/mastra-ai/mastra/pull/31813))
+
+  ```ts
+  new Agent({
+    // ...
+    backgroundTasks: {
+      tools: 'all',
+      defaultDisposition: 'foreground',
+      modelOverrides: false,
+    },
+  });
+  ```
+
+  Both act as defaults: a per-tool entry wins over the agent-wide value, and a tool's own `background` config fills anything left unset. `enabled` is never inherited, so agent-wide fields can't opt a tool in on their own.
+
+  A `_background` value the model sends to a tool whose resolved policy disallows overrides is now dropped before schema validation and approval checks, so strict tool schemas no longer reject the call.
+
+  Fixes #31614.
+  Fixes #31612.
+
+- Added `modelOverrides: false` to background tool config so fixed background tools don't add `_background` to their model-facing schema. Each overridable tool adds five optional parameters, so five strict background tools exceeded Anthropic's limit of 24 optional parameters. Set it on the tool or on an agent's per-tool entry; the tool still runs with its configured disposition. ([#31813](https://github.com/mastra-ai/mastra/pull/31813))
+
+  ```ts
+  createTool({
+    id: 'research',
+    strict: true,
+    background: { enabled: true, modelOverrides: false },
+    // ...
+  });
+  ```
+
+  Fixes #28638.
+
+- Fixed pinned Knowledge pages not reaching an agent's first turns when the store declares the scopes (as Platform's hosted Knowledge does). Pin delivery now loads the store's scope declarations before checking the run's scopes, instead of skipping pins until a Knowledge tool call had loaded them. If loading those declarations fails, the turn fails with that error rather than running without pins; a run with no scopes or an undeclared scope still gets no pins, as before. ([#31454](https://github.com/mastra-ai/mastra/pull/31454))
+
+- Fixed two workflow delivery bugs on push-only pubsubs such as `UnixSocketPubSub`. ([#31803](https://github.com/mastra-ai/mastra/pull/31803))
+
+  - Subscribing to a topic right after its last listener unsubscribed no longer loses the subscription. Before, the new listener waited forever for events (for example, a run's finish event).
+  - Workflow events are now handled by one process instead of every process sharing the pubsub, matching how the Redis orchestration worker already behaves. Before, each process ran the same step.
+
 ## 1.87.0-alpha.5
 
 ### Minor Changes
