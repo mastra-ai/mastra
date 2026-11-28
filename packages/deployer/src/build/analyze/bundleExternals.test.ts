@@ -1123,5 +1123,70 @@ describe('bundleExternals', () => {
       expect(sharedChunk!.fileName).not.toContain('node_modules/.cache');
       expect(await pathExists(join(testDir, sharedChunk!.fileName))).toBe(true);
     });
+
+    it('should write a shared chunk into the workspace package that owns it when another package path is a prefix of it', async () => {
+      // `packages/shared` is a path prefix of `packages/shared-db`, so a naive
+      // `moduleId.startsWith(packageLocation)` check attributes every shared-db module
+      // to `shared` whenever `shared` comes first in the workspace map.
+      const sharedDir = join(testDir, 'packages', 'shared');
+      const sharedDbDir = join(testDir, 'packages', 'shared-db');
+      for (const [dir, name] of [
+        [sharedDir, '@workspace/shared'],
+        [sharedDbDir, '@workspace/shared-db'],
+      ] as const) {
+        await ensureDir(dir);
+        await writeFile(
+          join(dir, 'package.json'),
+          JSON.stringify({ name, version: '1.0.0', main: 'index.js', type: 'module' }),
+        );
+        await ensureDir(join(testDir, 'node_modules', '@workspace'));
+        await symlink(dir, join(testDir, 'node_modules', name), 'dir');
+      }
+
+      // Both entries pull in the same two shared-db modules, so rollup emits them as a
+      // chunk owned only by `shared-db`.
+      await writeFile(join(sharedDbDir, 'schema.js'), 'export const schema = "schema";');
+      await writeFile(join(sharedDbDir, 'client.js'), 'export const client = "client";');
+      await writeFile(
+        join(sharedDbDir, 'index.js'),
+        'export { schema } from "./schema.js"; export { client } from "./client.js";',
+      );
+      await writeFile(
+        join(sharedDir, 'index.js'),
+        'export { schema } from "../shared-db/schema.js"; export { client } from "../shared-db/client.js";',
+      );
+
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        ['@workspace/shared', { location: sharedDir, dependencies: {}, version: '1.0.0' }],
+        ['@workspace/shared-db', { location: sharedDbDir, dependencies: {}, version: '1.0.0' }],
+      ]);
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        ['@workspace/shared', { exports: ['schema', 'client'], rootPath: sharedDir, isWorkspace: true }],
+        ['@workspace/shared-db', { exports: ['schema', 'client'], rootPath: sharedDbDir, isWorkspace: true }],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        workspaceRoot: testDir,
+        projectRoot: join(testDir, 'app'),
+        workspaceMap,
+        bundlerOptions: { ...normalizeExternals(true), isDev: true },
+      });
+
+      // `shared-db` is a path prefix match for `shared` as a raw string, so compare on
+      // directory boundaries instead of with a plain startsWith.
+      const isInside = (id: string, dir: string) => id.startsWith(dir + '/');
+
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      const sharedDbChunk = chunks.find(
+        c =>
+          !c.isEntry &&
+          c.moduleIds.some(id => isInside(id, sharedDbDir)) &&
+          !c.moduleIds.some(id => isInside(id, sharedDir)),
+      );
+      expect(sharedDbChunk).toBeDefined();
+      expect(sharedDbChunk!.fileName).toMatch(/packages\/shared-db\/node_modules\/\.cache\//);
+      expect(sharedDbChunk!.fileName).not.toMatch(/packages\/shared\/node_modules\/\.cache\//);
+      expect(await pathExists(join(testDir, sharedDbChunk!.fileName))).toBe(true);
+    });
   });
 });

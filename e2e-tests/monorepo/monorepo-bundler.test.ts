@@ -5,7 +5,7 @@ import { chmod, mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } fro
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
-import { timeout, activeProcesses } from './helpers';
+import { timeout, activeProcesses, killOrphanedDevServer } from './helpers';
 
 describe.for([['pnpm'] as const])(`%s monorepo`, { concurrent: false }, ([pkgManager]) => {
   beforeAll(() => {
@@ -539,6 +539,113 @@ assert.equal(subpathOnlyValue, 'c');`,
           expect(buildResult.exitCode, output).toBe(1);
           expect(output).toContain('Missing "./missing" specifier in "@inner/subpath-only" package');
         } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+
+    it(
+      'should keep a workspace package shared chunk out of the cache of a package whose path is a prefix of it',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-prefix-collision-${pkgManager}-`));
+        const appDir = join(isolatedFixturePath, 'apps', 'custom');
+        const port = await getPort();
+        const controller = new AbortController();
+        let proc: ReturnType<typeof execa> | undefined;
+
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          // `packages/hello` is a path prefix of the existing `packages/hello-world` package.
+          // Nothing imports `@inner/hello`; it only has to exist so `findWorkspaces` lists the
+          // shorter path first in the workspace map, the layout that misroutes a shared chunk.
+          const helloPackageDir = join(isolatedFixturePath, 'packages', 'hello');
+          await mkdir(join(helloPackageDir, 'src'), { recursive: true });
+          await Promise.all([
+            writeFile(
+              join(helloPackageDir, 'package.json'),
+              JSON.stringify({
+                name: '@inner/hello',
+                version: '1.0.0',
+                private: true,
+                type: 'module',
+                exports: { '.': './src/index.ts' },
+              }),
+            ),
+            writeFile(join(helloPackageDir, 'src', 'index.ts'), `export const hello = 'hello';\n`),
+          ]);
+
+          proc = execa('mastra', ['dev'], {
+            cwd: appDir,
+            preferLocal: true,
+            cancelSignal: controller.signal,
+            gracefulCancel: true,
+            env: {
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              MASTRA_PORT: port.toString(),
+            },
+          });
+          activeProcesses.push({ controller, proc });
+
+          await new Promise<void>((resolve, reject) => {
+            proc!.stderr?.on('data', data => {
+              const errMsg = data?.toString();
+              if (errMsg && errMsg.includes('punycode')) {
+                return;
+              }
+              if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+                return;
+              }
+              reject(new Error('failed to start prefix-collision dev server: ' + errMsg));
+            });
+            proc!.stdout?.on('data', data => {
+              const outMsg = data?.toString() ?? '';
+              console.log(outMsg);
+              if (outMsg.includes(`http://localhost:${port}`)) {
+                resolve();
+                return;
+              }
+              // A chunk misfiled into the prefix package's cache cannot resolve the dependency it
+              // imports, so the dev build fails before the server starts. Fail on that at once
+              // instead of waiting out the test timeout.
+              if (outMsg.includes("wasn't able to build your project")) {
+                reject(new Error('prefix-collision dev build failed: ' + outMsg));
+              }
+            });
+          });
+
+          const toolsResponse = await fetch(`http://localhost:${port}/api/tools`);
+          expect(toolsResponse.status).toBe(200);
+
+          // hello-world's `src/shared/*` modules are reachable from both the package root and the
+          // `./agent` subpath the app imports, so Rollup emits them as a shared chunk. That chunk
+          // must stay in hello-world's cache; entry files are named `<scope>__<name>.mjs`.
+          const helloWorldCacheDir = join(isolatedFixturePath, 'packages', 'hello-world', 'node_modules', '.cache');
+          const helloWorldChunks = (await readdir(helloWorldCacheDir)).filter(
+            name => name.endsWith('.mjs') && !name.startsWith('@inner__'),
+          );
+          expect(helloWorldChunks.length).toBeGreaterThan(0);
+
+          const helloCacheDir = join(isolatedFixturePath, 'packages', 'hello', 'node_modules', '.cache');
+          const helloChunks = (await readdir(helloCacheDir).catch(() => [])).filter(
+            name => name.endsWith('.mjs') && !name.startsWith('@inner__'),
+          );
+          expect(helloChunks).toEqual([]);
+        } finally {
+          if (proc) {
+            try {
+              setImmediate(() => controller.abort());
+              await proc;
+            } catch (err) {
+              // @ts-expect-error - isCanceled is not typed
+              if (!err.isCanceled) {
+                console.log('failed to stop prefix-collision dev server', err);
+              }
+            }
+          }
+
+          await killOrphanedDevServer(appDir);
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
       },
