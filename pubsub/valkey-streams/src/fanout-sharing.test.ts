@@ -305,6 +305,14 @@ describe('ValkeyStreamsPubSub fan-out sharing', () => {
     // wait for that teardown, before the stream is deleted.
     const capture = captureNativeWarnings();
     try {
+      // Positive control. The NOGROUP assertion below only proves the *absence*
+      // of a warning, which also holds vacuously when the native logger is
+      // suppressed (e.g. RUST_LOG=error) or rerouted. Emit a unique warn through
+      // GLIDE's logger - the same native sink core warnings use - and require it
+      // to be captured, so an empty NOGROUP result is meaningful.
+      const control = `glide-capture-control-${randomUUID()}`;
+      Logger.log('warn', 'fanout-sharing-test', control);
+
       const { ps } = createPubSub({ blockMs: 30_000 });
       const topic = `t-${randomUUID()}`;
       const c = collector();
@@ -318,7 +326,10 @@ describe('ValkeyStreamsPubSub fan-out sharing', () => {
 
       expect(await admin.command(['EXISTS', `${KEY_PREFIX}:${topic}`])).toBe(0);
       expect(await groups(topic)).toBe(0);
-      const nogroup = capture.stop().filter(line => /NOGROUP/i.test(line));
+
+      const lines = capture.stop();
+      expect(lines.some(line => line.includes(control))).toBe(true);
+      const nogroup = lines.filter(line => /NOGROUP/i.test(line));
       expect(nogroup).toEqual([]);
     } finally {
       capture.stop();
