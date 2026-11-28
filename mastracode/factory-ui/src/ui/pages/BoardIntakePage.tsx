@@ -1,7 +1,7 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 
 import { RouterBoardSettingsHost } from './board/RouterBoardSettingsHost';
-import { RoutingPage } from '../domains/boardCanvas/components/routing/RoutingPage';
+import { RoutingPage } from '@mastra/playground-ui/domains/factory';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 
@@ -12,8 +12,8 @@ export function BoardIntakePage() {
 
   return (
     <PageLayout variant="page" body="fixed">
-      <RouterBoardSettingsHost factoryId={factory.id}>
-        <RoutingPage key={factory.id} factoryId={factory.id} boardId={boardId} repositories={factory.repositories} />
+      <RouterBoardSettingsHost factoryId={factory.id} repositories={factory.repositories}>
+        <RoutingPage key={factory.id} factoryId={factory.id} boardId={boardId} />
       </RouterBoardSettingsHost>
     </PageLayout>
   );

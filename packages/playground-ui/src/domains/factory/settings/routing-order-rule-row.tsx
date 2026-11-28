@@ -1,17 +1,11 @@
-import {
-  RuleRank,
-  OrderRuleRow as SharedOrderRuleRow,
-  phaseName,
-  boardPhaseIconKind,
-  ruleNotes,
-} from '@mastra/playground-ui/domains/factory';
+import type { InstalledBoardInfo } from '@mastra/client-js';
 
-import type { InstalledBoardInfo } from '../../../../../api/types';
-import type { RuleLine } from '@mastra/playground-ui/domains/factory';
-import { LaneIcon } from './laneIcon';
+import { RuleRank, OrderRuleRow as SharedOrderRuleRow, phaseName, boardPhaseIconKind, ruleNotes } from '..';
+import type { RuleLine } from '..';
+import { LaneIcon } from './lane-icon';
 
 /** One rule in an order card: its trigger, name, the phase it files into and what it filed; opens the rule. */
-export function OrderRuleRow({
+export function RoutingOrderRuleRow({
   line,
   board,
   onOpen,

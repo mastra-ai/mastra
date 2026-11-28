@@ -1,9 +1,12 @@
+import type { IntakeDryRunResponse } from '@mastra/client-js';
 import { useBoardCatalog, useIntakeRoutesQuery, useIntakeDryRunQuery } from '@mastra/react/hooks/factory';
 import {
   AddRuleRow,
+  BoardSettingsTabs,
   BoardStatsRow,
   CanvasFrame,
   CanvasToolbar,
+  INTAKE_ORDER_ANCHOR,
   IntakeOrderList,
   IntakeOrderStatus,
   IntakeReorderButtons,
@@ -16,42 +19,28 @@ import {
   UnsavedPill,
   phaseName,
   readCanvasFocus,
-  BoardSettingsTabs,
-} from '@mastra/playground-ui/domains/factory';
-import type { BoardStats, CanvasFocus } from '@mastra/playground-ui/domains/factory';
-import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useNavigate, useSearchParams } from 'react-router';
+  useBoardSettingsHost,
+} from '..';
+import type { BoardStats, CanvasFocus } from '..';
 
-import type { IntakeDryRunResponse } from '../../../../../api/types';
-import { HrefLink } from '../../../../ui/HrefLink';
-import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../../boardConfig/boardConfigPaths';
-import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
-import { NotRoutedCard } from './NotRoutedCard';
-import { OrderRuleList } from './OrderRuleList';
-import { RerouteNotice } from './RerouteNotice';
-import { RoutingPanel } from './RoutingPanel';
-import { SourcesColumn } from './SourcesColumn';
-import { useOrderDraft } from './useOrderDraft';
-import { useOrderLines } from './useOrderLines';
+import { RoutingNotRoutedCard } from './routing-not-routed-card';
+import { RoutingOrderRuleList } from './routing-order-rule-list';
+import { RoutingPanel } from './routing-panel';
+import { RoutingRerouteNotice } from './routing-reroute-notice';
+import { RoutingSourcesColumn } from './routing-sources-column';
+import { useOrderDraft } from './use-order-draft';
+import { useOrderLines } from './use-order-lines';
+import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
 
 /**
  * A board's routing: where new issues and pull requests come from, the order boards are asked in with each board's
  * rules for them, and what no board took. Mount it with a `key` per project: an unsaved order belongs to one.
  */
-export function RoutingPage({
-  factoryId,
-  boardId,
-  repositories,
-}: {
-  factoryId: string;
-  boardId: string;
-  repositories: readonly LinkedRepositoryPayload[];
-}) {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const focus = readCanvasFocus(searchParams);
-  const go = (next?: CanvasFocus) => navigate(boardIntakePath(factoryId, boardId, { focus: next }));
+export function RoutingPage({ factoryId, boardId }: { factoryId: string; boardId: string }) {
+  const host = useBoardSettingsHost();
+  const focus = readCanvasFocus(host.searchParams);
+  const go = (next?: CanvasFocus) => host.navigate(host.routingHref(boardId, { focus: next }));
 
   const draft = useOrderDraft(factoryId);
   const routesQuery = useIntakeRoutesQuery(factoryId);
@@ -97,12 +86,7 @@ export function RoutingPage({
       }
     >
       <div className="relative mx-auto flex w-max items-start gap-16 max-sm:w-full max-sm:flex-col max-sm:gap-10">
-        <SourcesColumn
-          factoryId={factoryId}
-          repositories={repositories}
-          filed={filedByEvent}
-          routeList={order?.evaluator === 'route-list'}
-        />
+        <RoutingSourcesColumn filed={filedByEvent} routeList={order?.evaluator === 'route-list'} />
 
         <section
           id={INTAKE_ORDER_ANCHOR}
@@ -114,7 +98,7 @@ export function RoutingPage({
           </Txt>
           {draft.query.isError && <Notice variant="destructive">The intake order didn’t load.</Notice>}
           {routesQuery.isError && <Notice variant="warning">Rules didn’t load.</Notice>}
-          <RerouteNotice factoryId={factoryId} canEdit={canEditRules} boardNames={names} />
+          <RoutingRerouteNotice factoryId={factoryId} canEdit={canEditRules} boardNames={names} />
           {order && <IntakeOrderStatus order={order} changed={draft.changed} />}
           {order && !draft.saved.includes(boardId) && (
             <Notice variant="info">
@@ -144,9 +128,9 @@ export function RoutingPage({
                         place={index + 1}
                         grip={draft.movable}
                         dragging={dragging}
-                        routingHref={boardIntakePath(factoryId, boardKey)}
-                        rulesHref={boardConfigPath(factoryId, boardKey)}
-                        LinkComponent={HrefLink}
+                        routingHref={host.routingHref(boardKey)}
+                        rulesHref={host.configHref(boardKey)}
+                        LinkComponent={host.LinkComponent}
                       >
                         {draft.sortable && (
                           <IntakeReorderButtons
@@ -158,7 +142,7 @@ export function RoutingPage({
                       </OrderCardHeader>
                     }
                   >
-                    <OrderRuleList
+                    <RoutingOrderRuleList
                       name={name}
                       lines={lines?.get(boardKey)}
                       board={board}
@@ -172,13 +156,13 @@ export function RoutingPage({
                       {current && canEditRules && newRuleBoard !== boardKey && (
                         <AddRuleRow onAdd={() => go({ newRule: { board: boardKey } })} />
                       )}
-                    </OrderRuleList>
+                    </RoutingOrderRuleList>
                   </OrderBoardCard>
                 );
               }}
             />
             {draft.shown.length > 0 && <StackLink />}
-            <NotRoutedCard factoryId={factoryId} onWhy={decisionId => go({ test: decisionId })} />
+            <RoutingNotRoutedCard factoryId={factoryId} onWhy={decisionId => go({ test: decisionId })} />
           </div>
         </section>
         <SourceLinks />

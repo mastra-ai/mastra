@@ -1,5 +1,7 @@
 import { boardPath } from '../factory/boardCatalog';
-import { focusSearch } from '@mastra/playground-ui/domains/factory';
+import { focusSearch, INTAKE_ORDER_ANCHOR, NOT_ROUTED_ANCHOR } from '@mastra/playground-ui/domains/factory';
+
+export { INTAKE_ORDER_ANCHOR, NOT_ROUTED_ANCHOR };
 import type { CanvasFocus } from '@mastra/playground-ui/domains/factory';
 
 export interface BoardConfigLocation {
@@ -18,10 +20,8 @@ export function boardConfigPath(factoryId: string, boardId: string, phaseKey?: s
 }
 
 /** The order intake asks boards to take a new item, on the routing page. */
-export const INTAKE_ORDER_ANCHOR = 'intake-order';
 
 /** Items no board took, on the routing page. */
-export const NOT_ROUTED_ANCHOR = 'not-routed';
 
 /** Sources, the intake order and items no board took. Outside `config/`, where any phase key can name a phase. */
 export function boardIntakePath(

@@ -1,13 +1,14 @@
-import { OrderRuleList as SharedOrderRuleList } from '@mastra/playground-ui/domains/factory';
+import type { InstalledBoardInfo } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 
-import type { InstalledBoardInfo } from '../../../../../api/types';
-import type { RuleLine } from '@mastra/playground-ui/domains/factory';
-import { ARRIVAL_EVENTS, LaneIcon } from './laneIcon';
-import { OrderRuleRow } from './OrderRuleRow';
+import { OrderRuleList as SharedOrderRuleList } from '..';
+import type { RuleLine } from '..';
+import { ARRIVAL_EVENTS } from './arrival-events';
+import { LaneIcon } from './lane-icon';
+import { RoutingOrderRuleRow } from './routing-order-rule-row';
 
 /** A board's rules for new issues and pull requests, trigger by trigger, checked in order. */
-export function OrderRuleList({
+export function RoutingOrderRuleList({
   name,
   lines,
   board,
@@ -32,7 +33,9 @@ export function OrderRuleList({
       icon: <LaneIcon event={event} />,
       rules: lines
         .filter(line => line.event === event)
-        .map(line => <OrderRuleRow key={`${event}:${line.rule.id}`} line={line} board={board} onOpen={onOpenRule} />),
+        .map(line => (
+          <RoutingOrderRuleRow key={`${event}:${line.rule.id}`} line={line} board={board} onOpen={onOpenRule} />
+        )),
     }));
 
   return (

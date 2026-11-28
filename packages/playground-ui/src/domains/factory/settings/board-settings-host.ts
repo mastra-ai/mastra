@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import type { BoardNavigation } from '..';
+import type { IntakeProvider } from '../board-page/board-source-filters';
 
 import type { CanvasFocus } from './canvas-focus';
 import type { SourceOption } from './source-options';
@@ -35,8 +36,14 @@ export interface BoardSettingsLeaveGuard {
 export interface BoardSettingsHost {
   /** A board's settings, at a phase or with a rule or test open in the side panel. */
   configHref: (boardId: string, phaseKey?: string, focus?: CanvasFocus) => string;
-  /** Routing, at the intake order when asked. */
-  routingHref: (boardId: string, options?: { intakeOrder?: boolean }) => string;
+  /** Routing, at the intake order when asked, or with a rule or test open in the side panel. */
+  routingHref: (boardId: string, options?: { intakeOrder?: boolean; focus?: CanvasFocus }) => string;
+  /** The app's intake settings, where sources are connected. */
+  intakeSettingsHref: () => string;
+  /** The page's URL hash, which opens Not routed when it names it. */
+  hash: string;
+  /** Where the project's new issues and pull requests come from; undefined while they load. */
+  intakeProviders: readonly IntakeProvider[] | undefined;
   /** A board's cards, in the view the viewer last left it in; `view: 'default'` opens it unfiltered. */
   boardHref: (boardId: string, options?: { view?: 'remembered' | 'default' }) => string;
   /** Where a deleted board's page goes when no other board is left. */

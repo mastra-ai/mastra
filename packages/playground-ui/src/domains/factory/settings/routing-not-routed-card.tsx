@@ -1,26 +1,26 @@
+import type { IntakeDecisionInfo } from '@mastra/client-js';
 import { useBoardCatalog, useNotRoutedQuery, useRouteAgain } from '@mastra/react/hooks/factory';
-import { toast } from '@mastra/playground-ui/components/Toaster';
 import {
-  NotRoutedItem,
+  NOT_ROUTED_ANCHOR,
   NotRoutedCard as SharedNotRoutedCard,
+  NotRoutedItem,
+  SettingsIntegrationIcon,
   isIntakeProvider,
-} from '@mastra/playground-ui/domains/factory';
-import { useLocation } from 'react-router';
+  useBoardSettingsHost,
+} from '..';
 
-import type { IntakeDecisionInfo } from '../../../../../api/types';
-import { NOT_ROUTED_ANCHOR } from '../../../boardConfig/boardConfigPaths';
-import type { IntakeProvider } from '@mastra/playground-ui/domains/factory';
-import { SettingsIntegrationIcon } from '../../../settings/components/brand-icons/SettingsIntegrationIcon';
+import type { IntakeProvider } from '..';
+import { toast } from '@/ds/components/Toaster';
 
 /**
  * The end of the intake order: where a new issue or pull request lands when no board's rules take it, with the recent
  * ones listed under it. Route again files one after its rules or labels change.
  */
-export function NotRoutedCard({ factoryId, onWhy }: { factoryId: string; onWhy: (decisionId: string) => void }) {
+export function RoutingNotRoutedCard({ factoryId, onWhy }: { factoryId: string; onWhy: (decisionId: string) => void }) {
   const query = useNotRoutedQuery(factoryId);
   const routeAgain = useRouteAgain(factoryId);
   const catalog = useBoardCatalog(factoryId);
-  const location = useLocation();
+  const { hash } = useBoardSettingsHost();
   const boardNames = new Map((catalog.data ?? []).map(board => [board.id, board.name]));
   const pages = query.data?.pages ?? [];
   const items = pages.flatMap(page => page.notRouted);
@@ -36,7 +36,7 @@ export function NotRoutedCard({ factoryId, onWhy }: { factoryId: string; onWhy: 
   return (
     <SharedNotRoutedCard
       id={NOT_ROUTED_ANCHOR}
-      defaultOpen={location.hash === `#${NOT_ROUTED_ANCHOR}`}
+      defaultOpen={hash === `#${NOT_ROUTED_ANCHOR}`}
       count={items.length}
       pending={query.isPending}
       error={query.isError}

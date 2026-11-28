@@ -42,3 +42,7 @@ export function readCanvasFocus(params: URLSearchParams): CanvasFocus | undefine
   if (rule) return { rule, test };
   return test ? { test } : undefined;
 }
+
+/** Routing's anchors: the intake order and what no board took. */
+export const INTAKE_ORDER_ANCHOR = 'intake-order';
+export const NOT_ROUTED_ANCHOR = 'not-routed';

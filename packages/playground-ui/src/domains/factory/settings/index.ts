@@ -27,3 +27,5 @@ export * from './use-board-draft';
 export * from './use-canvas-data';
 export * from './use-rule-writes';
 export * from './use-unfinished-fields';
+export * from './routing-page';
+export * from './lane-icon';

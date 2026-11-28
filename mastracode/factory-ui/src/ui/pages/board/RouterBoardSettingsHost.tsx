@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
+import { BoardSettingsHostContext, isIntakeProvider } from '@mastra/playground-ui/domains/factory';
+import type { BoardSettingsHost, BoardSettingsLeaveGuard, IntakeProvider } from '@mastra/playground-ui/domains/factory';
 import type { ReactNode } from 'react';
-import { useBeforeUnload, useBlocker, useNavigate, useSearchParams } from 'react-router';
+import { useBeforeUnload, useBlocker, useLocation, useNavigate, useSearchParams } from 'react-router';
 
 import { useFactorySkillsQuery } from '../../../hooks/useFactorySkills';
+import { useIntakeBindingsQuery } from '../../../hooks/useIntakeConfig';
 import { useSourceSuggestions } from '../../../hooks/useSourceSuggestions';
-import { BoardSettingsHostContext } from '@mastra/playground-ui/domains/factory';
-import type { BoardSettingsHost, BoardSettingsLeaveGuard } from '@mastra/playground-ui/domains/factory';
 import {
   boardConfigPath,
   boardIntakePath,
@@ -39,18 +40,55 @@ function useRouterLeaveGuard(boardId: string, changed: () => boolean): BoardSett
   };
 }
 
+const NO_REPOSITORIES: readonly { provider?: IntakeProvider }[] = [];
+
+/** The project's repositories' hosts, then the issue trackers bound to it. */
+function useIntakeProviders(
+  factoryId: string,
+  repositories: readonly { provider?: IntakeProvider }[],
+): readonly IntakeProvider[] | undefined {
+  const bindings = useIntakeBindingsQuery().data;
+  return useMemo(() => {
+    if (!bindings) return undefined;
+    const providers = new Set<IntakeProvider>(repositories.map(repository => repository.provider ?? 'github'));
+    for (const binding of bindings) {
+      if (binding.factoryProjectId === factoryId && isIntakeProvider(binding.integrationId)) {
+        providers.add(binding.integrationId);
+      }
+    }
+    return [...providers];
+  }, [bindings, factoryId, repositories]);
+}
+
 /** Factory's board settings links and data, read from its router, skills and integrations. */
-export function RouterBoardSettingsHost({ factoryId, children }: { factoryId: string; children: ReactNode }) {
+export function RouterBoardSettingsHost({
+  factoryId,
+  repositories = NO_REPOSITORIES,
+  children,
+}: {
+  factoryId: string;
+  /** The project's repositories; their hosts count as intake sources. */
+  repositories?: readonly { provider?: IntakeProvider }[];
+  children: ReactNode;
+}) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const skills = useFactorySkillsQuery(factoryId).data;
   const sourceSuggestions = useSourceSuggestions(factoryId);
+  const { hash } = useLocation();
+  const intakeProviders = useIntakeProviders(factoryId, repositories);
 
   const host = useMemo(
     (): BoardSettingsHost => ({
       configHref: (boardId, phaseKey, focus) => boardConfigPath(factoryId, boardId, phaseKey, focus),
       routingHref: (boardId, options) =>
-        boardIntakePath(factoryId, boardId, options?.intakeOrder ? { anchor: INTAKE_ORDER_ANCHOR } : {}),
+        boardIntakePath(factoryId, boardId, {
+          anchor: options?.intakeOrder ? INTAKE_ORDER_ANCHOR : undefined,
+          focus: options?.focus,
+        }),
+      intakeSettingsHref: () => settingsSectionPath(factoryId, 'intake'),
+      hash,
+      intakeProviders,
       boardHref: (boardId, options) =>
         options?.view === 'default' ? boardPath(factoryId, boardId) : rememberedBoardPath(factoryId, boardId),
       homeHref: () => `/factories/${factoryId}`,
@@ -66,7 +104,7 @@ export function RouterBoardSettingsHost({ factoryId, children }: { factoryId: st
       sourceSuggestions,
       useLeaveGuard: useRouterLeaveGuard,
     }),
-    [factoryId, navigate, searchParams, skills, sourceSuggestions],
+    [factoryId, navigate, searchParams, skills, sourceSuggestions, hash, intakeProviders],
   );
 
   return <BoardSettingsHostContext.Provider value={host}>{children}</BoardSettingsHostContext.Provider>;

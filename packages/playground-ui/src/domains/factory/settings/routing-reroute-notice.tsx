@@ -1,13 +1,13 @@
-import { toast } from '@mastra/playground-ui/components/Toaster';
-import { RerouteNotice as SharedRerouteNotice } from '@mastra/playground-ui/domains/factory';
-
 import { useApplyReroute, useReroutePreview } from '@mastra/react/hooks/factory';
+import { RerouteNotice as SharedRerouteNotice } from '..';
+
+import { toast } from '@/ds/components/Toaster';
 
 /**
  * After rules change, untouched cards (alone in their board's first phase, no session yet) may now belong on another
  * board. Offers to move them to the start of that board.
  */
-export function RerouteNotice({
+export function RoutingRerouteNotice({
   factoryId,
   canEdit,
   boardNames,

@@ -36,7 +36,7 @@ function BoardConfigBody() {
   const query = useBoardQuery(factory.id, boardId);
 
   return (
-    <RouterBoardSettingsHost factoryId={factory.id}>
+    <RouterBoardSettingsHost factoryId={factory.id} repositories={factory.repositories}>
       <BoardConfigState factoryId={factory.id} boardId={boardId} phaseKey={route?.phaseKey} query={query} />
     </RouterBoardSettingsHost>
   );
