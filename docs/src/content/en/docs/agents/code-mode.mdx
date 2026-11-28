@@ -183,6 +183,22 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
+Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper, so the import is safe on runtimes without Node.js globals such as Cloudflare Workers. The default stripper (`ts-blank-space`) loads on the first run that needs it, and on those runtimes it can't load at all: it pulls in `typescript`, which reads `__filename` while it initializes. Pass a stripper that runs there instead:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { QuickJsCodeModeTransport } from '@mastra/quickjs'
+
+// Programs that are already plain JavaScript need no transform, and nothing
+// that depends on Node.js globals is loaded.
+const { tool, instructions } = createCodeMode(
+  { tools },
+  new QuickJsCodeModeTransport({ stripTypes: code => code }),
+)
+```
+
+Where a build step can strip the types, send the program already stripped. To cap CPU-heavy programs on a host with a frozen clock, set `maxInterruptTicks` or `shouldInterrupt`. See the [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport#constructor-parameters).
+
 See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transport) for a side-by-side comparison.
 
 ## Related

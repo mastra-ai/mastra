@@ -25,6 +25,12 @@
  * TypeScript is stripped on the host with `ts-blank-space` — a pure-JavaScript
  * type eraser, deliberately chosen over esbuild, which is itself a native binary
  * and would reintroduce the very dependency this package exists to avoid.
+ * `ts-blank-space` wraps `typescript`, whose module initialisation touches
+ * CommonJS globals such as `__filename` that hosted runtimes like workerd do not
+ * provide, so it is imported lazily — merely importing this package no longer
+ * evaluates it, and a caller that injects its own `stripTypes` avoids it
+ * entirely. A caller that does not, on such a host, gets an error naming the fix
+ * rather than the `ReferenceError` from inside `typescript`.
  *
  * ## Concurrency
  *
@@ -45,7 +51,6 @@ import { sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import { getQuickJS } from 'quickjs-emscripten';
 import type { QuickJSDeferredPromise, QuickJSHandle, QuickJSWASMModule } from 'quickjs-emscripten';
-import tsBlankSpace from 'ts-blank-space';
 
 /** Default interpreter heap limit, in MiB. */
 const DEFAULT_MEMORY_LIMIT_MB = 128;
@@ -62,6 +67,59 @@ const DRAIN_BUDGET_MS = 50;
 
 /** Upper bound on drain passes, so a job queue that refills cannot spin forever. */
 const MAX_DRAIN_PASSES = 10;
+
+/**
+ * Strips TypeScript type syntax, returning equivalent JavaScript.
+ *
+ * The function receives the whole program the guest will run, wrapped in an
+ * async arrow function expression, and must return the JavaScript to evaluate.
+ */
+export type QuickJsStripTypes = (code: string) => string;
+
+/**
+ * Resolves the default TypeScript stripper (`ts-blank-space`) on first use.
+ *
+ * The import is deliberately dynamic: `ts-blank-space` is a thin wrapper around
+ * `typescript`, whose module initialisation reads CommonJS globals such as
+ * `__filename`. A *static* import would therefore turn merely importing this
+ * package into a startup crash on hosted runtimes that do not provide them.
+ * Deferring it means the dependency is only ever evaluated by a run that
+ * actually needs it — never for a caller that injects its own `stripTypes`.
+ */
+let defaultStripTypesPromise: Promise<QuickJsStripTypes> | undefined;
+
+/**
+ * Picks the callable stripper out of a module namespace. The ESM build exposes
+ * it as the default export, but a bundler's CommonJS interop can wrap it once or
+ * twice, so unwrap until a function falls out.
+ */
+function resolveStripper(module: unknown): QuickJsStripTypes {
+  let candidate: unknown = module;
+  for (let depth = 0; depth < 4; depth++) {
+    if (typeof candidate === 'function') return candidate as QuickJsStripTypes;
+    if (candidate !== null && typeof candidate === 'object' && 'default' in candidate) {
+      candidate = (candidate as { default: unknown }).default;
+      continue;
+    }
+    break;
+  }
+  throw new Error('ts-blank-space did not expose a callable default export');
+}
+
+async function loadTsBlankSpace(): Promise<QuickJsStripTypes> {
+  try {
+    return resolveStripper(await import('ts-blank-space'));
+  } catch (error) {
+    // Do not cache a failure: a later run should be able to try again.
+    defaultStripTypesPromise = undefined;
+    throw error;
+  }
+}
+
+function loadDefaultStripTypes(): Promise<QuickJsStripTypes> {
+  defaultStripTypesPromise ??= loadTsBlankSpace();
+  return defaultStripTypesPromise;
+}
 
 export interface QuickJsCodeModeTransportOptions {
   /**
@@ -86,6 +144,39 @@ export interface QuickJsCodeModeTransportOptions {
    * with its leak sanitizer during testing.
    */
   module?: QuickJSWASMModule;
+
+  /**
+   * Erases TypeScript type syntax before the program is evaluated. Defaults to
+   * `ts-blank-space`, loaded lazily on the first run that needs it.
+   *
+   * Supply your own when the default cannot run in your environment — for
+   * example a hosted runtime where `ts-blank-space`'s dependency on `typescript`
+   * cannot be initialised. The function receives the program wrapped in an async
+   * arrow function expression and must return the JavaScript to evaluate; pass an
+   * identity function only for programs that are already plain JavaScript.
+   */
+  stripTypes?: QuickJsStripTypes;
+
+  /**
+   * Maximum number of QuickJS interrupt-handler checks a single run may consume
+   * before it is interrupted and fails with an `ExecutionLimitError`. Optional,
+   * with no default budget: when omitted, only the wall-clock `timeout` and the
+   * `abortSignal` can stop runaway guest code.
+   *
+   * A tick is one interrupt-handler check, not a millisecond and not a portable
+   * opcode count, so treat the budget as a coarse guard against guest code that
+   * spins — it is the only guard that still works when the host clock is frozen
+   * or unreliable, as it is on some hosted runtimes.
+   */
+  maxInterruptTicks?: number;
+
+  /**
+   * Called on every interrupt-handler check, after the wall-clock and
+   * `maxInterruptTicks` guards. Returning `true` interrupts the run, which fails
+   * with an `InterruptError`. A predicate that throws is treated as an
+   * interruption rather than being allowed to crash the host.
+   */
+  shouldInterrupt?: () => boolean;
 }
 
 /** The success and failure handles of a QuickJS call result, either of which must be freed. */
@@ -132,15 +223,29 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
   readonly #memoryLimitMb: number;
   readonly #maxStackSizeBytes: number;
   readonly #module: QuickJSWASMModule | undefined;
+  readonly #stripTypes: QuickJsStripTypes | undefined;
+  readonly #maxInterruptTicks: number | undefined;
+  readonly #shouldInterrupt: (() => boolean) | undefined;
 
   constructor(options: QuickJsCodeModeTransportOptions = {}) {
     this.#memoryLimitMb = options.memoryLimitMb ?? DEFAULT_MEMORY_LIMIT_MB;
     this.#maxStackSizeBytes = options.maxStackSizeBytes ?? DEFAULT_MAX_STACK_SIZE_BYTES;
     this.#module = options.module;
+    this.#stripTypes = options.stripTypes;
+    if (
+      options.maxInterruptTicks !== undefined &&
+      (!Number.isInteger(options.maxInterruptTicks) || options.maxInterruptTicks < 1)
+    ) {
+      throw new RangeError('maxInterruptTicks must be a finite positive integer');
+    }
+    this.#maxInterruptTicks = options.maxInterruptTicks;
+    this.#shouldInterrupt = options.shouldInterrupt;
   }
 
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
     const { program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
+    const maxInterruptTicks = this.#maxInterruptTicks;
+    const shouldInterrupt = this.#shouldInterrupt;
 
     const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
@@ -166,12 +271,31 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
 
     // Strip TypeScript on the host; QuickJS runs plain JavaScript. Wrapping in
     // an async arrow makes top-level `return`/`await`/`const` legal, same as the
-    // core runner's program module. ts-blank-space only erases types, so it
+    // core runner's program module. The default stripper only erases types, so it
     // leaves genuine syntax errors alone — those surface from `evalCode` below
     // as a real SyntaxError, with QuickJS's own diagnostics.
+    //
+    // An injected stripper is used as-is and skips the default entirely, so a
+    // host that cannot initialise `ts-blank-space` pays nothing for it. A caller
+    // that omits `stripTypes` on such a host would otherwise see the raw
+    // `ReferenceError` raised from inside `typescript`; name the fix instead.
+    let strip: QuickJsStripTypes;
+    if (this.#stripTypes) {
+      strip = this.#stripTypes;
+    } else {
+      try {
+        strip = await loadDefaultStripTypes();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `The default TypeScript stripper could not be loaded (${message}). A runtime without Node.js globals, such as Cloudflare Workers, cannot load it at all, so pass a stripTypes function: for a program that is already plain JavaScript, stripTypes: (code) => code is enough.`,
+          { cause: error },
+        );
+      }
+    }
     let strippedProgram: string;
     try {
-      strippedProgram = tsBlankSpace(`(async () => {\n${program}\n})`);
+      strippedProgram = strip(`(async () => {\n${program}\n})`);
     } catch (error) {
       const err = error as { message?: string };
       return {
@@ -245,15 +369,80 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     // so the queue has to be drained first. The drain gets its own short
     // deadline, since the very work being drained may be the runaway code that
     // ended the run.
-    const drainJobs = (): void => {
-      const drainDeadline = Date.now() + DRAIN_BUDGET_MS;
-      runtime.setInterruptHandler(() => Date.now() >= drainDeadline);
-      for (let pass = 0; pass < MAX_DRAIN_PASSES && Date.now() < drainDeadline; pass++) {
-        const jobs = runtime.executePendingJobs();
-        jobs.error?.dispose();
-        if (!jobs.error && jobs.value === 0) break;
+    const deadline = Date.now() + timeout;
+
+    // One interrupt policy governs every period of guest execution — the
+    // bootstrap, the main evaluation and the microtask pumping around it. The
+    // final drain opts out of it and runs under its own deadline (see below).
+    // QuickJS calls the handler between operations, and a truthy return unwinds
+    // whatever guest code is running. It cannot help while the guest is merely
+    // awaiting a host call — no guest code is running then — which is what the
+    // host-side races below are for.
+    //
+    // Order matters: outer cancellation and the wall clock keep their existing
+    // precedence, and only then do the new, clock-independent budgets apply.
+    let interruptTicks = 0;
+    let drainDeadline = 0;
+    let draining = false;
+    let interrupted: 'timeout' | 'abort' | 'limit' | 'predicate' | undefined;
+
+    const interruptHandler = (): boolean => {
+      // The drain is exempt from the policy below. It exists to unwind guest
+      // jobs left over by a run that already ended, so the conditions that ended
+      // that run — an abort signal still aborted, a tick budget already spent, a
+      // predicate that already returned true — must not be re-applied to it. It
+      // runs under its own short deadline instead.
+      if (draining) return Date.now() >= drainDeadline;
+      if (abortSignal?.aborted) {
+        interrupted = 'abort';
+        return true;
       }
-      runtime.removeInterruptHandler();
+      // Wall clock. The drain returns above on its own deadline, so this is the
+      // run deadline proper.
+      if (Date.now() >= deadline) {
+        interrupted = 'timeout';
+        return true;
+      }
+      // A tick is one interrupt-handler check, not a millisecond and not a
+      // portable opcode count, so this is a coarse but clock-independent guard
+      // against guest code that spins. `>=` is deliberate: the limit is the
+      // number of ticks the run may consume before it is interrupted.
+      interruptTicks += 1;
+      if (maxInterruptTicks !== undefined && interruptTicks >= maxInterruptTicks) {
+        interrupted = 'limit';
+        return true;
+      }
+      if (shouldInterrupt) {
+        // A predicate that throws must fail closed as an ordinary result, never
+        // as a host crash.
+        let stop: boolean;
+        try {
+          stop = shouldInterrupt();
+        } catch {
+          stop = true;
+        }
+        if (stop) {
+          interrupted = 'predicate';
+          return true;
+        }
+      }
+      return false;
+    };
+
+    const drainJobs = (): void => {
+      drainDeadline = Date.now() + DRAIN_BUDGET_MS;
+      draining = true;
+      runtime.setInterruptHandler(interruptHandler);
+      try {
+        for (let pass = 0; pass < MAX_DRAIN_PASSES && Date.now() < drainDeadline; pass++) {
+          const jobs = runtime.executePendingJobs();
+          jobs.error?.dispose();
+          if (!jobs.error && jobs.value === 0) break;
+        }
+      } finally {
+        draining = false;
+        runtime.removeInterruptHandler();
+      }
     };
 
     const cleanup = (): void => {
@@ -286,23 +475,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       jobs.error?.dispose();
     };
 
-    const deadline = Date.now() + timeout;
-    let interrupted: 'timeout' | 'abort' | undefined;
-    // The only way to stop a runaway synchronous program: QuickJS calls this
-    // between operations, and a truthy return unwinds the evaluation. It cannot
-    // help while the guest is merely awaiting a host call — no guest code is
-    // running then — which is what the host-side races below are for.
-    runtime.setInterruptHandler(() => {
-      if (abortSignal?.aborted) {
-        interrupted = 'abort';
-        return true;
-      }
-      if (Date.now() >= deadline) {
-        interrupted = 'timeout';
-        return true;
-      }
-      return false;
-    });
+    runtime.setInterruptHandler(interruptHandler);
 
     const timedOutResult = (): CodeModeToolResult => ({
       success: false,
@@ -314,6 +487,33 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       logs,
       error: { message: 'Code Mode execution aborted', name: 'AbortError' },
     });
+
+    // Outer cancellation keeps its existing precedence; the clock-independent
+    // budgets are only consulted when the run was neither aborted nor timed out.
+    // Returns undefined for an ordinary guest failure, so the caller can report
+    // the guest's own error.
+    const interruptedResult = (): CodeModeToolResult | undefined => {
+      if (interrupted === 'abort' || abortSignal?.aborted) return abortedResult();
+      if (interrupted === 'timeout') return timedOutResult();
+      if (interrupted === 'limit') {
+        return {
+          success: false,
+          logs,
+          error: {
+            message: `Code Mode execution interrupted after ${maxInterruptTicks} interrupt ticks (maxInterruptTicks)`,
+            name: 'ExecutionLimitError',
+          },
+        };
+      }
+      if (interrupted === 'predicate') {
+        return {
+          success: false,
+          logs,
+          error: { message: 'Code Mode execution interrupted by shouldInterrupt', name: 'InterruptError' },
+        };
+      }
+      return undefined;
+    };
 
     let timer: NodeJS.Timeout | undefined;
     let onAbort: (() => void) | undefined;
@@ -402,6 +602,11 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       if (bootstrap.error) {
         const err = context.dump(bootstrap.error) as { message?: string };
         bootstrap.error.dispose();
+        // The interrupt guards also cover the bootstrap, so an interruption here
+        // (for example a predicate that stops the run before the program starts)
+        // must surface as the matching error, not a generic bootstrap failure.
+        const mapped = interruptedResult();
+        if (mapped) return mapped;
         return { success: false, logs, error: { message: err?.message ?? 'Code Mode bootstrap failed' } };
       }
       bootstrap.value.dispose();
@@ -434,8 +639,8 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       if (evalResult.error) {
         const err = context.dump(evalResult.error) as { message?: string; name?: string };
         evalResult.error.dispose();
-        if (interrupted === 'abort' || abortSignal?.aborted) return abortedResult();
-        if (interrupted === 'timeout') return timedOutResult();
+        const mapped = interruptedResult();
+        if (mapped) return mapped;
         return {
           success: false,
           logs,
@@ -494,8 +699,8 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       if (settled.error) {
         const err = context.dump(settled.error) as { message?: string; name?: string };
         settled.error.dispose();
-        if (interrupted === 'abort' || abortSignal?.aborted) return abortedResult();
-        if (interrupted === 'timeout') return timedOutResult();
+        const mapped = interruptedResult();
+        if (mapped) return mapped;
         return {
           success: false,
           logs,
