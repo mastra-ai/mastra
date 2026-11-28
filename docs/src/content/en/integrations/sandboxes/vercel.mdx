@@ -157,6 +157,79 @@ Creation options apply when a new sandbox is created. A `networkPolicy` protects
 
 When `sandboxName` matches a sandbox that already exists, starting resumes it unchanged: it keeps the configuration and network policy it was created with, so a stricter policy passed here doesn't restrict it. To change the policy of a running sandbox, update it through the underlying SDK (`await sandbox.sandbox.update({ networkPolicy: 'deny-all' })`). Mastra doesn't manage that.
 
+#### Region and failover regions
+
+Vercel runs sandboxes in many regions. Set `region` to pin creation to one region, and `failoverRegions` to list the regions Vercel may use as fallbacks, in order. A failover region must not repeat `region`:
+
+```typescript
+const sandbox = new VercelSandbox({
+  region: 'fra1',
+  failoverRegions: ['iad1', 'sfo1'],
+})
+```
+
+Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a sandbox created for a name uses them. When a sandbox with that name already exists, `getOrCreate` resumes it unchanged: the supplied `region` and `failoverRegions` don't reconfigure it. An empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when Vercel fails over, the SDK's session object reports the region the running VM uses:
+
+```typescript
+await sandbox.start()
+console.log(sandbox.sandbox.region)
+```
+
+#### Mounting Vercel Drives
+
+Vercel [Drives](https://vercel.com/docs/vercel-sandbox/concepts/drives) are persistent volumes that sandboxes can attach at a path. Pass `mounts` to attach them:
+
+```typescript
+import { Drive } from '@vercel/sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+const drive = await Drive.getOrCreate({ name: 'agent-data' })
+
+const sandbox = new VercelSandbox({
+  // A sandbox's main region must match the Drive's region.
+  region: drive.region,
+  mounts: { '/data': drive },
+})
+
+await sandbox.start()
+await sandbox.executeCommand('sh', ['-c', 'echo hello > /data/marker.txt'])
+```
+
+Mount paths must be absolute and can't overlap. A sandbox can mount up to four Drives, and its main region must match each Drive's region. Only one sandbox at a time can mount a Drive read-write, so other sandboxes mount `drive.snapshot()` for read-only copies. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or an explicit `{ drive: string, mode }` pair where `drive` is the Drive's name and `mode` is `'read-write'` or `'snapshot'`:
+
+```typescript
+const archive = await Drive.getOrCreate({ name: 'agent-archive', region: drive.region })
+
+const sandbox = new VercelSandbox({
+  region: drive.region,
+  mounts: {
+    // A Drive instance mounts read-write.
+    '/data': drive,
+    // The SDK's snapshot helper mounts a read-only copy.
+    '/snapshot': drive.snapshot(),
+    // The explicit form takes a Drive's name and a mode.
+    '/archive': { drive: archive.name, mode: 'read-write' },
+  },
+})
+```
+
+Files written to a read-write mount persist in the Drive. Once the sandbox that holds the read-write mount stops, another sandbox can mount the same Drive and read them back:
+
+```typescript
+await sandbox.stop()
+
+const reader = new VercelSandbox({
+  region: drive.region,
+  mounts: { '/data': drive },
+})
+await reader.start()
+
+const result = await reader.executeCommand('cat', ['/data/marker.txt'])
+console.log(result.stdout) // hello
+```
+
+Mounts are applied when the sandbox is created. A sandbox already running keeps the mounts it started with, and a named sandbox that already exists resumes unchanged with the mounts it was created with.
+
 ### Constructor parameters
 
 <PropertiesTable
@@ -216,6 +289,20 @@ When `sandboxName` matches a sandbox that already exists, starting resumes it un
     isOptional: true,
   },
   {
+    name: 'region',
+    type: 'SandboxRegion',
+    description: 'Vercel region to create the sandbox in, for example `fra1`. Accepts any Vercel region.',
+    isOptional: true,
+    defaultValue: "'iad1' (Vercel API default)",
+  },
+  {
+    name: 'failoverRegions',
+    type: 'SandboxRegion[]',
+    description:
+      'Regions the sandbox can fail over to, in order. Must not include `region`. An empty array creates the sandbox with no failover regions.',
+    isOptional: true,
+  },
+  {
     name: 'networkPolicy',
     type: "'allow-all' | 'deny-all' | NetworkPolicy",
     description:
@@ -241,6 +328,13 @@ When `sandboxName` matches a sandbox that already exists, starting resumes it un
     type: 'number[]',
     description:
       'Ports to expose from the sandbox (up to 15). Public HTTPS domains are available via getInfo().metadata.domains.',
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'SandboxMounts',
+    description:
+      "Vercel Drives to mount inside the sandbox at creation. Keys are absolute paths inside the sandbox; values are a `Drive` instance, a `drive.snapshot()`, or an explicit `{ drive: string, mode }` where `drive` is the Drive's name.",
     isOptional: true,
   },
   {
@@ -384,7 +478,7 @@ The call extends the live session deadline only, so `60_000` keeps the same Micr
 
 The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.
 
-The Mastra adapter doesn't implement the Workspace filesystem mounting API. The underlying Vercel Sandbox product supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage). You can configure a mount directly through the underlying SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage its lifecycle.
+The Mastra adapter doesn't implement the Workspace filesystem mounting API, so mounts configured on a `Workspace` aren't attached to the sandbox. Attach Vercel Drives with the `mounts` constructor option instead (see [Mounting Vercel Drives](#mounting-vercel-drives)). The underlying Vercel Sandbox product also supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage), which you can configure through the SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage their lifecycle.
 
 :::
 

@@ -328,6 +328,93 @@ describe('VercelSandbox', () => {
     });
   });
 
+  describe('region, failoverRegions, and mounts', () => {
+    const mounts: NonNullable<VercelSandboxOptions['mounts']> = {
+      '/data': { drive: 'drv_test', mode: 'read-write' },
+    };
+
+    it('forwards region and failoverRegions to Sandbox.create', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ region: 'fra1', failoverRegions: ['sfo1', 'iad1'] });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1', 'iad1']);
+    });
+
+    it('forwards region and failoverRegions to Sandbox.getOrCreate for named sandboxes', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({
+        sandboxName: 'my-app',
+        region: 'fra1',
+        failoverRegions: ['sfo1'],
+      });
+      await sandbox._start();
+
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1']);
+    });
+
+    it('forwards an explicitly empty failoverRegions array', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ failoverRegions: [] });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.failoverRegions).toEqual([]);
+    });
+
+    it('forwards SDK-shaped mounts to Sandbox.create', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ mounts });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.mounts).toEqual(mounts);
+    });
+
+    it('forwards SDK-shaped mounts to Sandbox.getOrCreate for named sandboxes', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ sandboxName: 'my-app', mounts });
+      await sandbox._start();
+
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.mounts).toEqual(mounts);
+    });
+
+    it('omits region, failoverRegions, and mounts when not configured', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox();
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBeUndefined();
+      expect(params.failoverRegions).toBeUndefined();
+      expect(params.mounts).toBeUndefined();
+    });
+
+    it('carries region, failoverRegions, and mounts into a clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const template = new VercelSandbox({ region: 'fra1', failoverRegions: ['sfo1'], mounts });
+      const cloned = template.clone();
+      await cloned._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1']);
+      expect(params.mounts).toEqual(mounts);
+    });
+  });
+
   describe('writeFiles()', () => {
     it('forwards files to the SDK writeFiles', async () => {
       const fake = makeFakeSandbox();
