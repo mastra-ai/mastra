@@ -19,6 +19,7 @@ import type {
 } from '../types';
 import { applyStateDelta, defineLazyWriter, defineStateAccessors } from '../utils';
 import { getControlFlowIdentityAttributes } from './control-flow';
+import { scopeOperationId } from './operation-id';
 
 /** The timer resolves both when it expires and when its executor is stopped. */
 function sleepTermination(signal?: AbortSignal): SpanTermination {
@@ -77,7 +78,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
 
   const sleepSpan = await engine.createChildSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
-    operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.start`,
+    operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.start`, executionContext),
     options: {
       type: SpanType.WORKFLOW_SLEEP,
       outcome: null,
@@ -95,55 +96,58 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     if (fn) {
       const stepCallId = globalThis.crypto.randomUUID();
       const storageV2 = !!engine.getRunJournal(runId);
-      duration = await engine.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
-        return fn(
-          defineLazyWriter(
-            defineStateAccessors(
-              {
-                runId,
-                workflowId,
-                mastra: engine.mastra!,
-                requestContext,
-                inputData: prevOutput,
-                state: executionContext.state,
-                setState: async (state: any) => {
-                  if (storageV2) applyStateDelta(executionContext.state, state ?? {});
-                  else executionContext.state = state;
-                },
-                updateState: async (changes: any) => {
-                  applyStateDelta(executionContext.state, changes ?? {});
-                },
-                retryCount: -1,
-                ...createObservabilityContext({ currentSpan: sleepSpan }),
-                getInitData: () => stepResults?.input as any,
-                ...buildStepResultAccessors(engine, runId, stepResults),
-                // TODO: this function shouldn't have suspend probably?
-                suspend: async (_suspendPayload: any): Promise<any> => {},
-                bail: (() => {}) as () => InnerOutput,
-                abort: () => {
-                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
-                },
-                [PUBSUB_SYMBOL]: pubsub,
-                [STREAM_FORMAT_SYMBOL]: executionContext.format,
-                engine: engine.getEngineContext(),
-                abortSignal: abortController?.signal,
-              },
-              () => executionContext.state,
-              storageV2,
-            ),
-            () =>
-              new ToolStream(
+      duration = await engine.wrapDurableOperation(
+        scopeOperationId(`workflow.${workflowId}.sleep.${entry.id}`, executionContext),
+        async () => {
+          return fn(
+            defineLazyWriter(
+              defineStateAccessors(
                 {
-                  prefix: 'workflow-step',
-                  callId: stepCallId,
-                  name: 'sleep',
                   runId,
+                  workflowId,
+                  mastra: engine.mastra!,
+                  requestContext,
+                  inputData: prevOutput,
+                  state: executionContext.state,
+                  setState: async (state: any) => {
+                    if (storageV2) applyStateDelta(executionContext.state, state ?? {});
+                    else executionContext.state = state;
+                  },
+                  updateState: async (changes: any) => {
+                    applyStateDelta(executionContext.state, changes ?? {});
+                  },
+                  retryCount: -1,
+                  ...createObservabilityContext({ currentSpan: sleepSpan }),
+                  getInitData: () => stepResults?.input as any,
+                  ...buildStepResultAccessors(engine, runId, stepResults),
+                  // TODO: this function shouldn't have suspend probably?
+                  suspend: async (_suspendPayload: any): Promise<any> => {},
+                  bail: (() => {}) as () => InnerOutput,
+                  abort: () => {
+                    abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                  },
+                  [PUBSUB_SYMBOL]: pubsub,
+                  [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                  engine: engine.getEngineContext(),
+                  abortSignal: abortController?.signal,
                 },
-                outputWriter,
+                () => executionContext.state,
+                storageV2,
               ),
-          ),
-        );
-      });
+              () =>
+                new ToolStream(
+                  {
+                    prefix: 'workflow-step',
+                    callId: stepCallId,
+                    name: 'sleep',
+                    runId,
+                  },
+                  outputWriter,
+                ),
+            ),
+          );
+        },
+      );
 
       // Update sleep span with dynamic duration
       sleepSpan?.update({
@@ -161,13 +165,16 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     );
     await engine.endChildSpan({
       span: sleepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`,
+      operationId: scopeOperationId(`workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`, executionContext),
       endOptions: sleepTermination(abortController?.signal),
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.error`,
+      operationId: scopeOperationId(
+        `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.error`,
+        executionContext,
+      ),
       errorOptions: {
         ...(abortController?.signal.aborted
           ? sleepTermination(abortController.signal)
@@ -231,7 +238,10 @@ export async function executeSleepUntil(
 
   const sleepUntilSpan = await engine.createChildSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
-    operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.start`,
+    operationId: scopeOperationId(
+      `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.start`,
+      executionContext,
+    ),
     options: {
       type: SpanType.WORKFLOW_SLEEP,
       outcome: null,
@@ -251,7 +261,7 @@ export async function executeSleepUntil(
       const stepCallId = globalThis.crypto.randomUUID();
       const storageV2 = !!engine.getRunJournal(runId);
       const dateResult = await engine.wrapDurableOperation(
-        `workflow.${workflowId}.sleepUntil.${entry.id}`,
+        scopeOperationId(`workflow.${workflowId}.sleepUntil.${entry.id}`, executionContext),
         async () => {
           return fn(
             defineLazyWriter(
@@ -317,7 +327,10 @@ export async function executeSleepUntil(
     if (!date) {
       await engine.endChildSpan({
         span: sleepUntilSpan,
-        operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
+        operationId: scopeOperationId(
+          `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
+          executionContext,
+        ),
         endOptions: sleepTermination(abortController?.signal),
       });
       return;
@@ -326,13 +339,19 @@ export async function executeSleepUntil(
     await engine.executeSleepUntilDate(date, entry.id, workflowId, abortController?.signal);
     await engine.endChildSpan({
       span: sleepUntilSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,
+      operationId: scopeOperationId(
+        `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,
+        executionContext,
+      ),
       endOptions: sleepTermination(abortController?.signal),
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepUntilSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.error`,
+      operationId: scopeOperationId(
+        `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.error`,
+        executionContext,
+      ),
       errorOptions: {
         ...(abortController?.signal.aborted
           ? sleepTermination(abortController.signal)

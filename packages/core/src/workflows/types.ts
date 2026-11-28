@@ -404,6 +404,12 @@ export interface NestedWorkflowParent {
   runId: string;
   stepId: string;
   foreachIndex?: number;
+  /**
+   * Occurrence of the parent step within its ancestors' loops, e.g. `.p.body.iter.2`.
+   * Appended to the child's durable operation ids so a nested workflow that reuses the
+   * parent's run id across loop iterations still gets distinct ids per iteration.
+   */
+  occurrenceScope?: string;
 }
 
 export interface WorkflowRunState {
@@ -1451,6 +1457,8 @@ export type ExecutionContext = {
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;
   foreachIndex?: number;
+  /** 1-based iteration of the enclosing dountil/dowhile loop, used to scope durable operation ids */
+  loopIteration?: number;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

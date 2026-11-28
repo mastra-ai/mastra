@@ -3464,6 +3464,16 @@ export class Workflow<
       run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
     }
 
+    // A nested workflow inside a parent loop reopens the same run on every iteration. The
+    // occurrence scope belongs to the current iteration, so take it from the caller rather
+    // than from the stored or cached run.
+    if (options?.parentWorkflow && run.parentWorkflow) {
+      const { occurrenceScope: _previousScope, ...parent } = run.parentWorkflow;
+      run.parentWorkflow = options.parentWorkflow.occurrenceScope
+        ? { ...parent, occurrenceScope: options.parentWorkflow.occurrenceScope }
+        : parent;
+    }
+
     if (!existsInStorage && shouldPersistSnapshot) {
       const initialSnapshot: WorkflowRunState = {
         runId: runIdToUse,
