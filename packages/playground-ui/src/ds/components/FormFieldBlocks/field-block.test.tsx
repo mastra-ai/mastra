@@ -2,9 +2,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { FieldBlock } from './block/field-block';
-import { SelectFieldBlock } from './fields/select-field-block';
 import { TextFieldBlock } from './fields/text-field-block';
-import { TextareaFieldBlock } from './fields/textarea-field-block';
 
 afterEach(() => cleanup());
 
@@ -29,56 +27,6 @@ describe('TextFieldBlock message', () => {
   });
 });
 
-describe('TextareaFieldBlock message', () => {
-  describe('when neither helpText nor errorMsg is provided', () => {
-    it('does not render the message container', () => {
-      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" />);
-
-      expect(messageContainer(container)).toBeNull();
-    });
-  });
-
-  describe('when helpText is provided', () => {
-    it('renders the message container', () => {
-      const { container } = render(<TextareaFieldBlock name="bio" label="Bio" helpText="Keep it short." />);
-
-      expect(messageContainer(container)).not.toBeNull();
-      expect(screen.getByText('Keep it short.')).toBeDefined();
-    });
-  });
-});
-
-describe('SelectFieldBlock message', () => {
-  const options = [{ value: 'a', label: 'A' }];
-
-  describe('when neither helpText nor errorMsg is provided', () => {
-    it('does not render the message container', () => {
-      const { container } = render(
-        <SelectFieldBlock name="kind" label="Kind" options={options} onValueChange={() => {}} />,
-      );
-
-      expect(messageContainer(container)).toBeNull();
-    });
-  });
-
-  describe('when helpText is provided', () => {
-    it('renders the message container', () => {
-      const { container } = render(
-        <SelectFieldBlock
-          name="kind"
-          label="Kind"
-          options={options}
-          onValueChange={() => {}}
-          helpText="Pick a kind."
-        />,
-      );
-
-      expect(messageContainer(container)).not.toBeNull();
-      expect(screen.getByText('Pick a kind.')).toBeDefined();
-    });
-  });
-});
-
 describe('FieldBlock error wiring', () => {
   it('ties the message to its control so the reason is announced with the field', () => {
     render(<TextFieldBlock name="email" label="Email" errorMsg="Your email must include an @ symbol." />);
@@ -93,17 +41,6 @@ describe('FieldBlock error wiring', () => {
     expect(message.id).toBe('error-email');
     expect(message.textContent).toContain('@ symbol');
     expect(message.parentElement?.className).toContain('h-lh');
-  });
-
-  it('ties a textarea message to its control', () => {
-    render(<TextareaFieldBlock name="bio" label="Bio" errorMsg="Bio is too long." />);
-
-    const textarea = screen.getByLabelText('Bio');
-    const message = screen.getByRole('alert');
-
-    expect(textarea.getAttribute('aria-invalid')).toBe('true');
-    expect(textarea.getAttribute('aria-describedby')).toBe('error-bio');
-    expect(message.id).toBe('error-bio');
   });
 
   it('leaves a healthy field unmarked', () => {

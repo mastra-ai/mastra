@@ -5,7 +5,7 @@ import { Button } from '../Button';
 import { Checkbox } from '../Checkbox';
 import { Spinner } from '../Spinner';
 import { Composer, ComposerActions, ComposerBox, ComposerInput, ComposerRing } from './composer';
-import { ComposerHeader, ComposerHeaderActions, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
+import { ComposerHeader, ComposerHeaderContent, ComposerHeaderRow } from './composer-header';
 import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof ComposerHeader> = {
@@ -76,11 +76,9 @@ function OwnershipRow() {
         {owned ? 'You own this session.' : "You're viewing Sam's session. Take ownership to change its model."}
       </ComposerHeaderContent>
       {!owned && (
-        <ComposerHeaderActions>
-          <Button type="button" size="sm" onClick={() => setOwned(true)}>
-            Take ownership
-          </Button>
-        </ComposerHeaderActions>
+        <Button type="button" size="sm" onClick={() => setOwned(true)}>
+          Take ownership
+        </Button>
       )}
     </ComposerHeaderRow>
   );

@@ -65,8 +65,6 @@ export function ComposerBox({ children, className, sendingPulseKey = 0, ...props
   );
 }
 
-export type ComposerTone = 'default' | 'green' | 'purple' | 'orange';
-
 export interface ComposerRingProps extends ComponentProps<'div'> {
   busy?: boolean;
 }
@@ -246,11 +244,3 @@ const ComposerSendingPulse = ({ pulseKey }: { pulseKey: number }) => {
     </div>
   );
 };
-
-export interface ComposerToneLabelProps extends ComponentProps<'span'> {
-  tone: ComposerTone;
-}
-
-export function ComposerToneLabel({ tone, className, ...props }: ComposerToneLabelProps) {
-  return <span data-composer-tone={tone} className={cn('composer-tone-label', className)} {...props} />;
-}

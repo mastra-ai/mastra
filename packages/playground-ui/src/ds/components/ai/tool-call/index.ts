@@ -10,5 +10,3 @@ export * from './tool-call-output';
 export * from './tool-call-view';
 export * from './tool-presentation';
 export * from './tool-phrases';
-
-export { ToolCallTime } from './tool-call-time';

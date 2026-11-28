@@ -1,6 +1,5 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ProductBadge } from '../ProductBadge/ProductBadge';
 import type { Product } from './product-identity';
 import { ProductAvatar } from './ProductAvatar';
 
@@ -20,12 +19,5 @@ describe('product identity', () => {
     expect(html).toContain(`aria-label="${label}"`);
     expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
     expect(html).toContain('<path');
-  });
-
-  it.each(products)('labels the %s badge without repeating the icon name', (product, label) => {
-    const html = renderToStaticMarkup(<ProductBadge product={product} />);
-    expect(html).toContain(`${label}</span>`);
-    expect(html).toMatch(/<svg[^>]*aria-hidden="true"/);
-    expect(html).not.toContain('aria-label=');
   });
 });

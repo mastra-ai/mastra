@@ -1,12 +1,10 @@
 import React from 'react';
 
-import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
 import { resolveTableAlign, tableAlignClasses, toNativeAlign } from './table-align';
 import type { TableAlign } from './table-align';
 import { useTableVariant } from './table-context';
 import { cn } from '@/lib/utils';
-import { formatDate } from '@/utils/date-format';
 
 export type TableCellTone = 'ink' | 'muted';
 
@@ -62,53 +60,6 @@ export const TxtCell = ({ className, children }: CellProps) => {
       <Txt as="span" variant="body-sm" className="w-full truncate">
         {children}
       </Txt>
-    </Cell>
-  );
-};
-
-export interface DateTimeCellProps extends Omit<CellProps, 'children'> {
-  dateTime: Date;
-}
-
-export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
-  return (
-    <Cell {...props}>
-      <Txt as="span" variant="body" className="shrink-0">
-        {formatDate(dateTime, 'date-time-seconds')}
-      </Txt>
-    </Cell>
-  );
-};
-
-export interface EntryCellProps extends Omit<CellProps, 'children'> {
-  name: React.ReactNode;
-  description?: React.ReactNode;
-  icon?: React.ReactNode;
-  meta?: React.ReactNode;
-}
-
-export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCellProps) => {
-  return (
-    <Cell {...props}>
-      <div className="flex items-center gap-3.5">
-        {icon && (
-          <Icon size="lg" className="text-foreground">
-            {icon}
-          </Icon>
-        )}
-
-        <div className="flex flex-col gap-0">
-          <Txt as="span" variant="body" tone="ink">
-            {name}
-          </Txt>
-          {description && (
-            <Txt as="span" variant="meta" tone="muted" className="w-full max-w-75 truncate pt-1">
-              {description}
-            </Txt>
-          )}
-        </div>
-        {meta}
-      </div>
     </Cell>
   );
 };

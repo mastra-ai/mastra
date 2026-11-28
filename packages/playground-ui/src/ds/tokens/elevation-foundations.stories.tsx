@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge } from '../components/Badge/Badge';
 import { ProductAvatar } from '../components/ProductAvatar/ProductAvatar';
-import { ProductBadge } from '../components/ProductBadge/ProductBadge';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection, Specimen } from './foundations-layout';
 
@@ -104,7 +103,6 @@ export const ElevationFoundations: Story = {
           <Specimen name="shadow-inset" note="Badge and ProductAvatar">
             <div className="flex h-20 flex-wrap items-center gap-3 rounded-xl bg-background p-4">
               <ProductAvatar product="studio" />
-              <ProductBadge product="studio" />
               <Badge variant="purple">Purple</Badge>
               <Badge variant="success">Success</Badge>
             </div>

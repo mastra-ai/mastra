@@ -81,7 +81,6 @@ describe('components/* subpath exports', () => {
     expect(mod.Comment).toBeDefined();
     expect(mod.CommentList).toBeDefined();
     expect(mod.CommentItem).toBeDefined();
-    expect(mod.CommentComposer).toBeDefined();
   });
 
   it('AI plan entry exports Plan', async () => {

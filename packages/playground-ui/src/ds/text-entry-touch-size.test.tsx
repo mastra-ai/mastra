@@ -14,7 +14,6 @@ import {
   ComboboxSearch,
 } from '@/ds/components/Combobox/combobox-parts';
 import { Command, CommandInput } from '@/ds/components/Command';
-import { CommentEditor } from '@/ds/components/Comment/comment-editor';
 import { ComposerInput } from '@/ds/components/Composer/composer';
 import { FilterBar } from '@/ds/components/FilterBar';
 import { Input } from '@/ds/components/Input';
@@ -81,7 +80,6 @@ const textEntryFields = {
     </Command>
   ),
   ComposerInput: <ComposerInput aria-label="Message" />,
-  CommentEditor: <CommentEditor initialBody="" onSave={ignore} onClose={ignore} />,
   TreeInput: <TreeInput type="file" onSubmit={ignore} />,
   SavedViewNameInput: <SavedViewNameInput name="Errors" onCommit={ignore} />,
   CodeEditor: <CodeEditor aria-label="Tool input" value="{}" />,

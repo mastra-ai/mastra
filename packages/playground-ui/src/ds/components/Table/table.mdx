@@ -53,7 +53,7 @@ Import both variants from the existing `@mastra/playground-ui/components/Table` 
 - **`variant="inset"`**: adds the raised surface and horizontal scroll area. Rows have a 36px minimum and grow with their contents. `size` does not change inset row density; use content composition rather than a fixed height.
 - **`columnDividers`** is off by default and applies only to inset tables. It separates body columns, not the header labels. It is not a horizontal-border variant.
 
-Existing imports (`Thead`, `Th`, `Tbody`, `Row`, `Cell`, `TxtCell`, `EntryCell`, and `DateTimeCell`) keep working. These parts also read the inset variant from the table, so opting into it does not require switching to compound names.
+Existing imports (`Thead`, `Th`, `Tbody`, `Row`, `Cell`, and `TxtCell`) keep working. These parts also read the inset variant from the table, so opting into it does not require switching to compound names.
 
 The two header shapes are intentionally different:
 

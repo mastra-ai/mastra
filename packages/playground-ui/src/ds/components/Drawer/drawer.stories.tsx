@@ -16,7 +16,6 @@ import {
   DrawerHeader,
   DrawerPopup,
   DrawerPortal,
-  DrawerSwipeArea,
   DrawerTitle,
   DrawerTrigger,
   DrawerViewport,
@@ -457,45 +456,6 @@ export const NonModal: Story = {
       </DrawerPortal>
     </Drawer>
   ),
-};
-
-// Escape hatch: portal scoped to a parent box instead of `document.body`.
-function SwipeToOpenExample() {
-  const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
-
-  return (
-    <div
-      ref={setContainer}
-      className="relative h-80 w-96 overflow-hidden rounded-xl border border-border bg-background"
-    >
-      <Drawer side="right" modal={false}>
-        <DrawerSwipeArea className="absolute inset-y-0 right-0 z-10 w-10 border-l border-dashed border-border-strong bg-muted/40" />
-        <div className="flex h-full items-center justify-center px-12 text-center">
-          <p className="text-caption text-muted-foreground">Swipe from the right edge to open the drawer.</p>
-        </div>
-        <DrawerPortal container={container}>
-          <DrawerBackdrop className="absolute" />
-          <DrawerViewport className="absolute">
-            <DrawerPopup className="h-full w-3/4 max-w-xs">
-              <DrawerHeader>
-                <DrawerTitle>Library</DrawerTitle>
-                <DrawerDescription>Swipe from the edge to jump back into your playlists.</DrawerDescription>
-              </DrawerHeader>
-              <DrawerFooter>
-                <DrawerClose asChild>
-                  <Button>Close</Button>
-                </DrawerClose>
-              </DrawerFooter>
-            </DrawerPopup>
-          </DrawerViewport>
-        </DrawerPortal>
-      </Drawer>
-    </div>
-  );
-}
-
-export const SwipeToOpen: Story = {
-  render: () => <SwipeToOpenExample />,
 };
 
 const actionSheetActions = ['Unfollow', 'Mute', 'Add to favourites', 'Restrict'];

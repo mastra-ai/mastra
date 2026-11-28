@@ -29,16 +29,7 @@ const ShadcnUIComponents: AutoFormUIComponents = {
   ArrayElementWrapper,
 };
 
-// eslint-disable-next-line react-refresh/only-export-components -- field registry shared with custom forms
-export const ShadcnAutoFormFieldComponents = {
-  string: StringField,
-  number: NumberField,
-  boolean: BooleanField,
-  date: DateField,
-  select: SelectField,
-  record: RecordField,
-};
-export type FieldTypes = keyof typeof ShadcnAutoFormFieldComponents;
+export type FieldTypes = 'string' | 'number' | 'boolean' | 'date' | 'select' | 'record';
 
 export function AutoForm<T extends Record<string, any>>({
   uiComponents,

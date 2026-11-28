@@ -1,11 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Button } from '../Button';
 import { Txt } from '../Txt';
-import { Header, HeaderTitle, HeaderAction, HeaderGroup } from './Header';
-import { IconBell2 } from '@/ds/icons/central/IconBell2';
-import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
-import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
-import { IconSettingsGear5 } from '@/ds/icons/central/IconSettingsGear5';
+import { Header, HeaderTitle } from './Header';
 import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 
 const meta: Meta<typeof Header> = {
@@ -51,63 +46,10 @@ export const InFrame: Story = {
   ),
 };
 
-export const WithActions: Story = {
-  render: () => (
-    <Header>
-      <HeaderTitle>Agents</HeaderTitle>
-      <HeaderAction>
-        <Button variant="ghost" size="icon-md">
-          <IconMagnifyingGlass className="size-4" />
-        </Button>
-        <Button icon={<IconPlusMedium />} size="md">
-          New agent
-        </Button>
-      </HeaderAction>
-    </Header>
-  ),
-};
-
-export const WithGroup: Story = {
-  render: () => (
-    <Header>
-      <HeaderGroup>
-        <HeaderTitle>Workflows</HeaderTitle>
-        <span className="text-body text-muted-foreground">12 total</span>
-      </HeaderGroup>
-      <HeaderAction>
-        <Button size="icon-md">
-          <IconSettingsGear5 className="size-4" />
-        </Button>
-      </HeaderAction>
-    </Header>
-  ),
-};
-
 export const NoBorder: Story = {
   render: () => (
     <Header border={false}>
       <HeaderTitle>Settings</HeaderTitle>
-    </Header>
-  ),
-};
-
-export const ComplexHeader: Story = {
-  render: () => (
-    <Header>
-      <HeaderGroup>
-        <HeaderTitle>My Workspace</HeaderTitle>
-      </HeaderGroup>
-      <HeaderAction>
-        <Button variant="ghost" size="icon-md">
-          <IconBell2 className="size-4" />
-        </Button>
-        <Button variant="ghost" size="icon-md">
-          <IconSettingsGear5 className="size-4" />
-        </Button>
-        <Button icon={<IconPlusMedium />} size="md">
-          Create
-        </Button>
-      </HeaderAction>
     </Header>
   ),
 };

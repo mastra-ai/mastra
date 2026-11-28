@@ -322,10 +322,6 @@ const DrawerClose = React.forwardRef<HTMLButtonElement, DrawerCloseProps>(({ asC
 DrawerClose.displayName = 'DrawerClose';
 
 const DrawerPortal = DrawerPrimitive.Portal;
-const DrawerProvider = DrawerPrimitive.Provider;
-const DrawerIndent = DrawerPrimitive.Indent;
-const DrawerIndentBackground = DrawerPrimitive.IndentBackground;
-const DrawerSwipeArea = DrawerPrimitive.SwipeArea;
 // Inner region where pointer drags select text / scroll instead of swiping the drawer closed.
 const DrawerInteractive = DrawerPrimitive.Content;
 
@@ -557,10 +553,6 @@ export {
   DrawerBody,
   DrawerTitle,
   DrawerDescription,
-  DrawerProvider,
-  DrawerIndent,
-  DrawerIndentBackground,
-  DrawerSwipeArea,
   DrawerInteractive,
 };
 
