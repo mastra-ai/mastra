@@ -249,6 +249,61 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(run!.resourceId).toBe('x');
   });
 
+  it('does not overwrite the colliding legacy run when persisting the colon-named run', async () => {
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+
+    // Persisting `r:resourceId:x` writes its canonical key, which is byte-identical to run `r`'s
+    // legacy `:resourceId:x` key. Run `r`'s snapshot must survive that write.
+    await store.persistWorkflowSnapshot({
+      workflowName,
+      runId: collidingRunId,
+      resourceId: 'other',
+      snapshot: snapshot(collidingRunId),
+    });
+
+    const shortRun = await store.loadWorkflowSnapshot({ workflowName, runId: 'r' });
+    expect(shortRun).not.toBeNull();
+    expect(shortRun?.runId).toBe('r');
+    expect((await store.getWorkflowRunById({ workflowName, runId: 'r' }))?.runId).toBe('r');
+  });
+
+  it('keeps both runs when the colliding legacy run already has its canonical copy', async () => {
+    await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
+    await store.persistWorkflowSnapshot({ workflowName, runId: 'r', resourceId: 'x', snapshot: snapshot('r') });
+
+    await store.persistWorkflowSnapshot({
+      workflowName,
+      runId: collidingRunId,
+      resourceId: 'other',
+      snapshot: snapshot(collidingRunId),
+    });
+
+    expect((await store.loadWorkflowSnapshot({ workflowName, runId: 'r' }))?.runId).toBe('r');
+    expect((await store.loadWorkflowSnapshot({ workflowName, runId: collidingRunId }))?.runId).toBe(collidingRunId);
+  });
+
+  it('refuses, without mutating, when the colliding run cannot be placed', async () => {
+    // Three runs in a chain: `a`, `a:resourceId:b`, `a:resourceId:b:resourceId:c`. The last one's
+    // canonical key holds `a:resourceId:b`'s legacy record, and that run's own canonical key is
+    // taken by `a`'s record, so the occupant cannot be moved anywhere safe.
+    await writeLegacy('a', 'b', new Date('2025-01-01T00:00:00Z'));
+    await writeLegacy('a:resourceId:b', 'c', new Date('2025-01-02T00:00:00Z'));
+
+    await expect(
+      store.persistWorkflowSnapshot({
+        workflowName,
+        runId: 'a:resourceId:b:resourceId:c',
+        resourceId: 'other',
+        snapshot: snapshot('a:resourceId:b:resourceId:c'),
+      }),
+    ).rejects.toThrow();
+
+    expect(await client.get(legacyKey('a', 'b'))).not.toBeNull();
+    expect(await client.get(legacyKey('a:resourceId:b', 'c'))).not.toBeNull();
+    const contested = await client.get(canonicalKey('a:resourceId:b:resourceId:c'));
+    expect(JSON.parse(contested!).run_id).toBe('a:resourceId:b');
+  });
+
   it('does not delete the legacy run when deleting the colon-named run whose canonical key it occupies', async () => {
     await writeLegacy('r', 'x', new Date('2025-01-01T00:00:00Z'));
 

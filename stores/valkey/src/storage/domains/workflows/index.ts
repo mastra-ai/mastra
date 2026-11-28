@@ -36,7 +36,7 @@ import {
   runClaimKey,
   writeBatch,
 } from '../run-fencing';
-import type { RunFenceCheck } from '../run-fencing';
+import type { RunFenceCheck, WriteBatch } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
 function parseWorkflowRun(row: Record<string, unknown>): WorkflowRun {
@@ -169,6 +169,47 @@ export class WorkflowsValkey extends WorkflowsStorage {
     }
 
     return null;
+  }
+
+  /**
+   * Moves a foreign record off a canonical key before this run is written there, so the other
+   * run's snapshot survives (see {@link snapshotKey} and {@link legacySnapshotKeyPattern}): run `r`
+   * with resource `x` and run `r:resourceId:x` share one key. The move rides in the caller's batch,
+   * so it is applied atomically with this run's write. When the occupant's own canonical key is
+   * already taken by another run, or is the same key, the collision is unresolvable and this throws
+   * without mutating rather than destroy a snapshot.
+   */
+  private async displaceForeignOccupant(
+    batch: WriteBatch,
+    namespace: string,
+    workflowName: string,
+    runId: string,
+    canonicalKey: string,
+  ): Promise<void> {
+    const data = await this.client.get(canonicalKey);
+    if (!data) return;
+
+    const occupant = JSON.parse(data) as SnapshotRecord;
+    if (recordMatchesRun(occupant, namespace, workflowName, runId)) return;
+    if (typeof occupant.workflow_name !== 'string' || typeof occupant.run_id !== 'string') {
+      throw new Error(`Cannot place run ${runId}: the snapshot key holds a record with no run identity`);
+    }
+
+    const occupantNamespace = occupant.namespace ?? namespace;
+    const destination = snapshotKey(occupantNamespace, occupant.workflow_name, occupant.run_id);
+    if (destination === canonicalKey) {
+      throw new Error(`Cannot place run ${runId}: run ${occupant.run_id} resolves to the same snapshot key`);
+    }
+
+    const destinationData = await this.client.get(destination);
+    if (destinationData) {
+      const existing = JSON.parse(destinationData) as SnapshotRecord;
+      // The occupant already has a canonical copy, so this run may take the contested key.
+      if (recordMatchesRun(existing, occupantNamespace, occupant.workflow_name, occupant.run_id)) return;
+      throw new Error(`Cannot place run ${runId}: run ${occupant.run_id}'s snapshot key is occupied by another run`);
+    }
+
+    batch.set(destination, data);
   }
 
   public supportsConcurrentUpdates(): boolean {
@@ -426,6 +467,14 @@ export class WorkflowsValkey extends WorkflowsStorage {
         updatedAt: updatedAt ?? new Date(),
       });
       const batch = writeBatch(this.client, check);
+      // A canonical key can hold a *different* run's legacy record: run IDs are free-form, so run
+      // `r` with resource `x` and run `r:resourceId:x` share one key. Writing this run there would
+      // destroy the other run's snapshot, so move that occupant to its own canonical key in the
+      // same batch first. Only a run ID that can carry a legacy key suffix is checked, so ordinary
+      // persists pay nothing; a collision that cannot be resolved throws without mutating.
+      if (runId.includes(':resourceId:')) {
+        await this.displaceForeignOccupant(batch, namespace, workflowName, runId, key);
+      }
       batch.set(key, JSON.stringify(processedRecord));
       await batch.exec();
     } catch (error) {
