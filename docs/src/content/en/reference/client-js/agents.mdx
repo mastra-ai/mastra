@@ -390,6 +390,17 @@ const { messages, initialHistoryPagination } = useChat({
 
 `subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout. If a reconnect request fails with a 4xx status (for example `401` or `403`) or `501`, `processDataStream()` stops reconnecting and rejects with the original `MastraClientError`. `408` and `429` are still retried.
 
+Pass `reconnect: { withInitialHistory: true }` (or `{ perPage }`) to start each resubscription with a `thread-history` chunk. The stream then catches up on what it missed while it was down. `useChat()` follows its thread this way: after the stream ends or breaks, for example when a phone locks, the stored history replaces what the page had streamed, and a running reply goes on from there.
+
+```typescript
+await subscription.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+  reconnect: { withInitialHistory: true },
+})
+```
+
 <PropertiesTable
   content={[
   {
@@ -413,10 +424,10 @@ const { messages, initialHistoryPagination } = useChat({
   },
   {
     name: 'processDataStream().reconnect',
-    type: 'boolean | { maxRetries?: number; delayMs?: number }',
+    type: 'boolean | { maxRetries?: number; delayMs?: number; withInitialHistory?: boolean | { perPage?: number } }',
     isOptional: true,
     description:
-      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay. A 4xx (other than `408` and `429`) or `501` response stops reconnecting and rejects with that error.',
+      "Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay. A 4xx (other than `408` and `429`) or `501` response stops reconnecting and rejects with that error. `withInitialHistory` requests the stored history on each resubscription, and defaults to the subscription's own.",
   },
 ]}
 />

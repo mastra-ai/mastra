@@ -106,6 +106,8 @@ Use `reconnect: true` for long-lived subscriptions. `processDataStream()` then r
 
 A reconnect can resume output that the shared [PubSub backend](/docs/server/pubsub) still retains. It can't recover events held only in another process's in-memory cache. Use `withInitialHistory` to reload the newest page of stored messages when you need conversation history.
 
+Pass `reconnect: { withInitialHistory: true }` to request that history on each resubscription. The stream then catches up on runs that finished while it was down, and goes on with a running one from the parts newer than the stored history. `useChat()` from `@mastra/react` follows its thread this way.
+
 Stored messages aren't a recording of every streamed text fragment. Reconnecting doesn't replay completed stored output or reconstruct fragments that weren't retained.
 
 Outcome recovery is bounded by the PubSub backend's retention, not by the history page size. Redis Streams keeps compact terminal events and execution authority metadata when saved output is trimmed, but its configured stream length and idle TTL can still evict them. This isn't a permanent run audit log or a guaranteed time window. Upgrade both `@mastra/core` and `@mastra/redis-streams` for recovery after trimming. Older adapters may delete terminal events with the output.

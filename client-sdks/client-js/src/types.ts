@@ -194,6 +194,11 @@ export interface ProcessAgentThreadStreamOptions<WITH_RUN_STATUS extends boolean
         maxRetries?: number;
         /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
         delayMs?: number;
+        /**
+         * Asks each resubscription for the stored history first, as `withInitialHistory` does, so what the stream
+         * missed while it was down arrives as a `thread-history` chunk.
+         */
+        withInitialHistory?: SubscribeAgentThreadParams['withInitialHistory'];
       };
 }
 
