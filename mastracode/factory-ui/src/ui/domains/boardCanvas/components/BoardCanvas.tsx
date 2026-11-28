@@ -1,4 +1,4 @@
-import { useSaveBoardMutation, useIntakeTestQuery } from '@mastra/react/hooks/factory';
+import { factoryKeys, useSaveBoardMutation, useIntakeTestQuery } from '@mastra/react/hooks/factory';
 import {
   CanvasFrame,
   CanvasToolbar,
@@ -15,14 +15,11 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useBeforeUnload, useBlocker, useNavigate, useSearchParams } from 'react-router';
-
-import { queryKeys } from '../../../../api/keys';
 import type { BoardCatalogResponse, StoredBoardResponse, StoredPhaseInfo } from '../../../../api/types';
-import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import { useBoardDraft } from '../../boardConfig/BoardDraftProvider';
-import { boardConfigPath, parseBoardConfigPath, readCanvasFocus } from '../../boardConfig/boardConfigPaths';
-import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
+import { useBoardSettingsHost } from '../boardSettingsHost';
+import { readCanvasFocus } from '../canvasFocus';
+import type { CanvasFocus } from '../canvasFocus';
 import type { BoardDraft, RuleEvent } from '@mastra/playground-ui/domains/factory';
 import { canvasModel, emphasisOf, orderNote } from '../canvasModel';
 import type { RuleLine } from '../canvasModel';
@@ -63,10 +60,8 @@ export function BoardCanvas({
   const { board, canEdit = false } = response;
   const { draft, locked, setDraft, discard } = useBoardDraft(factoryId, boardId, board);
   const data = useCanvasData(factoryId, boardId);
-  const skills = useFactorySkillsQuery(factoryId);
-  const [params] = useSearchParams();
-  const focus = readCanvasFocus(params);
-  const navigate = useNavigate();
+  const host = useBoardSettingsHost();
+  const focus = readCanvasFocus(host.searchParams);
   const queryClient = useQueryClient();
   const save = useSaveBoardMutation(factoryId, boardId);
   const writes = useBoardActions({ factoryId, boardId, boards: data.boards, onDeleted: discard });
@@ -80,7 +75,7 @@ export function BoardCanvas({
   const phase = phaseKey ? draft.phases.find(candidate => candidate.key === phaseKey) : undefined;
   const title = draft.name || board.name;
   const open = (nextPhase?: string, nextFocus?: CanvasFocus) =>
-    void navigate(boardConfigPath(factoryId, boardId, nextPhase, nextFocus));
+    host.navigate(host.configHref(boardId, nextPhase, nextFocus));
 
   // Condition rows live in the phase panel's editors, so a half-filled row only counts until that panel closes. The
   // panel moves between a dock and a phone's sheet across the breakpoint, which remounts its editors empty.
@@ -95,19 +90,12 @@ export function BoardCanvas({
   const hold = saveHold(draft, toFix);
   const stale = save.error?.code === 'revision_mismatch';
 
-  const blocker = useBlocker(({ nextLocation }) => {
+  const leaveGuard = host.useLeaveGuard(boardId, () => {
     // A deleted board leaves the catalog before its panel navigates away: there is nothing left to save.
     const listed = queryClient
-      .getQueryData<BoardCatalogResponse>(queryKeys.boardCatalog(factoryId))
+      .getQueryData<BoardCatalogResponse>(factoryKeys.boardCatalog(factoryId))
       ?.boards.some(other => other.id === boardId);
-    if (!changed || listed === false) return false;
-    const next = parseBoardConfigPath(nextLocation.pathname);
-    // Routing has no save bar, so leaving for it counts as leaving the board's settings.
-    return next?.factoryId !== factoryId || next.boardId !== boardId || next.intake === true;
-  });
-  // Reloading or closing the tab would drop the edits too.
-  useBeforeUnload(event => {
-    if (changed) event.preventDefault();
+    return changed && listed !== false;
   });
 
   const discardEdits = () => {
@@ -153,7 +141,7 @@ export function BoardCanvas({
     <>
       <CanvasFrame
         label={`${title} settings`}
-        tabs={<BoardSettingsTabs factoryId={factoryId} boardId={boardId} active="settings" />}
+        tabs={<BoardSettingsTabs boardId={boardId} active="settings" />}
         header={
           <BoardHeader
             board={board}
@@ -179,7 +167,7 @@ export function BoardCanvas({
                     phases={draft.phases}
                     boardTitle={title}
                     codeBehaviour={board.codeBehaviour}
-                    skills={skills.data}
+                    skills={host.skills}
                     disabled={frozen}
                     totals={data.totals}
                     onFocus={next => open(undefined, next)}
@@ -237,7 +225,7 @@ export function BoardCanvas({
             problems={new Set(toFix.map(candidate => candidate.key))}
             rulesEditable={data.rulesEditable}
             order={data.order}
-            skills={skills.data?.skills}
+            skills={host.skills?.skills}
             edit={
               frozen
                 ? undefined
@@ -281,11 +269,11 @@ export function BoardCanvas({
       </CanvasFrame>
       <LeaveDialog
         boardName={board.name}
-        open={blocker.state === 'blocked'}
-        onStay={() => blocker.reset?.()}
+        open={leaveGuard.blocked}
+        onStay={() => leaveGuard.stay()}
         onLeave={() => {
           discard();
-          blocker.proceed?.();
+          leaveGuard.leave();
         }}
       />
     </>

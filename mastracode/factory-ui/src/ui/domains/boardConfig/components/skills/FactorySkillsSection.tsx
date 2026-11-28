@@ -23,7 +23,7 @@ import { SettingsSubsection } from '../../../settings/components/SettingsSubsect
 import { useSettingsLinkState } from '../../../settings/hooks/useSettingsOpen';
 import { newSkillPath, skillPath } from '../../../settings/settingsSections';
 import { boardConfigPath } from '../../boardConfigPaths';
-import { SkillBadges } from './SkillBadges';
+import { SkillBadges } from '../../../boardCanvas/components/phasePanel/SkillBadges';
 
 /** A board phase that runs a skill. */
 type SkillUse = { boardId: string; board: string; phaseKey: string; phase: string };

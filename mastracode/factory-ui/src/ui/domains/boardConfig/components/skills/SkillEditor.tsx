@@ -9,7 +9,7 @@ import { useLeaveGuard } from '../../hooks/useLeaveGuard';
 import { DiscardChangesDialog } from '../DiscardChangesDialog';
 import { SaveBar } from '../SaveBar';
 import { composeSkillMarkdown } from './skillMarkdown';
-import { SkillBadges } from './SkillBadges';
+import { SkillBadges } from '../../../boardCanvas/components/phasePanel/SkillBadges';
 import { SkillDescription } from './SkillDescription';
 import { SkillInstructions } from './SkillInstructions';
 

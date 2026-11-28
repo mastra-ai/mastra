@@ -24,8 +24,8 @@ import {
   useIntakeOrderQuery,
   useSkippedRulesQuery,
 } from '@mastra/react/hooks/factory';
-import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
-import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
+import { useBoardSettingsHost } from '../../boardSettingsHost';
+import type { CanvasFocus } from '../../canvasFocus';
 import { boardRulesOf, ruleLines, ruleNotes, triggerFallback } from '../../canvasModel';
 import type { RuleSkips } from '../../canvasModel';
 import { MAX_RULE_NAME, draftRoutes, editOf, newEdit, resolveEdit, targetPhases, withCondition } from '../../ruleDraft';
@@ -67,7 +67,7 @@ export function RuleEditor({
   onFocus,
   onClose,
 }: RuleEditorProps) {
-  const sources = useSourceSuggestions(factoryId);
+  const sources = useBoardSettingsHost().sourceSuggestions;
   const order = useIntakeOrderQuery(factoryId);
   const skipped = useSkippedRulesQuery(factoryId);
   const dryRun = useIntakeDryRunQuery(factoryId);

@@ -16,11 +16,9 @@ import {
 } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../../api/types';
-import { useSourceSuggestions } from '../../../../../hooks/useSourceSuggestions';
-import { SettingsHrefLink } from '../../../settings/components/SettingsHrefLink';
-import { newSkillPath, settingsSectionPath, skillPath } from '../../../settings/settingsSections';
+import { useBoardSettingsHost } from '../../boardSettingsHost';
 import type { RuleField } from '@mastra/playground-ui/domains/factory';
-import { skillBadges } from '../../../boardConfig/components/skills/SkillBadges';
+import { skillBadges } from './SkillBadges';
 import { ConditionCells } from '../conditions/ConditionCells';
 
 type Runner = NonNullable<StoredPhaseInfo['runner']>;
@@ -70,7 +68,8 @@ export function PhasePanel({
   onRemove?: () => void;
   onClose: () => void;
 }) {
-  const sources = useSourceSuggestions(factoryId);
+  const host = useBoardSettingsHost();
+  const sources = host.sourceSuggestions;
   const exitToolId = phase.exitTool?.id ?? '';
   const skillName = phase.runner?.skill;
   const skill = skillName ? skills?.find(candidate => candidate.name === skillName) : undefined;
@@ -93,9 +92,9 @@ export function PhasePanel({
       kindLocked={kindLocked}
       skills={skills}
       skillsEditable={skillsEditable}
-      skillHref={skillName ? skillPath(factoryId, skillName) : undefined}
-      skillsHref={settingsSectionPath(factoryId, 'skills')}
-      newSkillHref={newSkillPath(factoryId)}
+      skillHref={skillName ? host.skillHref(skillName) : undefined}
+      skillsHref={host.skillsHref()}
+      newSkillHref={host.newSkillHref()}
       skillBadges={skill ? skillBadges(skill) : []}
       outcomes={{
         defaults,
@@ -148,7 +147,7 @@ export function PhasePanel({
       autoApproveProblem={
         unfinished.includes('autoApproveWhen') ? undefined : cardRuleProblem(phase.exitTool?.autoApproveWhen)
       }
-      LinkComponent={SettingsHrefLink}
+      LinkComponent={host.SettingsLinkComponent ?? host.LinkComponent}
       onName={name => onChange({ ...phase, name })}
       onDescription={description => onChange({ ...phase, description })}
       onKind={kind => onChange(withKind(phase, kind, phases))}

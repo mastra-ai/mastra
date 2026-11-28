@@ -5,12 +5,13 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
+import { RouterBoardSettingsHost } from '../../../pages/board/RouterBoardSettingsHost';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { IntakeDryRunResponse, IntakeRouteInfo, IntakeTestResponse } from '../../../../api/types';
-import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
+import type { CanvasFocus } from '../canvasFocus';
 import { FACTORY_ID, PROJECT_URL, rule, ruleId, serveRules } from '../../boardRules/__tests__/fixtures/rulesServer';
 import { RulePanel } from '../components/rulePanel/RulePanel';
 
@@ -98,8 +99,10 @@ function Canvas({ initial, backTo }: { initial: CanvasFocus; backTo?: string }) 
 function renderPanel(initial: CanvasFocus, backTo?: string) {
   return renderWithProviders(
     <MemoryRouter>
-      <Canvas initial={initial} backTo={backTo} />
-      <Toaster />
+      <RouterBoardSettingsHost factoryId={FACTORY_ID}>
+        <Canvas initial={initial} backTo={backTo} />
+        <Toaster />
+      </RouterBoardSettingsHost>
     </MemoryRouter>,
   );
 }

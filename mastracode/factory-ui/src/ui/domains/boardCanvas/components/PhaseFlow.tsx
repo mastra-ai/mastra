@@ -9,8 +9,7 @@ import {
 import type { PhaseFlowModel } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillInfo, InstalledBoardInfo, IntakeOrderResponse } from '../../../../api/types';
-import { HrefLink } from '../../../ui/HrefLink';
-import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../boardConfig/boardConfigPaths';
+import { useBoardSettingsHost } from '../boardSettingsHost';
 import { intakeSentence, movesOnItsOwn, sessionSpans } from '../canvasModel';
 import type { CanvasEmphasis, CanvasModel } from '../canvasModel';
 import { flowIncomingRule, flowRuleLine } from '../flowLines';
@@ -71,6 +70,7 @@ export function PhaseFlow({
   order,
   skills,
 }: PhaseFlowProps) {
+  const host = useBoardSettingsHost();
   const phases = model.rows.map(row => row.phase);
   const board = boards.find(candidate => candidate.id === boardId);
   const flow: PhaseFlowModel = {
@@ -81,7 +81,7 @@ export function PhaseFlow({
         lines: row.lines.map(line =>
           flowRuleLine(
             line,
-            boardConfigPath(factoryId, boardId, undefined, { rule: line.rule.id }),
+            host.configHref(boardId, undefined, { rule: line.rule.id }),
             emphasis.line(line, phase.key),
             lanes,
             board,
@@ -91,7 +91,7 @@ export function PhaseFlow({
           flowIncomingRule(
             rule,
             boards,
-            boardConfigPath(factoryId, rule.target.boardKey, undefined, { rule: rule.id }),
+            host.configHref(rule.target.boardKey, undefined, { rule: rule.id }),
             emphasis.outside(rule.id),
           ),
         ),
@@ -111,8 +111,8 @@ export function PhaseFlow({
                 tools: (phase.tools ?? []).map(toolLabel).join(', '),
               }
             : undefined,
-        href: boardConfigPath(factoryId, boardId, phase.key),
-        newRuleHref: boardConfigPath(factoryId, boardId, undefined, { newRule: { into: phase.key } }),
+        href: host.configHref(boardId, phase.key),
+        newRuleHref: host.configHref(boardId, undefined, { newRule: { into: phase.key } }),
       };
     }),
     sessions: sessionSpans(phases),
@@ -130,13 +130,13 @@ export function PhaseFlow({
       edit={edit && { ...edit, keyFromName, keyProblem }}
       intake={{
         sentence: order && intakeSentence(order.boards, order.evaluator, boardId),
-        reorderHref: boardIntakePath(factoryId, boardId, { anchor: INTAKE_ORDER_ANCHOR }),
+        reorderHref: host.routingHref(boardId, { intakeOrder: true }),
         // The old route list still files by these rules; a board left out of the order never gets the chance.
         asked:
           order !== undefined &&
           (order.evaluator === 'route-list' || order.boards.some(board => board.boardKey === boardId)),
       }}
-      LinkComponent={HrefLink}
+      LinkComponent={host.LinkComponent}
     />
   );
 }

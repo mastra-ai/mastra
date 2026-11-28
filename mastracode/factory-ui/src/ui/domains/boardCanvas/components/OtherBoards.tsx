@@ -2,8 +2,7 @@ import { OtherBoards as SharedOtherBoards, boardName, phaseName } from '@mastra/
 import type { FlowRuleLine, OtherBoardMove } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo, IntakeRouteInfo } from '../../../../api/types';
-import { HrefLink } from '../../../ui/HrefLink';
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
+import { useBoardSettingsHost } from '../boardSettingsHost';
 import type { Emphasis, RuleLine } from '../canvasModel';
 import { flowIncomingRule, flowRuleLine } from '../flowLines';
 import type { LaneOrder } from '../flowLines';
@@ -34,15 +33,10 @@ export function OtherBoards({
   outside,
   lanes,
 }: OtherBoardsProps) {
+  const host = useBoardSettingsHost();
   const board = boards.find(candidate => candidate.id === boardId);
   const chip = (line: RuleLine): FlowRuleLine =>
-    flowRuleLine(
-      line,
-      boardConfigPath(factoryId, boardId, undefined, { rule: line.rule.id }),
-      emphasis(line),
-      lanes,
-      board,
-    );
+    flowRuleLine(line, host.configHref(boardId, undefined, { rule: line.rule.id }), emphasis(line), lanes, board);
   const moves = leaving.map((line): OtherBoardMove => {
     const key = line.rule.target.moveToBoardKey ?? line.rule.target.boardKey;
     const target = boards.find(candidate => candidate.id === key);
@@ -50,7 +44,7 @@ export function OtherBoards({
     const phase = target?.phases.find(candidate => candidate.id === phaseKey);
     return {
       line: chip(line),
-      href: boardConfigPath(factoryId, key, phaseKey ?? undefined),
+      href: host.configHref(key, phaseKey ?? undefined),
       stage: phaseKey && target ? { key: phaseKey, boardId: key, kind: phase?.kind ?? 'resting' } : undefined,
       phaseName: phaseName(target, line.rule.target.phaseKey),
       boardName: target ? boardName(target) : key,
@@ -65,11 +59,11 @@ export function OtherBoards({
         flowIncomingRule(
           rule,
           boards,
-          boardConfigPath(factoryId, rule.target.boardKey, undefined, { rule: rule.id }),
+          host.configHref(rule.target.boardKey, undefined, { rule: rule.id }),
           outside(rule.id),
         ),
       )}
-      LinkComponent={HrefLink}
+      LinkComponent={host.LinkComponent}
     />
   );
 }

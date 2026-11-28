@@ -1,4 +1,4 @@
-import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
+import type { CanvasFocus } from '../../canvasFocus';
 import { RulePanel } from '../rulePanel/RulePanel';
 import { TestPanel } from '../testPanel/TestPanel';
 

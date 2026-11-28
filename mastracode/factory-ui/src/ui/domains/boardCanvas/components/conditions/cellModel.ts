@@ -11,7 +11,7 @@ import {
   newKey,
 } from '@mastra/playground-ui/domains/factory';
 import type { Group, Item, Row } from '@mastra/playground-ui/domains/factory';
-import { narrowSuggestions } from '../../../settings/components/sourceSuggestions';
+import { narrowSuggestions } from './sourceOptions';
 
 const LEGACY_FIELDS = legacyConditionFields();
 

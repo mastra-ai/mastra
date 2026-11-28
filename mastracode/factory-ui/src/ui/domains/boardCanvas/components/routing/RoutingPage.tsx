@@ -23,13 +23,9 @@ import { useNavigate, useSearchParams } from 'react-router';
 
 import type { IntakeDryRunResponse } from '../../../../../api/types';
 import { HrefLink } from '../../../../ui/HrefLink';
-import {
-  boardConfigPath,
-  boardIntakePath,
-  INTAKE_ORDER_ANCHOR,
-  readCanvasFocus,
-} from '../../../boardConfig/boardConfigPaths';
-import type { CanvasFocus } from '../../../boardConfig/boardConfigPaths';
+import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../../boardConfig/boardConfigPaths';
+import { readCanvasFocus } from '../../canvasFocus';
+import type { CanvasFocus } from '../../canvasFocus';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
 import { BoardSettingsTabs } from '../BoardSettingsTabs';
 import { NotRoutedCard } from './NotRoutedCard';
@@ -75,7 +71,7 @@ export function RoutingPage({
   return (
     <CanvasFrame
       label="Routing"
-      tabs={<BoardSettingsTabs factoryId={factoryId} boardId={boardId} active="routing" />}
+      tabs={<BoardSettingsTabs boardId={boardId} active="routing" />}
       panel={
         focus
           ? {

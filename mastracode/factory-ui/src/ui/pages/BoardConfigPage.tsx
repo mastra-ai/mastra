@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { FactoryRequestError } from '@mastra/client-js';
 import { BoardCanvas } from '../domains/boardCanvas/components/BoardCanvas';
 import { BoardSettingsTabs } from '../domains/boardCanvas/components/BoardSettingsTabs';
+import { RouterBoardSettingsHost } from './board/RouterBoardSettingsHost';
 import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
@@ -30,11 +31,29 @@ function BoardConfigBody() {
   const boardId = route?.boardId ?? '';
   const query = useBoardQuery(factory.id, boardId);
 
+  return (
+    <RouterBoardSettingsHost factoryId={factory.id}>
+      <BoardConfigState factoryId={factory.id} boardId={boardId} phaseKey={route?.phaseKey} query={query} />
+    </RouterBoardSettingsHost>
+  );
+}
+
+function BoardConfigState({
+  factoryId,
+  boardId,
+  phaseKey,
+  query,
+}: {
+  factoryId: string;
+  boardId: string;
+  phaseKey: string | undefined;
+  query: ReturnType<typeof useBoardQuery>;
+}) {
   if (query.isPending) {
     return (
       <CanvasFrame
         label="Board settings"
-        tabs={<BoardSettingsTabs factoryId={factory.id} boardId={boardId} active="settings" />}
+        tabs={<BoardSettingsTabs boardId={boardId} active="settings" />}
         header={<BoardHeaderSkeleton />}
       >
         <PhaseFlowSkeleton />
@@ -43,7 +62,7 @@ function BoardConfigBody() {
   }
   if (query.isError && query.error instanceof FactoryRequestError && query.error.code === 'board_not_found') {
     return (
-      <StatusFrame factoryId={factory.id} boardId={boardId}>
+      <StatusFrame boardId={boardId}>
         <EmptyState
           variant="fill"
           titleSlot={<span role="alert">Board unavailable: this board is not installed.</span>}
@@ -53,7 +72,7 @@ function BoardConfigBody() {
   }
   if (query.isError) {
     return (
-      <StatusFrame factoryId={factory.id} boardId={boardId}>
+      <StatusFrame boardId={boardId}>
         <LoadErrorState
           title="Couldn’t load this board"
           error={query.error}
@@ -67,9 +86,9 @@ function BoardConfigBody() {
     <BoardCanvas
       // A save or a reload answers with the next revision: the canvas starts over from it.
       key={`${boardId}:${query.data.board.revision ?? 'code'}`}
-      factoryId={factory.id}
+      factoryId={factoryId}
       boardId={boardId}
-      phaseKey={route?.phaseKey}
+      phaseKey={phaseKey}
       response={query.data}
       onReload={() => void query.refetch()}
     />
@@ -77,11 +96,11 @@ function BoardConfigBody() {
 }
 
 /** When the board can't show, the canvas keeps its tabs and controls in place, so switching views never drops them. */
-function StatusFrame({ factoryId, boardId, children }: { factoryId: string; boardId: string; children: ReactNode }) {
+function StatusFrame({ boardId, children }: { boardId: string; children: ReactNode }) {
   return (
     <CanvasFrame
       label="Board settings"
-      tabs={<BoardSettingsTabs factoryId={factoryId} boardId={boardId} active="settings" />}
+      tabs={<BoardSettingsTabs boardId={boardId} active="settings" />}
       status={children}
     />
   );

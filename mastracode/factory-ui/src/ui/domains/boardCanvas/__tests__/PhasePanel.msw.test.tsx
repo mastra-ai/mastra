@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
+import { RouterBoardSettingsHost } from '../../../pages/board/RouterBoardSettingsHost';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
@@ -95,7 +96,9 @@ function Board({
 function renderPanel(props: Parameters<typeof Board>[0]) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/work/config/${props.phaseKey}`]}>
-      <Board {...props} />
+      <RouterBoardSettingsHost factoryId={FACTORY_ID}>
+        <Board {...props} />
+      </RouterBoardSettingsHost>
     </MemoryRouter>,
   );
 }

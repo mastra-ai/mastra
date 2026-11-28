@@ -1,10 +1,10 @@
 import type { UseMutationResult } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
 
 import type { InstalledBoardInfo, StoredBoardResponse } from '../../../../api/types';
 import { useDeleteBoardMutation, useResetBoardMutation } from '@mastra/react/hooks/factory';
 import type { FactoryRequestError } from '@mastra/client-js';
-import { boardPath, orderedBoards } from '../../factory/boardCatalog';
+import { orderedBoards } from '../../factory/boardCatalog';
+import { useBoardSettingsHost } from '../boardSettingsHost';
 
 /** The board's reset and delete, each sent with the revision it was read at. */
 export interface BoardActionWrites {
@@ -25,13 +25,13 @@ export function useBoardActions({
   /** Drops the draft before a deleted board's canvas goes away. */
   onDeleted: () => void;
 }): BoardActionWrites {
-  const navigate = useNavigate();
+  const host = useBoardSettingsHost();
   const reset = useResetBoardMutation(factoryId, boardId);
   const remove = useDeleteBoardMutation(factoryId, boardId, () => {
     onDeleted();
     // The deleted board is gone from the catalog by now; Work, or the first board left, shows next.
     const next = orderedBoards(boards).find(other => other.id !== boardId);
-    void navigate(next ? boardPath(factoryId, next.id) : `/factories/${factoryId}`, { replace: true });
+    host.navigate(next ? host.boardHref(next.id) : host.homeHref(), { replace: true });
   });
   return { reset, remove };
 }

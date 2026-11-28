@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  boardConfigPath,
-  boardIntakePath,
-  INTAKE_ORDER_ANCHOR,
-  parseBoardConfigPath,
-  readCanvasFocus,
-} from '../boardConfigPaths';
-import type { CanvasFocus } from '../boardConfigPaths';
+import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR, parseBoardConfigPath } from '../boardConfigPaths';
+import { readCanvasFocus } from '../../boardCanvas/canvasFocus';
+import type { CanvasFocus } from '../../boardCanvas/canvasFocus';
 
 const focusOf = (path: string) => readCanvasFocus(new URL(path, 'http://localhost').searchParams);
 

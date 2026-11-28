@@ -1,5 +1,5 @@
 import { sourceSuggestions } from '../ui/domains/settings/components/sourceSuggestions';
-import type { SourceOption } from '../ui/domains/settings/components/sourceSuggestions';
+import type { SourceOption } from '../ui/domains/boardCanvas/components/conditions/sourceOptions';
 import { useFactoryQuery } from './useFactories';
 import { useIntakeBindingsQuery } from './useIntakeConfig';
 import { useJiraProjectsQuery } from './useJiraData';

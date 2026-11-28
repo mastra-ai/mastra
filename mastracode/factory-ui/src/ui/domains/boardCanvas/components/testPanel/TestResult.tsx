@@ -3,8 +3,7 @@ import { IntakeTestResult, phaseName } from '@mastra/playground-ui/domains/facto
 import type { ReactNode } from 'react';
 
 import type { IntakeTestResponse } from '../../../../../api/types';
-import { HrefLink } from '../../../../ui/HrefLink';
-import { boardPath } from '../../../factory/boardCatalog';
+import { useBoardSettingsHost } from '../../boardSettingsHost';
 import { eventLabel, moveRuleVerdictLabel, moveVerdictLabel, ruleVerdictLabel } from '../../../intake/intakeCheckCopy';
 
 /** An intake test's answer, its boards' and phases' names resolved and every verdict put in words. */
@@ -21,6 +20,7 @@ export function TestResult({
   close: ReactNode;
   onEditRule: (routeId: string) => void;
 }) {
+  const host = useBoardSettingsHost();
   const boardName = (key: string) => result.boards.find(board => board.boardKey === key)?.name ?? key;
   const catalog = useBoardCatalog(factoryId).data ?? [];
   const place = (boardKey: string, phaseKey: string | null) => {
@@ -46,7 +46,8 @@ export function TestResult({
         placement: placement && {
           place: place(placement.boardKey, placement.phase),
           boardName: boardName(placement.boardKey),
-          boardHref: boardPath(factoryId, placement.boardKey),
+          // The placed card must show, so the board opens without the viewer's saved filters.
+          boardHref: host.boardHref(placement.boardKey, { view: 'default' }),
         },
         reason: result.reason,
         legacyEvaluator: result.evaluator !== 'intake-order',
@@ -82,7 +83,7 @@ export function TestResult({
       }}
       boardId={boardId}
       close={close}
-      LinkComponent={HrefLink}
+      LinkComponent={host.LinkComponent}
       onEditRule={onEditRule}
     />
   );

@@ -1,9 +1,8 @@
 import { PhaseNotFoundPanel, canRemovePhase, kindLocked } from '@mastra/playground-ui/domains/factory';
 
 import type { FactorySkillsResponse, StoredBoardInfo, StoredPhaseInfo } from '../../../../api/types';
-import { HrefLink } from '../../../ui/HrefLink';
-import { boardConfigPath } from '../../boardConfig/boardConfigPaths';
-import type { CanvasFocus } from '../../boardConfig/boardConfigPaths';
+import { useBoardSettingsHost } from '../boardSettingsHost';
+import type { CanvasFocus } from '../canvasFocus';
 import type { RuleField } from '@mastra/playground-ui/domains/factory';
 import { PhasePanel } from './phasePanel/PhasePanel';
 import { RulePanel } from './rulePanel/RulePanel';
@@ -52,6 +51,7 @@ export function CanvasPanel({
   onUnfinished,
   onRemove,
 }: CanvasPanelProps) {
+  const host = useBoardSettingsHost();
   if (focus && 'rule' in focus) {
     return (
       <RulePanel
@@ -117,8 +117,8 @@ export function CanvasPanel({
   return (
     <PhaseNotFoundPanel
       boardTitle={boardTitle}
-      boardHref={boardConfigPath(factoryId, boardId)}
-      LinkComponent={HrefLink}
+      boardHref={host.configHref(boardId)}
+      LinkComponent={host.LinkComponent}
     />
   );
 }

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { limitedProviders } from '@mastra/playground-ui/domains/factory';
-import { narrowSuggestions, sourceSuggestions } from './sourceSuggestions';
+import { narrowSuggestions } from '../../boardCanvas/components/conditions/sourceOptions';
+import { sourceSuggestions } from './sourceSuggestions';
 
 describe('sourceSuggestions', () => {
   it("offers the project's repositories, then the keys of its own Linear and Jira sources, once each", () => {
