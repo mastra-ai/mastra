@@ -269,10 +269,11 @@ export type StorageCloneThreadInput = {
     /** Maximum number of messages to copy (from most recent) */
     messageLimit?: number;
     /**
-     * Copy every message. With observational memory, `Memory` otherwise copies only the messages
-     * after the observations. Can't be combined with `messageLimit` or `messageFilter`.
+     * With observational memory, `Memory` copies only the messages after the observations (the ones
+     * still in the context window) instead of every message. Can't be combined with `messageLimit`
+     * or `messageFilter`.
      */
-    fullThread?: boolean;
+    contextWindowOnly?: boolean;
     /** Filter messages by date range or specific IDs */
     messageFilter?: {
       /** Only include messages created on or after this date */

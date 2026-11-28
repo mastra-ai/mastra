@@ -668,7 +668,7 @@ export const cloneThreadBodySchema = z.object({
   options: z
     .object({
       messageLimit: z.number().optional(),
-      fullThread: z.boolean().optional(),
+      contextWindowOnly: z.boolean().optional(),
       messageFilter: z
         .object({
           startDate: z.coerce.date().optional(),
@@ -678,10 +678,12 @@ export const cloneThreadBodySchema = z.object({
         .optional(),
     })
     .refine(
-      options => !options.fullThread || (options.messageFilter === undefined && options.messageLimit === undefined),
+      options =>
+        !options.contextWindowOnly || (options.messageFilter === undefined && options.messageLimit === undefined),
       {
-        message: 'fullThread copies every message and cannot be combined with messageFilter or messageLimit',
-        path: ['fullThread'],
+        message:
+          'contextWindowOnly copies only the messages in the context window and cannot be combined with messageFilter or messageLimit',
+        path: ['contextWindowOnly'],
       },
     )
     .optional(),

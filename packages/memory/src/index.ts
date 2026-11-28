@@ -3715,23 +3715,22 @@ Notes:
   /**
    * With observational memory, the context window is the observations plus the messages created
    * after `lastObservedAt`, read from the record the configured engine reads (`contextOM`), as
-   * `getContext` does. When the caller names no message filter or limit and doesn't ask for the
-   * full thread, copy only those messages: the observations carry the rest. `fullThread` is
-   * `Memory`'s own option and never reaches the storage copy.
+   * `getContext` does. When the caller asks for `contextWindowOnly`, copy only those messages: the
+   * observations carry the rest. Otherwise copy what the caller's filter or limit selects, or every
+   * message. `contextWindowOnly` is `Memory`'s own option and never reaches the storage copy.
    */
   private withContextWindowFilter(
     args: StorageCloneThreadInput,
     contextOM: ObservationalMemoryRecord | null,
   ): StorageCloneThreadInput {
-    const { fullThread, ...options } = args.options ?? {};
-    const callerChoseMessages = options.messageFilter !== undefined || options.messageLimit !== undefined;
-    if (fullThread && callerChoseMessages) {
+    const { contextWindowOnly, ...options } = args.options ?? {};
+    if (contextWindowOnly && (options.messageFilter !== undefined || options.messageLimit !== undefined)) {
       throw new Error(
-        'cloneThread: fullThread copies every message and cannot be combined with messageFilter or messageLimit',
+        'cloneThread: contextWindowOnly copies only the messages in the context window and cannot be combined with messageFilter or messageLimit',
       );
     }
     const storageArgs = args.options ? { ...args, options } : args;
-    if (fullThread || callerChoseMessages || !contextOM?.lastObservedAt) return storageArgs;
+    if (!contextWindowOnly || !contextOM?.lastObservedAt) return storageArgs;
 
     const startDate = new Date(new Date(contextOM.lastObservedAt).getTime() + 1);
     return { ...storageArgs, options: { ...options, messageFilter: { startDate } } };
