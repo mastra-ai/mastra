@@ -30,6 +30,8 @@ export {
   type ListSchedulesFilter,
 } from '../schedules';
 export * from './agent';
+export { mergeAgentPersona } from './merge-persona';
+export type { AgentPersona } from './merge-persona';
 export { getGoalActivityDurationMs } from './goal';
 export { DEFAULT_TOOL_DECLINE_REASON, resolveDeclineReason } from './tool-approval';
 export * from './utils';

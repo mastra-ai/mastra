@@ -17,6 +17,33 @@ export function knowledgeAgentScopes(): KnowledgeScopeDeclarations {
   );
 }
 
+/**
+ * {@link knowledgeAgentScopes} plus a read-only persona convention: each agent reads and pins its own
+ * `#persona` page, and every agent of a role or team reads and pins that scope's `#rules` page. The
+ * `:edit` forms give editor on one role or team scope and are never minted; host code passes them.
+ * @experimental
+ */
+export function knowledgePersonaScopes(): KnowledgeScopeDeclarations {
+  const scopes = knowledgeAgentScopes();
+  for (const [key, page, name, edit] of [
+    ['agent:$agentId', 'persona', 'Persona', false],
+    ['agent:persona:role:$role', 'rules', 'Role rules', true],
+    ['agent:persona:team:$teamId', 'rules', 'Team rules', true],
+  ] as const) {
+    scopes[key] = {
+      ...scopes[key],
+      access: [
+        { principal: 'self', role: 'viewer' },
+        ...(edit ? [{ principal: `${key}:edit`, role: 'editor' as const }] : []),
+      ],
+      pages: [{ key: page, name }],
+      pinnedContext: [`${key}#${page}`],
+    };
+    if (edit) scopes[`${key}:edit`] = { access: [] };
+  }
+  return scopes;
+}
+
 /** @internal */
 export function mintKnowledgeAgentScopes(
   compiled: CompiledKnowledgeScopes,
