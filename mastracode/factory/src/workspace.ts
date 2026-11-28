@@ -1160,18 +1160,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               .map(repo => repositoryDirectoryName(repo.slug)),
           ]
         : undefined;
-    // The SDK system prompt uses `state.projectPath` without falling back to
-    // the server cwd. Pin the session workdir once known so the prompt and
-    // workspace tools describe the same checkout. A remote workdir resolves at
-    // the sandbox's first start, so the pin self-heals on the next resolution.
-    if (
-      ctx &&
-      workdir &&
-      (ctx.getState()?.projectPath !== workdir ||
-        ctx.getState()?.instructionRoots?.join('\n') !== checkoutDirs?.join('\n'))
-    ) {
-      await ctx.setState({ projectPath: workdir, projectName: repoFullName, instructionRoots: checkoutDirs });
-    }
+    // The SDK system prompt and host tools such as `submit_plan` use
+    // `state.projectPath` without falling back to the server cwd. Pin the
+    // session workdir once known so the prompt and workspace tools describe the
+    // same checkout. A remote workdir is unknown until the sandbox runs, so the
+    // filesystem pins it when its first file operation resolves it.
+    const pinControllerRoot = async (root: string | undefined) => {
+      if (!ctx || !root) return;
+      const state = ctx.getState();
+      if (state?.projectPath === root && state?.instructionRoots?.join('\n') === checkoutDirs?.join('\n')) return;
+      await ctx.setState({ projectPath: root, projectName: repoFullName, instructionRoots: checkoutDirs });
+    };
+    await pinControllerRoot(workdir);
 
     // Keyed by the session, not the request's thread: a workspace built for a
     // dispatcher kickoff has no live thread yet, but the session's binding
@@ -1883,10 +1883,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       sandbox: sessionSandbox,
       // Lazy: a remote workdir is only knowable once a VM runs. The first
       // file operation resolves it (starting the VM — which materializes the
-      // repo via the onStart hook — when needed) and memoizes it.
+      // repo via the onStart hook — when needed), memoizes it, and pins it as
+      // the controller's root.
       workdir: async () => {
         const checkout = await resolveSessionWorkdir(session.id, sessionEntry.sandbox, repoFullName);
-        return sessionWorkdir(checkout) ?? checkout;
+        const root = sessionWorkdir(checkout) ?? checkout;
+        await pinControllerRoot(root);
+        return root;
       },
     });
     // Relative to the filesystem root. An environment session's root is the
