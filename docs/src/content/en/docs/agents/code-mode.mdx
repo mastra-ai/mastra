@@ -199,7 +199,7 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
-If the program is already plain JavaScript, `stripTypes: (code) => code` is enough. To cap CPU-heavy programs on a host with a frozen clock, set `maxInterruptTicks` or `shouldInterrupt`; see the [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport#constructor-parameters).
+If the program is already plain JavaScript, `stripTypes: (code) => code` is enough. To cap CPU-heavy programs on a host with a frozen clock, set `maxInterruptTicks` or `shouldInterrupt`. See the [QuickJsCodeModeTransport reference](/reference/tools/quickjs-transport#constructor-parameters).
 
 See [Choosing a transport](/reference/tools/quickjs-transport#choosing-a-transport) for a side-by-side comparison.
 
