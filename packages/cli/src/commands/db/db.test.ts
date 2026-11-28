@@ -69,10 +69,6 @@ describe('formatScope', () => {
 });
 
 describe('defaultDatabaseName', () => {
-  it('derives a name from the project slug with a per-provider suffix', () => {
-    expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
-  });
-
   it('matches the dashboard suggestions for every provider', () => {
     // Must stay in sync with `suggestDatabaseName` in the platform
     // frontend so CLI- and UI-created databases look the same.

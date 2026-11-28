@@ -1,4 +1,4 @@
-import type { FactoryDecisionStatus } from './services/decisions';
+import type { FactoryDecisionStatus } from '@internal/factory-contract';
 
 export type RuleDecisionGroupKey = 'all' | 'active' | 'proposed' | 'failed' | 'succeeded';
 

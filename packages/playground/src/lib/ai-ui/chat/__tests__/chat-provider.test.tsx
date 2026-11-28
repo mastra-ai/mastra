@@ -466,20 +466,14 @@ describe('ChatProvider', () => {
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(steps);
     };
 
-    it('shows no maxSteps warning when stopWhen ended the turn after the question', async () => {
-      const chunks = await runAgent({ maxSteps: 10, stopWhen: stopAfterQuestion });
+    it.each([
+      ['shows no maxSteps warning when stopWhen ended the turn after the question', 10],
+      ['shows no maxSteps warning when stopWhen matches on its only step', 1],
+    ] as const)('%s', async (_title, maxSteps) => {
+      const chunks = await runAgent({ maxSteps, stopWhen: stopAfterQuestion });
       expectToolCallFinish(chunks, 1);
 
-      await renderRun({ maxSteps: 10, chunks });
-
-      expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
-    });
-
-    it('shows no maxSteps warning when stopWhen matches on its only step', async () => {
-      const chunks = await runAgent({ maxSteps: 1, stopWhen: stopAfterQuestion });
-      expectToolCallFinish(chunks, 1);
-
-      await renderRun({ maxSteps: 1, chunks });
+      await renderRun({ maxSteps, chunks });
 
       expect(screen.queryByText(MAX_STEPS_WARNING)).toBeNull();
     });

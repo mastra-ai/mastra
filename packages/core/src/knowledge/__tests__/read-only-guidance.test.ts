@@ -256,7 +256,7 @@ describe('Knowledge guidance for an agent without write tools', () => {
     expect(sha(pinnedGuidance(new PinnedStateProcessor({ ...deps, read: true, write: true })))).toBe(preamble);
     const tools = knowledge.createTools();
     expect(sha(tools.knowledge_read!.description!)).toBe(
-      '692561e732c23e2a1af8cb11ce765ec39c795b30503dbe0e3c7e37ece6f582ba',
+      '1dfb1ea3d02185e07bbcb9fd9e1f9b3ed6afa0b92f0e83bc50f076434a4551b2',
     );
     expect(sha(tools.knowledge_page!.description!)).toBe(
       '3967b4fb4cce10cccbb67254ab53cdeee32d558095fb359e9265052879c66a9f',

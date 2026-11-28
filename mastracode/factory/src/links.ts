@@ -4,7 +4,7 @@
  * `MASTRACODE_PUBLIC_URL` is unset or blank: an unconfigured server has no address to link to.
  */
 
-import { DEFAULT_BOARD_ID } from './boards/default-board.js';
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 
 /** The configured web UI origin, trimmed and without a trailing slash; null when unset or blank. */
 export function factoryUiOrigin(raw: string | undefined = process.env.MASTRACODE_PUBLIC_URL): string | null {

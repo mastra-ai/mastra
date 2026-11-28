@@ -1,5 +1,6 @@
 import { SandboxUnsupportedFeatureError, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { VercelSandboxOptions } from './index';
 import { VercelSandbox } from './index';
 
 const createMock = vi.fn();
@@ -23,6 +24,7 @@ function makeFakeSandbox(overrides: Partial<Record<string, unknown>> = {}) {
     domain: vi.fn((port: number) => `https://port-${port}.vercel.run`),
     runCommand: vi.fn(),
     writeFiles: vi.fn().mockResolvedValue(undefined),
+    extendTimeout: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -178,6 +180,123 @@ describe('VercelSandbox', () => {
     });
   });
 
+  describe('creation controls', () => {
+    it('forwards a structured network policy through Sandbox.create unchanged', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = { allow: ['*.npmjs.org', 'github.com'], subnets: { allow: ['10.0.0.0/8'] } };
+
+      const sandbox = new VercelSandbox({ networkPolicy });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      // Forwarded by reference: the provider must not clone, reorder, or drop rules.
+      expect(params.networkPolicy).toBe(networkPolicy);
+    });
+
+    it('forwards a structured network policy through Sandbox.getOrCreate unchanged', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = { allow: { '*.npmjs.org': [] } };
+
+      const sandbox = new VercelSandbox({ sandboxName: 'named-box', networkPolicy });
+      await sandbox._start();
+
+      expect(createMock).not.toHaveBeenCalled();
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.name).toBe('named-box');
+      expect(params.networkPolicy).toBe(networkPolicy);
+    });
+
+    it('starts an image-only sandbox without a runtime or source key', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ image: 'my-repo:v1' });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.image).toBe('my-repo:v1');
+      // The SDK rejects runtime/image/source together, so a default runtime must
+      // be absent (not merely falsy) whenever an image is selected.
+      expect('runtime' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    it('starts a snapshot-only sandbox without a runtime or image key', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const source = { type: 'snapshot', snapshotId: 'snap_123' } as const;
+
+      const sandbox = new VercelSandbox({ source });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.source).toBe(source);
+      expect('runtime' in params).toBe(false);
+      expect('image' in params).toBe(false);
+    });
+
+    it('defaults to the legacy node24 runtime when nothing else is selected', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      await new VercelSandbox()._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.runtime).toBe('node24');
+      expect('image' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    it('preserves an explicitly supplied legacy runtime', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      await new VercelSandbox({ runtime: 'python3.13' })._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.runtime).toBe('python3.13');
+      expect('image' in params).toBe(false);
+      expect('source' in params).toBe(false);
+    });
+
+    const incompatiblePairs: Array<[string, VercelSandboxOptions]> = [
+      ['runtime and image', { runtime: 'node22', image: 'my-repo:v1' }],
+      ['runtime and source', { runtime: 'node22', source: { type: 'snapshot', snapshotId: 'snap_1' } }],
+      ['image and source', { image: 'my-repo:v1', source: { type: 'snapshot', snapshotId: 'snap_1' } }],
+    ];
+
+    it.each(incompatiblePairs)('rejects %s at construction without touching the SDK', (_label, options) => {
+      expect(() => new VercelSandbox(options)).toThrow(/mutually exclusive/);
+      expect(createMock).not.toHaveBeenCalled();
+      expect(getOrCreateMock).not.toHaveBeenCalled();
+    });
+
+    it('carries image and network policy into a started clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const networkPolicy = 'deny-all' as const;
+      const template = new VercelSandbox({ image: 'my-repo:v1', networkPolicy, sandboxName: 'template-box' });
+
+      const child = template.clone({ id: 'child-1' });
+      await child._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.image).toBe('my-repo:v1');
+      expect(params.networkPolicy).toBe(networkPolicy);
+      expect('runtime' in params).toBe(false);
+      // clone() drops the template's name so the child is an independent sandbox.
+      expect(params.name).toBeUndefined();
+    });
+
+    it('carries a snapshot source into a started clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+      const source = { type: 'snapshot', snapshotId: 'snap_42' } as const;
+      const template = new VercelSandbox({ source, networkPolicy: { allow: ['registry.npmjs.org'] } });
+
+      const child = template.clone();
+      await child._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.source).toEqual(source);
+      expect('runtime' in params).toBe(false);
+    });
+  });
+
   describe('networking', () => {
     it('getPortUrl returns the public domain for an exposed port', async () => {
       createMock.mockResolvedValue(makeFakeSandbox());
@@ -206,6 +325,93 @@ describe('VercelSandbox', () => {
     it('getPortUrl returns null before the sandbox is started', async () => {
       const sandbox = new VercelSandbox({ ports: [4111] });
       await expect(sandbox.networking.getPortUrl(4111)).resolves.toBeNull();
+    });
+  });
+
+  describe('region, failoverRegions, and mounts', () => {
+    const mounts: NonNullable<VercelSandboxOptions['mounts']> = {
+      '/data': { drive: 'drv_test', mode: 'read-write' },
+    };
+
+    it('forwards region and failoverRegions to Sandbox.create', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ region: 'fra1', failoverRegions: ['sfo1', 'iad1'] });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1', 'iad1']);
+    });
+
+    it('forwards region and failoverRegions to Sandbox.getOrCreate for named sandboxes', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({
+        sandboxName: 'my-app',
+        region: 'fra1',
+        failoverRegions: ['sfo1'],
+      });
+      await sandbox._start();
+
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1']);
+    });
+
+    it('forwards an explicitly empty failoverRegions array', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ failoverRegions: [] });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.failoverRegions).toEqual([]);
+    });
+
+    it('forwards SDK-shaped mounts to Sandbox.create', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ mounts });
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.mounts).toEqual(mounts);
+    });
+
+    it('forwards SDK-shaped mounts to Sandbox.getOrCreate for named sandboxes', async () => {
+      getOrCreateMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox({ sandboxName: 'my-app', mounts });
+      await sandbox._start();
+
+      const params = getOrCreateMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.mounts).toEqual(mounts);
+    });
+
+    it('omits region, failoverRegions, and mounts when not configured', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const sandbox = new VercelSandbox();
+      await sandbox._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBeUndefined();
+      expect(params.failoverRegions).toBeUndefined();
+      expect(params.mounts).toBeUndefined();
+    });
+
+    it('carries region, failoverRegions, and mounts into a clone', async () => {
+      createMock.mockResolvedValue(makeFakeSandbox());
+
+      const template = new VercelSandbox({ region: 'fra1', failoverRegions: ['sfo1'], mounts });
+      const cloned = template.clone();
+      await cloned._start();
+
+      const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
+      expect(params.region).toBe('fra1');
+      expect(params.failoverRegions).toEqual(['sfo1']);
+      expect(params.mounts).toEqual(mounts);
     });
   });
 
@@ -386,6 +592,49 @@ describe('VercelSandbox', () => {
     });
   });
 
+  describe('extendTimeout()', () => {
+    it('starts the sandbox then forwards the exact duration', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.extendTimeout(600_000);
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledWith(600_000);
+      // Creation must precede the extension, not race it.
+      const createOrder = createMock.mock.invocationCallOrder[0]!;
+      const extendOrder = (fake.extendTimeout as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0]!;
+      expect(createOrder).toBeLessThan(extendOrder);
+    });
+
+    it('reuses the running sandbox across repeated calls', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox.extendTimeout(600_000);
+      await sandbox.extendTimeout(120_000);
+
+      expect(createMock).toHaveBeenCalledTimes(1);
+      expect(fake.extendTimeout).toHaveBeenCalledTimes(2);
+      expect(fake.extendTimeout).toHaveBeenNthCalledWith(1, 600_000);
+      expect(fake.extendTimeout).toHaveBeenNthCalledWith(2, 120_000);
+    });
+
+    it('propagates an SDK rejection unchanged', async () => {
+      const failure = new Error('sandbox_max_timeout_exceeded');
+      const fake = makeFakeSandbox({
+        extendTimeout: vi.fn().mockRejectedValue(failure),
+      });
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await expect(sandbox.extendTimeout(600_000)).rejects.toBe(failure);
+    });
+  });
+
   describe('getInfo()', () => {
     it('includes runtime, timeout and exposed port domains', async () => {
       const fake = makeFakeSandbox();
@@ -412,6 +661,32 @@ describe('VercelSandbox', () => {
       expect(text).toContain('Workspace filesystem mounting tools are not available through this Mastra adapter');
       expect(text).toContain('the underlying Vercel Sandbox supports FUSE mounts');
       expect(text).not.toContain('Filesystem mounting (FUSE) is not supported');
+    });
+
+    it('describes Amazon Linux 2023 and dnf for a runtime-managed sandbox', () => {
+      const text = new VercelSandbox({ runtime: 'node24' }).getInstructions!();
+      expect(text).toContain('running Amazon Linux 2023');
+      expect(text).toContain('install packages via dnf');
+    });
+
+    it('makes no OS or package-manager claim for a custom image sandbox', () => {
+      const text = new VercelSandbox({ image: 'my-repo:v1' }).getInstructions!();
+      expect(text).toContain('Image: my-repo:v1');
+      // An arbitrary image can hold any filesystem, so the default instructions
+      // must not promise Amazon Linux 2023 or `dnf`.
+      expect(text).not.toContain('Amazon Linux');
+      expect(text).not.toContain('dnf');
+      expect(text).toContain('Runs as the vercel-sandbox user with sudo access.');
+    });
+
+    it('makes no OS or package-manager claim for a snapshot sandbox', () => {
+      const text = new VercelSandbox({
+        source: { type: 'snapshot', snapshotId: 'snap_7' },
+      }).getInstructions!();
+      expect(text).toContain('Filesystem restored from snapshot snap_7');
+      expect(text).not.toContain('Amazon Linux');
+      expect(text).not.toContain('dnf');
+      expect(text).toContain('Runs as the vercel-sandbox user with sudo access.');
     });
 
     it('honors a string override', () => {

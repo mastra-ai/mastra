@@ -1,22 +1,29 @@
-import { evaluateRuleGroup, explainRuleGroup } from '../rules/rule-group.js';
-import type { FailedRuleCondition, RuleFacts, RuleGroup } from '../rules/rule-group.js';
-import { externalSourceForWorkItem } from '../rules/types.js';
-import type { FactoryCommitDecision } from '../rules/types.js';
-import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
-import type { Card } from '../storage/domains/work-items/base.js';
-import type { BoardEventFacts, RouteArrivals } from './board-events.js';
 import {
   arrivalKind,
   arrivalKinds,
+  deriveIntakeOrder,
+  evaluateRuleGroup,
   eventMovesCard,
   eventRuleFacts,
+  explainRuleGroup,
+  externalSourceForWorkItem,
   isPullRequestEvent,
   LEGACY_ARRIVAL_EVENT,
+  reconcileIntakeOrder,
   SETTLING_PULL_REQUEST_EVENTS,
   testsField,
-} from './board-events.js';
+} from '@internal/factory-contract';
+import type {
+  BoardEventFacts,
+  FactoryCommitDecision,
+  FailedRuleCondition,
+  RouteArrivals,
+  RuleFacts,
+  RuleGroup,
+} from '@internal/factory-contract';
+import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
-import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget, isTerminalWorkItem } from './semantics.js';
 

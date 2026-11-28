@@ -504,32 +504,18 @@ describe('Memory', () => {
         expect(result?.content.toolInvocations?.map(invocation => invocation.toolName)).toEqual(['lookupWeather']);
       });
 
-      it('drops a step left with only reasoning and whitespace text', () => {
+      it.each([
+        ['drops a step left with only reasoning and whitespace text', '\n\n'],
+        [
+          'drops a step left with only reasoning and working-memory tags',
+          '<working_memory># User\n- Name: Jim</working_memory>',
+        ],
+      ] as const)('%s', (_title, text) => {
         const result = memory.testUpdateMessageToHideWorkingMemoryV2(
           assistantMessage([
             { type: 'step-start' },
             reasoning('SIG_A'),
-            { type: 'text', text: '\n\n' },
-            toolInvocation('wm-1', 'updateWorkingMemory'),
-            { type: 'step-start' },
-            reasoning('SIG_B'),
-            { type: 'text', text: 'Done' },
-          ]),
-        );
-
-        expect(result?.content.parts).toEqual([
-          { type: 'step-start' },
-          reasoning('SIG_B'),
-          { type: 'text', text: 'Done' },
-        ]);
-      });
-
-      it('drops a step left with only reasoning and working-memory tags', () => {
-        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
-          assistantMessage([
-            { type: 'step-start' },
-            reasoning('SIG_A'),
-            { type: 'text', text: '<working_memory># User\n- Name: Jim</working_memory>' },
+            { type: 'text', text },
             toolInvocation('wm-1', 'updateWorkingMemory'),
             { type: 'step-start' },
             reasoning('SIG_B'),
@@ -2624,16 +2610,11 @@ describe('Memory', () => {
       return { memory, messages, mockVector, threadId, resourceId };
     };
 
-    it('filters out vector results below semanticRecall.threshold in direct recall', async () => {
-      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.8);
-
-      const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
-
-      expect(result.messages.map(m => m.id)).toEqual([messages[1]!.id]);
-    });
-
-    it('includes vector results that meet semanticRecall.threshold in direct recall', async () => {
-      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(0.9);
+    it.each([
+      ['filters out vector results below semanticRecall.threshold in direct recall', 0.8],
+      ['includes vector results that meet semanticRecall.threshold in direct recall', 0.9],
+    ] as const)('%s', async (_title, input) => {
+      const { memory, messages, threadId, resourceId } = await createSemanticRecallMemory(input);
 
       const result = await memory.recall({ threadId, resourceId, vectorSearchString: 'remember this' });
 
@@ -3390,54 +3371,34 @@ describe('Memory', () => {
       return new MemoryWithMockVector();
     }
 
-    it('should delete message vectors with default separator', async () => {
-      const memory = createMemoryWithMockVector('_');
-      const messageId = 'msg-123';
+    it.each([
+      ['should delete message vectors with default separator', '_', 'msg-123', 'memory_messages'],
+      ['should delete message vectors with dash separator (Pinecone/Vectorize)', '-', 'msg-456', 'memory-messages'],
+    ] as const)('%s', async (_title, input, messageIdValue, indexName) => {
+      const memory = createMemoryWithMockVector(input);
+      const messageId = messageIdValue;
 
       await memory.deleteMessages([messageId]);
       await memory.flushVectorCleanup();
 
       expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory_messages',
+        indexName,
         filter: { message_id: { $in: [messageId] } },
       });
     });
 
-    it('should delete thread vectors with default separator', async () => {
-      const memory = createMemoryWithMockVector('_');
-      const threadId = 'thread-123';
+    it.each([
+      ['should delete thread vectors with default separator', '_', 'thread-123', 'memory_messages'],
+      ['should delete thread vectors with dash separator (Pinecone/Vectorize)', '-', 'thread-456', 'memory-messages'],
+    ] as const)('%s', async (_title, input, threadIdValue, indexName) => {
+      const memory = createMemoryWithMockVector(input);
+      const threadId = threadIdValue;
 
       await memory.deleteThread(threadId);
       await memory.flushVectorCleanup();
 
       expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory_messages',
-        filter: { thread_id: threadId },
-      });
-    });
-
-    it('should delete message vectors with dash separator (Pinecone/Vectorize)', async () => {
-      const memory = createMemoryWithMockVector('-');
-      const messageId = 'msg-456';
-
-      await memory.deleteMessages([messageId]);
-      await memory.flushVectorCleanup();
-
-      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory-messages',
-        filter: { message_id: { $in: [messageId] } },
-      });
-    });
-
-    it('should delete thread vectors with dash separator (Pinecone/Vectorize)', async () => {
-      const memory = createMemoryWithMockVector('-');
-      const threadId = 'thread-456';
-
-      await memory.deleteThread(threadId);
-      await memory.flushVectorCleanup();
-
-      expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
-        indexName: 'memory-messages',
+        indexName,
         filter: { thread_id: threadId },
       });
     });

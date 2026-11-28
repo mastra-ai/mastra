@@ -1,12 +1,13 @@
-import type { AnyWorkflow } from '@mastra/core/workflows';
+import type { FactoryTransitionResult } from '@internal/factory-contract';
 
+import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { BoardRegistry } from '../boards/index.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import { applyPhaseOutcome } from '../rules/phase-outcome-move.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
-import type { FactoryTransitionResult } from '../rules/types.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactoryCardRunState } from './board-workflow.js';
 
 /**
  * A card filed somewhere without a transition: re-filed by a reconcile pass, or moved to another
@@ -21,7 +22,20 @@ export type FactoryCardPlacementResult = Awaited<ReturnType<typeof moveCardToBoa
 export type FactoryRunEndedBinding = Pick<
   FactoryRunBindingRecord,
   'id' | 'role' | 'orgId' | 'factoryProjectId' | 'workItemId'
->;
+> & {
+  /**
+   * Names the run that ended, when whoever tells of it can: every telling of one run's end
+   * carries the same name, so an engine that counts run ends counts it once.
+   */
+  runEnd?: string;
+  /**
+   * Set by a teller that decides whether the phase is run again when the run ended without an
+   * outcome, as the dispatcher does: true when a second run follows, which makes the end a probe,
+   * false when the teller gives the phase up. An end that says neither (a person's chat turn with
+   * the card's session, a resumed run nobody watches) is followed by no second run.
+   */
+  runsAgain?: boolean;
+};
 
 /**
  * Decides how a card moves across its board. Every stage change from outside the engine (a
@@ -57,18 +71,58 @@ export interface FactoryBoardEngine {
    * it, so a wrapping engine sees that move like any other.
    */
   runEnded(binding: FactoryRunEndedBinding, engine: Pick<FactoryBoardEngine, 'requestMove'>): Promise<boolean>;
+  /**
+   * Tells the engine that a run of a session bound to a card stopped to wait for a person: a tool
+   * call held for approval, or a tool (a submitted plan) that asks for a yes or no. The run carries
+   * on once someone answers. For an engine that keeps what a card is doing.
+   */
+  runPaused?(binding: FactoryRunEndedBinding, reason: 'approval'): Promise<void>;
+  /**
+   * What the card is doing as the engine last recorded it, for an engine that keeps that. Nothing
+   * for a card it has no record of.
+   */
+  describe?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<FactoryCardRunState | undefined>;
+  /**
+   * Asks to move a card without waiting for the move, for an engine whose moves can take a while.
+   * The engine checks what it can tell right away (the card, its revision, the move's edge). A
+   * move that passes is answered with an input id and settles later; one that doesn't is
+   * answered on the spot, as `requestMove` would.
+   */
+  submitMove?(request: FactoryTransitionRequest): Promise<FactorySubmittedMove>;
+  /** Tells the engine a card was deleted, for an engine that keeps something per card to let go of. */
+  cardDeleted?(card: Pick<FactoryTransitionRequest, 'workItemId'>): Promise<void>;
   /** Workflows the engine runs cards on; `MastraFactory` registers them with the host's Mastra. */
   readonly workflows?: Readonly<Record<string, AnyWorkflow>>;
 }
+
+/** A move taken on to settle later under `inputId`, or one answered right away. */
+export type FactorySubmittedMove =
+  | { inputId: string; settled: Promise<FactoryTransitionResult> }
+  | { answered: FactoryTransitionResult };
 
 /** The services an engine is built from; the host's `boardEngine` factory receives them. */
 export interface FactoryBoardEngineContext {
   /** Factory's governed stage-transition service, with every board check and commit hook installed. */
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   /** Reads the card a run ended on, with the outcome its session reported. */
-  workItems: Pick<WorkItemsStorage, 'get'>;
+  workItems: Pick<WorkItemsStorage, 'get'> & Partial<Pick<WorkItemsStorage, 'getTransitionResultByIngress'>>;
   /** The boards cards are filed on, built in and stored. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The runs on a card's sessions, for an engine that stops them when a person moves the card. */
+  runs?: FactoryCardRuns;
+}
+
+type CardAddress = Pick<FactoryTransitionRequest, 'orgId' | 'factoryProjectId' | 'workItemId'>;
+
+export interface FactoryCardRuns {
+  /** Whether a run is in flight on any of the card's sessions. */
+  inFlight(card: CardAddress): Promise<boolean>;
+  /**
+   * Stops the runs in flight on the card's sessions for the person `by`, as that person's Stop
+   * does; they end on their own time. Answers whether it stopped any: a run another process holds
+   * is out of its reach, and with a run on a session that person may not drive, it stops none.
+   */
+  stop(card: CardAddress, by: { userId: string }): Promise<boolean>;
 }
 
 export type FactoryBoardEngineFactory = (context: FactoryBoardEngineContext) => FactoryBoardEngine;

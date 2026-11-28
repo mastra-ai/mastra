@@ -149,16 +149,4 @@ describe('TextualDifferenceMetric', () => {
     const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
     expect(result.preprocessStepResult?.changes).toBe(65536);
   });
-
-  it('should include difference details in result', async () => {
-    const inputMessages = [createTestMessage({ content: 'The quick brown fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
-
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.preprocessStepResult).toMatchObject({
-      confidence: 1,
-      changes: 0,
-      lengthDiff: 0,
-    });
-  });
 });

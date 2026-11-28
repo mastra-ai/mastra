@@ -1,5 +1,5 @@
 import type { Card } from '@mastra/factory/storage/domains/work-items/base';
-import type { FactoryDecisionSummary } from '../../domains/factory/services/decisions';
+import type { FactoryDecisionSummary } from '@internal/factory-contract';
 import type { GithubPullRequest } from '../../domains/factory/services/factory';
 
 export const reviewCandidate: GithubPullRequest = {

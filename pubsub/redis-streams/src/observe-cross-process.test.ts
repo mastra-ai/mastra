@@ -102,7 +102,7 @@ class Node {
   }
 
   async stop() {
-    if (this.proc.exitCode !== null) return;
+    if (this.proc.exitCode !== null || this.proc.signalCode !== null) return;
     const exited = new Promise(r => this.proc.once('exit', r));
     this.proc.kill('SIGTERM');
     await Promise.race([exited, new Promise(r => setTimeout(r, 5_000))]);
@@ -140,9 +140,11 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
         ENGINE: engine,
         PREWRAPPED_PUBSUB: engine === 'evented' ? '1' : '0',
       };
+      // Crash tests must signal the fixture itself, not the tsx CLI wrapper.
+      const direct = engine === 'native-evented';
       const start = (nodeId: string) =>
         new Node(
-          spawn(TSX_BIN, [ENTRY], {
+          spawn(direct ? process.execPath : TSX_BIN, direct ? ['--import', 'tsx', ENTRY] : [ENTRY], {
             cwd: PACKAGE_DIR,
             env: { ...process.env, ...env, NODE_ID: nodeId },
             stdio: ['pipe', 'pipe', 'pipe'],
@@ -159,6 +161,44 @@ for (const engine of ['durable', 'evented', 'native-default', 'native-evented'] 
       await Promise.all([producer?.stop(), observer?.stop()]);
       await cleanupStorage?.();
     });
+
+    if (engine === 'native-evented') {
+      it.each(['queue', 'queueApprovalContinuation'])(
+        'delivers acknowledged input via %s after the active turn finishes',
+        async cmd => {
+          const threadId = randomUUID();
+          const queuedRunId = `${threadId}-queued`;
+          const queuedPrompt = `queued-next-turn-${threadId}`;
+          llm.onMessage('Hold the active turn', {
+            toolCalls: [{ id: 'queue_gate', name: 'wait_gate', arguments: JSON.stringify({ step: 'queue' }) }],
+          });
+          // Most recent matching user message can be in history; use the last user message.
+          llm.on(
+            {
+              endpoint: 'chat',
+              predicate: req =>
+                req.messages.filter(m => m.role === 'user').at(-1)?.content !== 'Hold the active turn' ||
+                req.messages.at(-1)?.role === 'tool',
+            },
+            { content: 'Turn completed.' },
+          );
+          producer.send({ cmd: 'stream', threadId, prompt: 'Hold the active turn' });
+          await producer.next(e => e.type === 'tool-started');
+          producer.send({ cmd, threadId, runId: queuedRunId, prompt: queuedPrompt });
+          const receipt = await producer.next(e => e.type === 'queue-receipt');
+          expect(receipt).toMatchObject(
+            cmd === 'queue' ? { action: 'deliver', runId: queuedRunId } : { accepted: true, runId: queuedRunId },
+          );
+          // The original turn is still blocked and the acknowledged input has not reached the model.
+          expect(producer.events.some(e => e.type === 'stream-done')).toBe(false);
+          expect(JSON.stringify(llm.getRequests().map(req => req.body))).not.toContain(queuedPrompt);
+          producer.send({ cmd: 'release' });
+          await producer.next(e => e.type === 'queued-finished' && e.runId === queuedRunId, 15_000);
+          expect(JSON.stringify(llm.getRequests().map(req => req.body))).toContain(queuedPrompt);
+        },
+        45_000,
+      );
+    }
 
     it('closes an observation of a run no process knows', async () => {
       expect(await observer.observeToClose('unknown', `run-${randomUUID()}`)).toEqual([]);

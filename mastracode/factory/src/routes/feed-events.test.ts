@@ -11,7 +11,7 @@ import { Hono } from 'hono';
 import { SSEStreamingApi } from 'hono/streaming';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { feedTopic, touchFeed } from '../feed-events.js';
+import { announceMove, feedTopic, touchFeed } from '../feed-events.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { buildFeedEventsRoutes } from './feed-events.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -147,6 +147,33 @@ describe('board feed stream', () => {
 
     await vi.waitFor(() => expect(otherFeed.frames).toHaveLength(1));
     expect(feed.frames).toHaveLength(1);
+
+    await feed.stop();
+    await otherFeed.stop();
+  });
+
+  it("carries a move's answer to the project's boards with the input id it answers", async () => {
+    const seed = await createFactoryStorageForTests();
+    const { project } = await seedProjectItem(seed);
+    const { project: other } = await seedProjectItem(seed);
+    const pubsub = new EventEmitterPubSub();
+    const { app } = buildApp(seed, pubsub, asAlice);
+    const feed = openFeed(await app.request(`/web/factory/projects/${project.id}/feed-events`));
+    const otherFeed = openFeed(await app.request(`/web/factory/projects/${other.id}/feed-events`));
+    const scope = { orgId: ORG, factoryProjectId: project.id };
+    const refused = { inputId: 'input-1', status: 'rejected', code: 'card_busy', reason: 'The card is busy.' } as const;
+
+    announceMove(pubsub, scope, refused);
+    announceMove(pubsub, scope, { inputId: 'input-2', status: 'accepted' });
+    touchFeed(pubsub, { orgId: ORG, factoryProjectId: other.id });
+
+    await vi.waitFor(() => expect(otherFeed.frames).toHaveLength(1));
+    expect(feed.frames.map(frame => [frame.event, JSON.parse(frame.data)])).toEqual([
+      ['move', refused],
+      ['move', { inputId: 'input-2', status: 'accepted' }],
+    ]);
+    // Another project's board hears nothing of the move.
+    expect(otherFeed.frames).toEqual([{ event: 'feed', data: '{}' }]);
 
     await feed.stop();
     await otherFeed.stop();

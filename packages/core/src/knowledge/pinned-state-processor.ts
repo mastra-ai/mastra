@@ -119,8 +119,8 @@ function renderDelta(ops: PinDeltaOp[]): string {
 }
 
 export interface PinnedStateProcessorDeps {
-  /** A key identifying the run's principals, for the per-turn memo. Throws when the run has no Knowledge view. */
-  principalsKey(context: KnowledgeRunContext): string;
+  /** A key identifying the run's principals, for the per-turn memo; `undefined` when the run has no Knowledge view, so it gets no pins. */
+  principalsKey(context: KnowledgeRunContext): Promise<string | undefined> | string | undefined;
   /** The pins the run receives. */
   readPins(context: KnowledgeRunContext): Promise<PinEntry[]>;
   /** Whether the agent has `knowledge_search`, `knowledge_read` and `knowledge_list`; when `false` the guidance, the overflow suffix and pin descriptions name no read tool. Defaults to `true`. */
@@ -174,12 +174,8 @@ export class PinnedStateProcessor implements Processor<typeof PINNED_KNOWLEDGE_S
       requestContext: args.requestContext,
       agent: { resourceId: args.resourceId, threadId: args.threadId },
     };
-    let key: string;
-    try {
-      key = this.deps.principalsKey(context);
-    } catch {
-      return undefined;
-    }
+    const key = await this.deps.principalsKey(context);
+    if (key === undefined) return undefined;
     if (memo && memo.key === key && stepNumber > memo.atStep) return memo.entries;
     const entries = await this.deps.readPins(context);
     args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, key, entries });

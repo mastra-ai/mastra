@@ -1,5 +1,5 @@
-import { MAX_RULE_GROUP_DEPTH } from '@mastra/factory/rules/rule-group';
-import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
+import { MAX_RULE_GROUP_DEPTH } from '@internal/factory-contract';
+import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 
 import { fromRule, isGroup, toRule } from '../../settings/components/conditionTree';

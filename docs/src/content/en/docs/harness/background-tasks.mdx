@@ -110,6 +110,25 @@ export const researcher = new Agent({
 
 Set `tools: 'all'` to opt in every tool the agent has.
 
+### Agent-wide defaults
+
+Agent-wide `defaultDisposition` and `modelOverrides` sit next to `tools` and apply to every tool the agent has opted in, so you don't have to repeat them per tool:
+
+```typescript title="src/mastra/agents/researcher.ts"
+export const researcher = new Agent({
+  // ...
+  backgroundTasks: {
+    tools: 'all',
+    defaultDisposition: 'foreground',
+    modelOverrides: false,
+  },
+})
+```
+
+Both act as defaults. For each tool the agent has opted in, `defaultDisposition` resolves as the tool entry's own value, then the agent-wide value, then the tool's own `background` config, then `deferred`. `modelOverrides` resolves the same way but defaults to `true`. `enabled` is never inherited, so agent-wide fields can't opt a tool in on their own.
+
+Agent-wide values apply to named entries too, so a plain `tools: { research: true }` inherits them. An entry can still opt out per tool with its own `defaultDisposition` or `modelOverrides`. `defaultDisposition` accepts `'foreground'` or `'deferred'`, so `awaited` remains a per-call `_background` choice.
+
 ### LLM per-call override
 
 When a tool is registered on an agent that has background tasks enabled, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call. The model only includes what it wants to override, all fields in `_background` are optional. The override is stripped from the arguments before the tool runs.
@@ -130,6 +149,25 @@ The available dispositions are:
 For compatibility, `_background.enabled: true` selects `deferred`, and `_background.enabled: false` selects `foreground`. An explicit `disposition` takes precedence over `enabled`.
 
 The `_background` override only _modifies_ tools the developer has already opted in at the tool or agent layer. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
+
+### Disable the per-call override
+
+The `_background` object adds five optional parameters to each eligible tool's input schema: the object itself plus `enabled`, `disposition`, `timeoutMs`, and `maxRetries`. Some providers cap optional parameters per request. Anthropic rejects strict tool schemas with more than 24 optional parameters in total, so five strict background tools exceed the limit before counting their own optional fields.
+
+Set `modelOverrides: false` when a tool should always use its configured disposition. Mastra then leaves `_background` out of the tool's schema and the system prompt, and ignores any `_background` value the model sends:
+
+```typescript
+const researchTool = createTool({
+  id: 'research',
+  description: 'Research a topic in depth',
+  strict: true,
+  inputSchema: z.object({ topic: z.string() }),
+  background: { enabled: true, modelOverrides: false },
+  execute: async ({ topic }) => runResearch(topic),
+})
+```
+
+You can also set `modelOverrides: false` on an agent's per-tool entry, for example `backgroundTasks: { tools: { research: { enabled: true, modelOverrides: false } } }`. The agent entry takes precedence over the tool definition. Tools with `modelOverrides: false` and `defaultDisposition: 'foreground'` always run in the foreground.
 
 ### Resolution order
 

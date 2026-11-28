@@ -1,4 +1,4 @@
-import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';

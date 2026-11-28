@@ -117,6 +117,19 @@ function cancelUnreadBodyOnAbort(response: Response, signal: AbortSignal): void 
   }
 }
 
+/**
+ * Releases an adapter-owned body branch that will not be forwarded. `Request.clone()` tees the body, so an unread
+ * branch retains the whole body until GC. Cancelling the unused branch frees it while the forwarded branch streams.
+ *
+ * The cancel is intentionally fire-and-forget: fetch tee cancellation only settles once the sibling branch drains (or
+ * is otherwise consumed), so awaiting it here would stall dispatch. Rejections are swallowed so cancellation failure
+ * cannot turn into an unhandled rejection or replace the route response.
+ */
+function releaseUnreadBody(body: ReadableStream | null | undefined): void {
+  if (!body || body.locked) return;
+  void body.cancel('unused request body clone').catch(() => {});
+}
+
 export type HonoBindings = {};
 
 /**
@@ -161,8 +174,15 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       // Preserve a pristine clone of the request before user middleware runs.
       // `Request.clone()` tees the body stream, so the clone stays readable
       // even after middleware consumes the original (json/text/formData/raw).
-      // Only taken when custom routes exist — the bridge is the sole consumer.
-      if (this.hasCustomRouteHandler && BODY_METHODS.has(c.req.method) && c.req.raw.body) {
+      // Only taken for requests that will actually reach a custom route — the
+      // bridge is the sole consumer — so ordinary routes don't retain a tee
+      // branch (see https://github.com/mastra-ai/mastra/issues/31191).
+      if (
+        this.hasCustomRouteHandler &&
+        BODY_METHODS.has(c.req.method) &&
+        c.req.raw.body &&
+        this.matchCustomRoute(c.req.url, c.req.method)
+      ) {
         c.set(MASTRA_PRISTINE_REQUEST_KEY, c.req.raw.clone());
       }
 
@@ -720,115 +740,146 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
     for (const route of routes) {
       const routeHandler: MiddlewareHandler = async (c: Context) => {
-        // This app's router may pick a different route than the custom-route app (the
-        // app can use another router, and has more routes). Check auth against the
-        // route the custom-route app will actually run for the forwarded URL.
-        const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
-          c.req.url,
-          c.req.method,
-          c.req.path,
-          route,
-        );
+        // The pristine clone is adapter-owned. It is either handed to the custom
+        // handler or released, so an unused tee branch never retains the body
+        // (see https://github.com/mastra-ai/mastra/issues/31191).
+        const originalRequest = c.req.raw;
+        const pristineRequest = (c.get(MASTRA_PRISTINE_REQUEST_KEY) as Request | undefined) ?? originalRequest;
+        const hasPristine = pristineRequest !== originalRequest;
+        let releasePristineBody = hasPristine;
 
-        // Per-route auth check (same pattern as registerRoute)
-        const authError = await this.checkRouteAuth(serverRoute, {
-          path: c.req.path,
-          method: c.req.method,
-          getHeader: name => c.req.header(name),
-          getQuery: name => c.req.query(name),
-          requestContext: c.get('requestContext'),
-          request: c.req.raw,
-          buildAuthorizeContext: () => c,
-          customRouteAuthConfig,
-        });
-
-        if (authError) {
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
-              c.header(key, value as string);
-            }
-          }
-          if (authError.error) {
-            return c.json({ error: authError.error }, authError.status as any);
-          }
-        }
-
-        const permissionError = this.checkRouteRBAC(serverRoute, c.get('requestContext'));
-        if (permissionError) {
-          return c.json(
-            { error: permissionError.error, message: permissionError.message },
-            permissionError.status as any,
-          );
-        }
-
-        // Use the pristine clone captured by the context middleware (before
-        // user middleware ran) so body reads survive middleware that already
-        // consumed `c.req.raw`.
-        const pristineRequest = (c.get(MASTRA_PRISTINE_REQUEST_KEY) as Request | undefined) ?? c.req.raw;
-
-        // Check FGA authorization (EE feature)
-        let bodyParams: Record<string, unknown> = {};
-        if (getFGAProvider(this.mastra, c.get('requestContext'))) {
-          const contentType = c.req.header('content-type');
-          if (contentType?.includes('application/json')) {
-            try {
-              const body = (await pristineRequest.clone().json()) as unknown;
-              if (body && typeof body === 'object' && !Array.isArray(body)) {
-                bodyParams = body as Record<string, unknown>;
-              }
-            } catch {
-              bodyParams = {};
-            }
-          } else if (
-            contentType?.includes('application/x-www-form-urlencoded') ||
-            contentType?.includes('multipart/form-data')
-          ) {
-            try {
-              bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
-            } catch {
-              bodyParams = {};
-            }
-          }
-        }
-        // Path params last: the custom handler reads them from the URL, so query/body
-        // values must not be able to change which resource FGA checks.
-        const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
-          ...bodyParams,
-          // The dispatched route's params; this app's match may belong to another route.
-          ...(match ? match.params : c.req.param()),
-        });
-        if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
-        }
-
-        const reqHeaders: Record<string, string | string[] | undefined> = {};
-        c.req.raw.headers.forEach((v, k) => {
-          reqHeaders[k] = v;
-        });
-        // Forward the platform execution context (e.g. Cloudflare Workers'
-        // `waitUntil`) so custom route handlers can keep background work alive
-        // after the response. Hono's `executionCtx` getter throws when no
-        // ExecutionContext exists (e.g. Node), so guard the access.
-        let executionCtx: ExecutionContext | undefined;
         try {
-          executionCtx = c.executionCtx;
-        } catch {
-          executionCtx = undefined;
+          // This app's router may pick a different route than the custom-route app (the
+          // app can use another router, and has more routes). Check auth against the
+          // route the custom-route app will actually run for the forwarded URL.
+          const { match, serverRoute, customRouteAuthConfig } = this.resolveCustomRouteAuth(
+            c.req.url,
+            c.req.method,
+            c.req.path,
+            route,
+          );
+
+          // Per-route auth check (same pattern as registerRoute)
+          const authError = await this.checkRouteAuth(serverRoute, {
+            path: c.req.path,
+            method: c.req.method,
+            getHeader: name => c.req.header(name),
+            getQuery: name => c.req.query(name),
+            requestContext: c.get('requestContext'),
+            request: c.req.raw,
+            buildAuthorizeContext: () => c,
+            customRouteAuthConfig,
+          });
+
+          if (authError) {
+            if (authError.headers) {
+              for (const [key, value] of Object.entries(authError.headers)) {
+                c.header(key, value as string);
+              }
+            }
+            if (authError.error) {
+              return c.json({ error: authError.error }, authError.status as any);
+            }
+          }
+
+          const permissionError = this.checkRouteRBAC(serverRoute, c.get('requestContext'));
+          if (permissionError) {
+            return c.json(
+              { error: permissionError.error, message: permissionError.message },
+              permissionError.status as any,
+            );
+          }
+
+          // Check FGA authorization (EE feature)
+          let bodyParams: Record<string, unknown> = {};
+          if (getFGAProvider(this.mastra, c.get('requestContext'))) {
+            const contentType = c.req.header('content-type');
+            if (contentType?.includes('application/json')) {
+              try {
+                const body = (await pristineRequest.clone().json()) as unknown;
+                if (body && typeof body === 'object' && !Array.isArray(body)) {
+                  bodyParams = body as Record<string, unknown>;
+                }
+              } catch {
+                bodyParams = {};
+              }
+            } else if (
+              contentType?.includes('application/x-www-form-urlencoded') ||
+              contentType?.includes('multipart/form-data')
+            ) {
+              try {
+                bodyParams = Object.fromEntries(await pristineRequest.clone().formData());
+              } catch {
+                bodyParams = {};
+              }
+            }
+          }
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
+          const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
+            ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
+            ...bodyParams,
+            // The dispatched route's params; this app's match may belong to another route.
+            ...(match ? match.params : c.req.param()),
+          });
+          if (fgaError) {
+            return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          }
+
+          const reqHeaders: Record<string, string | string[] | undefined> = {};
+          c.req.raw.headers.forEach((v, k) => {
+            reqHeaders[k] = v;
+          });
+          // Forward the platform execution context (e.g. Cloudflare Workers'
+          // `waitUntil`) so custom route handlers can keep background work alive
+          // after the response. Hono's `executionCtx` getter throws when no
+          // ExecutionContext exists (e.g. Node), so guard the access.
+          let executionCtx: ExecutionContext | undefined;
+          try {
+            executionCtx = c.executionCtx;
+          } catch {
+            executionCtx = undefined;
+          }
+
+          // Pick the body source once, immediately before dispatch. Forward the
+          // original only while it is completely untouched: once middleware has
+          // consumed or locked it, the pristine clone is the only readable copy.
+          const originalUntouched =
+            originalRequest.body !== null && !originalRequest.bodyUsed && !originalRequest.body.locked;
+          let requestBody: ReadableStream | null;
+          if (!hasPristine) {
+            // No clone was taken (no custom route matched at middleware time).
+            requestBody = originalRequest.body;
+          } else if (originalUntouched) {
+            // The handler owns the original; release the now-unused pristine branch
+            // before dispatch so it stops buffering while the body streams.
+            requestBody = originalRequest.body;
+            releasePristineBody = false;
+            releaseUnreadBody(pristineRequest.body);
+          } else {
+            // Middleware consumed or locked the original: replay from the clone.
+            requestBody = pristineRequest.body;
+            releasePristineBody = false;
+          }
+
+          const response = await this.handleCustomRouteRequest(
+            c.req.url,
+            c.req.method,
+            reqHeaders,
+            requestBody,
+            c.get('requestContext'),
+            c.req.raw.signal,
+            executionCtx,
+          );
+          if (!response) {
+            return c.json({ error: 'Not Found' }, 404);
+          }
+          return response;
+        } finally {
+          // Released on every path that did not transfer the clone: auth/RBAC/FGA
+          // rejection, setup failure, or a throw before dispatch.
+          if (releasePristineBody) releaseUnreadBody(pristineRequest.body);
         }
-        const response = await this.handleCustomRouteRequest(
-          c.req.url,
-          c.req.method,
-          reqHeaders,
-          pristineRequest.body,
-          c.get('requestContext'),
-          c.req.raw.signal,
-          executionCtx,
-        );
-        if (!response) {
-          return c.json({ error: 'Not Found' }, 404);
-        }
-        return response;
       };
 
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';

@@ -8,14 +8,14 @@
  * stops existing later is reported in `problems` and skipped when cards arrive.
  */
 
+import { DEFAULT_ROUTE_EVENTS } from '@internal/factory-contract';
+import type { FactoryCommitDecision, RouteEvent } from '@internal/factory-contract';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 import type { FactoryBoardEngine } from '../board-engine/engine.js';
-import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
 
-import type { RouteEvent } from '../boards/board-events.js';
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import {
   arrivalRuleFacts,
@@ -28,7 +28,6 @@ import {
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
-import type { FactoryCommitDecision } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type {

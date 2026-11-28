@@ -1,4 +1,4 @@
-import { cardThreadSession } from '@mastra/factory/work-items/card-context-sessions';
+import { cardThreadSession } from '@internal/factory-contract';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Logo } from '@mastra/playground-ui/components/Logo';

@@ -1,33 +1,26 @@
 import type { WorkItemActivity } from '../../../api/types';
 
-export type ActivityPeriod = 'today' | 'week' | 'month';
-export type ActivityKind = 'cameIn' | 'ran' | 'shipped';
-export type ActivityCounts = Record<ActivityKind, number>;
-
-export const ACTIVITY_KIND_ORDER: readonly ActivityKind[] = ['cameIn', 'ran', 'shipped'];
-
-/** The period the activity band opens on. */
-export const DEFAULT_ACTIVITY_PERIOD: ActivityPeriod = 'week';
-
-export const ACTIVITY_PERIOD_LABELS: Record<ActivityPeriod, string> = {
-  today: 'Today',
-  week: 'This week',
-  month: 'This month',
-};
-
-export interface ActivitySlot {
-  start: number;
-  end: number;
-  counts: ActivityCounts;
-  ranComplete: boolean;
-}
-
-export interface Activity {
-  hoursPerSlot: number;
-  slots: ActivitySlot[];
-  totals: ActivityCounts;
-  ranComplete: boolean;
-}
+export {
+  ACTIVITY_KIND_ORDER,
+  ACTIVITY_PERIOD_LABELS,
+  DEFAULT_ACTIVITY_PERIOD,
+  PERIOD_DAYS,
+} from '@mastra/playground-ui/domains/factory';
+export type {
+  Activity,
+  ActivityCounts,
+  ActivityKind,
+  ActivityPeriod,
+  ActivitySlot,
+} from '@mastra/playground-ui/domains/factory';
+import { ACTIVITY_KIND_ORDER, PERIOD_DAYS } from '@mastra/playground-ui/domains/factory';
+import type {
+  Activity,
+  ActivityCounts,
+  ActivityKind,
+  ActivityPeriod,
+  ActivitySlot,
+} from '@mastra/playground-ui/domains/factory';
 
 export interface RunStarts {
   starts: readonly number[];
@@ -37,8 +30,6 @@ export interface RunStarts {
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
-export const PERIOD_DAYS = { week: 7, month: 30 } as const;
-
 const HOURS_PER_SLOT: Record<ActivityPeriod, number> = { today: 1, week: 4, month: 24 };
 
 function noCounts(): ActivityCounts {
@@ -46,7 +37,7 @@ function noCounts(): ActivityCounts {
 }
 
 /** The period a read fetches for `period`: Today reads the week's answer, so narrowing fetches nothing. */
-export function activityDepth(period: ActivityPeriod): ActivityPeriod {
+export function activityDepth(period: ActivityPeriod): 'week' | 'month' {
   return period === 'month' ? 'month' : 'week';
 }
 

@@ -1,6 +1,5 @@
 import type { FactoryModelScope } from '../workspaces/services/github';
-import { MODEL_ROUTES } from './components/models/routing/model-routes';
-import type { ModelDefaults } from './components/models/routing/model-routes';
+import { MODEL_DEFAULTS_ANCHORS, MODEL_ROUTES } from './components/models/routing/model-routes';
 
 export type SettingsSection =
   | 'account'
@@ -11,6 +10,7 @@ export type SettingsSection =
   | 'models'
   | 'memory'
   | 'tools'
+  | 'skills'
   | 'behavior'
   | 'debug';
 
@@ -23,14 +23,12 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   models: 'Models',
   memory: 'Memory',
   tools: 'Tools',
+  skills: 'Skills',
   behavior: 'Behavior',
   debug: 'Debug',
 };
 
-export const MODEL_DEFAULTS_ANCHORS = {
-  personal: 'personal-defaults',
-  factory: 'factory-defaults',
-} as const satisfies Record<ModelDefaults, string>;
+export { MODEL_DEFAULTS_ANCHORS };
 
 export type ModelDefaultsAnchor = (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS];
 
@@ -66,4 +64,16 @@ export function isSettingsSection(value: unknown): value is SettingsSection {
 export function settingsSectionPath(factoryId: string, section: SettingsSection, anchor?: SettingsAnchor): string {
   const path = `/factories/${factoryId}/settings/${section}`;
   return anchor ? `${path}#${anchor}` : path;
+}
+
+/** A skill's page, under Settings › Skills. */
+export function skillPath(factoryId: string, skillName: string): string {
+  return `${settingsSectionPath(factoryId, 'skills')}/${encodeURIComponent(skillName)}`;
+}
+
+/** The settings page that creates a skill. Not under `skills/`, where `new` could be a skill's name. */
+export const NEW_SKILL_PAGE = 'new-skill';
+
+export function newSkillPath(factoryId: string): string {
+  return `/factories/${factoryId}/settings/${NEW_SKILL_PAGE}`;
 }

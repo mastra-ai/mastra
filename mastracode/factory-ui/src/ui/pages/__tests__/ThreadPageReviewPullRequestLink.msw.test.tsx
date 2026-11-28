@@ -1,4 +1,4 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
+import type { WorkItemRow } from '@internal/factory-contract';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';

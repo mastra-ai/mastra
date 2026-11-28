@@ -60,10 +60,14 @@ function makeNoopWorkflow(id: string) {
 }
 
 describe('cross-process workflow event guard', () => {
+  // Instances on a push-only pubsub consume `workflows` in one group, so each
+  // event reaches one of them. These cases make the non-owning instance the
+  // only consumer, so the event lands on it the way it would in a process
+  // that does not own the run.
   it('skips events for internal workflows not owned by this instance', async () => {
     const sharedPubSub = new PushOnlyPubSub();
 
-    // Instance A: owns the internal workflow
+    // Instance A: owns the internal workflow but consumes no events here
     const mastraA = new Mastra({
       logger: false,
       storage: new MockStore(),
@@ -81,14 +85,13 @@ describe('cross-process workflow event guard', () => {
 
     mastraA.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-1');
 
-    await mastraA.startWorkers();
     await mastraB.startWorkers();
 
-    const spyA = vi.spyOn(mastraA, 'handleWorkflowEvent');
     const spyB = vi.spyOn(mastraB, 'handleWorkflowEvent');
 
     await sharedPubSub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
-    await vi.waitFor(() => expect(spyA).toHaveBeenCalled(), { timeout: 1000, interval: 10 });
+    // Allow async event processing to settle
+    await new Promise(r => setTimeout(r, 50));
     // Instance B should NOT process any events (guard skips all of them)
     expect(spyB).not.toHaveBeenCalled();
 
@@ -96,7 +99,7 @@ describe('cross-process workflow event guard', () => {
     await mastraB.shutdown();
   });
 
-  it('still processes events for public workflows on all instances', async () => {
+  it('handles each event for a public workflow on one instance only', async () => {
     const sharedPubSub = new PushOnlyPubSub();
 
     const publicWf = makeNoopWorkflow('my-public-workflow');
@@ -120,15 +123,17 @@ describe('cross-process workflow event guard', () => {
 
     const spyA = vi.spyOn(mastraA, 'handleWorkflowEvent');
     const spyB = vi.spyOn(mastraB, 'handleWorkflowEvent');
+    const handled = () => [...spyA.mock.calls, ...spyB.mock.calls].map(([event]) => event as Event);
 
     await sharedPubSub.publish('workflows', makeStartEvent('my-public-workflow', 'run-pub'));
-    await vi.waitFor(
-      () => {
-        expect(spyA).toHaveBeenCalled();
-        expect(spyB).toHaveBeenCalled();
-      },
-      { timeout: 1000, interval: 10 },
-    );
+    await vi.waitFor(() => expect(handled().some(e => e.type === 'workflow.end' && e.runId === 'run-pub')).toBe(true), {
+      timeout: 2000,
+      interval: 10,
+    });
+
+    expect(handled().filter(e => e.type === 'workflow.start')).toHaveLength(1);
+    const ids = handled().map(e => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
 
     await mastraA.shutdown();
     await mastraB.shutdown();
@@ -152,7 +157,6 @@ describe('cross-process workflow event guard', () => {
 
     mastraOwner.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-2');
 
-    await mastraOwner.startWorkers();
     await mastraOther.startWorkers();
 
     // Collect all workflow.fail events on the shared pubsub
@@ -189,10 +193,8 @@ describe('cross-process workflow event guard', () => {
 
     mastraOwner.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-owner');
 
-    await mastraOwner.startWorkers();
     await mastraOther.startWorkers();
 
-    const spyOwner = vi.spyOn(mastraOwner, 'handleWorkflowEvent');
     const spyOther = vi.spyOn(mastraOther, 'handleWorkflowEvent');
 
     // Simulate a nested workflow event (agentic-loop inside execution-workflow)
@@ -220,7 +222,8 @@ describe('cross-process workflow event guard', () => {
     } as Event;
 
     await sharedPubSub.publish('workflows', nestedEvent);
-    await vi.waitFor(() => expect(spyOwner).toHaveBeenCalled(), { timeout: 1000, interval: 10 });
+    // Allow async event processing to settle
+    await new Promise(r => setTimeout(r, 50));
     // The non-owning instance must NOT process nested events
     expect(spyOther).not.toHaveBeenCalled();
 

@@ -13,9 +13,20 @@ import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
+/**
+ * Serializes a JSON column value for SQL Server.
+ *
+ * The column holds a JSON document for every value, not just objects: a bare
+ * string or number written as-is was stored verbatim and then read back as a
+ * different type (`'42'` became the number `42`). Encoding every defined value
+ * keeps the reader's `JSON.parse` round-trip lossless.
+ *
+ * `undefined`/`null` map to a SQL `NULL` so a cleared column stays cleared
+ * instead of becoming the JSON string `'undefined'`. See mastra-ai/mastra#31613.
+ */
 function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return JSON.stringify(v);
-  return v ?? null;
+  if (v === undefined || v === null) return null;
+  return JSON.stringify(v);
 }
 
 function rowToTask(row: Record<string, any>): BackgroundTask {

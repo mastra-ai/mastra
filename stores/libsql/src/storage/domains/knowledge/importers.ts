@@ -456,6 +456,16 @@ export class LibSQLKnowledgeImporters implements KnowledgeImportersStorage {
     ).rows[0];
     return row ? toNode(row) : null;
   }
+  async getNodes(bindingId: string, sourceIds: string[]) {
+    if (sourceIds.length === 0) return [];
+    const rows = (
+      await this.#read.execute({
+        sql: `SELECT * FROM "${T.nodes}" WHERE bindingId = ? AND sourceId IN (SELECT value FROM json_each(?))`,
+        args: [bindingId, JSON.stringify([...new Set(sourceIds)])],
+      })
+    ).rows;
+    return rows.map(toNode);
+  }
   async getNodeByPage(pageId: string) {
     const row = (await this.#read.execute({ sql: `SELECT * FROM "${T.nodes}" WHERE pageId = ?`, args: [pageId] }))
       .rows[0];

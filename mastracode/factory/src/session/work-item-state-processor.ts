@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto';
-import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
+import {
+  authorTrusted,
+  isSafeBranchName,
+  legacyGithubWorkItemBranch,
+  pullRequestBranch,
+  SELF_REVIEW_ROUND_LIMIT,
+  workItemBranch,
+  workItemBranchSource,
+} from '@internal/factory-contract';
 
+import type { WorkItemSourceRow } from '@internal/factory-contract';
+import type { ComputeStateSignalArgs, ComputeStateSignalResult, Processor } from '@mastra/core/processors';
 import { boardForWorkItem, pullRequestSourceNumber, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -9,16 +19,7 @@ import { hasRecordedVerdict, reviewedChangeRequest } from '../boards/semantics.j
 import type { ReviewedChangeRequest } from '../boards/semantics.js';
 import { factorySessionUrl } from '../links.js';
 import { getFactorySessionCoordinates } from '../rules/binding-context.js';
-import { authorTrusted, SELF_REVIEW_ROUND_LIMIT } from '../rules/types.js';
 import type { Card, FactoryRunBindingRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
-import {
-  isSafeBranchName,
-  legacyGithubWorkItemBranch,
-  pullRequestBranch,
-  workItemBranch,
-  workItemBranchSource,
-} from '../work-item-branch.js';
 
 const STATE_ID = 'factory-work-item';
 

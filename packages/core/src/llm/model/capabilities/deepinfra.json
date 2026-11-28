@@ -29,6 +29,7 @@
     "google/gemma-4-31B-it-Ultra",
     "google/gemma-4-31B-it-turbo",
     "inclusionAI/Ling-3.0-flash-VL",
+    "inclusionAI/LingSante-3.1-air-VL",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-Guard-4-12B",
     "meta-models/Muse-Glimmer-30B",
@@ -36,6 +37,7 @@
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K3",
     "moonshotai/Kimi-K3.1-Pro",
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "tencent/Hy4",
     "tencent/Hy4-flash",
     "thinkingmachines/Inkling-2-Mini",
@@ -89,6 +91,7 @@
     "ibm-granite/granite-4.2-8b",
     "inclusionAI/Ling-3.0-flash",
     "inclusionAI/Ling-3.0-flash-VL",
+    "inclusionAI/LingSante-3.1-air-VL",
     "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-llama/Llama-Guard-4-12B",
@@ -101,6 +104,7 @@
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning",
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-120b-Ultra",
     "openai/gpt-oss-20b",
@@ -162,6 +166,7 @@
     "google/gemma-4-31B-it-turbo",
     "inclusionAI/Ling-3.0-flash",
     "inclusionAI/Ling-3.0-flash-VL",
+    "inclusionAI/LingSante-3.1-air-VL",
     "meta-llama/Llama-3.3-70B-Instruct-Turbo",
     "meta-llama/Llama-4-Scout-17B-16E-Instruct",
     "meta-models/Muse-Glimmer-30B",
@@ -174,6 +179,7 @@
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/NVIDIA-Nemotron-3.5-Lightning",
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "tencent/Hy4",
@@ -189,6 +195,214 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b-Ultra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "ByteDance/Seed-2.0-code": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "ibm-granite/granite-4.2-8b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "moonshotai/Kimi-K3.1-Pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "thinkingmachines/Inkling-2-Small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "thinkingmachines/Inkling-2-Mini": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "google/gemma-4-31B-it-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-31B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-31B-it-Ultra": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionAI/LingSante-3.1-air-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionAI/Ling-3.0-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionAI/Ling-3.0-flash-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen4-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "tencent/Hy4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "tencent/Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "tencent/Hy4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -200,10 +414,22 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V3.1": [
@@ -226,102 +452,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it-Ultra": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ibm-granite/granite-4.2-8b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-4.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/GLM-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "ByteDance/Seed-2.0-code": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "XiaomiMiMo/MiMo-V2.6-Flash": [
       {
         "type": "toggle"
@@ -330,119 +460,6 @@
     "XiaomiMiMo/MiMo-V2.6-Pro": [
       {
         "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-120b-Ultra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "meta-models/Muse-Glimmer-30B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K3.1-Pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": [
-      {
-        "type": "effort",
-        "values": ["none", "medium", "high"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "thinkingmachines/Inkling-2-Small": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "thinkingmachines/Inkling-2-Mini": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen4-Max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "inclusionAI/Ling-3.0-flash-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "inclusionAI/Ling-3.0-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "tencent/Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "tencent/Hy4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "tencent/Hy4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

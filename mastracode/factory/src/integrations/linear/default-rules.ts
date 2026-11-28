@@ -1,5 +1,5 @@
+import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '@internal/factory-contract';
 import { closedByRoutes, recordExplicitRuleOverrides } from '../../rules/event-rules.js';
-import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type LinearRuleOverrides = Partial<
   Record<FactoryLinearEventName, FactoryRuleHandler<FactoryLinearRuleContext> | null | undefined>

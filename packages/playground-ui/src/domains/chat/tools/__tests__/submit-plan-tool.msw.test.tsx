@@ -169,30 +169,18 @@ describe('SubmitPlanTool', () => {
       expect(decisions?.children).toHaveLength(3);
     });
 
-    it('resumes the tool with the displayed plan when approved', async () => {
+    it.each([
+      ['resumes the tool with the displayed plan when approved', 'Approve the plan', 'approved'],
+      ['resumes the tool with a rejected action when rejected', 'Reject the plan', 'rejected'],
+    ] as const)('%s', async (_title, name, action) => {
       usePlanFileHandler();
       const { approveToolcall } = renderSubmitPlan(pendingProps);
 
       await screen.findByRole('heading', { name: 'Add dark mode' });
-      fireEvent.click(screen.getByRole('button', { name: 'Approve the plan' }));
+      fireEvent.click(screen.getByRole('button', { name }));
 
       expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
-        action: 'approved',
-        path: submittedPlanPath,
-        title: 'Add dark mode',
-        plan: submittedPlanFile.content,
-      });
-    });
-
-    it('resumes the tool with a rejected action when rejected', async () => {
-      usePlanFileHandler();
-      const { approveToolcall } = renderSubmitPlan(pendingProps);
-
-      await screen.findByRole('heading', { name: 'Add dark mode' });
-      fireEvent.click(screen.getByRole('button', { name: 'Reject the plan' }));
-
-      expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
-        action: 'rejected',
+        action,
         path: submittedPlanPath,
         title: 'Add dark mode',
         plan: submittedPlanFile.content,

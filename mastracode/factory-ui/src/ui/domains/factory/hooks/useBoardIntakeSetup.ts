@@ -1,11 +1,10 @@
-import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { DEFAULT_BOARD_ID, placesArrivals } from '@internal/factory-contract';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/useIntakeConfig';
 import { useIntakeRoutesQuery } from '../../../../hooks/useIntakeRoutes';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { placesArrivals } from '@mastra/factory/boards/intake-order';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { InstalledBoardInfo } from '../../../../api/types';
 

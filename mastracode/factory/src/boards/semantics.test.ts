@@ -1,10 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import {
+  pullRequestSourceNumber,
+  reviewedPullRequest,
+  workingPullRequest,
+  workItemBranch,
+} from '@internal/factory-contract';
 
+import type { WorkItemSourceRow } from '@internal/factory-contract';
+import { describe, expect, it } from 'vitest';
 import type { Card } from '../storage/domains/work-items/base.js';
-import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
-import { workItemBranch } from '../work-item-branch.js';
-import { pullRequestSourceNumber, reviewedPullRequest, workingPullRequest } from '../work-items/change-requests.js';
 import { defineBoard } from './define-board.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import {

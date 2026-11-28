@@ -335,24 +335,16 @@ describe('recall observations integration', () => {
       expect(results).not.toContain('newer message');
     });
   });
-  it('rejects a cross-resource thread before fetching observations', async () => {
+  it.each([
+    ['rejects a cross-resource thread before fetching observations', 'resource', 'other-resource'],
+    ['does not bypass thread scope with an explicit sibling thread', 'thread', 'resource'],
+  ] as const)('%s', async (_title, retrievalScope, resourceId) => {
     const { memory, om } = setup();
-    const tool = recallTool(undefined, { retrievalScope: 'resource', getOMEngine: () => om });
+    const tool = recallTool(undefined, { retrievalScope, getOMEngine: () => om });
     await expect(
       tool.execute?.({ mode: 'observations', threadId: 'thread', groupId: 'a' }, {
         memory,
-        agent: { threadId: 'other', resourceId: 'other-resource' },
-      } as any),
-    ).rejects.toThrow('Thread not found');
-    expect(om.getHistory).not.toHaveBeenCalled();
-  });
-  it('does not bypass thread scope with an explicit sibling thread', async () => {
-    const { memory, om } = setup();
-    const tool = recallTool(undefined, { retrievalScope: 'thread', getOMEngine: () => om });
-    await expect(
-      tool.execute?.({ mode: 'observations', threadId: 'thread', groupId: 'a' }, {
-        memory,
-        agent: { threadId: 'other', resourceId: 'resource' },
+        agent: { threadId: 'other', resourceId },
       } as any),
     ).rejects.toThrow('Thread not found');
     expect(om.getHistory).not.toHaveBeenCalled();

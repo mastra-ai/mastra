@@ -461,6 +461,83 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
       });
     });
 
+    describe('page parents', () => {
+      // What getPageParents must return: getPage's answer for each row, nearest first, up to and
+      // including the first scope page, stopping at a row getPage returns null for.
+      const walk = async (parentId: string, r: KnowledgeReadScope) => {
+        const rows = [];
+        for (let id: string | null = parentId; id && rows.length <= MAX_KNOWLEDGE_PAGE_DEPTH;) {
+          const row = await store.getPage({ id, read: r });
+          if (!row) break;
+          rows.push(row);
+          id = row.isScope ? null : row.parentId;
+        }
+        return rows;
+      };
+
+      it('returns the parent and its ancestors, nearest first, ending at the scope page', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'A', { key: 'a' });
+        const b = await page(a.id, 'B', { key: 'b' });
+        const c = await page(b.id, 'C', { key: 'c' });
+        const parents = await store.getPageParents({ parentId: c.id, read: 'all' });
+        expect(ids(parents)).toEqual([c.id, b.id, a.id, acme.id]);
+        expect(parents).toEqual(await walk(c.id, 'all'));
+        expect(ids(await store.getPageParents({ parentId: acme.id, read: 'all' }))).toEqual([acme.id]);
+      });
+
+      it('stops after the first scope page, even when that scope has a parent scope', async () => {
+        const acme = await scope('org:acme', ORG);
+        const eng = await scope('team:acme:eng', TEAM, acme.id);
+        const a = await page(eng.id, 'A', { key: 'a' });
+        expect(ids(await store.getPageParents({ parentId: a.id, read: 'all' }))).toEqual([a.id, eng.id]);
+      });
+
+      it('returns every row of the deepest chain the store allows: the deepest page, its parents and the scope', async () => {
+        const acme = await scope('org:acme', ORG);
+        let parentId = acme.id;
+        const chain = [];
+        for (let level = 1; level <= MAX_KNOWLEDGE_PAGE_DEPTH; level++) {
+          const created = await page(parentId, `Level ${level}`, { key: `l${level}` });
+          chain.unshift(created.id);
+          parentId = created.id;
+        }
+        const parents = await store.getPageParents({ parentId, read: 'all' });
+        expect(ids(parents)).toEqual([...chain, acme.id]);
+        expect(parents).toHaveLength(MAX_KNOWLEDGE_PAGE_DEPTH + 1);
+        expect(parents).toEqual(await walk(parentId, 'all'));
+      });
+
+      it('returns nothing for a missing parent', async () => {
+        expect(await store.getPageParents({ parentId: 'missing', read: 'all' })).toEqual([]);
+      });
+
+      it('returns a deleted row exactly as getPage does', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'A', { key: 'a' });
+        const b = await page(a.id, 'B', { key: 'b' });
+        await store.deletePage({ id: b.id, expectedVersion: 1, deletedBy: 'alex' });
+        const parents = await store.getPageParents({ parentId: b.id, read: 'all' });
+        expect(ids(parents)).toEqual([b.id, a.id, acme.id]);
+        expect(parents[0]!.deletedAt).toBeTruthy();
+        expect(parents).toEqual(await walk(b.id, 'all'));
+        const r = read(['org:acme']);
+        expect(await store.getPageParents({ parentId: b.id, read: r })).toEqual(await walk(b.id, r));
+      });
+
+      it('filters each row like getPage: nothing from an unreadable scope', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'A', { key: 'a' });
+        const b = await page(a.id, 'B', { key: 'b' });
+        const r = read(['org:acme']);
+        expect(ids(await store.getPageParents({ parentId: b.id, read: r }))).toEqual([b.id, a.id, acme.id]);
+        expect(await store.getPageParents({ parentId: b.id, read: r })).toEqual(await walk(b.id, r));
+        const other = read(['org:globex']);
+        expect(await store.getPageParents({ parentId: b.id, read: other })).toEqual([]);
+        expect(await walk(b.id, other)).toEqual([]);
+      });
+    });
+
     describe('read scope filtering', () => {
       it('treats a page in an unreadable scope exactly like a missing one', async () => {
         const acme = await scope('org:acme', ORG);

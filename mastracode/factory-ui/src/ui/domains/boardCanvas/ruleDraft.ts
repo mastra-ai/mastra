@@ -1,6 +1,5 @@
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem } from '@mastra/factory/boards/board-events';
-import { ruleGroupSchema } from '@mastra/factory/rules/rule-group';
-import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
+import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, ruleGroupSchema } from '@internal/factory-contract';
+import type { RuleCondition, RuleGroup } from '@internal/factory-contract';
 
 import type { InstalledBoardInfo, IntakeDryRunBody, IntakeRouteInfo } from '../../../api/types';
 import { describeRule } from '../settings/components/conditionFields';

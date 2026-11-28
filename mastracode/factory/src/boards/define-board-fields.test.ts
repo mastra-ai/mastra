@@ -1,7 +1,6 @@
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
+import type { FactoryStageRuleContext, RuleGroup } from '@internal/factory-contract';
 
-import type { RuleGroup } from '../rules/rule-group.js';
-import type { FactoryStageRuleContext } from '../rules/types.js';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';

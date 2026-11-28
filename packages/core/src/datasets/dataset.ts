@@ -34,7 +34,12 @@ import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/age
 import { durableRunOptions } from './experiment/durable.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import type { ExperimentItemRunOptions } from './experiment/item.js';
-import { assertExperimentScorersExist, experimentScoreId } from './experiment/scorer.js';
+import {
+  assertExperimentScorersExist,
+  experimentScoreId,
+  pinStoredScorerVersions,
+  runLevelScorerIds,
+} from './experiment/scorer.js';
 import type {
   ExperimentConfig,
   StartExperimentAsyncConfig,
@@ -173,6 +178,20 @@ export class Dataset {
       pagination: { page: 0, perPage: 0 },
     });
     return pagination.total;
+  }
+
+  /**
+   * Pin the current version of every stored scorer the experiment can use:
+   * run-level, dataset-level and item-level ids at the experiment's dataset version.
+   */
+  async #pinScorerVersions(scorers: ExperimentConfig['scorers'], dataset: DatasetRecord, version: number) {
+    if (!this.#mastra.getEditor?.()) return null;
+    const items = await (await this.#getDatasetsStore()).getItemsByVersion({ datasetId: this.id, version });
+    return pinStoredScorerVersions(this.#mastra, [
+      ...runLevelScorerIds(scorers),
+      ...(dataset.scorerIds ?? []),
+      ...items.flatMap(item => item.scorerIds ?? []),
+    ]);
   }
 
   // ---------------------------------------------------------------------------
@@ -442,6 +461,7 @@ export class Dataset {
     const experimentId = crypto.randomUUID();
 
     if (experimentsStore) {
+      const scorerVersions = await this.#pinScorerVersions(config.scorers, dataset, targetVersion);
       await experimentsStore.createExperiment({
         id: experimentId,
         datasetId: this.id,
@@ -461,6 +481,7 @@ export class Dataset {
         organizationId: dataset.organizationId ?? null,
         projectId: dataset.projectId ?? null,
         ...(durableRun ? { scorerIds: durableRun.scorerIds ?? null } : {}),
+        scorerVersions,
       });
     }
 
@@ -832,6 +853,7 @@ export class Dataset {
     }
 
     const experimentId = args?.id ?? crypto.randomUUID();
+    const scorerVersions = await this.#pinScorerVersions(args?.scorers, dataset, targetVersion);
 
     try {
       await experimentsStore.createExperiment({
@@ -841,6 +863,7 @@ export class Dataset {
         targetType: args?.targetType ?? null,
         targetId: args?.targetId ?? null,
         scorerIds: args?.scorers?.length ? args.scorers : null,
+        scorerVersions,
         totalItems,
         name: args?.name,
         description: args?.description,

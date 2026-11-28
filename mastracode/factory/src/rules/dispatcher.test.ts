@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryCommitDecision } from '@internal/factory-contract';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -7,8 +8,8 @@ import { createSignal } from '@mastra/core/signals';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Hono } from 'hono';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FactoryBoardEngine, FactoryCardPlacement } from '../board-engine/engine.js';
 import { createDispatcherBoardEngine } from '../board-engine/engine.js';
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
@@ -57,7 +58,6 @@ import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import type { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryTransitionRequest } from './transition-service.js';
-import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
@@ -5173,6 +5173,118 @@ describe('FactoryDecisionDispatcher', () => {
       const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
       expect(decision).toMatchObject({ status: 'succeeded' });
       expect(requestMove).not.toHaveBeenCalled();
+    });
+    it('tells the board engine a run ends unanswered only when the phase is run again', async () => {
+      const tellings = async (boards: ReturnType<typeof autoStartingBoards>, key: string) => {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const { item, transitionService } = await queueDecision(storage, {
+          type: 'invokeSkill',
+          role: 'work',
+          skillName: 'factory-build',
+          arguments: 'Continue building',
+          idempotencyKey: key,
+        });
+        await bindWorkRun(storage, item.id);
+        const runEnded = vi.fn<FactoryBoardEngine['runEnded']>(async () => false);
+        const { controller } = createSession(undefined, {
+          signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+          emitAgentEndDuringSignal: true,
+          agentEndReason: 'complete',
+        });
+        const dispatcher = new FactoryDecisionDispatcher({
+          controller: controller as never,
+          boards,
+          transitionService,
+          boardEngine: { requestMove: vi.fn(), requestPlacement: vi.fn(), runEnded },
+          storage,
+          ownerId: 'worker-1',
+        });
+        await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+        const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        const told = () => runEnded.mock.calls.map(([binding]) => binding.runsAgain ?? 'unmarked');
+        const first = { decision, told: told() };
+        await dispatcher.runOnce(new Date('2030-01-01T00:10:00Z'));
+        const [last] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+        return { ...first, last: { decision: last, told: told().slice(first.told.length) } };
+      };
+
+      // Building names how it ends: an unchanged card is a run to do again, and only then is it marked.
+      const building = await tellings(autoStartingBoards(), 'run-end-marked');
+      expect(building.decision).toMatchObject({ status: 'retry', failureCode: 'run_incomplete' });
+      expect(building.told).toEqual(['unmarked', true]);
+      // Its second run is its last: the engine hears that no third follows.
+      expect(building.last.decision).toMatchObject({ status: 'failed', failureCode: 'run_incomplete' });
+      expect(building.last.told).toEqual(['unmarked', false]);
+
+      // A phase that doesn't name how it ends is never run again.
+      const open = await tellings(
+        autoStartingBoards(
+          createLifecycleTestRegistry({ execute: { runner: { skill: 'factory-build', context: 'work' } } }),
+        ),
+        'run-end-unmarked',
+      );
+      expect(open.decision).toMatchObject({ status: 'succeeded' });
+      expect(open.told).toEqual(['unmarked']);
+      expect(open.last.told).toEqual([]);
+    });
+  });
+
+  describe("stopping the runs on a card for a person's move", () => {
+    async function seated() {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'invokeSkill',
+        role: 'work',
+        skillName: 'factory-build',
+        arguments: 'Continue building',
+        idempotencyKey: `stop-${crypto.randomUUID()}`,
+      });
+      const binding = await bindWorkRun(storage, item.id);
+      const { controller, session } = createSession(undefined, { streamActive: true });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+      const card = { orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: item.id };
+      const stopAsked = () => storage.runBindingStopRequested({ orgId: 'org-1', bindingId: binding.id });
+      return { dispatcher, session, card, stopAsked };
+    }
+
+    it('records the stop on the seat and aborts its session, for a person who may drive it', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      const asked: string[] = [];
+
+      const stopped = await dispatcher.stopRunsOnCard(card, async sessionId => {
+        asked.push(sessionId);
+        return true;
+      });
+
+      expect(stopped).toBe(true);
+      expect(asked).toEqual(['session-1']);
+      expect(session.abort).toHaveBeenCalledTimes(1);
+      await expect(stopAsked()).resolves.toBe(true);
+    });
+
+    it('stops nothing, and records no stop, when the person may not drive the session', async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+
+      await expect(dispatcher.stopRunsOnCard(card, async () => false)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
+    });
+
+    it("leaves a session alone that is busy with another thread than the card's seat", async () => {
+      const { dispatcher, session, card, stopAsked } = await seated();
+      await session.thread.switch({ threadId: 'another-thread' });
+
+      await expect(dispatcher.stopRunsOnCard(card)).resolves.toBe(false);
+
+      expect(session.abort).not.toHaveBeenCalled();
+      await expect(stopAsked()).resolves.toBe(false);
     });
   });
 

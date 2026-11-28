@@ -1,19 +1,51 @@
-import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
-import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { validateSkillContent } from '@mastra/core/skills';
-import { z } from 'zod';
-
+import type {
+  BoardPhasesFilter,
+  BoardPhasesResponse,
+  CardChangeRequest,
+  RunQueueResponse,
+  WorkItemFilterOptionsResponse,
+} from '@internal/factory-contract';
 import {
+  BOARD_PHASES_SORTS,
+  boardPhasesResponseSchema,
+  cardSchema,
+  cardStampSchema,
+  decisionListResponseSchema,
+  entitySchema,
+  runQueueResponseSchema,
+  workItemActivityResponseSchema,
+  workItemFilterOptionsResponseSchema,
+  workItemListResponseSchema,
+  workItemSessionRepositoryResponseSchema,
+  workItemStartersResponseSchema,
+  cardRuleGroupSchema,
   CLOSE_REASONS,
   INTAKE_ROUTE_RULE_FIELDS,
-  routeEventsProblem,
+  PULL_REQUEST_STATUSES,
   ROUTE_EVENTS,
+  routeEventsProblem,
+  ruleGroupSchema,
   STATUS_EVENTS,
-} from '../boards/board-events.js';
+} from '@internal/factory-contract';
+
+export {
+  BOARD_PHASES_SORTS,
+  boardPhasesResponseSchema,
+  runQueueResponseSchema,
+  workItemActivityResponseSchema,
+  workItemFilterOptionsResponseSchema,
+  workItemSessionRepositoryResponseSchema,
+  workItemStartersResponseSchema,
+};
+export type { BoardPhasesResponse, RunQueueResponse, WorkItemFilterOptionsResponse };
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
+import { validateSkillContent } from '@mastra/core/skills';
+import { z } from 'zod';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { MODEL_PACK_MODELS_MAX, MODEL_PACK_NAME_MAX, MODEL_PACKS_MAX, modelIdSchema } from '../model-packs.js';
 import type { ModelPackSet } from '../model-packs.js';
-import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import {
   SESSION_ROW_ALL_OWNERS,
@@ -29,8 +61,6 @@ import {
 } from '../session/session-row-query.js';
 import { MAX_INTAKE_ROUTES_PER_BOARD } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
-import { PULL_REQUEST_STATUSES } from '../work-items/change-requests.js';
-import type { CardChangeRequest } from '../work-items/change-requests.js';
 import {
   UUID_PATTERN,
   uuidSchema,
@@ -81,7 +111,6 @@ export type FactoryRouteContract = {
   responseSchema: z.ZodType;
 };
 
-const entitySchema = z.record(z.string(), z.unknown());
 const nonEmptyTrimmed = (max: number) => z.string().trim().min(1).max(max);
 const rawBoundedTrimmed = (max: number) =>
   z
@@ -650,78 +679,8 @@ export const projectListRepositorySchema = z.object({
 export type ProjectListRepository = z.infer<typeof projectListRepositorySchema>;
 
 const projectListItemSchema = projectSchema.and(z.object({ repositories: z.array(projectListRepositorySchema) }));
-const cardSchema = z
-  .object({
-    workItem: z
-      .object({
-        provider: z.string(),
-        key: z.string().nullable(),
-        url: z.string().nullable(),
-        title: z.string(),
-        state: z.string().nullable(),
-        labels: z.array(z.string()),
-        author: z.string().nullable(),
-      })
-      .passthrough()
-      .optional(),
-  })
-  .passthrough();
 const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
-
-const runQueueEntrySchema = z.object({
-  decisionId: z.string(),
-  /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
-  state: z.enum(['waiting', 'claimed']),
-  type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
-  /**
-   * `interactive`: a reply a person sent on the card's pull request or issue,
-   * claimed ahead of automated runs into its own reserve of slots.
-   * `automated`: everything else.
-   */
-  lane: z.enum(['automated', 'interactive']),
-  role: z.string().nullable(),
-  /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
-  skillName: z.string().nullable(),
-  /** When it became claimable for `waiting`, when it was claimed for `claimed`. */
-  queuedSince: z.string(),
-  workItem: z
-    .object({
-      id: z.string(),
-      key: z.string().nullable(),
-      title: z.string(),
-      board: z.string().nullable(),
-      phase: z.string().nullable(),
-    })
-    .nullable(),
-});
-
-export const runQueueResponseSchema = z.object({
-  /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
-  slots: z
-    .object({
-      scope: z.literal('server'),
-      /** Automated run slots, including any a person's reply borrowed once its reserve was full. */
-      inUse: z.number().int(),
-      cap: z.number().int(),
-      /** Slots kept for people's replies, on top of `cap`. */
-      interactive: z.object({ inUse: z.number().int(), cap: z.number().int() }),
-    })
-    .nullable(),
-  /** The project's runs holding a slot on any server. */
-  running: z.number().int(),
-  claimed: z.array(runQueueEntrySchema),
-  /** Every waiting run, though `queued` lists at most 50. */
-  queuedCount: z.number().int(),
-  /** `queuedCount` split by lane. */
-  queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
-  /**
-   * Waiting replies, then automated runs, each oldest first: interactive runs are claimed before
-   * automated ones. `position` counts within the run's lane.
-   */
-  queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
-});
-export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
 
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
@@ -878,37 +837,11 @@ const workItemListQuerySchema = z
       : query,
   );
 
-const countSchema = z.number().int().nonnegative();
-
-export const workItemSessionRepositoryResponseSchema = z.discriminatedUnion('status', [
-  z.object({ status: z.literal('resolved'), projectRepositoryId: z.string(), slug: z.string() }),
-  z.object({ status: z.literal('unlinked'), hint: z.string() }),
-]);
-
-/** What the draft page's starter buttons count on the project's default board. */
-export const workItemStartersResponseSchema = z.object({
-  failed: countSchema,
-  changesRequested: countSchema,
-  review: z.object({ count: countSchema, oldestOpenedAt: z.string().optional() }),
-  undecided: countSchema,
-  untriaged: countSchema,
-  unplannedBugs: countSchema,
-  sweep: z.object({ area: z.string(), count: countSchema }).optional(),
-  stale: countSchema,
-});
-
 export const workItemActivityQuerySchema = z.object({
   since: z.iso.datetime({ offset: true }).transform(since => Date.parse(since)),
 });
 
-/** When the project's cards were created and completed since an instant, and how many cards it has in all. */
-export const workItemActivityResponseSchema = z.object({
-  total: countSchema,
-  createdAt: z.array(z.string()),
-  doneAt: z.array(z.string()),
-});
-
-export const BOARD_PHASES_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+const countSchema = z.number().int().nonnegative();
 
 /** Repeatable. The values picked for one filter: a card matches on any of them, and none picks every card. */
 const pickedValuesSchema = z
@@ -993,67 +926,22 @@ export const boardPhasesQuerySchema = z.object({
   cards: z.enum(['true']).optional(),
 });
 
-/**
- * Names a card and the body the answer was read from. `version` is another value whenever any of
- * the body is, so a reader that holds the card at this version holds this body.
- */
-const cardStampSchema = z.object({ id: z.string(), version: z.string() });
-
-export const boardPhasesResponseSchema = z.object({
-  /** The board's phases in declaration order. */
-  phases: z.array(
-    z.object({
-      phase: z.string(),
-      /** Cards of this phase that match the view. */
-      total: countSchema,
-      /** The first of them in the view's order: what the reader shows. */
-      cards: z.array(cardStampSchema),
-    }),
-  ),
-  /** With `item`: the asked card, when the board holds it. */
-  item: cardStampSchema
-    .extend({
-      /**
-       * Each phase the view lists the card under, and how many cards it lists before it there.
-       * Empty when the search or filters leave the card out.
-       */
-      places: z.array(z.object({ phase: z.string(), position: countSchema })),
-    })
-    .optional(),
-  /**
-   * Cards related to a listed card or to the asked one that no phase lists: the first `limit` of
-   * each card's, in the board's order.
-   */
-  related: z.array(cardStampSchema),
-  /** How many such cards there are, named in `related` or not. */
-  relatedTotal: countSchema,
-  /** Cards of the board, whatever the search and filters. */
-  boardTotal: countSchema,
-  /** Cards of the board that match the view, each counted once: a card in two phases is one. */
-  matchingTotal: countSchema,
-  /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
-  workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
-});
-
-/** What the board's filter menus offer, read over every card of the project. */
-export const workItemFilterOptionsResponseSchema = z.object({
-  /** Every label on a card, sorted. */
-  labels: z.array(z.string()),
-  /** The people the cards' sources name, sorted by name. `id` is what a people filter sends. */
-  people: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      source: z.enum(['github', 'gitlab', 'linear', 'jira', 'incidentio']),
-    }),
-  ),
-  /** The Factory users who created a card, moved one or started a session on one, sorted. */
-  actorIds: z.array(z.string()),
-});
+type BoardPhasesQueryFilter = {
+  [Field in keyof z.output<typeof boardPhasesQuerySchema>]-?: z.output<
+    typeof boardPhasesQuerySchema
+  >[Field] extends Set<string>
+    ? Field
+    : never;
+}[keyof z.output<typeof boardPhasesQuerySchema>];
+// The board's clients send BOARD_PHASES_FILTERS; this fails to compile when the query schema's filters drift from it.
+const boardPhasesFiltersMatch: [BoardPhasesQueryFilter] extends [BoardPhasesFilter]
+  ? [BoardPhasesFilter] extends [BoardPhasesQueryFilter]
+    ? true
+    : false
+  : false = true;
+void boardPhasesFiltersMatch;
 
 export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
-export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
-export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
 /** `<group key>:<count>`: how many rows of one group to list. Group keys hold colons, so the count follows the last. */
 const sessionRowWindowSchema = z
@@ -1829,18 +1717,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory work items',
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
-    responseSchema: z.object({
-      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
-      workItems: z.array(cardSchema),
-      /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
-      total: z.number().int().nonnegative().optional(),
-      /** Names this read of the whole board. Absent when the next read must list it whole again. */
-      cursor: z.string().optional(),
-      /** Cards gone since the `since` sent. Its presence marks an answer that holds only what moved. */
-      removedIds: z.array(z.string()).optional(),
-      /** With `removedIds`: `boardCheck` of the whole board, for a reader to check its merged copy against. */
-      check: z.string().optional(),
-    }),
+    responseSchema: workItemListResponseSchema,
   },
   workItemStarters: {
     method: 'GET',
@@ -1906,7 +1783,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     method: 'POST',
     path: '/web/factory/projects/:id/work-items/:workItemId/transition',
     description:
-      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase",
+      "Transition a work item with its expected revision; naming a board other than the card's moves it to that board's phase. Answers 202 with an inputId when the board's engine settles the move later; the project's feed-events stream then carries a `move` frame for that inputId",
     pathSchema: transitionPathSchema,
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,
@@ -1952,7 +1829,7 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'List Factory decisions',
     pathSchema: projectPathSchema,
     querySchema: decisionQuerySchema,
-    responseSchema: z.object({ decisions: z.array(entitySchema), nextCursor: z.string().optional() }),
+    responseSchema: decisionListResponseSchema,
   },
   runQueue: {
     method: 'GET',

@@ -271,7 +271,8 @@ export const MovesToTheNextStep: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Next: Instructions')).toBeInTheDocument();
     await userEvent.click(canvas.getByRole('button', { name: 'Continue' }));
-    await expect(canvas.getByRole('heading', { name: 'Instructions', level: 2 })).toHaveFocus();
+    const deck = within(canvas.getByRole('region', { name: 'New agent steps' }));
+    await expect(deck.getByRole('heading', { name: 'Instructions', level: 2 })).toHaveFocus();
     await expect(canvas.getByText('Next: Tools')).toBeInTheDocument();
   },
 };

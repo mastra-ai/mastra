@@ -1,5 +1,50 @@
 # @mastra/react
 
+## 1.17.0-alpha.5
+
+### Minor Changes
+
+- Added Factory board hooks under `@mastra/react/hooks/factory`, so any app can render a Factory board from the same data layer Factory's own UI uses. ([#31789](https://github.com/mastra-ai/mastra/pull/31789))
+
+  ```tsx
+  import {
+    FactoryBasePathProvider,
+    useBoardPhasesQuery,
+    useTransitionWorkItemMutation,
+  } from '@mastra/react/hooks/factory';
+
+  // Inside MastraReactProvider and a React Query QueryClientProvider:
+  function Board({ projectId, currentUserId }: { projectId: string; currentUserId: string }) {
+    const board = useBoardPhasesQuery(projectId, { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} });
+    const move = useTransitionWorkItemMutation(projectId, currentUserId);
+    // render board.data?.phases; call move.mutate(...) on drop
+  }
+  ```
+
+  Wrap the tree in `FactoryBasePathProvider` when Factory's routes are served under a different path (for example `/v1/factory`).
+
+### Patch Changes
+
+- Updated dependencies [[`b712b6a`](https://github.com/mastra-ai/mastra/commit/b712b6a7cc0d7018ffbfad70712554cadf1079fa), [`4e762e3`](https://github.com/mastra-ai/mastra/commit/4e762e39efee28c70efec215363adaa5aecb8b3d), [`44e6a17`](https://github.com/mastra-ai/mastra/commit/44e6a1769ed96ad489a5cd2cd9afb22d739be16e), [`5efd2d3`](https://github.com/mastra-ai/mastra/commit/5efd2d32d1d1ebe88e6e29332830dbde1068d4eb), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`0a31d4d`](https://github.com/mastra-ai/mastra/commit/0a31d4d07d94ced97d5e06c6e8abc722d50f266a), [`f62d4fe`](https://github.com/mastra-ai/mastra/commit/f62d4fea8a8e9e182248e007cf1d5023e2fd0481)]:
+  - @mastra/core@1.87.0-alpha.5
+  - @mastra/client-js@1.63.0-alpha.5
+
+## 1.17.0-alpha.4
+
+### Minor Changes
+
+- Added `useWorkspaceDirectories` to list several workspace folders at once. Each folder shares its cache entry with `useWorkspaceDirectory`. ([#31521](https://github.com/mastra-ai/mastra/pull/31521))
+
+  ```tsx
+  const listings = useWorkspaceDirectories({ workspaceId, paths: ['src', 'src/agents'] });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6af07e7`](https://github.com/mastra-ai/mastra/commit/6af07e76acda2c15c9b85675a428baab774d8606), [`116f675`](https://github.com/mastra-ai/mastra/commit/116f6755907feea0c97d78c0b9d22fe0df436823), [`5af764a`](https://github.com/mastra-ai/mastra/commit/5af764a61c49ccb7587ab45afc82e8c65830f419), [`c4d377d`](https://github.com/mastra-ai/mastra/commit/c4d377d782073727e1b32c4cefdbf44f6b471251), [`a414673`](https://github.com/mastra-ai/mastra/commit/a414673fc9f725e40ec24cfc83eb84554ed514a2), [`237add3`](https://github.com/mastra-ai/mastra/commit/237add377a4006b02336800155140ccfb9cd86d3), [`cfa1aea`](https://github.com/mastra-ai/mastra/commit/cfa1aea7e917c810c21705fa197af7c832d0b951), [`afdf069`](https://github.com/mastra-ai/mastra/commit/afdf069f29d34a2d51b7e458b071c42d23e6b2c4), [`d890f2d`](https://github.com/mastra-ai/mastra/commit/d890f2dacbb5f62fe809ed165e42278810eb66bd), [`f191321`](https://github.com/mastra-ai/mastra/commit/f191321203830f38fa5ed51cfcc4c4fe0d44c350), [`5793d03`](https://github.com/mastra-ai/mastra/commit/5793d03b44a6e59a8a63873ed2a0ddc1b9a20a4d), [`7967489`](https://github.com/mastra-ai/mastra/commit/7967489aa73653c1540435e624458fa808d3e1a3), [`b5755a5`](https://github.com/mastra-ai/mastra/commit/b5755a5e10386f424c3ec76663ea6a57543c648a)]:
+  - @mastra/core@1.87.0-alpha.4
+  - @mastra/client-js@1.62.1-alpha.4
+
 ## 1.17.0-alpha.3
 
 ### Patch Changes

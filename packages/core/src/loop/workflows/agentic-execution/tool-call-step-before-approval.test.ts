@@ -230,4 +230,75 @@ describe('createToolCallStep beforeApproval hook (#26772)', () => {
       expect(result.result).toMatchObject({ error: true, message: expect.stringContaining('amount') });
     });
   });
+
+  describe('model override policy (#31614, #31612)', () => {
+    // A strict schema rejects any unknown key, so a call that reaches
+    // `beforeApproval` proves the disallowed `_background` override was dropped
+    // before validation, the hook, and the approval gate ever saw it.
+    const buildStrictRefundTool = (overrides: Record<string, unknown>) =>
+      new CoreToolBuilder({
+        originalTool: createTool({
+          id: 'issue_refund',
+          description: 'Issue a refund',
+          inputSchema: z.strictObject({ orderId: z.string() }),
+          ...overrides,
+        }),
+        options: { name: 'issue_refund', requestContext: new RequestContext(), requireApproval: true } as any,
+      }).build();
+
+    const callWithOverride = (step: ReturnType<typeof makeStep>) =>
+      step.execute(
+        makeExecuteParams(suspend, {
+          inputData: { ...inputData, args: { orderId: 'a', _background: { enabled: true } } },
+        }),
+      );
+
+    it('drops a disallowed override before validation, the hook, and the gate', async () => {
+      const execute = vi.fn();
+      const beforeApproval = vi.fn().mockResolvedValue(undefined);
+      const tool = buildStrictRefundTool({ requireApproval: true, beforeApproval, execute });
+      const step = makeStep(tool, {
+        _internal: { agentBackgroundConfig: { tools: 'all', modelOverrides: false } },
+      });
+
+      const result = await callWithOverride(step);
+
+      expect(beforeApproval).toHaveBeenCalledWith({ orderId: 'a' }, expect.anything());
+      expect(result).toBe('suspended');
+      expect(suspend).toHaveBeenCalledTimes(1);
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('applies the agent-wide opt-out to a named entry', async () => {
+      const execute = vi.fn();
+      const beforeApproval = vi.fn().mockResolvedValue(undefined);
+      const tool = buildStrictRefundTool({ requireApproval: true, beforeApproval, execute });
+      const step = makeStep(tool, {
+        _internal: { agentBackgroundConfig: { tools: { issue_refund: true }, modelOverrides: false } },
+      });
+
+      const result = await callWithOverride(step);
+
+      expect(beforeApproval).toHaveBeenCalledWith({ orderId: 'a' }, expect.anything());
+      expect(result).toBe('suspended');
+    });
+
+    // Control: when the resolved policy allows model overrides the same strict
+    // schema rejects `_background`, proving the cases above strip it rather than
+    // the schema ignoring unknown keys.
+    it('still rejects `_background` when the resolved policy allows overrides', async () => {
+      const execute = vi.fn();
+      const beforeApproval = vi.fn().mockResolvedValue({ proceed: false, output: 'rejected' });
+      const tool = buildStrictRefundTool({ requireApproval: true, beforeApproval, execute });
+      const step = makeStep(tool, {
+        _internal: { agentBackgroundConfig: { tools: { issue_refund: { enabled: true, modelOverrides: true } } } },
+      });
+
+      const result = (await callWithOverride(step)) as any;
+
+      expect(beforeApproval).not.toHaveBeenCalled();
+      expect(suspend).not.toHaveBeenCalled();
+      expect(result.result).toMatchObject({ error: true, message: expect.stringContaining('_background') });
+    });
+  });
 });

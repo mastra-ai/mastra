@@ -1,4 +1,4 @@
-import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import type { FactoryRuleStage } from '@internal/factory-contract';
 
 /**
  * The default board's phases, in column order: its columns' labels and colours when no catalog

@@ -1,9 +1,10 @@
 import assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
 
+import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from '@internal/factory-contract';
 import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { compileBoardDefinition } from '../boards/define-board.js';
 import type { BoardPhaseRunner } from '../boards/define-board.js';
 import {
@@ -28,7 +29,6 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { createPhaseGoalEnder, PHASE_GOAL_METADATA_KEY } from './phase-goal.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryTransitionServiceOptions } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';

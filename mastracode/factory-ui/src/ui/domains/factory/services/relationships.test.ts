@@ -8,7 +8,7 @@ import {
   workItemReference,
   workItemShortReference,
 } from './relationships';
-import type { WorkItem } from './workItems';
+import type { WorkItem } from '@internal/factory-contract';
 
 function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>): WorkItem {
   const { id, source, ...rest } = overrides;

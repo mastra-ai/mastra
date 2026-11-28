@@ -72,19 +72,13 @@ describe('findRecordIdAtOrBefore', () => {
     expect(findRecordIdAtOrBefore(records, cursor)).toBeNull();
   });
 
-  it('returns the record exactly at the cursor', () => {
-    const cursor = new Date('2026-06-01T10:10:00.000Z').getTime();
-    expect(findRecordIdAtOrBefore(records, cursor)).toBe('b');
-  });
-
-  it('returns the latest record at or before the cursor (unsorted input)', () => {
-    const cursor = new Date('2026-06-01T10:15:00.000Z').getTime();
-    expect(findRecordIdAtOrBefore(records, cursor)).toBe('b');
-  });
-
-  it('returns the last record when the cursor is after all records', () => {
-    const cursor = new Date('2026-06-01T11:00:00.000Z').getTime();
-    expect(findRecordIdAtOrBefore(records, cursor)).toBe('c');
+  it.each([
+    ['returns the record exactly at the cursor', '2026-06-01T10:10:00.000Z', 'b'],
+    ['returns the latest record at or before the cursor (unsorted input)', '2026-06-01T10:15:00.000Z', 'b'],
+    ['returns the last record when the cursor is after all records', '2026-06-01T11:00:00.000Z', 'c'],
+  ] as const)('%s', (_title, input, expected) => {
+    const cursor = new Date(input).getTime();
+    expect(findRecordIdAtOrBefore(records, cursor)).toBe(expected);
   });
 
   it('returns null for a null cursor even when a record sits on the epoch', () => {

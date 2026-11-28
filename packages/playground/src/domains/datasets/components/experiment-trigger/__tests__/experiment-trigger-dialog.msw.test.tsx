@@ -8,6 +8,13 @@ import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  agentIdWithVersions,
+  agentVersionsResponse,
+  emptyAgentVersionsResponse,
+  latestAgentVersionId,
+  publishedAgentVersionId,
+} from '../../__tests__/fixtures/agent-versions';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
 import {
@@ -68,6 +75,9 @@ function setupHandlers({
     http.get(`${BASE_URL}/api/datasets/:datasetId/versions`, ({ params }) =>
       HttpResponse.json(params.datasetId === 'dataset-1' ? datasetVersionsResponse : emptyVersionsResponse),
     ),
+    http.get(`${BASE_URL}/api/stored/agents/:agentId/versions`, ({ params }) =>
+      HttpResponse.json(params.agentId === agentIdWithVersions ? agentVersionsResponse : emptyAgentVersionsResponse),
+    ),
     http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(targetAgents)),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
@@ -121,6 +131,7 @@ function renderDialog(props: Partial<ExperimentTriggerDialogProps> = {}) {
 
 const targetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Target/ });
 const datasetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Dataset(?! version)/ });
+const agentVersionField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Agent version/ });
 const scorersField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Scorers/ });
 const runButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Run experiment' });
 const advancedToggle = () => screen.getByRole('button', { name: 'Advanced' });
@@ -139,6 +150,15 @@ async function pickAgentOne() {
   await waitFor(() => expect(targetField().disabled).toBe(false));
   await choose(targetField(), 'Agent One');
   await waitFor(() => expect(targetField().value).toBe('Agent One'));
+}
+
+/**
+ * Picks an agent version. An option's accessible name runs its label into its created-at description
+ * ("v1Created …"), so the label is matched at the start of the name rather than in full.
+ */
+async function chooseAgentVersion(field: HTMLInputElement, option: string) {
+  fireEvent.keyDown(field, { key: 'ArrowDown' });
+  fireEvent.click(await screen.findByRole('option', { name: new RegExp(`^${option}`) }));
 }
 
 async function openAdvanced() {
@@ -253,6 +273,161 @@ describe('ExperimentTriggerDialog', () => {
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].datasetId).toBe('dataset-2');
       expect(triggerCalls[0].body.version).toBeUndefined();
+    });
+
+    it('pre-fills the agent version a rerun pinned and sends it', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({
+        initialDatasetId: 'dataset-1',
+        initialTargetType: 'agent',
+        initialTargetId: 'agent-1',
+        initialAgentVersion: publishedAgentVersionId,
+      });
+
+      await waitFor(() => expect(targetField().value).toBe('Agent One'));
+      await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+    });
+
+    it('keeps a rerun pinned to the newest version pinned instead of calling it Latest', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog({
+        initialDatasetId: 'dataset-1',
+        initialTargetType: 'agent',
+        initialTargetId: 'agent-1',
+        initialAgentVersion: latestAgentVersionId,
+      });
+
+      await waitFor(() => expect(targetField().value).toBe('Agent One'));
+      await waitFor(() => expect(agentVersionField().value).toBe('v2'));
+
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.agentVersion).toBe(latestAgentVersionId);
+    });
+  });
+
+  describe('agent version', () => {
+    it('offers the target agent its versions and starts on Latest', async () => {
+      setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+      fireEvent.keyDown(agentVersionField(), { key: 'ArrowDown' });
+      expect(await screen.findByRole('option', { name: /^v2/ })).toBeDefined();
+      expect(screen.getByRole('option', { name: /^v1/ })).toBeDefined();
+    });
+
+    it('sends the picked version id rather than its number', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+
+      await chooseAgentVersion(agentVersionField(), 'v1');
+      await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+      expect(triggerCalls[0].body.agentVersion).not.toBe(1);
+    });
+
+    it('sends no agent version while Latest is picked', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).not.toHaveProperty('agentVersion');
+    });
+
+    it('forgets the pinned version when Latest is picked back', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+
+      await chooseAgentVersion(agentVersionField(), 'v1');
+      await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+      await chooseAgentVersion(agentVersionField(), 'Latest');
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+      fireEvent.click(runButton());
+
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).not.toHaveProperty('agentVersion');
+    });
+
+    it('forgets the pinned version when another target is picked', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+      await chooseAgentVersion(agentVersionField(), 'v1');
+      await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+
+      await choose(targetField(), 'Agent Two');
+      await waitFor(() => expect(targetField().value).toBe('Agent Two'));
+      expect(screen.queryByRole('combobox', { name: /^Agent version/ })).toBeNull();
+
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
+      expect(triggerCalls[0].body).not.toHaveProperty('agentVersion');
+    });
+
+    it('offers no agent version for an agent without versions', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(targetField().disabled).toBe(false));
+      await choose(targetField(), 'Agent Two');
+
+      await waitFor(() => expect(targetField().value).toBe('Agent Two'));
+      expect(screen.queryByRole('combobox', { name: /^Agent version/ })).toBeNull();
+    });
+
+    // A pinned version swaps in the agent's stored instructions and tools, but not its model:
+    // applyStoredOverrides never overrides the model of a code-defined agent, so the run still uses the
+    // model the agent is configured with (packages/core/src/agent/__tests__/agent-model-override.test.ts).
+    // The dialog must show that model even when the version was saved on another one.
+    describe('when the pinned version was saved on another model', () => {
+      const providerField = () => screen.getByRole('combobox', { name: 'Model provider' });
+      const modelField = () => screen.getByRole('combobox', { name: 'Model' });
+
+      it("keeps showing the agent's own model while the version is pinned", async () => {
+        setupHandlers();
+        renderDialog();
+        await pickAgentOne();
+        await waitFor(() => expect(modelField().textContent).toContain('gpt-4o-mini'));
+
+        await chooseAgentVersion(agentVersionField(), 'v1');
+
+        await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+        expect(providerField().textContent).toContain('OpenAI');
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+      });
+
+      it('sends the version only, leaving the model to the agent', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await pickAgentOne();
+        await waitFor(() => expect(agentVersionField().value).toBe('Latest'));
+
+        await chooseAgentVersion(agentVersionField(), 'v1');
+        await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
     });
   });
 
@@ -442,10 +617,31 @@ describe('ExperimentTriggerDialog', () => {
         expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
       });
+
+      // An explicit pick is what the run will use, and pinning a version does not clear it.
+      describe('when a version saved on another model is pinned', () => {
+        it('keeps a picked model when a version is pinned, and sends both', async () => {
+          const { triggerCalls } = setupHandlers();
+          renderDialog();
+          await openModelOverride();
+
+          await pickModel('Anthropic', 'claude-haiku-4-5');
+          await chooseAgentVersion(agentVersionField(), 'v1');
+          await waitFor(() => expect(agentVersionField().value).toBe('v1'));
+
+          await waitFor(() => expect(providerField().textContent).toContain('Anthropic'));
+          expect(modelField().textContent).toContain('claude-haiku-4-5');
+          fireEvent.click(runButton());
+
+          await waitFor(() => expect(triggerCalls).toHaveLength(1));
+          expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+          expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+        });
+      });
     });
 
     describe('when the target is not an agent', () => {
-      it('offers no model and sends none', async () => {
+      it('offers no model or agent version, and sends neither', async () => {
         const { triggerCalls } = setupHandlers({ scorers: itemScorers });
         renderDialog();
         await openModelOverride();
@@ -453,11 +649,13 @@ describe('ExperimentTriggerDialog', () => {
 
         await choose(targetField(), 'Quality scorer');
         await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull());
+        expect(screen.queryByRole('combobox', { name: /^Agent version/ })).toBeNull();
         fireEvent.click(runButton());
 
         await waitFor(() => expect(triggerCalls).toHaveLength(1));
         expect(triggerCalls[0].body).toMatchObject({ targetType: 'scorer', targetId: 'quality' });
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body).not.toHaveProperty('agentVersion');
         expect(triggerCalls[0].body.name).toMatch(/^quality-scorer-[0-9a-f]{4}$/);
       });
     });

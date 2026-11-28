@@ -14,7 +14,7 @@ Run commands in isolated Vercel environments with either persistent Sandbox micr
 
 ## Vercel sandbox
 
-Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM running Amazon Linux 2023. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
+Executes commands inside [Vercel Sandbox](https://vercel.com/docs/vercel-sandbox) which is an ephemeral [Firecracker](https://firecracker-microvm.github.io/) MicroVM. Sandboxes created from a runtime run Amazon Linux 2023. Sandboxes created from a custom image or a snapshot use the filesystem that image or snapshot contains. Provides a persistent in-session filesystem, `sudo` access, exposed ports, and background processes. For interface details, see the [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 :::note
 
@@ -126,6 +126,110 @@ await sandbox.executeCommand('sh', ['-c', 'for i in 1 2 3; do echo "line $i"; sl
 
 Both callbacks are optional and can be used independently.
 
+#### Custom images, snapshots and network policy
+
+Start from a Vercel Container Registry image or a filesystem snapshot, and restrict outbound traffic at creation time. The environment selection is mutually exclusive: pass at most one of `runtime`, `image` or `source`.
+
+Sandboxes started from a custom `image` or a snapshot aren't assumed to run Amazon Linux 2023. Their default agent instructions make no operating-system or package-manager claim.
+
+```typescript
+// From a container image (no runtime is sent with the request)
+const fromImage = new VercelSandbox({ image: 'my-repo:v1' })
+
+// From a filesystem snapshot
+const fromSnapshot = new VercelSandbox({
+  source: { type: 'snapshot', snapshotId: 'snap_123' },
+})
+
+// From a runtime with all outbound traffic blocked
+const offline = new VercelSandbox({ runtime: 'node24', networkPolicy: 'deny-all' })
+
+// Allow only specific hosts and subnets
+const restricted = new VercelSandbox({
+  networkPolicy: {
+    allow: ['registry.npmjs.org', '*.githubusercontent.com'],
+    subnets: { allow: ['10.0.0.0/8'] },
+  },
+})
+```
+
+Creation options apply when a new sandbox is created. A `networkPolicy` protects that new sandbox from its first command.
+
+When `sandboxName` matches a sandbox that already exists, starting resumes it unchanged: it keeps the configuration and network policy it was created with, so a stricter policy passed here doesn't restrict it. To change the policy of a running sandbox, update it through the underlying SDK (`await sandbox.sandbox.update({ networkPolicy: 'deny-all' })`). Mastra doesn't manage that.
+
+#### Region and failover regions
+
+Vercel runs sandboxes in many regions. Set `region` to pin creation to one region, and `failoverRegions` to list the regions Vercel may use as fallbacks, in order. A failover region must not repeat `region`:
+
+```typescript
+const sandbox = new VercelSandbox({
+  region: 'fra1',
+  failoverRegions: ['iad1', 'sfo1'],
+})
+```
+
+Both options are passed to `Sandbox.create()` and `Sandbox.getOrCreate()`, so a sandbox created for a name uses them. When a sandbox with that name already exists, `getOrCreate` resumes it unchanged: the supplied `region` and `failoverRegions` don't reconfigure it. An empty `failoverRegions` array creates the sandbox without failover. Read the region a sandbox is configured for from the SDK instance; when Vercel fails over, the SDK's session object reports the region the running VM uses:
+
+```typescript
+await sandbox.start()
+console.log(sandbox.sandbox.region)
+```
+
+#### Mounting Vercel Drives
+
+Vercel [Drives](https://vercel.com/docs/vercel-sandbox/concepts/drives) are persistent volumes that sandboxes can attach at a path. Pass `mounts` to attach them:
+
+```typescript
+import { Drive } from '@vercel/sandbox'
+import { VercelSandbox } from '@mastra/vercel'
+
+const drive = await Drive.getOrCreate({ name: 'agent-data' })
+
+const sandbox = new VercelSandbox({
+  // A sandbox's main region must match the Drive's region.
+  region: drive.region,
+  mounts: { '/data': drive },
+})
+
+await sandbox.start()
+await sandbox.executeCommand('sh', ['-c', 'echo hello > /data/marker.txt'])
+```
+
+Mount paths must be absolute and can't overlap. A sandbox can mount up to four Drives, and its main region must match each Drive's region. Only one sandbox at a time can mount a Drive read-write, so other sandboxes mount `drive.snapshot()` for read-only copies. A value is a `Drive` instance for read-write access, `drive.snapshot()` for a read-only copy, or an explicit `{ drive: string, mode }` pair where `drive` is the Drive's name and `mode` is `'read-write'` or `'snapshot'`:
+
+```typescript
+const archive = await Drive.getOrCreate({ name: 'agent-archive', region: drive.region })
+
+const sandbox = new VercelSandbox({
+  region: drive.region,
+  mounts: {
+    // A Drive instance mounts read-write.
+    '/data': drive,
+    // The SDK's snapshot helper mounts a read-only copy.
+    '/snapshot': drive.snapshot(),
+    // The explicit form takes a Drive's name and a mode.
+    '/archive': { drive: archive.name, mode: 'read-write' },
+  },
+})
+```
+
+Files written to a read-write mount persist in the Drive. Once the sandbox that holds the read-write mount stops, another sandbox can mount the same Drive and read them back:
+
+```typescript
+await sandbox.stop()
+
+const reader = new VercelSandbox({
+  region: drive.region,
+  mounts: { '/data': drive },
+})
+await reader.start()
+
+const result = await reader.executeCommand('cat', ['/data/marker.txt'])
+console.log(result.stdout) // hello
+```
+
+Mounts are applied when the sandbox is created. A sandbox already running keeps the mounts it started with, and a named sandbox that already exists resumes unchanged with the mounts it was created with.
+
 ### Constructor parameters
 
 <PropertiesTable
@@ -140,7 +244,8 @@ Both callbacks are optional and can be used independently.
   {
     name: 'sandboxName',
     type: 'string',
-    description: 'Optional name passed to the Vercel API. Auto-generated if omitted.',
+    description:
+      'Optional name passed to the Vercel API. Auto-generated if omitted. A name is an identity: starting resumes an existing sandbox with that name without applying creation options, so an existing sandbox keeps the configuration and network policy it was created with.',
     isOptional: true,
   },
   {
@@ -164,9 +269,46 @@ Both callbacks are optional and can be used independently.
   {
     name: 'runtime',
     type: "'node24' | 'node22' | 'node26' | 'python3.13'",
-    description: 'Sandbox runtime.',
+    description:
+      'Sandbox runtime. Ignored and rejected when `image` or `source` is set. The `node24` default applies only when the sandbox starts from a runtime.',
     isOptional: true,
     defaultValue: "'node24'",
+  },
+  {
+    name: 'image',
+    type: 'string',
+    description:
+      'Start from a Vercel Container Registry image (`my-repo`, `my-repo:v1`, or a fully-qualified `vcr.vercel.com/...` reference). Mutually exclusive with `runtime` and `source`. No runtime is sent with the request.',
+    isOptional: true,
+  },
+  {
+    name: 'source',
+    type: "{ type: 'snapshot'; snapshotId: string }",
+    description:
+      'Start from an existing filesystem snapshot. Only the snapshot source is supported; git and tarball sources are not exposed. Mutually exclusive with `runtime` and `image`. No runtime is sent with the request.',
+    isOptional: true,
+  },
+  {
+    name: 'region',
+    type: 'SandboxRegion',
+    description: 'Vercel region to create the sandbox in, for example `fra1`. Accepts any Vercel region.',
+    isOptional: true,
+    defaultValue: "'iad1' (Vercel API default)",
+  },
+  {
+    name: 'failoverRegions',
+    type: 'SandboxRegion[]',
+    description:
+      'Regions the sandbox can fail over to, in order. Must not include `region`. An empty array creates the sandbox with no failover regions.',
+    isOptional: true,
+  },
+  {
+    name: 'networkPolicy',
+    type: "'allow-all' | 'deny-all' | NetworkPolicy",
+    description:
+      "Outbound network policy applied at creation. Pass 'deny-all' to block all egress, 'allow-all' (the platform default) for full internet access, or an object with `allow` domain rules and `subnets` CIDR lists. A newly created sandbox is protected from its first command; an existing sandbox resumed by `sandboxName` keeps its current policy.",
+    isOptional: true,
+    defaultValue: "'allow-all'",
   },
   {
     name: 'timeout',
@@ -186,6 +328,13 @@ Both callbacks are optional and can be used independently.
     type: 'number[]',
     description:
       'Ports to expose from the sandbox (up to 15). Public HTTPS domains are available via getInfo().metadata.domains.',
+    isOptional: true,
+  },
+  {
+    name: 'mounts',
+    type: 'SandboxMounts',
+    description:
+      "Vercel Drives to mount inside the sandbox at creation. Keys are absolute paths inside the sandbox; values are a `Drive` instance, a `drive.snapshot()`, or an explicit `{ drive: string, mode }` where `drive` is the Drive's name.",
     isOptional: true,
   },
   {
@@ -295,11 +444,41 @@ await handle.kill()
 
 See the [`SandboxProcessManager` reference](/reference/workspace/process-manager) for the full API.
 
+### Methods
+
+#### `extendTimeout(ms)`
+
+Asks Vercel to keep the running session alive for `ms` more milliseconds, so a run can outlive the timeout the sandbox was created with:
+
+```typescript
+const sandbox = new VercelSandbox({ timeout: 300_000 })
+await sandbox.start()
+
+// Keeps the same session alive for another 10 minutes.
+await sandbox.extendTimeout(600_000)
+```
+
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'ms',
+    type: 'number',
+    description: 'Milliseconds to add to the running session deadline.',
+  },
+]}
+/>
+
+**Returns:** `Promise<void>`. It resolves once the running session deadline has moved by `ms`.
+
+The call extends the live session deadline only, so `60_000` keeps the same MicroVM running for 60 seconds longer without changing the `timeout` the sandbox was constructed with (which `getInfo().metadata.timeout` keeps reporting). If the sandbox isn't running yet, `extendTimeout()` starts it first. Repeated calls reuse the same session instead of creating a new one. Vercel caps the total session duration by plan, so extending past that limit rejects with the provider error unchanged.
+
 :::note
 
 The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `handle.sendStdin()` throws.
 
-The Mastra adapter doesn't implement the Workspace filesystem mounting API. The underlying Vercel Sandbox product supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage). You can configure a mount directly through the underlying SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage its lifecycle.
+The Mastra adapter doesn't implement the Workspace filesystem mounting API, so mounts configured on a `Workspace` aren't attached to the sandbox. Attach Vercel Drives with the `mounts` constructor option instead (see [Mounting Vercel Drives](#mounting-vercel-drives)). The underlying Vercel Sandbox product also supports [Filesystem in Userspace (FUSE) mounts](https://vercel.com/docs/sandbox/mount-remote-storage), which you can configure through the SDK instance exposed by `sandbox.sandbox`, but Mastra doesn't manage their lifecycle.
 
 :::
 

@@ -1,5 +1,5 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { createCrossHostRuntime } from './cross-host-resume';
+import { addContextProbes, createCrossHostRuntime } from './cross-host-resume';
 
 // Host B: no workers. Approves the parked run as a different user, so this host claims the resume
 // while host A is the only process consuming workflow events.
@@ -16,6 +16,7 @@ await storage.init();
 const requestContext = new RequestContext();
 requestContext.set('resume-marker', 'B');
 requestContext.set('mastra__user', { id: 'bob' });
+addContextProbes(requestContext, 'B');
 const resumed = await agent.approveToolCall({
   runId: process.env.CROSS_HOST_RUN_ID!,
   toolCallId: 'approval-one',

@@ -9,9 +9,8 @@ import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
-import type { FactoryDecisionPage, FactoryDecisionSummary } from '../domains/factory/services/decisions';
+import type { FactoryDecisionPage, FactoryDecisionSummary, FactoryTransitionResult } from '@internal/factory-contract';
 import type { GithubPullRequestDetail } from '../domains/factory/services/factory';
-import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
 import { reviewCandidate, reviewDecision, reviewItem } from './fixtures/reviewCard';
 

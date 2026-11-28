@@ -1,3 +1,4 @@
+import type { BackgroundTask } from '@mastra/core/background-tasks';
 import type { BackgroundTasksStorage, MastraStorage } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, it, expect } from 'vitest';
 import { createSampleTask } from './data';
@@ -172,6 +173,151 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(resumed!.status).toBe('running');
         expect(resumed!.suspendPayload).toBeUndefined();
         expect(resumed!.suspendedAt).toBeUndefined();
+      });
+    });
+
+    // Regression coverage for #31613. `result`, `error`, `suspendPayload` and
+    // `metadata` are JSON columns, but the JSON value written into them can be
+    // any JSON value — including plain strings, JSON-looking strings, numbers
+    // and booleans. Stores that only serialized objects, or that tested the
+    // value for truthiness instead of for `undefined`, either rejected those
+    // writes (`invalid input syntax for type json`) or read them back as a
+    // different type or as null. Whatever is written must come back unchanged.
+    describe('scalar JSON values', () => {
+      const scalarCases: [label: string, value: unknown][] = [
+        ['plain-string', 'task finished'],
+        ['empty-string', ''],
+        ['JSON-looking number string', '42'],
+        ['JSON-looking object string', '{"nested":"text"}'],
+        ['JSON-looking array string', '[1,2,3]'],
+        ['JSON-looking boolean string', 'true'],
+        ['JSON-looking null string', 'null'],
+        ['number', 42],
+        ['zero', 0],
+        ['boolean-true', true],
+        ['boolean-false', false],
+        ['whitespace-only string', '   '],
+        ['quote-only string', '"'],
+        ['multiline string', 'line1\nline2'],
+        ['unicode string', 'héllo — 🎉'],
+        ['space-padded numeric string', ' 42 '],
+        ['leading-zero numeric string', '007'],
+        ['negative number', -7],
+        ['float number', 3.25],
+        ['long numeric string', '9007199254740993'],
+      ];
+
+      function expectJsonScalar(actual: unknown, expected: unknown, write: string) {
+        expect(typeof actual, `${write} changed the JSON value type`).toBe(typeof expected);
+        expect(actual, `${write} changed the JSON value`).toEqual(expected);
+      }
+
+      for (const [label, value] of scalarCases) {
+        it(`round-trips a ${label} result through createTask and updateTask`, async () => {
+          if (!bgStorage) return;
+
+          const created = createSampleTask({
+            status: 'completed',
+            result: value,
+            completedAt: new Date(),
+          });
+          await bgStorage.createTask(created);
+          expectJsonScalar((await bgStorage.getTask(created.id))!.result, value, 'createTask');
+
+          const updated = createSampleTask();
+          await bgStorage.createTask(updated);
+          await bgStorage.updateTask(updated.id, { result: value });
+          expectJsonScalar((await bgStorage.getTask(updated.id))!.result, value, 'updateTask');
+        });
+      }
+
+      it('round-trips a falsy scalar suspendPayload through createTask', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'suspended',
+          suspendPayload: 0,
+          suspendedAt: new Date(),
+        });
+        await bgStorage.createTask(task);
+
+        expectJsonScalar((await bgStorage.getTask(task.id))!.suspendPayload, 0, 'createTask');
+      });
+
+      it('round-trips a JSON-looking string suspendPayload through updateTask', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'running', startedAt: new Date() });
+        await bgStorage.createTask(task);
+
+        const suspendPayload = '{"awaiting":"analyst-approval"}';
+        await bgStorage.updateTask(task.id, {
+          status: 'suspended',
+          suspendPayload,
+          suspendedAt: new Date(),
+        });
+
+        expectJsonScalar((await bgStorage.getTask(task.id))!.suspendPayload, suspendPayload, 'updateTask');
+      });
+
+      it('round-trips a scalar error value', async () => {
+        if (!bgStorage) return;
+        // A scalar is not a valid `error` shape, but the column is JSON and
+        // non-conforming or legacy writers can put one there, so the storage
+        // layer must preserve it rather than reject, reshape or coerce it.
+        const error = 'tool crashed' as unknown as BackgroundTask['error'];
+        const task = createSampleTask({ status: 'failed', error, completedAt: new Date() });
+        await bgStorage.createTask(task);
+        expectJsonScalar((await bgStorage.getTask(task.id))!.error, 'tool crashed', 'createTask');
+
+        await bgStorage.updateTask(task.id, { error });
+        expectJsonScalar((await bgStorage.getTask(task.id))!.error, 'tool crashed', 'updateTask');
+      });
+
+      it('preserves scalar values nested in metadata', async () => {
+        if (!bgStorage) return;
+        const metadata = { note: '42', retries: 0, flagged: false, nested: { text: '[1,2,3]' } };
+        const task = createSampleTask({ metadata });
+        await bgStorage.createTask(task);
+
+        const stored = await bgStorage.getTask(task.id);
+        expect(stored!.metadata).toEqual(metadata);
+      });
+
+      it('leaves result unset when it is omitted on create', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const stored = await bgStorage.getTask(task.id);
+        // Stores differ on whether a cleared JSON column reads back as null or
+        // undefined; both mean unset, the string 'null' does not.
+        expect(stored!.result ?? null).toBeNull();
+      });
+
+      it('clears a scalar result with undefined without persisting the string "undefined"', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'completed', result: 'done', completedAt: new Date() });
+        await bgStorage.createTask(task);
+
+        await bgStorage.updateTask(task.id, { result: undefined });
+
+        const stored = await bgStorage.getTask(task.id);
+        expect(stored!.result ?? null).toBeNull();
+      });
+
+      it('round-trips the completion string reported on the issue', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'running', startedAt: new Date() });
+        await bgStorage.createTask(task);
+
+        await bgStorage.updateTask(task.id, {
+          status: 'completed',
+          result: 'Background task completed successfully.',
+          completedAt: new Date(),
+        });
+
+        const completed = await bgStorage.getTask(task.id);
+        expect(completed!.status).toBe('completed');
+        expect(completed!.result).toBe('Background task completed successfully.');
       });
     });
 

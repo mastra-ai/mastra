@@ -30,9 +30,35 @@ function getTableName(schemaName?: string) {
   return schemaName ? `${schemaName}.${quoted}` : quoted;
 }
 
-function serializeJson(v: unknown): any {
-  if (typeof v === 'object' && v != null) return toPgJson(v);
-  return v ?? null;
+/**
+ * Encode a JSON column value for the insert path.
+ *
+ * `#db.insert` runs every jsonb column through `toPgJson` (i.e. `JSON.stringify`)
+ * once more, so the value handed to it must already be one level in: strings are
+ * JSON-stringified here, while objects, numbers and booleans are passed through
+ * for `prepareValuesForInsert` to stringify. `null`/`undefined` become SQL NULL,
+ * which the reader maps back to `undefined`.
+ *
+ * Strings need that extra level because the reader (`parseJson`) applies
+ * `JSON.parse` to any string it reads back. A plain string survives its failed
+ * parse, but a JSON-looking string such as `'42'` or `'{"a":1}'` would otherwise
+ * be silently converted to a number or an object.
+ */
+function serializeJsonForInsert(v: unknown): unknown {
+  if (v === undefined || v === null) return null;
+  return typeof v === 'string' ? JSON.stringify(v) : v;
+}
+
+/**
+ * Encode a JSON column value for a raw `UPDATE ... SET` parameter.
+ *
+ * Nothing re-encodes parameters on this path, so the value is fully encoded
+ * here — with the same extra level for strings that `serializeJsonForInsert`
+ * gets from the insert path, keeping both writers compatible.
+ */
+function serializeJsonForUpdate(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  return toPgJson(typeof v === 'string' ? JSON.stringify(v) : v);
 }
 
 function parseJson(v: unknown): any {
@@ -258,10 +284,10 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         resource_id: task.resourceId ?? null,
         run_id: task.runId,
         status: task.status,
-        args: serializeJson(task.args),
-        result: serializeJson(task.result),
-        error: serializeJson(task.error),
-        suspend_payload: serializeJson(task.suspendPayload),
+        args: serializeJsonForInsert(task.args),
+        result: serializeJsonForInsert(task.result),
+        error: serializeJsonForInsert(task.error),
+        suspend_payload: serializeJsonForInsert(task.suspendPayload),
         retry_count: task.retryCount,
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
@@ -278,7 +304,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         leaseExpiresAtZ: task.leaseExpiresAt?.toISOString() ?? null,
         expiresAt: task.expiresAt?.toISOString() ?? null,
         expiresAtZ: task.expiresAt?.toISOString() ?? null,
-        metadata: serializeJson(task.metadata),
+        metadata: serializeJsonForInsert(task.metadata),
       },
     });
   }
@@ -298,15 +324,15 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     }
     if ('result' in update) {
       setClauses.push(`"result" = $${paramIdx++}`);
-      params.push(serializeJson(update.result));
+      params.push(serializeJsonForUpdate(update.result));
     }
     if ('error' in update) {
       setClauses.push(`"error" = $${paramIdx++}`);
-      params.push(serializeJson(update.error));
+      params.push(serializeJsonForUpdate(update.error));
     }
     if ('suspendPayload' in update) {
       setClauses.push(`"suspend_payload" = $${paramIdx++}`);
-      params.push(serializeJson(update.suspendPayload));
+      params.push(serializeJsonForUpdate(update.suspendPayload));
     }
     if ('retryCount' in update) {
       setClauses.push(`"retry_count" = $${paramIdx++}`);
@@ -348,7 +374,7 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
     }
     if ('metadata' in update) {
       setClauses.push(`"metadata" = $${paramIdx++}`);
-      params.push(serializeJson(update.metadata));
+      params.push(serializeJsonForUpdate(update.metadata));
     }
 
     if (setClauses.length === 0) return false;

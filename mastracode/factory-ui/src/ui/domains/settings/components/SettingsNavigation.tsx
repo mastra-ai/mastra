@@ -11,6 +11,7 @@ import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSection
 import type { SettingsSection } from '../settingsSections';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
@@ -76,6 +77,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.tools,
         icon: IconMaintenance,
         searchText: 'tools mastra connect connections integrations sessions platform project approval',
+      },
+      {
+        id: 'skills',
+        label: SETTINGS_SECTION_LABELS.skills,
+        icon: IconBook,
+        searchText: 'skills instructions skill.md agents load phases runner new skill edit revert',
       },
       {
         id: 'behavior',

@@ -5,7 +5,19 @@ export {
   FACTORY_AGENT_ID,
   REVIEW_CONTEXT,
 } from './define-board.js';
-export { DEFAULT_BOARD_ID } from './default-board.js';
+export {
+  DEFAULT_BOARD_ID,
+  isOpenPullRequestSource,
+  isPullRequestCard,
+  pullRequestSourceNumber,
+  pullRequestSources,
+  pullRequestTrustKey,
+  reviewedPullRequest,
+  trustedPullRequestSource,
+  UNTRUSTED_PULL_REQUESTS_KEY,
+  workingPullRequest,
+} from '@internal/factory-contract';
+export type { BoardPhaseKind } from '@internal/factory-contract';
 export { cardRuleFacts } from './card-facts.js';
 export type {
   BoardDefinition,
@@ -15,7 +27,6 @@ export type {
   BoardPhaseDefinition,
   BoardPhaseExitTool,
   BoardPhaseOutcome,
-  BoardPhaseKind,
   BoardPhaseGoal,
   BoardPhaseRunner,
   FactoryPhaseTool,
@@ -54,17 +65,6 @@ export {
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics, ReviewedChangeRequest } from './semantics.js';
-export {
-  isOpenPullRequestSource,
-  isPullRequestCard,
-  pullRequestSourceNumber,
-  pullRequestSources,
-  pullRequestTrustKey,
-  reviewedPullRequest,
-  trustedPullRequestSource,
-  UNTRUSTED_PULL_REQUESTS_KEY,
-  workingPullRequest,
-} from '../work-items/change-requests.js';
 export type {
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,

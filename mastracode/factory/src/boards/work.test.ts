@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import type { FactoryRuleItemContext, FactoryStageRuleContext } from '@internal/factory-contract';
 
-import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
+import { describe, expect, it } from 'vitest';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { phaseRunDecision } from './phase-runner.js';

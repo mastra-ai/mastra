@@ -2,7 +2,7 @@ import { unstartedCards } from '@mastra/factory/routes/work-item-selection';
 
 import { storedCard } from '../../../../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
-import type { WorkItem } from '../../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 

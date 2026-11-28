@@ -1,11 +1,10 @@
-import type { CardContextSession } from '@mastra/factory/work-items/card-context-sessions';
+import type { CardContextSession, WorkItemSessionRef } from '@internal/factory-contract';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Link } from 'react-router';
 
 import { useSessionActivityQuery } from '../../../../hooks/useSessionRows';
 import { threadPath } from '../../workspaces/services/factoryPaths';
-import type { WorkItemSessionRef } from '../services/workItems';
 import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 

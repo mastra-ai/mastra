@@ -925,6 +925,28 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return rows[0] ? toPage(rows[0]) : null;
   }
 
+  /** One recursive query; each row passes the same scope join and read filter as {@link getPage}. */
+  async getPageParents(input: { parentId: string; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    const core = await loadPagesCore();
+    const params = new Params();
+    const id = params.add(input.parentId);
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `WITH RECURSIVE chain AS (
+         SELECT p.*, 1 AS "__depth" FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+         WHERE p."id" = ${id} AND ${filter.readable('s')}
+         UNION ALL
+         SELECT p.*, c."__depth" + 1 FROM chain c
+         JOIN ${this.#pages} p ON p."id" = c."parentId" JOIN ${this.#pages} s ON s."id" = p."scopeId"
+         WHERE NOT c."isScope" AND c."__depth" <= ${core.MAX_KNOWLEDGE_PAGE_DEPTH} AND ${filter.readable('s')}
+       )
+       SELECT * FROM chain ORDER BY "__depth"`,
+      params.values,
+    );
+    return rows.map(toPage);
+  }
+
   async getPageByPath(input: {
     scopeId: string;
     path: string[];

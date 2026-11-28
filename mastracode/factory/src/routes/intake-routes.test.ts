@@ -2,20 +2,20 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { auditActionsInNamespaces } from '@internal/factory-contract';
 
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { DispatcherBoardEngine } from '../board-engine/engine.js';
 import type { FactoryCardPlacement } from '../board-engine/engine.js';
-import { createBoardRegistry } from '../boards/index.js';
 
+import { createBoardRegistry } from '../boards/index.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
 import {

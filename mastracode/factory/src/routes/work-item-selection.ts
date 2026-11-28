@@ -1,8 +1,8 @@
+import { sourceExternalId } from '@internal/factory-contract';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardSearch } from '../work-items/card-search.js';
 import { matchesSearch, searchTerms } from '../work-items/search-terms.js';
 import type { SearchableCard } from '../work-items/search-terms.js';
-import { sourceExternalId } from '../work-items/source-external-id.js';
 
 interface UnstartedCard {
   card: Card;

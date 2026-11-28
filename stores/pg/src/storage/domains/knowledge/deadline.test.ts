@@ -1,7 +1,8 @@
 import { KnowledgeTransactionDeadlineError } from '@mastra/core/storage';
-import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { Client, Pool } from 'pg';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { PoolAdapter } from '../../client';
 import { connectionString as defaultConnectionString } from '../../test-utils';
 import { KnowledgePG, pgKnowledgeTransactionClient } from '.';
 
@@ -17,6 +18,11 @@ const provenance = { author: 'agent:test' };
 const pool = new Pool({ connectionString });
 const lockerPool = new Pool({ connectionString, max: 1 });
 const store = new KnowledgePG({ pool, schemaName });
+/** As Platform Knowledge runs it: deadline transactions reuse their timeouts for up to 1,000 ms. */
+const headroomStore = new KnowledgePG({
+  client: new PoolAdapter(pool, undefined, { timeoutHeadroomMs: 1_000 }),
+  schemaName,
+});
 
 let scopeId = '';
 let n = 0;
@@ -93,6 +99,55 @@ describe('PG transaction deadline (r347 O3 §C‴)', () => {
       locker.release();
     }
   }, 20_000);
+
+  it("keeps the deadline for the store's statements after the caller's own SQL lengthens the timeouts", async () => {
+    const victim = await store.createPage({ parentId: scopeId, name: 'locked-after-caller', provenance });
+    const locker = await lockerPool.connect();
+    await locker.query('BEGIN');
+    await locker.query(`SELECT 1 FROM "${schemaName}".mastra_knowledge_pages WHERE "id" = $1 FOR UPDATE`, [victim.id]);
+    // Without the deadline the update below waits for this lock; let it go so a failing run ends.
+    const unlock = setTimeout(() => void locker.query('ROLLBACK'), 8_000);
+    try {
+      const { outcome, elapsed, name } = await timed(
+        3000,
+        async tx => {
+          // No keyword shows it: the timeouts change inside EXECUTE.
+          await pgKnowledgeTransactionClient(tx).query(
+            `DO $$ BEGIN EXECUTE 'SET LOCAL statement' || '_timeout = 600000'; EXECUTE 'SET LOCAL lock' || '_timeout = 600000'; END $$`,
+          );
+          await tx.updatePage({ id: victim.id, expectedVersion: victim.version, name: 'renamed', provenance });
+        },
+        headroomStore,
+      );
+      expect(outcome).toBeInstanceOf(KnowledgeTransactionDeadlineError);
+      expect(elapsed).toBeLessThan(4000);
+      expect(await pageCount(name)).toBe(0);
+    } finally {
+      clearTimeout(unlock);
+      await locker.query('ROLLBACK');
+      locker.release();
+    }
+  }, 20_000);
+
+  it("still reuses the timeouts across the store's own statements", async () => {
+    const sent = vi.spyOn(Client.prototype, 'query');
+    onTestFinished(() => sent.mockRestore());
+    const { outcome, elapsed } = await timed(
+      45_000,
+      async tx => {
+        for (let i = 0; i < 5; i++) await tx.createPage({ parentId: scopeId, name: `reused-${n}-${i}`, provenance });
+      },
+      headroomStore,
+    );
+    expect(outcome).toBe('committed');
+    const statements = sent.mock.calls.map(([sql]) => String(sql));
+    const refreshes = statements.filter(sql => sql.startsWith('SET LOCAL statement_timeout'));
+    // Six page writes of several statements each. Reuse allows one refresh per started 1,000 ms
+    // headroom window, so the bound grows with how long this run took; exact counts live in the
+    // clock-controlled unit tests.
+    expect(statements.length).toBeGreaterThan(30);
+    expect(refreshes.length).toBeLessThanOrEqual(Math.floor(elapsed / 1_000) + 1);
+  });
 
   it('bounds statements inside a nested transaction (savepoint) by the outer deadline', async () => {
     const { outcome, elapsed, name } = await timed(1500, async tx => {

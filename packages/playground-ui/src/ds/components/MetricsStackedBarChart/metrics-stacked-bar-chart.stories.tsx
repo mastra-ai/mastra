@@ -146,7 +146,7 @@ export const WithoutYAxis: Story = {
 
 /**
  * A handful of errors next to thousands of successes, and one request in a quiet hour: every
- * non-zero value still draws a few readable pixels, zeros draw nothing.
+ * non-zero value still draws a few readable pixels.
  */
 export const TinyValues: Story = {
   args: {
@@ -161,6 +161,54 @@ export const TinyValues: Story = {
     ],
     valueFormatter: count,
     showYAxis: false,
+  },
+};
+
+const tokenSeries = [
+  { dataKey: 'input', label: 'Input', color: 'var(--chart-green)' },
+  { dataKey: 'cacheRead', label: 'Cache read', color: 'var(--chart-purple)' },
+  { dataKey: 'output', label: 'Output', color: 'var(--chart-cyan)' },
+] satisfies MetricsLineChartSeries[];
+
+/** A week in 6-hour buckets with traffic only in `busy` ones; `missing` ones have no data at all. */
+const quietWeek = (busy: number[], missing: number[] = []) =>
+  Array.from({ length: 28 }, (_, i) => {
+    const at = new Date(2026, 9, 1, i * 6);
+    const tokens = busy.includes(i) ? { input: 8_200, cacheRead: 34_000, output: 12_000 } : undefined;
+    return {
+      time: at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+      tsMs: at.getTime(),
+      ...(missing.includes(i) ? {} : { input: 0, cacheRead: 0, output: 0, ...tokens }),
+    };
+  });
+
+/** A bucket that counted zero draws a short neutral stub, so a quiet stretch reads as "nothing happened". */
+export const QuietWeek: Story = {
+  args: { data: quietWeek([25]), series: tokenSeries, valueFormatter: count, showYAxis: false },
+};
+
+/** A bucket whose values are missing stays empty (here Oct 2): only a real zero gets a stub. */
+export const ZeroAndMissing: Story = {
+  args: {
+    data: quietWeek([3, 9, 10, 18, 25], [4, 5, 6, 7]),
+    series: tokenSeries,
+    valueFormatter: count,
+    showYAxis: false,
+  },
+};
+
+/** Columns only a few pixels wide: the stubs thin to one pixel, so they don't read as a solid bar. */
+export const ManyQuietBuckets: Story = {
+  args: {
+    data: Array.from({ length: 240 }, (_, i) => ({
+      time: `${i % 24}:00`,
+      tsMs: new Date(2026, 9, 1, i).getTime(),
+      ok: i % 24 > 8 && i % 24 < 17 ? Math.round(40 + 30 * Math.sin(i)) : 0,
+    })),
+    series: [{ dataKey: 'ok', label: 'Traces', color: 'var(--chart-blue)' }],
+    valueFormatter: count,
+    showYAxis: false,
+    showLegend: false,
   },
 };
 

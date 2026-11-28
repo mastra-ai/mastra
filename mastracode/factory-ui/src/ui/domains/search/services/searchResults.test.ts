@@ -1,7 +1,7 @@
 import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem } from '@internal/factory-contract';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from './searchResults';
 

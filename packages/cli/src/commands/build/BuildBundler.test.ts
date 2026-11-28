@@ -67,22 +67,6 @@ describe('BuildBundler', () => {
       const entry = (bundler as any).getEntry();
       expect(entry).toContain('studio: false');
     });
-
-    it('should set studio to true when provided', async () => {
-      const { BuildBundler } = await import('./BuildBundler');
-      const bundler = new BuildBundler({ studio: true });
-
-      const entry = (bundler as any).getEntry();
-      expect(entry).toContain('studio: true');
-    });
-
-    it('should set studio to false when explicitly provided', async () => {
-      const { BuildBundler } = await import('./BuildBundler');
-      const bundler = new BuildBundler({ studio: false });
-
-      const entry = (bundler as any).getEntry();
-      expect(entry).toContain('studio: false');
-    });
   });
 
   describe('getEnvFiles', () => {

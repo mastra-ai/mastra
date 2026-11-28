@@ -1,6 +1,6 @@
+import { DEFAULT_BOARD_ID } from '@internal/factory-contract';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { DEFAULT_BOARD_ID } from './default-board.js';
 import { holdsLegacyPlanner } from './legacy-plan-role.js';
 import type { BoardRegistry } from './registry.js';
 

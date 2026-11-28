@@ -9,6 +9,7 @@
  * because the busy case needs a run that is provably in flight while the
  * comments arrive.
  */
+import type { FactorySignalActivityDecision } from '@internal/factory-contract';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
@@ -17,14 +18,13 @@ import { dispatchDueNotifications } from '@mastra/core/notifications';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
-import { describe, expect, it, vi } from 'vitest';
 
+import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../boards/registry.js';
 import { autoStartingBoards } from '../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactorySignalActivityDecision } from './types.js';
 
 vi.setConfig({ testTimeout: 30_000 });
 

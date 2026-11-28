@@ -73,33 +73,28 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "meta/muse-glimmer-30b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "max"]
       }
     ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "google/diffusiongemma-26b-a4b-it": [
+    "stepfun-ai/step-5-preview": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimaxai/minimax-m3.1-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "z-ai/glm-5.3-flash": [
@@ -108,13 +103,18 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "minimaxai/minimax-m3.1-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "moonshotai/kimi-k2.6": [
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/diffusiongemma-26b-a4b-it": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
@@ -135,16 +135,6 @@
         "type": "toggle"
       }
     ],
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": -1,
-        "max": 32768
-      }
-    ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
       {
         "type": "effort",
@@ -156,10 +146,20 @@
         "max": 32768
       }
     ],
-    "stepfun-ai/step-5-preview": [
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": -1,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

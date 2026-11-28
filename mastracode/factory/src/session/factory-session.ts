@@ -1,8 +1,9 @@
+import { legacyGithubWorkItemBranch } from '@internal/factory-contract';
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
-import type { AgentController } from '@mastra/core/agent-controller';
 
+import type { AgentController } from '@mastra/core/agent-controller';
 import { customEndpointUrlProblem } from '../routes/custom-endpoint-url.js';
 import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
@@ -17,7 +18,6 @@ import type {
   SourceControlSessionVisibility,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import { legacyGithubWorkItemBranch } from '../work-item-branch.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 

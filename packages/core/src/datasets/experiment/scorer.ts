@@ -78,35 +78,61 @@ export interface ScorerResolution {
 
 export type ScorerResolver = (scorers: (ResolvedScorer | string)[]) => Promise<ScorerResolution>;
 
+/** Stored-scorer versions pinned on an experiment, keyed by scorer id. */
+export type ScorerVersions = Record<string, string>;
+
+/** Version ids of scorers built from a pinned stored version, recorded on their score rows. */
+const pinnedScorerVersionIds = new WeakMap<ResolvedScorer, string>();
+
 /**
- * Create a run-scoped scorer resolver. Instances pass through; string ids are
- * looked up in Mastra's registry, then loaded as stored scorers through the
- * editor (which registers them). Resolutions, including misses, are cached so
- * concurrent items hydrate a stored scorer at most once per run.
+ * Build a stored scorer at a specific version without registering it, so a
+ * pinned (possibly older) version never replaces the current one in Mastra's registry.
+ */
+async function loadPinnedScorer(mastra: Mastra, scorerId: string, versionId: string): Promise<ResolvedScorer | null> {
+  const editor = mastra.getEditor?.();
+  const store = await mastra.getStorage()?.getStore('scorerDefinitions');
+  if (!editor || !store) return null;
+  const definition = await store.getByIdResolved(scorerId, { versionId });
+  if (definition?.resolvedVersionId !== versionId) return null;
+  const scorer = editor.scorer.resolve(definition);
+  if (scorer) pinnedScorerVersionIds.set(scorer, versionId);
+  return scorer;
+}
+
+/**
+ * Create a run-scoped scorer resolver. Instances pass through. String ids
+ * pinned in `scorerVersions` load that stored version; other ids are looked up
+ * in Mastra's registry, then loaded as stored scorers through the editor (which
+ * registers them). Resolutions, including misses, are cached so concurrent items
+ * load a stored scorer at most once per run.
  *
  * Only a scorer that doesn't exist is reported in `missingIds`. A failed lookup
  * (for example, storage being unavailable) rejects with its own error and isn't
  * cached, so it isn't mistaken for a bad scorer ID.
  */
-export function createScorerResolver(mastra: Mastra): ScorerResolver {
+export function createScorerResolver(mastra: Mastra, scorerVersions?: ScorerVersions | null): ScorerResolver {
   const resolutionCache = new Map<string, Promise<ResolvedScorer | null>>();
 
   const resolveById = (scorerId: string): Promise<ResolvedScorer | null> => {
     const cached = resolutionCache.get(scorerId);
     if (cached) return cached;
 
-    const resolution = (async () => {
-      let scorer = getItemScorerById(mastra, scorerId);
-      if (scorer) return scorer;
+    const pinnedVersionId =
+      scorerVersions && Object.hasOwn(scorerVersions, scorerId) ? scorerVersions[scorerId] : undefined;
+    const resolution = pinnedVersionId
+      ? loadPinnedScorer(mastra, scorerId, pinnedVersionId)
+      : (async () => {
+          let scorer = getItemScorerById(mastra, scorerId);
+          if (scorer) return scorer;
 
-      const editor = mastra.getEditor?.();
-      if (editor) {
-        await editor.scorer.getById(scorerId);
-        scorer = getItemScorerById(mastra, scorerId);
-      }
+          const editor = mastra.getEditor?.();
+          if (editor) {
+            await editor.scorer.getById(scorerId);
+            scorer = getItemScorerById(mastra, scorerId);
+          }
 
-      return scorer;
-    })();
+          return scorer;
+        })();
 
     resolutionCache.set(scorerId, resolution);
     resolution.catch(() => resolutionCache.delete(scorerId));
@@ -132,6 +158,28 @@ export function createScorerResolver(mastra: Mastra): ScorerResolver {
       missingIds: resolved.flatMap(({ id, scorer }) => (scorer ? [] : [id])),
     };
   };
+}
+
+/**
+ * Pin the current version of every stored scorer among `scorerIds`, so all
+ * items of an experiment are scored by the same definition even if the stored
+ * scorer is edited mid-run. Ids served by a code scorer are not pinned.
+ */
+export async function pinStoredScorerVersions(
+  mastra: Mastra,
+  scorerIds: Iterable<string>,
+): Promise<ScorerVersions | null> {
+  const store = mastra.getEditor?.() ? await mastra.getStorage()?.getStore('scorerDefinitions') : undefined;
+  if (!store) return null;
+
+  const pins: ScorerVersions = {};
+  for (const scorerId of new Set(scorerIds)) {
+    const registered = getItemScorerById(mastra, scorerId);
+    if (registered && registered.source !== 'stored') continue;
+    const definition = await store.getByIdResolved(scorerId);
+    if (definition?.resolvedVersionId) pins[scorerId] = definition.resolvedVersionId;
+  }
+  return Object.keys(pins).length > 0 ? pins : null;
 }
 
 /**
@@ -175,6 +223,14 @@ export function flattenScorerConfig(scorers: ExperimentConfig['scorers']): {
   };
 }
 
+/** Every scorer id in a run-level `scorers` config, including workflow step scorers. */
+export function runLevelScorerIds(scorers: ExperimentConfig['scorers']): string[] {
+  const { flat, steps } = flattenScorerConfig(scorers);
+  return [...flat, ...Object.values(steps ?? {}).flat()].filter(
+    (scorer): scorer is string => typeof scorer === 'string',
+  );
+}
+
 /**
  * Throw {@link EXPERIMENT_SCORER_NOT_FOUND} when any run-level scorer id can't
  * be resolved, so a typo or deleted stored scorer fails before an experiment is created.
@@ -183,10 +239,7 @@ export async function assertExperimentScorersExist(
   mastra: Mastra,
   scorers: ExperimentConfig['scorers'],
 ): Promise<void> {
-  const { flat, steps } = flattenScorerConfig(scorers);
-  const ids = [...flat, ...Object.values(steps ?? {}).flat()].filter(
-    (scorer): scorer is string => typeof scorer === 'string',
-  );
+  const ids = runLevelScorerIds(scorers);
   if (ids.length === 0) return;
   const { missingIds } = await createScorerResolver(mastra)(ids);
   if (missingIds.length > 0) throw experimentScorerNotFoundError(missingIds);
@@ -348,6 +401,7 @@ export async function runScorersForItem(
               name: scorer.name,
               description: scorer.description ?? '',
               hasJudge: !!scorer.judge,
+              ...(pinnedScorerVersionIds.has(scorer) ? { versionId: pinnedScorerVersionIds.get(scorer) } : {}),
             },
             entity: {
               id: targetId,
@@ -666,6 +720,7 @@ export async function runStepScorersForItem(
                   name: scorer.name,
                   description: scorer.description ?? '',
                   hasJudge: !!scorer.judge,
+                  ...(pinnedScorerVersionIds.has(scorer) ? { versionId: pinnedScorerVersionIds.get(scorer) } : {}),
                 },
                 entity: {
                   id: targetId,

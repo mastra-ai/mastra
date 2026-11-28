@@ -1,7 +1,7 @@
+import type { FactoryRuleDecision } from '@internal/factory-contract';
 import { describe, expect, it } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
 import { boardRegistryOf, createBoardRegistry } from '../boards/registry.js';
-import type { FactoryRuleDecision } from './types.js';
 import {
   assertFactoryConfigVersion,
   assertFactoryDecisionTarget,

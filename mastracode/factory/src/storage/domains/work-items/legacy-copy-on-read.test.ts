@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 
+import type { ExternalWorkItemSource } from '@internal/factory-contract';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createIsolatedFactoryPostgresForTests, createLegacyCardTablesForTests } from '../../test-utils.js';
 import { WorkItemsStorage } from './base.js';
-import type { Card, ExternalWorkItemSource } from './base.js';
+import type { Card } from './base.js';
 import { Cards } from './cards.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;

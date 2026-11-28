@@ -1,3 +1,5 @@
+import { FACTORY_GITLAB_EVENTS } from '@internal/factory-contract';
+import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '@internal/factory-contract';
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
@@ -6,8 +8,6 @@ import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
-import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { closingLinksIn } from '../../work-items/closing-pull-requests.js';

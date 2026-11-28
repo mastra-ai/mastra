@@ -26,7 +26,23 @@ export interface WriteBatch {
   del(key: string): unknown;
   zAdd(key: string, member: { score: number; value: string }): unknown;
   zRem(key: string, member: string): unknown;
+  /**
+   * Guards a key's raw value until the batch applies: `value` is the bytes the caller read and
+   * decided on, or `null` when the key must still be absent. A batch that cannot honour a guard
+   * applies nothing and `exec()` throws {@link WritePreconditionError}, so the caller re-reads and
+   * re-decides rather than overwriting or deleting bytes it never saw. Needs a guarded batch
+   * ({@link guardedWriteBatch}); a plain MULTI cannot check it.
+   */
+  expect(key: string, value: string | null): unknown;
   exec(): Promise<unknown>;
+}
+
+/** A guarded key changed since the batch was planned: the caller must re-read and re-decide. */
+export class WritePreconditionError extends Error {
+  constructor() {
+    super('Write precondition failed: a guarded key changed since the batch was planned');
+    this.name = 'WritePreconditionError';
+  }
 }
 
 /**
@@ -135,11 +151,31 @@ redis.call('PEXPIRE', KEYS[1], ARGV[3])
 return 1
 `;
 
-// ARGV: generation, ownerId, then each command as its argument count followed by its arguments
-const FENCED_WRITE = `
-local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
-if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
-local i = 3
+/** A guarded key's expected raw value when the key must still be absent. Snapshot values are JSON. */
+const ABSENT = '__mastra_absent__';
+
+// KEYS: [1] the run's claim key, or '' when the write is not fenced; [2..1+G] the guarded keys;
+//       [2+G..] every key the write's commands touch.
+// ARGV: [1] generation ('' when unfenced), [2] ownerId, [3] guard count G, [4..3+G] each guarded
+//       key's expected raw value, then each command as its argument count followed by its arguments.
+// A guard that no longer matches, or a fence that is no longer current, aborts before any command
+// runs, so a rejected batch writes nothing. Returns 1 applied, 0 stale fence, -1 changed guard.
+const GUARDED_WRITE = `
+local guards = tonumber(ARGV[3])
+if ARGV[1] ~= '' then
+  local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
+  if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
+end
+for j = 1, guards do
+  local expected = ARGV[3 + j]
+  local current = redis.call('GET', KEYS[1 + j])
+  if expected == '${ABSENT}' then
+    if current then return -1 end
+  elseif current ~= expected then
+    return -1
+  end
+end
+local i = 4 + guards
 while i <= #ARGV do
   local n = tonumber(ARGV[i])
   redis.call(unpack(ARGV, i + 1, i + n))
@@ -265,19 +301,21 @@ export async function retireRunFence(client: ValkeyClient, fence: RunFence): Pro
 }
 
 /**
- * Collects writes and applies them in one script that first checks the run's
- * claim against the fence. A fence that is no longer current makes `exec()`
- * throw `RunFenceConflictError` without writing anything. Scripts run
- * atomically, so a takeover lands either before the batch (failing its check)
- * or after it.
+ * Collects writes and applies them in one script that first checks the run's fence and then every
+ * compare-and-set guard. A fence that is no longer current makes `exec()` throw
+ * `RunFenceConflictError`; a guarded key that changed makes it throw {@link WritePreconditionError};
+ * either way nothing is written. Scripts run atomically, so a takeover or a competing write lands
+ * either before the batch (failing its check) or after it.
  */
-class FencedWriteBatch implements WriteBatch {
+class GuardedWriteBatch implements WriteBatch {
   readonly #keys = new Set<string>();
   readonly #args: string[] = [];
+  readonly #guardedKeys: string[] = [];
+  readonly #guardedValues: string[] = [];
 
   constructor(
     private readonly client: ValkeyClient,
-    private readonly check: RunFenceCheck,
+    private readonly check?: RunFenceCheck,
   ) {}
 
   #add(key: string, ...command: string[]): this {
@@ -302,21 +340,81 @@ class FencedWriteBatch implements WriteBatch {
     return this.#add(key, 'ZREM', key, member);
   }
 
+  expect(key: string, value: string | null) {
+    this.#guardedKeys.push(key);
+    this.#guardedValues.push(value ?? ABSENT);
+    return this;
+  }
+
   async exec(): Promise<void> {
-    const { claims, fence, operation } = this.check;
+    const fence = this.check?.fence;
     const applied = await evalScript(
       this.client,
-      FENCED_WRITE,
-      [runClaimKey(claims, fence.runId), ...this.#keys],
-      [String(fence.generation), fence.ownerId, ...this.#args],
+      GUARDED_WRITE,
+      [fence ? runClaimKey(this.check!.claims, fence.runId) : '', ...this.#guardedKeys, ...this.#keys],
+      [
+        fence ? String(fence.generation) : '',
+        fence ? fence.ownerId : '',
+        String(this.#guardedKeys.length),
+        ...this.#guardedValues,
+        ...this.#args,
+      ],
     );
-    if (Number(applied) !== 1) throw new RunFenceConflictError(fence, operation);
+    if (Number(applied) === 0) throw new RunFenceConflictError(this.check!.fence, this.check!.operation);
+    if (Number(applied) !== 1) throw new WritePreconditionError();
   }
 }
 
-/** A MULTI transaction, or a fenced batch when `check` is set. */
+/** A plain MULTI transaction, for a write with no fence and no compare-and-set guards. */
+class MultiWriteBatch implements WriteBatch {
+  readonly #multi: ReturnType<ValkeyClient['multi']>;
+
+  constructor(client: ValkeyClient) {
+    this.#multi = client.multi();
+  }
+
+  set(key: string, value: string) {
+    this.#multi.set(key, value);
+    return this;
+  }
+
+  del(key: string) {
+    this.#multi.del(key);
+    return this;
+  }
+
+  zAdd(key: string, { score, value }: { score: number; value: string }) {
+    this.#multi.zAdd(key, { score, value });
+    return this;
+  }
+
+  zRem(key: string, member: string) {
+    this.#multi.zRem(key, member);
+    return this;
+  }
+
+  expect(): never {
+    throw new Error('expect() needs a guarded batch; build it with guardedWriteBatch()');
+  }
+
+  exec(): Promise<unknown> {
+    return this.#multi.exec();
+  }
+}
+
+/** A MULTI transaction, or a fenced script batch when `check` is set. */
 export function writeBatch(client: ValkeyClient, check: RunFenceCheck | undefined): WriteBatch {
-  return check ? new FencedWriteBatch(client, check) : client.multi();
+  return check ? new GuardedWriteBatch(client, check) : new MultiWriteBatch(client);
+}
+
+/**
+ * A batch that applies its writes, its fence check and every compare-and-set guard in one script.
+ * Use it for a read-decide-write — a relocation or a delete — where the decision must be atomic
+ * with the bytes it was based on: mark those bytes with `expect`, and a change to any of them
+ * throws {@link WritePreconditionError} without writing, so the caller can re-read and re-decide.
+ */
+export function guardedWriteBatch(client: ValkeyClient, check: RunFenceCheck | undefined): WriteBatch {
+  return new GuardedWriteBatch(client, check);
 }
 
 /**
@@ -324,5 +422,5 @@ export function writeBatch(client: ValkeyClient, check: RunFenceCheck | undefine
  * fence is no longer current, as the write itself would have been rejected.
  */
 export async function assertRunFence(client: ValkeyClient, check: RunFenceCheck | undefined): Promise<void> {
-  if (check) await new FencedWriteBatch(client, check).exec();
+  if (check) await new GuardedWriteBatch(client, check).exec();
 }

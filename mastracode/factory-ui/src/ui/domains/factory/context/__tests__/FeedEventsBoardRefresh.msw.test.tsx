@@ -8,19 +8,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { answerBoardPhases, versionedCard } from '../../../../../../e2e/ui/board-reads';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import {
+  renderHookWithProviders,
+  TEST_API,
+  TEST_BASE_URL,
+  waitForMutationsIdle,
+} from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { SessionActivity, SessionRowsRequest, SessionRowsResponse } from '../../../../../api/types';
-import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
-import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import {
+  useFactoryDecisionStatus,
   useBoardPhasesQuery,
   useSessionCardsQuery,
   useSessionWorkItemsQuery,
   useTransitionWorkItemMutation,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
-} from '../../../../../hooks/useWorkItems';
+} from '@mastra/react/hooks/factory';
+import { useSessionActivityQuery, useSessionRowsQuery } from '../../../../../hooks/useSessionRows';
 import { createQueryClient } from '../../../../../query-client';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
@@ -396,6 +401,163 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
+  describe('a move the server takes on and answers later', () => {
+    const PAST_THE_WAIT_FOR_AN_ANSWER_MS = 151_000;
+
+    /** The server answers the move `202`; the card reads `review` once `board.stage` says so. */
+    async function submitMove(stream: FeedStream) {
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, () => HttpResponse.json({ inputId: 'input-1' }, { status: 202 })),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      const shownStages = () => rendered.result.current.cards.data?.[0]?.stages;
+      await waitFor(() => expect(shownStages()).toEqual(['review']));
+      // The 202 is answered and frames keep coming: the move is still pending, the card where it was dragged.
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      expect(rendered.result.current.move.isPending).toBe(true);
+      expect(shownStages()).toEqual(['review']);
+      return { rendered, requests, board, shownStages };
+    }
+
+    it('stays pending until the feed says it landed, then reads the card the server holds', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, board, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      board.stage = 'review';
+      stream.move({ inputId: 'input-1', status: 'accepted' });
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['review']);
+    });
+
+    it('settles from an answer the feed carried before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { requests, board } = boardEndpoints();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          // The move settled before the route's answer got back: its frame comes first.
+          board.stage = 'review';
+          stream.move({ inputId: 'input-1', status: 'accepted' });
+          stream.push();
+          await answered;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      const before = { ...requests };
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      // The frame after the answer was read, so the answer was too, with nobody waiting for it yet.
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+      await waitFor(() => expect(requests.decisions).toBeGreaterThan(before.decisions));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answer();
+      await waitFor(() => expect(rendered.result.current.move.data).toEqual({ status: 'landed', inputId: 'input-1' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
+    it('stops waiting at once when the stream dropped and came back before the 202 arrived', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      server.use(stream.handler);
+      const { board } = boardEndpoints();
+      let answer = () => {};
+      const answered = new Promise<void>(resolve => {
+        answer = resolve;
+      });
+      server.use(
+        http.post(`${BOARD_URL}/item-1/transition`, async () => {
+          await answered;
+          return HttpResponse.json({ inputId: 'input-1' }, { status: 202 });
+        }),
+      );
+      const rendered = await renderQuietBoard(stream);
+      const [item] = rendered.result.current.cards.data ?? [];
+      if (!item) throw new Error('the board never loaded its card');
+      act(() => rendered.result.current.move.mutate({ item, board: 'review', stage: 'review' }));
+      await waitFor(() => expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']));
+
+      // The move landed while the stream was down: its frame went by with nobody to read it.
+      board.stage = 'review';
+      const opened = stream.opens;
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.opens).toBeGreaterThan(opened));
+      expect(rendered.result.current.move.isPending).toBe(true);
+
+      answer();
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.cards.data?.[0]?.stages).toEqual(['review']);
+    });
+
+    it('puts the card back when the feed says it was refused', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, shownStages } = await submitMove(stream);
+
+      stream.move({ inputId: 'input-1', status: 'rejected', code: 'card_busy', reason: 'The card is busy.' });
+      await waitFor(() => expect(rendered.result.current.move.data).toMatchObject({ status: 'rejected' }));
+      await waitForMutationsIdle(rendered.client);
+      expect(rendered.result.current.move.data).toEqual({
+        inputId: 'input-1',
+        status: 'rejected',
+        code: 'card_busy',
+        reason: 'The card is busy.',
+      });
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when no answer comes, and shows where the server holds the card', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, requests, shownStages } = await submitMove(stream);
+      const moving = { ...requests };
+
+      // Whoever took the move on never answers. The stream stays alive, as a live server keeps it.
+      for (let waited = 0; waited < PAST_THE_WAIT_FOR_AN_ANSWER_MS; waited += SERVER_PING_EVERY_MS) {
+        stream.ping();
+        await act(() => vi.advanceTimersByTimeAsync(SERVER_PING_EVERY_MS));
+      }
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(requests.cards).toBeGreaterThan(moving.cards);
+      expect(shownStages()).toEqual(['intake']);
+    });
+
+    it('stops waiting when the stream dropped and came back, since the answer may have gone by', async () => {
+      const stream = pushableFeedStream(PROJECT_ID);
+      const { rendered, board, shownStages } = await submitMove(stream);
+
+      board.stage = 'review';
+      stream.close();
+      await act(() => vi.advanceTimersByTimeAsync(PAST_ONE_STREAM_RETRY_MS));
+      await waitFor(() => expect(stream.open).toBe(true));
+      await waitFor(() =>
+        expect(rendered.result.current.move.data).toEqual({ status: 'unanswered', inputId: 'input-1' }),
+      );
+      await waitForMutationsIdle(rendered.client);
+      expect(shownStages()).toEqual(['review']);
+    });
+  });
+
   it('keeps a card in the column it is moving to when a poll comes round before the move settles', async () => {
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 404 })));
     const { board } = boardEndpoints();
@@ -582,8 +744,8 @@ describe('FeedEventsProvider, on a draft page', () => {
     );
     const rendered = renderHookWithProviders(
       () => ({
-        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
-        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        starters: useQuery(workItemStartersQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID))),
+        activity: useQuery(workItemActivityQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID), 'week')),
       }),
       { inner },
     );
@@ -621,8 +783,8 @@ describe('FeedEventsProvider, on a draft page', () => {
     );
     const rendered = renderHookWithProviders(
       () => ({
-        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
-        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        starters: useQuery(workItemStartersQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID))),
+        activity: useQuery(workItemActivityQueryOptions(TEST_API.mastra.getFactory(PROJECT_ID), 'week')),
         decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
       }),
       { inner },

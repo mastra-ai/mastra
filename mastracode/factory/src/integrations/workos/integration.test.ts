@@ -1,8 +1,8 @@
+import type { AuditEventRow } from '@internal/factory-contract';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
-import type { AuditEventRow } from '../../storage/domains/audit/base.js';
 import type { IntegrationContext } from '../base.js';
 import { toWorkOSEvent, WorkOSAuditIntegration } from './integration.js';
 
