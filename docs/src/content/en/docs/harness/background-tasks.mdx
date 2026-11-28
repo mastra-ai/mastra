@@ -125,9 +125,9 @@ export const researcher = new Agent({
 })
 ```
 
-Both act as defaults. For each tool the agent has opted in, `defaultDisposition` resolves as the tool entry's own value, then the agent-wide value, then the tool's own `background` config, then `deferred`; `modelOverrides` resolves the same way but defaults to `true`. `enabled` is never inherited, so agent-wide fields can't opt a tool in on their own.
+Both act as defaults. For each tool the agent has opted in, `defaultDisposition` resolves as the tool entry's own value, then the agent-wide value, then the tool's own `background` config, then `deferred`. `modelOverrides` resolves the same way but defaults to `true`. `enabled` is never inherited, so agent-wide fields can't opt a tool in on their own.
 
-Agent-wide values apply to named entries too, so a plain `tools: { research: true }` inherits them; an entry can still opt out per tool with its own `defaultDisposition` or `modelOverrides`. `defaultDisposition` accepts `'foreground'` or `'deferred'`, so `awaited` remains a per-call `_background` choice.
+Agent-wide values apply to named entries too, so a plain `tools: { research: true }` inherits them. An entry can still opt out per tool with its own `defaultDisposition` or `modelOverrides`. `defaultDisposition` accepts `'foreground'` or `'deferred'`, so `awaited` remains a per-call `_background` choice.
 
 ### LLM per-call override
 

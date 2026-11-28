@@ -58,7 +58,7 @@ describe('injectBackgroundTaskPrompt', () => {
     expect(systemContent).toContain('_background');
   });
 
-  it('honors agentBackgroundConfig.tools = "all" to enable injection for all tools', () => {
+  it('keeps guidance name-independent under agentBackgroundConfig.tools = "all"', () => {
     const inputMessages = makePrompt();
     const result = injectBackgroundTaskPrompt({
       inputMessages,
@@ -67,8 +67,18 @@ describe('injectBackgroundTaskPrompt', () => {
       agentBackgroundConfig: { tools: 'all' },
     });
     const systemContent = (result[0] as { content: string }).content;
-    expect(systemContent).toContain('foo');
-    expect(systemContent).toContain('bar');
+    expect(systemContent).toContain('Every tool supports background execution');
+    expect(systemContent).not.toContain('foo');
+    expect(systemContent).not.toContain('bar');
+
+    // The same text however many tools the agent has: no per-tool growth (#31614).
+    const many = injectBackgroundTaskPrompt({
+      inputMessages: makePrompt(),
+      backgroundTaskManager: fakeManager,
+      tools: Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`tool-${i}`, {}])),
+      agentBackgroundConfig: { tools: 'all' },
+    });
+    expect((many[0] as { content: string }).content).toBe(systemContent);
   });
 
   it('returns inputMessages unchanged when no tool is background-eligible (issue #22724)', () => {
