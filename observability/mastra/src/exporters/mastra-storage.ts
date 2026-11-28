@@ -2,7 +2,9 @@ import type { Mastra } from '@mastra/core';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  AnyExportedSpan,
   TracingEvent,
+  SpanFilteredEvent,
   InitExporterOptions,
   MetricEvent,
   LogEvent,
@@ -469,7 +471,7 @@ export class MastraStorageExporter extends BaseExporter {
         partials.push({
           traceId: span.traceId,
           spanId: span.id,
-          updates: buildUpdateSpanRecord(span),
+          updates: 'closeOnly' in event ? { endedAt: span.endTime ?? null } : buildUpdateSpanRecord(span),
         });
         sent.push(event);
       } else {
@@ -780,6 +782,32 @@ export class MastraStorageExporter extends BaseExporter {
 
     this.fallBackFromRealtimeUnderDurableExecution();
     this.#eventBuffer.addEvent({ ...event, exportedSpan: withSpanPreviews(event.exportedSpan) });
+    await this.handleBatchedFlush();
+  }
+
+  /**
+   * `spanFilter` dropped the end of a span whose start is stored. Set the
+   * span's end time, so it does not stay open. Strategies that do not write a
+   * row for a span's start have nothing to close.
+   */
+  async onSpanFilteredEvent(event: SpanFilteredEvent): Promise<void> {
+    await this.ensureInitialized();
+    if (!this.#observabilityStorage) return;
+
+    this.fallBackFromRealtimeUnderDurableExecution();
+    if (this.#resolvedStrategy !== 'realtime' && this.#resolvedStrategy !== 'batch-with-updates') return;
+
+    // Ride the span-end path, so the close waits for the span's create and is retried the same way.
+    this.#eventBuffer.addEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: {
+        id: event.spanId,
+        traceId: event.traceId,
+        endTime: event.endTime,
+        isEvent: false,
+      } as AnyExportedSpan,
+      closeOnly: true,
+    });
     await this.handleBatchedFlush();
   }
 

@@ -10,6 +10,7 @@ import type {
   InitExporterOptions,
   ModelGenerationAttributes,
   ScoreEvent,
+  SpanFilteredEvent,
   TracingEvent,
   UsageStats,
 } from '@mastra/core/observability';
@@ -192,6 +193,16 @@ export class LaminarExporter extends BaseExporter {
     }
 
     await this.handleSpanEnded(event.exportedSpan);
+  }
+
+  /** `spanFilter` dropped this span's end. Stop tracking the span, so its trace state can be freed. */
+  async onSpanFilteredEvent(event: SpanFilteredEvent): Promise<void> {
+    const traceState = this.traceMap.get(event.traceId);
+    if (!traceState?.activeSpanIds.delete(event.spanId)) return;
+
+    if (traceState.activeSpanIds.size === 0) {
+      this.traceMap.delete(event.traceId);
+    }
   }
 
   private handleSpanStarted(span: AnyExportedSpan): void {

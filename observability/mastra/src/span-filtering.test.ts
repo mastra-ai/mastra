@@ -1,6 +1,12 @@
 import { RequestContext } from '@mastra/core/di';
-import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
-import type { TracingEvent, MetricEvent, ObservabilityExporter, AnyExportedSpan } from '@mastra/core/observability';
+import { EntityType, SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
+import type {
+  TracingEvent,
+  MetricEvent,
+  ObservabilityExporter,
+  AnyExportedSpan,
+  SpanFilteredEvent,
+} from '@mastra/core/observability';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 import { PricingRegistry } from './metrics/pricing-registry';
@@ -365,6 +371,304 @@ describe('Span Filtering', () => {
       const spanNames = testExporter.events.map(e => e.exportedSpan.name);
       expect(spanNames).toContain('prod-agent');
       expect(spanNames).not.toContain('dev-agent');
+    });
+
+    it('should reparent descendants of a span the filter drops so exporters see no orphans', () => {
+      // Same tree as the excludeSpanTypes case above, dropped through spanFilter.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.type !== SpanType.MODEL_STEP,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+      const stepSpan = modelSpan.createChildSpan({ type: SpanType.MODEL_STEP, name: 'test-step' });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      stepSpan.createEventSpan({ type: SpanType.MODEL_CHUNK, name: 'chunk' });
+
+      toolSpan.end();
+      stepSpan.end();
+      modelSpan.end();
+      agentSpan.end();
+
+      const exported = testExporter.events.map(e => e.exportedSpan);
+      const exportedIds = new Set(exported.map(s => s.id));
+      expect(exported.map(s => s.type)).not.toContain(SpanType.MODEL_STEP);
+      expect(exported.find(s => s.type === SpanType.TOOL_CALL)?.parentSpanId).toBe(modelSpan.id);
+      expect(exported.find(s => s.type === SpanType.MODEL_CHUNK)?.parentSpanId).toBe(modelSpan.id);
+      expect(exported.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId))).toEqual([]);
+    });
+
+    it('should reparent children created under a rebuilt span the filter drops', () => {
+      // Durable engines rebuild a span in a later step. A rebuilt span sends no start event.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.type !== SpanType.WORKFLOW_STEP,
+      });
+
+      const runSpan = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
+      const stepSpan = runSpan.createChildSpan({ type: SpanType.WORKFLOW_STEP, name: 'step' });
+
+      const rebuiltStep = tracing.rebuildSpan(stepSpan.snapshot!());
+      const toolSpan = rebuiltStep.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      // The tool call also ends in a later step, from its own snapshot.
+      tracing.rebuildSpan(toolSpan.snapshot!()).end();
+
+      const toolEvents = testExporter.events.filter(e => e.exportedSpan.type === SpanType.TOOL_CALL);
+      expect(toolEvents.map(e => [e.type, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_started', runSpan.id],
+        ['span_ended', runSpan.id],
+      ]);
+    });
+
+    it('should give the filter the same parent whether or not it dropped that parent', () => {
+      // A filter that reads the parent must keep its answers: here it keeps every span that has a parent.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.parentSpanId),
+      });
+
+      const runSpan = tracing.startSpan({ type: SpanType.WORKFLOW_RUN, name: 'workflow' });
+      const agentSpan = runSpan.createChildSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      // Durable engines end a span from its snapshot. The filter must see the same parent there too.
+      tracing.rebuildSpan(toolSpan.snapshot!()).end();
+      agentSpan.end();
+      runSpan.end();
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_started', 'agent', undefined],
+        ['span_started', "tool: 'my_tool'", agentSpan.id],
+        ['span_ended', "tool: 'my_tool'", agentSpan.id],
+        ['span_ended', 'agent', undefined],
+      ]);
+    });
+
+    it('should keep each span under its parent when the filter drops every start', () => {
+      // An errors-only filter reads data set at the end, so no start passes. Exporters
+      // that write spans when they end must still get the tree.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.errorInfo),
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
+      const toolSpan = agentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      const innerSpan = toolSpan.createChildSpan({ type: SpanType.GENERIC, name: 'inner' });
+      const error = new Error('boom');
+      // Durable engines end a span from its snapshot. It must keep its parent there too.
+      tracing.rebuildSpan(innerSpan.snapshot!()).error({ error, endSpan: true });
+      toolSpan.error({ error, endSpan: true });
+      agentSpan.error({ error, endSpan: true });
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_ended', 'inner', toolSpan.id],
+        ['span_ended', 'tool', agentSpan.id],
+        ['span_ended', 'agent', undefined],
+      ]);
+    });
+
+    it('should keep an event span under its parent when the filter drops every start', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => Boolean(span.endTime),
+      });
+
+      const stepSpan = tracing.startSpan({ type: SpanType.MODEL_STEP, name: 'step' });
+      // An event span is exported once, when it is created. Its parent is still open then.
+      stepSpan.createEventSpan({ type: SpanType.MODEL_CHUNK, name: 'chunk' });
+      stepSpan.end();
+
+      expect(testExporter.events.map(e => [e.type, e.exportedSpan.name, e.exportedSpan.parentSpanId])).toEqual([
+        ['span_ended', 'chunk', stepSpan.id],
+        ['span_ended', 'step', undefined],
+      ]);
+    });
+
+    it('should not tell exporters to close a span whose start a processor dropped', async () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        // The processor hides a span while it is open. The filter drops it once it has ended.
+        spanOutputProcessors: [
+          { name: 'hide-open-spans', process: span => (span?.endTime ? span : undefined), shutdown: async () => {} },
+        ],
+        spanFilter: span => !span.endTime,
+      });
+
+      tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' }).end();
+      await tracing.flush();
+
+      expect(testExporter.events).toEqual([]);
+      expect(closed).toEqual([]);
+    });
+
+    it('should tell exporters to close a span when the filter drops only its end', async () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => {
+          // Dropped from the start: exporters never see this span.
+          if (span.type === SpanType.MODEL_STEP) return false;
+          // Kept at the start, because success is not set until the tool call ends.
+          return !(span.type === SpanType.TOOL_CALL && span.attributes?.success);
+        },
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const stepSpan = agentSpan.createChildSpan({ type: SpanType.MODEL_STEP, name: 'test-step' });
+      const toolSpan = stepSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: "tool: 'my_tool'",
+        attributes: { toolId: 'my_tool', toolType: 'function' },
+      });
+      toolSpan.end({ attributes: { success: true } });
+      stepSpan.end();
+      agentSpan.end();
+      await tracing.flush();
+
+      expect(closed).toEqual([
+        { type: 'span_filtered', traceId: toolSpan.traceId, spanId: toolSpan.id, endTime: toolSpan.endTime },
+      ]);
+    });
+
+    it('should close a span rebuilt after an update changed the answer of the filter', async () => {
+      const closed: SpanFilteredEvent[] = [];
+      const exporter = Object.assign(testExporter, {
+        onSpanFilteredEvent: async (event: SpanFilteredEvent) => void closed.push(event),
+      });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => span.metadata?.hide !== true,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      // Exporters receive the start of this span, then an update hides it.
+      const toolSpan = agentSpan.createChildSpan({ type: SpanType.TOOL_CALL, name: "tool: 'my_tool'" });
+      toolSpan.update({ metadata: { hide: true } });
+      // Durable engines end a span from its snapshot, in a process that did not see its start.
+      const rebuiltToolSpan = tracing.rebuildSpan(toolSpan.snapshot!());
+      rebuiltToolSpan.end();
+      agentSpan.end();
+      await tracing.flush();
+
+      expect(closed).toEqual([
+        { type: 'span_filtered', traceId: toolSpan.traceId, spanId: toolSpan.id, endTime: rebuiltToolSpan.endTime },
+      ]);
+    });
+
+    it('should deliver the close after the start of a span that starts and ends in the same tick', async () => {
+      const handled: string[] = [];
+      const exporter: ObservabilityExporter = {
+        name: 'slow-start-exporter',
+        async exportTracingEvent(event) {
+          // Exporters do async work before they register a span.
+          await new Promise(resolve => setTimeout(resolve, 5));
+          handled.push(event.type);
+        },
+        async onSpanFilteredEvent() {
+          handled.push('span_filtered');
+        },
+        async flush() {},
+        async shutdown() {},
+      };
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+        spanFilter: span => !span.endTime,
+      });
+
+      tracing.startSpan({ type: SpanType.TOOL_CALL, name: "tool: 'my_tool'" }).end();
+      await tracing.flush();
+
+      expect(handled).toEqual(['span_started', 'span_filtered']);
+    });
+
+    it('should still drop every span of an entity when the filter drops that entity', () => {
+      // Documented filter. The children carry the agent's entity only because they inherit it.
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+        spanFilter: span => span.entityId !== 'noisy-agent',
+      });
+
+      const runSpan = tracing.startSpan({
+        type: SpanType.WORKFLOW_RUN,
+        name: 'workflow',
+        entityType: EntityType.WORKFLOW_RUN,
+        entityId: 'my-workflow',
+      });
+      const agentSpan = runSpan.createChildSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'noisy agent run',
+        entityType: EntityType.AGENT,
+        entityId: 'noisy-agent',
+      });
+      const modelSpan = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-model',
+        attributes: { model: 'gpt-4', provider: 'openai' },
+      });
+
+      modelSpan.end();
+      agentSpan.end();
+      runSpan.end();
+
+      expect([...new Set(testExporter.events.map(e => e.exportedSpan.type))]).toEqual([SpanType.WORKFLOW_RUN]);
     });
   });
 
@@ -858,6 +1162,39 @@ describe('Span Filtering', () => {
       const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
       expect(inputTokenMetrics).toHaveLength(1);
       expect(inputTokenMetrics[0]!.metric.value).toBe(50);
+
+      await tracing.shutdown();
+    });
+
+    it('should still emit token metrics for an internal model call when the filter drops its only ancestor', async () => {
+      // A processor's own model call is internal. Its usage is reported through the nearest ancestor.
+      const collector = new MetricCollectingExporter();
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [collector],
+        spanFilter: span => span.type !== SpanType.AGENT_RUN,
+      });
+
+      const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'test-agent' });
+      const hiddenModel = agentSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      });
+      hiddenModel.end({
+        attributes: {
+          provider: 'mock-provider',
+          model: 'mock-model-id',
+          usage: { inputTokens: 50, outputTokens: 10 },
+        },
+      });
+      agentSpan.end();
+      await tracing.flush();
+
+      const inputTokenMetrics = collector.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+      expect(inputTokenMetrics.map(e => e.metric.value)).toEqual([50]);
 
       await tracing.shutdown();
     });

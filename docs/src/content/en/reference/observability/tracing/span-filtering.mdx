@@ -32,7 +32,7 @@ export const mastra = new Mastra({
         exporters: [new MastraStorageExporter(), new LangfuseExporter()],
         excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
         spanFilter: span => {
-          if (span.type === SpanType.TOOL_CALL && span.attributes?.success) {
+          if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') {
             return false
           }
 
@@ -86,7 +86,7 @@ import { SpanType } from '@mastra/core/observability'
 
 spanFilter: span => {
   if (span.type === SpanType.MODEL_CHUNK) return false
-  if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false
+  if (span.type === SpanType.MODEL_INFERENCE && span.entityName === 'judge') return false
 
   return true
 }
@@ -112,6 +112,20 @@ Span filtering happens at export time in this order:
 1. `spanFilter` decides whether to keep the final exported span.
 
 If `spanFilter` throws an error, Mastra keeps the span and logs the error to avoid silent data loss.
+
+## Start and end events
+
+Mastra calls `spanFilter` on each event of a span: when it starts, on each update, and when it ends. Data set at the end, such as `output` or `attributes.success`, isn't available at the start.
+
+| Filter result | What exporters receive |
+| - | - |
+| Drops every event | Nothing. A child whose start was kept attaches to the nearest ancestor whose start was exported, or has no parent when there is none. |
+| Keeps the start, drops the end | Exporters that write a span when it starts close it at its end time, without its end-time data. These are `MastraStorageExporter` with the `realtime` or `batch-with-updates` strategy, Braintrust, LangSmith, and Sentry. Exporters that write a span when it ends never write it, so its children have no parent there. These are Langfuse, the OpenTelemetry exporters, and `MastraStorageExporter` with the `insert-only` strategy. |
+| Drops the start, keeps the end | Exporters that write a span when it ends receive the span under its original parent. A filter on errors or duration does this for every span. The trace then keeps its shape in these exporters. When the start of an ancestor was exported, a child whose start was kept attaches above the span, to that ancestor. Its event spans, and its children in an OpenTelemetry bridge, can do the same. |
+
+To keep a connected tree in every exporter, return the same answer for every event of a span. A filter on the span type or entity always does this.
+
+A custom exporter that opens a span on its start event can implement [`onSpanFilteredEvent`](/reference/observability/tracing/interfaces#observabilityexporter) to close a span whose end was dropped.
 
 ## Related
 

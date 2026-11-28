@@ -106,6 +106,30 @@ describe('LaminarExporter', () => {
     expect(exportedChild.attributes['gen_ai.usage.cache_creation_input_tokens']).toBe(2);
   });
 
+  it('frees the trace state when spanFilter dropped the end of the last open span', async () => {
+    const span = {
+      id: '0000000000000001',
+      traceId: '00000000000000000000000000000001',
+      type: SpanType.TOOL_CALL,
+      name: 'tool',
+      startTime: new Date(),
+      isEvent: false,
+      isRootSpan: true,
+    } as unknown as AnyExportedSpan;
+    const traceMap: Map<string, unknown> = (exporter as any).traceMap;
+
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+    expect(traceMap.size).toBe(1);
+
+    await exporter.onSpanFilteredEvent({
+      type: 'span_filtered',
+      traceId: span.traceId,
+      spanId: span.id,
+      endTime: new Date(),
+    });
+    expect(traceMap.size).toBe(0);
+  });
+
   it('converts OTEL IDs to UUIDs for evaluator score API', async () => {
     const fetchSpy = vi
       .spyOn(globalThis, 'fetch')

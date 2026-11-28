@@ -2361,3 +2361,48 @@ describe('MastraStorageExporter realtime strategy with durable execution', () =>
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+describe('MastraStorageExporter with a spanFilter that drops a span end', () => {
+  it.each(['realtime', 'batch-with-updates'] as const)(
+    'closes the stored span and keeps what its start stored (%s)',
+    async strategy => {
+      const storage = new InMemoryStore();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'support',
+            exporters: [new MastraStorageExporter({ strategy })],
+            // Keeps a tool call when it starts, because its result is not known yet.
+            spanFilter: span => !(span.type === SpanType.TOOL_CALL && span.attributes?.success),
+          },
+        },
+      });
+      const mastra = new Mastra({ storage, observability, logger: false });
+      try {
+        const tracing = observability.getDefaultInstance()!;
+        const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'support agent' });
+        const tool = agent.createChildSpan({
+          type: SpanType.TOOL_CALL,
+          name: "tool: 'lookup_order'",
+          input: { orderId: '42' },
+          attributes: { toolId: 'lookup_order' },
+        });
+        tool.end({ output: { status: 'shipped' }, attributes: { success: true } });
+        agent.end();
+        await tracing.flush();
+
+        const store = (await storage.getStore('observability'))!;
+        const stored = (await store.getSpan({ traceId: tool.traceId, spanId: tool.id }))?.span;
+        expect(stored?.endedAt).toEqual(tool.endTime);
+        expect(stored).toMatchObject({
+          name: "tool: 'lookup_order'",
+          input: { orderId: '42' },
+          attributes: { toolId: 'lookup_order' },
+        });
+        expect(stored?.output ?? null).toBeNull();
+      } finally {
+        await mastra.shutdown();
+      }
+    },
+  );
+});

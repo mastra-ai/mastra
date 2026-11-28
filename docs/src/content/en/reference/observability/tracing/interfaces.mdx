@@ -283,6 +283,9 @@ interface ObservabilityExporter {
   /** Handle tracing events */
   onTracingEvent?(event: TracingEvent): void | Promise<void>
 
+  /** Close a span whose end `spanFilter` dropped after its start was exported */
+  onSpanFilteredEvent?(event: SpanFilteredEvent): void | Promise<void>
+
   /** Handle log events */
   onLogEvent?(event: LogEvent): void | Promise<void>
 

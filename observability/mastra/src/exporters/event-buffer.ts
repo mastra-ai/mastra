@@ -22,7 +22,13 @@ export interface UpdateSpanPartial {
 }
 
 /** An observability event augmented with retry tracking for the buffer. */
-export type BufferableEvent = Exclude<ObservabilityEvent, { type: 'feedback_replacement' | 'feedback_review_status' }>;
+export type BufferableEvent = Exclude<
+  ObservabilityEvent,
+  { type: 'feedback_replacement' | 'feedback_review_status' | 'span_filtered' }
+> & {
+  /** A span end that only sets the end time, because `spanFilter` dropped the span's own end event. */
+  closeOnly?: true;
+};
 export type BufferedEvent = BufferableEvent & RetryCount;
 
 /**
