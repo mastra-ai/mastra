@@ -3,7 +3,6 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CloneThreadControl } from '../clone-thread-control';
 import { MemorySidebarView } from '../memory-sidebar-view';
-import { ObservationalMemoryDisplay } from '../observational-memory-display';
 
 afterEach(cleanup);
 
@@ -16,26 +15,6 @@ const progress = {
   observationTokensThreshold: 800,
   isReflecting: false,
 };
-
-describe('ObservationalMemoryDisplay', () => {
-  it('renders loading, disabled, and enabled progress from host data', () => {
-    const onAnalyze = vi.fn();
-    const { rerender } = render(<ObservationalMemoryDisplay {...progress} isLoading isEnabled onAnalyze={onAnalyze} />);
-    expect(screen.queryByRole('button', { name: 'Analyze observations' })).toBeNull();
-
-    rerender(<ObservationalMemoryDisplay {...progress} isLoading={false} isEnabled={false} onAnalyze={onAnalyze} />);
-    expect(screen.getByRole('link', { name: /Learn about Observational Memory/i }).getAttribute('href')).toContain(
-      'observational-memory',
-    );
-    expect(screen.queryByRole('button', { name: 'Analyze observations' })).toBeNull();
-
-    rerender(<ObservationalMemoryDisplay {...progress} isLoading={false} isEnabled onAnalyze={onAnalyze} />);
-    expect(screen.getByText('1.5k')).toBeTruthy();
-    expect(screen.getByText('400')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze observations' }));
-    expect(onAnalyze).toHaveBeenCalledOnce();
-  });
-});
 
 describe('CloneThreadControl', () => {
   it('delegates clone and prevents repeat actions while cloning or disabled', () => {

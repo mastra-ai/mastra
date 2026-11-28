@@ -127,7 +127,7 @@ export type DashboardExpand = {
  * One kind of widget, self-contained: the renderer only looks it up by name, checks each view's
  * options against `optionsSchema`, sends what `discover` then `requests` plan, and renders
  * `component` with the answers. A kind planning neither sends nothing; its component may still fetch
- * on its own (`ViewGate`, `useDashboardRequests`), but then only `DashboardRenderer` can host it.
+ * on its own (`useDashboardRequests`), but then only `DashboardRenderer` can host it.
  */
 export type WidgetKind<Options = unknown> = {
   kind: string;

@@ -1,4 +1,3 @@
-export { DateRangeSelector } from './date-range-selector';
 export { MetricsTimeRangeChip } from './metrics-time-range-chip';
 export {
   OpenErrorsInLogsButton,
