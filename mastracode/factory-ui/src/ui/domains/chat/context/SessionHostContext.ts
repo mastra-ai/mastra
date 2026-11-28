@@ -1,10 +1,14 @@
 import { createContext, useContext } from 'react';
 import type { AnchorHTMLAttributes, ComponentType } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { FactoryProject, FactoryUserSession, LinkedRepositoryPayload, WorkItem } from '@internal/factory-contract';
-import type { ChangeRequestProvider, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
-
-import type { FactoryAuthState } from '../../auth/services/auth';
+import type {
+  FactoryProject,
+  FactoryUserSession,
+  LinkedRepositoryPayload,
+  WorkItem,
+  ChangeRequestProvider,
+  PullRequestSubscription,
+} from '@internal/factory-contract';
 
 import type { ModelDefaultsAnchor, SettingsSection, VOICE_INPUT_ANCHOR } from '../services/sessionSettings';
 
@@ -74,10 +78,17 @@ export interface CreateUserSessionInput {
  * it makes to them. Hooks keep the host's cache, so loading and error states
  * are the host's own.
  */
+/** Who is looking at the session, as far as the view needs to know. */
+export interface SessionViewer {
+  /** Whether the host signs people in at all; without it there is no one to tell apart. */
+  authEnabled: boolean;
+  user?: { userId?: string; name?: string; avatarUrl?: string };
+}
+
 export interface SessionHostData {
   useProject(projectId: string | undefined): UseQueryResult<FactoryProject | undefined>;
   useProjects(): UseQueryResult<FactoryProject[]>;
-  useViewer(options?: { monitorSession?: boolean }): UseQueryResult<FactoryAuthState>;
+  useViewer(options?: { monitorSession?: boolean }): UseQueryResult<SessionViewer>;
   useUserSession(sessionId: string | undefined): UseQueryResult<FactoryUserSession>;
   useSessionList(projectId: string | undefined): UseQueryResult<SessionList>;
   /**

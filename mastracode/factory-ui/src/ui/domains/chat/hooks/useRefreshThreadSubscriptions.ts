@@ -1,7 +1,7 @@
 import { useSessionHost } from '../context/SessionHostContext';
 import { useEffect, useRef } from 'react';
 
-import type { ChangeRequestProvider } from '@mastra/playground-ui/domains/factory';
+import type { ChangeRequestProvider } from '@internal/factory-contract';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import type { TranscriptState } from '../services/transcript';

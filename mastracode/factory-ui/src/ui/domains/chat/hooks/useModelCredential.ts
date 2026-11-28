@@ -3,7 +3,7 @@ import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
-import type { FactoryAuthState } from '../../auth/services/auth';
+import type { SessionViewer } from '../context/SessionHostContext';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -24,7 +24,7 @@ export interface ModelCredential {
 
 function personalHolder(
   owner: ThreadOwner | undefined,
-  viewer: FactoryAuthState['user'],
+  viewer: SessionViewer['user'],
   isDraft: boolean,
 ): CredentialHolder {
   if (owner && owner.id !== viewer?.userId) {
@@ -37,7 +37,7 @@ function personalHolder(
 function resolveHolder(
   credentialHolder: ModelCredentialHolder,
   owner: ThreadOwner | undefined,
-  viewer: FactoryAuthState['user'],
+  viewer: SessionViewer['user'],
   isDraft: boolean,
 ): CredentialHolder {
   switch (credentialHolder) {

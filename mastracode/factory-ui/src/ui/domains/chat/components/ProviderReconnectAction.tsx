@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import type { FactoryAuthState } from '../../auth/services/auth';
+import type { SessionViewer } from '../context/SessionHostContext';
 import { sessionDefaultsAnchor } from '../services/sessionSettings';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -11,7 +11,7 @@ import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRig
 function teammatePayingForSession(
   modelScope: 'factory' | 'user' | undefined,
   owner: ThreadOwner | undefined,
-  auth: FactoryAuthState | undefined,
+  auth: SessionViewer | undefined,
 ): ThreadOwner | undefined {
   if (modelScope !== 'user' || !owner || !auth?.authEnabled) return undefined;
   if (owner.id === auth.user?.userId) return undefined;

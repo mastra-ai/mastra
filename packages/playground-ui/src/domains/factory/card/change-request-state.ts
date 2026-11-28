@@ -1,17 +1,7 @@
+import type { ChangeRequestProvider, PullRequestSubscription } from '@internal/factory-contract';
 import type { CardChangeRequest, PullRequestStatus } from '@mastra/client-js';
 
-/** Which source-control provider serves the subscriptions route. */
-export type ChangeRequestProvider = 'github' | 'gitlab';
-
-export interface PullRequestSubscription {
-  id: string;
-  repoFullName: string;
-  pullRequestNumber: number;
-  status: 'open' | 'closed' | 'merged';
-  /** Absent on older servers. */
-  updatedAt?: string;
-  url: string;
-}
+export type { ChangeRequestProvider, PullRequestSubscription };
 
 interface ChangeRequestTerms {
   kind: 'PR' | 'MR';

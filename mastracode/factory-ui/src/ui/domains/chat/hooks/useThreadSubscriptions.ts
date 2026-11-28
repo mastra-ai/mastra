@@ -1,5 +1,5 @@
 import { useSessionHost } from '../context/SessionHostContext';
-import type { ChangeRequestProvider, PullRequestSubscription } from '@mastra/playground-ui/domains/factory';
+import type { ChangeRequestProvider, PullRequestSubscription } from '@internal/factory-contract';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 
 const NO_SUBSCRIPTIONS: PullRequestSubscription[] = [];
