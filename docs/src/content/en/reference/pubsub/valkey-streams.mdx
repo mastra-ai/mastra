@@ -90,7 +90,7 @@ export const mastra = new Mastra({
     name: 'reclaimIdleMs',
     type: 'number',
     description:
-      'Minimum idle time before an event can be reclaimed. Keep it at 30000 or more for evented workflows: a step event reclaimed sooner can be dropped as a duplicate.',
+      'Minimum idle time before an event can be reclaimed. Keep this well above typical processing time to avoid double delivery.',
     isOptional: true,
     defaultValue: '60000',
   },
@@ -105,7 +105,7 @@ export const mastra = new Mastra({
     name: 'inFlightTimeoutMs',
     type: 'number',
     description:
-      'How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. `0` disables it.',
+      "How long a handler may hold an event without acking or nacking before the reclaim loop nacks it on its behalf. The event is republished with an incremented `deliveryAttempt`, so `maxDeliveryAttempts` still applies. Set this to recover hung handlers in single-consumer groups. The reclaim loop checks the timeout on each pass, and the orchestration worker's heartbeat resets it every `leaseRenewIntervalMs` (10 seconds by default). Keep it above that interval, or an evented workflow step that's still running can be delivered again. `0` disables it.",
     isOptional: true,
     defaultValue: '0',
   },

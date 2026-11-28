@@ -101,14 +101,6 @@ export function describeResumeOccurrenceCases({
       }
     }
 
-    /** Re-delivers a step event with its own id while its first delivery is still inside the step. */
-    async function redeliverInBody(driver: RedeliveryDriver, event: Event) {
-      const key = `workflow-step-run:${event.runId}:${event.id}`;
-      const owner = await driver.pubsub.getLeaseOwner(key);
-      if (owner) await driver.pubsub.releaseLease(key, owner);
-      await driver.redeliverEvent(event);
-    }
-
     /** The step ends published for a step since event index `from`. */
     const stepEndsSince = (driver: RedeliveryDriver, from: number, runId: string, workflowId: string, path: number[]) =>
       driver.events
@@ -259,7 +251,7 @@ export function describeResumeOccurrenceCases({
           const result = run.resume({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.after.promise;
           const afterRun = stepRunsSince(driver, from, run.runId, '1')[0]!;
-          await redeliverInBody(driver, afterRun);
+          await driver.redeliverEvent(afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
@@ -297,7 +289,7 @@ export function describeResumeOccurrenceCases({
           const result = run.resume({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.gate.promise;
           const gateRun = stepRunsSince(driver, from, run.runId, '0')[0]!;
-          await redeliverInBody(driver, gateRun);
+          await driver.redeliverEvent(gateRun);
           await wf.entered.after.promise;
           // The duplicate claimed the running step again; the resume artifacts stay with it.
           expect(claimedByDuplicate).toMatchObject({
@@ -436,7 +428,7 @@ export function describeResumeOccurrenceCases({
     // versions. Under a new ID, storage v1 refuses it too, because the event expected no occurrence
     // of the step; storage v2 reads the expected occurrence from the stored step, so it runs the
     // step again (COR-1666). The next step still runs once there: its guard refuses the second start.
-    it.each(['expired', 'publish'] as const)(
+    it.each(['same-id', 'publish'] as const)(
       'refuses a late duplicate of a step after a resume (%s)',
       async mode => {
         const wf = linearWorkflow({
@@ -476,7 +468,7 @@ export function describeResumeOccurrenceCases({
           const result = run.timeTravel({ step: 'first', inputData: { n: 10 } });
           await wf.entered.after.promise;
           const afterRun = stepRunsSince(driver, from, run.runId, '1')[0]!;
-          await redeliverInBody(driver, afterRun);
+          await driver.redeliverEvent(afterRun);
           await wf.entered.next.promise;
           wf.held.after.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [1]);
@@ -502,7 +494,7 @@ export function describeResumeOccurrenceCases({
           const result = run.timeTravel({ step: 'gate', resumeData: { ok: true } });
           await wf.entered.gate.promise;
           const gateRun = stepRunsSince(driver, from, run.runId, '0')[0]!;
-          await redeliverInBody(driver, gateRun);
+          await driver.redeliverEvent(gateRun);
           await wf.entered.after.promise;
           wf.held.gate.resolve();
           await settleSecondCompletion(driver, from, run.runId, wf.workflow.id, [0]);
@@ -998,6 +990,45 @@ export function describeResumeOccurrenceCases({
       });
     }, 20_000);
 
+    // The parent's resume of its nested step is delivered again once the nested run has resumed. The
+    // copy finds no suspended step left in the nested run and must not fail the parent.
+    it('finishes a resumed nested workflow when the parent resume step is delivered again', async () => {
+      const entered = deferred();
+      const held = deferred();
+      const child = createWorkflow({ id: `resume-copy-child-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(
+          createStep({
+            id: 'inner-ask',
+            inputSchema: Num,
+            outputSchema: Num,
+            resumeSchema: Approval,
+            execute: async ({ inputData, resumeData, suspend }) => {
+              if (!resumeData) return suspend({});
+              entered.resolve();
+              await held.promise;
+              return { n: inputData.n + 1 };
+            },
+          }),
+        )
+        .commit();
+      const parent = createWorkflow({ id: `resume-copy-parent-${randomUUID()}`, inputSchema: Num, outputSchema: Num })
+        .then(child)
+        .commit();
+      await withHost({ [child.id]: child, [parent.id]: parent }, async ({ driver }) => {
+        try {
+          const run = await parent.createRun();
+          expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'suspended' });
+          const resumed = run.resume({ step: child.id, resumeData: { ok: true } });
+          await entered.promise;
+          await driver.redeliverEvent(driver.stepRuns({ spec: `${parent.id}@0`, runId: run.runId }).at(-1)!);
+          held.resolve();
+          expect(await resumed).toMatchObject({ status: 'success', result: { n: 1 } });
+        } finally {
+          held.resolve();
+        }
+      });
+    }, 20_000);
+
     // Resuming the child run directly leaves the parent's nested step as the suspension stored it.
     // The child's hand-back then completes that step under its stored occurrence, so the record
     // must read as running again or the guard keeps the suspension and the parent never continues.
@@ -1190,7 +1221,7 @@ export function describeResumeOccurrenceCases({
                 }
                 return publish(topic, event, options);
               });
-              await redeliverInBody(driver, finishing);
+              await driver.redeliverEvent(finishing);
               // The duplicate's next step must be the one held before the original copy goes on.
               if (order === 'the slower copy completes first') {
                 await expect.poll(() => heldNext, { timeout: 10_000 }).toBeDefined();

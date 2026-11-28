@@ -165,9 +165,8 @@ describe('redelivery processor draining', () => {
     }
   });
 
-  it('restores the clock and timers after an expired replay rejects', async () => {
+  it('restores the timers after a replay rejects', async () => {
     const driver = new RedeliveryDriver();
-    const originalNow = Date.now;
     const runId = 'rejected-replay';
     try {
       await driver.pubsub.publish('workflows', {
@@ -175,13 +174,10 @@ describe('redelivery processor draining', () => {
         runId,
         data: { workflowId: 'rejected', runId, executionPath: [0] },
       });
-      const original = driver.stepRuns({ spec: 'rejected@0', runId })[0]!;
-      await driver.pubsub.acquireLease(`workflow-step-run:${runId}:${original.id}`, 'owner', 30_000);
       vi.spyOn(driver, 'redeliver').mockRejectedValue(new Error('replay rejected'));
-      await expect(redeliverAndDrain(driver, { spec: 'rejected@0', runId }, 'expired')).rejects.toThrow(
+      await expect(redeliverAndDrain(driver, { spec: 'rejected@0', runId }, 'same-id')).rejects.toThrow(
         'replay rejected',
       );
-      expect(Date.now).toBe(originalNow);
       expect(vi.isFakeTimers()).toBe(false);
     } finally {
       driver.dispose();

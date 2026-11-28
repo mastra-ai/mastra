@@ -148,12 +148,12 @@ describe('T4 background-tools redelivery', () => {
           },
           // Storage v2 replays load the step's inputs from the stored run, which is deleted once the run
           // finishes, so the replayed step fails before it reaches the tool: only storage v1 shows the bug.
-          mode === 'same-id' || disposition === 'awaited' || original.data?.storageVersion === 2
+          disposition === 'awaited' || original.data?.storageVersion === 2
             ? undefined
             : {
                 reason:
-                  mode === 'expired'
-                    ? 'COR-1307 / COR-1394: an expired completed foreground/deferred step dispatches the tool again.'
+                  mode === 'same-id'
+                    ? 'COR-1307 / COR-1394: a redelivered completed foreground/deferred step dispatches the tool again.'
                     : 'COR-1307: a fresh-ID replay dispatches the completed foreground/deferred tool again.',
                 expect: correct => ({ ...correct, received: [...correct.received, ...correct.received] }),
               },

@@ -11,7 +11,7 @@ import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context'
 import type { MastraStorage } from '../../../storage';
 import type { WorkflowOptions, WorkflowRunState } from '../..';
 import { createStep, createWorkflow as createEventedWorkflow } from '..';
-import { drainHandlers } from './redelivery-contract';
+import { drainHandlers, settleDeliveries } from './redelivery-contract';
 import { RedeliveryDriver } from './redelivery-driver';
 
 export function describeOccurrenceReplayCases({
@@ -80,10 +80,7 @@ export function describeOccurrenceReplayCases({
             )
             .toBe(persist);
           const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
-          const key = `workflow-step-run:${run.runId}:${original.id}`;
           for (const deliveryAttempt of [2, 3, 4]) {
-            const owner = await driver.pubsub.getLeaseOwner(key);
-            if (owner) await driver.pubsub.releaseLease(key, owner);
             await driver.redeliverEvent(original, { deliveryAttempt });
           }
           expect(driver.events.filter(event => event.type === 'workflow.fail' && event.runId === run.runId)).toEqual(
@@ -213,8 +210,6 @@ export function describeOccurrenceReplayCases({
               ? driver.events.find(event => event.type === 'workflow.step.end' && event.data.workflowId === body.id)!
               : driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
           interrupted.mockRestore();
-          const leaseKey = `workflow-step-run:${original.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(original);
           expect(await result).toMatchObject({ status: 'success', result: { n: 3 } });
           expect(calls).toEqual([1, 2, 3]);
@@ -351,8 +346,6 @@ export function describeOccurrenceReplayCases({
         const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
         await expect.poll(() => executions).toBe(1);
         const original = driver.stepRuns({ spec: '0', runId: run.runId })[0]!;
-        const key = `workflow-step-run:${run.runId}:${original.id}`;
-        await driver.pubsub.releaseLease(key, (await driver.pubsub.getLeaseOwner(key))!);
         await driver.redeliverEvent(original);
         expect(swallowed).toBe(true);
         release();
@@ -501,8 +494,6 @@ export function describeOccurrenceReplayCases({
             (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.first,
           ).toMatchObject({ status: 'success', output: { n: 1 } });
           interrupted.mockRestore();
-          const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(
             delivery === 'end'
               ? {
@@ -521,16 +512,12 @@ export function describeOccurrenceReplayCases({
             const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
             expect(snapshot?.context.first).toMatchObject({ output: {}, metadata: { __continuationStarted: true } });
             expect(snapshot?.context.second).toMatchObject({ status: 'running', payload: { n: 1 } });
-            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
             const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
             await driver.redeliverEvent(original);
             expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
           }
           releaseSecond();
           expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
-          const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-          if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
           const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
           await driver.redeliverEvent(original);
           expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
@@ -719,9 +706,6 @@ export function describeOccurrenceReplayCases({
             const terminalEnds = driver.events.filter(event => event.type === 'workflow.end').length;
             const terminalRun = driver.stepRuns({ spec: '2', runId: run.runId })[0]!;
             const terminalEnd = await driver.waitForStepEnd({ spec: '2', runId: run.runId });
-            const leaseKey = `workflow-step-run:${run.runId}:${terminalRun.id}`;
-            const owner = await driver.pubsub.getLeaseOwner(leaseKey);
-            if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
             await driver.redeliverEvent(terminalRun);
             await driver.redeliverEvent(terminalEnd);
             expect(driver.events.filter(event => event.type === 'workflow.end')).toHaveLength(terminalEnds);
@@ -912,8 +896,6 @@ export function describeOccurrenceReplayCases({
           if (storageVersion === 1) {
             expect(original.data.stepResults.increment?.metadata?.startedBy).not.toBe(original.id);
           }
-          const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
-          await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
           await driver.redeliverEvent(original);
           if (storageVersion === 1) {
             const retry = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
@@ -993,12 +975,7 @@ export function describeOccurrenceReplayCases({
         expect(calls).toEqual([1, 2, 3]);
         await driver.redeliverEvent(completion!);
         expect(await load()).toEqual(before);
-        // Expire the event-processing lease without changing the persisted occurrence.
         const stepRun = driver.stepRuns({ spec: '0', runId: run.runId }).at(-1)!;
-        await driver.pubsub.releaseLease(
-          `workflow-step-run:${run.runId}:${stepRun.id}`,
-          (await driver.pubsub.getLeaseOwner(`workflow-step-run:${run.runId}:${stepRun.id}`))!,
-        );
         await driver.redeliverEvent(stepRun);
         expect(calls).toEqual([1, 2, 3]);
         release();
@@ -1012,5 +989,370 @@ export function describeOccurrenceReplayCases({
         }
       }
     }, 20_000);
+
+    // Nothing drops a step event the broker delivers again (COR-1610). Each case redelivers one step
+    // event with its own id. The branches and the step after a sleep that the copy publishes are new
+    // events with new ids, and the step guards decide which of them runs.
+    describe('a step event delivered again', () => {
+      const schema = z.object({ n: z.number() });
+      const gate = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>(done => {
+          resolve = done;
+        });
+        return { promise, resolve };
+      };
+      const counted = (id: string, calls: Record<string, number>, hold?: () => Promise<void>) =>
+        createStep({
+          id,
+          inputSchema: schema,
+          outputSchema: schema,
+          execute: async ({ inputData }) => {
+            calls[id] = (calls[id] ?? 0) + 1;
+            await hold?.();
+            return { n: inputData.n + 1 };
+          },
+        });
+
+      async function withWorkflow(workflow: any, body: (driver: RedeliveryDriver) => Promise<void>) {
+        const driver = new RedeliveryDriver();
+        const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+        try {
+          await mastra.startWorkers();
+          await body(driver);
+        } finally {
+          try {
+            await mastra.stopWorkers();
+          } finally {
+            driver.dispose();
+          }
+        }
+      }
+
+      // Two copies of a step run at once. The first fails and saves its attempt; the second then
+      // succeeds and finds that failure saved. The run follows the failed attempt's retry.
+      it.each(['step', 'loop body'] as const)(
+        'retries a %s whose overlapping copy failed first instead of failing the run',
+        async kind => {
+          const held = [gate(), gate()];
+          let calls = 0;
+          const flaky = createStep({
+            id: 'flaky',
+            inputSchema: schema,
+            outputSchema: schema,
+            execute: async ({ inputData }) => {
+              const call = ++calls;
+              await held[call - 1]?.promise;
+              if (call === 1) throw new Error('Transient failure');
+              return inputData;
+            },
+          });
+          const workflow: any = createWorkflow({
+            id: `overlap-fail-${randomUUID()}`,
+            inputSchema: schema,
+            outputSchema: schema,
+            // The delay keeps the retry from claiming the step before the second copy's step end.
+            retryConfig: { attempts: 1, delay: 1_000 },
+          });
+          if (kind === 'loop body') workflow.dountil(flaky, async () => true);
+          else workflow.then(flaky);
+          workflow.commit();
+          await withWorkflow(workflow, async driver => {
+            try {
+              const run = await workflow.createRun();
+              const result = run.start({ inputData: { n: 0 } });
+              await expect.poll(() => calls).toBe(1);
+              void driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
+              await expect.poll(() => calls).toBe(2);
+              held[0]!.resolve();
+              const store = (await storage.getStore('workflows'))!;
+              await expect
+                .poll(
+                  async () =>
+                    (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.flaky
+                      ?.status,
+                )
+                .toBe('failed');
+              held[1]!.resolve();
+              expect(await result).toMatchObject({ status: 'success', result: { n: 0 } });
+              expect(calls).toBe(3);
+            } finally {
+              held.forEach(h => h.resolve());
+            }
+          });
+        },
+        20_000,
+      );
+
+      // Two copies of a step run at once and both bail. The first ends the run; the second must not
+      // replace the saved result or end the run again.
+      it('keeps the first bail when an overlapping copy of the step bails too', async () => {
+        const held = [gate(), gate()];
+        let calls = 0;
+        const workflow = createWorkflow({
+          id: `overlap-bail-${randomUUID()}`,
+          inputSchema: schema,
+          outputSchema: schema,
+        })
+          .then(
+            createStep({
+              id: 'bails',
+              inputSchema: schema,
+              outputSchema: schema,
+              execute: async ({ bail }) => {
+                const call = ++calls;
+                await held[call - 1]!.promise;
+                return bail({ n: call });
+              },
+            }),
+          )
+          .commit();
+        await withWorkflow(workflow, async driver => {
+          try {
+            const run = await workflow.createRun();
+            const result = run.start({ inputData: { n: 0 } });
+            await expect.poll(() => calls).toBe(1);
+            const copy = driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
+            await expect.poll(() => calls).toBe(2);
+            held[0]!.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 1 } });
+            held[1]!.resolve();
+            await copy;
+            await drainHandlers();
+            const stored = await (await storage.getStore('workflows'))!.loadWorkflowSnapshot({
+              workflowName: workflow.id,
+              runId: run.runId,
+            });
+            expect(stored?.context.bails).toMatchObject({ output: { n: 1 } });
+            expect(driver.events.filter(e => e.type === 'workflow.end' && e.runId === run.runId)).toHaveLength(1);
+          } finally {
+            held.forEach(h => h.resolve());
+          }
+        });
+      }, 20_000);
+
+      // A bail ends only the run of the step that bails. A parent run continues after its nested
+      // workflow bails, as a plain step and as a loop body.
+      it.each(['step', 'loop body'] as const)(
+        'runs the next step after a nested workflow %s bails',
+        async kind => {
+          const calls: Record<string, number> = {};
+          const child = createWorkflow({ id: `bail-child-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+            .then(
+              createStep({
+                id: 'inner',
+                inputSchema: schema,
+                outputSchema: schema,
+                execute: async ({ bail }) => bail({ n: 5 }),
+              }),
+            )
+            .commit();
+          const workflow: any = createWorkflow({
+            id: `bail-parent-${randomUUID()}`,
+            inputSchema: schema,
+            outputSchema: schema,
+          });
+          if (kind === 'loop body') workflow.dountil(child, async () => true);
+          else workflow.then(child);
+          workflow.then(counted('next', calls)).commit();
+          await withWorkflow(workflow, async () => {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 6 } });
+            expect(calls).toEqual({ next: 1 });
+          });
+        },
+        20_000,
+      );
+
+      // The bailing delivery saves its result and fails before it ends the run, so its event is
+      // delivered again. That copy finds the saved bail and must end the run with it.
+      it('ends the run with a saved bail when the bailing step is delivered again', async () => {
+        const calls: Record<string, number> = {};
+        const workflow = createWorkflow({ id: `bail-copy-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+          .then(
+            createStep({
+              id: 'bails',
+              inputSchema: schema,
+              outputSchema: schema,
+              execute: async ({ bail }) => bail({ n: 5 }),
+            }),
+          )
+          .then(counted('next', calls))
+          .commit();
+        const store = (await storage.getStore('workflows'))!;
+        const method = storageVersion === 1 ? 'updateWorkflowState' : 'updateWorkflowRunHeader';
+        const update = (store[method] as (args: any) => Promise<any>).bind(store);
+        let endFails = true;
+        const interrupted = vi.spyOn(store, method).mockImplementation(async (args: any) => {
+          if (endFails && args.opts?.status === 'success') {
+            endFails = false;
+            throw new Error('Worker stopped before ending the run');
+          }
+          return update(args);
+        });
+        try {
+          await withWorkflow(workflow, async () => {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 5 } });
+            await drainHandlers();
+            expect(endFails).toBe(false);
+            expect(calls).toEqual({});
+          });
+        } finally {
+          interrupted.mockRestore();
+        }
+      }, 20_000);
+
+      // The copy of the block's dispatch publishes every branch again. Each branch's start guard
+      // refuses the second start: one branch is still in its body, the other already finished.
+      // Storage v2 reads the expected occurrence from the stored branch, so the finished branch is
+      // accepted and runs again (COR-1666). The step after the block still runs once.
+      it.each(['parallel', 'conditional'] as const)(
+        'runs each branch once when the %s dispatch is delivered again',
+        async kind => {
+          const calls: Record<string, number> = {};
+          const slow = gate();
+          const entered = gate();
+          const a = counted('a', calls, () => {
+            entered.resolve();
+            return slow.promise;
+          });
+          const b = counted('b', calls);
+          const workflow: any = createWorkflow({
+            id: `${kind}-dispatch-copy-${randomUUID()}`,
+            inputSchema: schema,
+            outputSchema: z.any(),
+          });
+          if (kind === 'parallel') workflow.parallel([a, b]);
+          else
+            workflow.branch([
+              [async () => true, a],
+              [async () => true, b],
+            ]);
+          workflow
+            .then(
+              createStep({
+                id: 'c',
+                inputSchema: z.any(),
+                outputSchema: z.any(),
+                execute: async ({ inputData }) => {
+                  calls.c = (calls.c ?? 0) + 1;
+                  return inputData;
+                },
+              }),
+            )
+            .commit();
+          await withWorkflow(workflow, async driver => {
+            try {
+              const run = await workflow.createRun();
+              const result = run.start({ inputData: { n: 0 } });
+              await entered.promise;
+              await driver.waitForStepEnd({ spec: '0,1', runId: run.runId });
+              await driver.redeliverEvent(driver.stepRuns({ spec: '0', runId: run.runId })[0]!);
+              await expect.poll(() => driver.deliveryCount({ spec: '0,0', runId: run.runId })).toBe(2);
+              await expect.poll(() => driver.deliveryCount({ spec: '0,1', runId: run.runId })).toBe(2);
+              await settleDeliveries([
+                driver.stepRuns({ spec: '0,0', runId: run.runId }).at(-1)!,
+                driver.stepRuns({ spec: '0,1', runId: run.runId }).at(-1)!,
+              ]);
+              slow.resolve();
+              expect(await result).toMatchObject({ status: 'success' });
+              await drainHandlers();
+              expect(calls).toEqual({ a: 1, b: storageVersion === 2 ? 2 : 1, c: 1 });
+            } finally {
+              slow.resolve();
+            }
+          });
+        },
+        20_000,
+      );
+
+      // The sleep's event is delivered again while the step after the sleep is in its body. The copy
+      // sleeps again and publishes that step a second time, and its start guard refuses the second
+      // delivery on both storage versions because the stored record is running.
+      it('runs the step after a sleep once when the sleep is delivered again', async () => {
+        const calls: Record<string, number> = {};
+        const held = gate();
+        const entered = gate();
+        const workflow = createWorkflow({
+          id: `sleep-copy-${randomUUID()}`,
+          inputSchema: schema,
+          outputSchema: schema,
+        })
+          .then(counted('before', calls))
+          .sleep(100)
+          .then(
+            counted('after', calls, () => {
+              entered.resolve();
+              return held.promise;
+            }),
+          )
+          .commit();
+        await withWorkflow(workflow, async driver => {
+          try {
+            const run = await workflow.createRun();
+            const result = run.start({ inputData: { n: 0 } });
+            await entered.promise;
+            await driver.redeliverEvent(driver.stepRuns({ spec: '1', runId: run.runId })[0]!);
+            await expect.poll(() => driver.deliveryCount({ spec: '2', runId: run.runId })).toBe(2);
+            // A second delivery that ran the step would stay held and never settle.
+            await settleDeliveries(driver.stepRuns({ spec: '2', runId: run.runId }).slice(1));
+            held.resolve();
+            expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+            await drainHandlers();
+            expect(calls).toEqual({ before: 1, after: 1 });
+          } finally {
+            held.resolve();
+          }
+        });
+      }, 20_000);
+
+      // Foreach items have no step guard (COR-1595): the copy runs the item again. The step after the
+      // foreach still runs once.
+      it('runs a foreach item again when its event is delivered again', async () => {
+        const calls: Record<string, number> = {};
+        const slow = gate();
+        const bothEntered = gate();
+        const item = counted('item', calls, () => {
+          if (calls.item === 2) bothEntered.resolve();
+          return slow.promise;
+        });
+        const workflow = createWorkflow({
+          id: `foreach-copy-${randomUUID()}`,
+          inputSchema: z.array(schema),
+          outputSchema: z.any(),
+        })
+          .foreach(item)
+          .then(
+            createStep({
+              id: 'after',
+              inputSchema: z.array(schema),
+              outputSchema: z.any(),
+              execute: async ({ inputData }) => {
+                calls.after = (calls.after ?? 0) + 1;
+                return inputData;
+              },
+            }),
+          )
+          .commit();
+        await withWorkflow(workflow, async driver => {
+          try {
+            const run = await workflow.createRun();
+            const result = run.start({ inputData: [{ n: 0 }] });
+            await expect.poll(() => driver.deliveryCount({ spec: '0,0', runId: run.runId })).toBe(1);
+            const copy = driver.redeliverEvent(driver.stepRuns({ spec: '0,0', runId: run.runId })[0]!);
+            // A copy that is refused settles without entering the item.
+            await Promise.race([bothEntered.promise, copy]);
+            slow.resolve();
+            await copy;
+            expect(await result).toMatchObject({ status: 'success', result: [{ n: 1 }] });
+            await drainHandlers();
+            expect(calls).toEqual({ item: 2, after: 1 });
+          } finally {
+            slow.resolve();
+          }
+        });
+      }, 20_000);
+    });
   });
 }

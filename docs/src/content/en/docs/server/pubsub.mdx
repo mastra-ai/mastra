@@ -149,7 +149,7 @@ export class MyBrokerPubSub extends PubSub {
 }
 ```
 
-Return `true` from `redeliversUnacked` only when the broker redelivers an abandoned event to another consumer of the same group, and only after 30 seconds or more. If your implementation delivers only inside the publishing process, return `false` from `deliversAcrossProcesses` instead. See the [`PubSub` properties](/reference/pubsub/base#properties).
+Return `true` from `redeliversUnacked` only when the broker redelivers an abandoned event to another consumer of the same group. If your implementation delivers only inside the publishing process, return `false` from `deliversAcrossProcesses` instead. See the [`PubSub` properties](/reference/pubsub/base#properties).
 
 To disable the warning for a setup that one process uses, set the `MASTRA_DISABLE_EVENTED_SETUP_WARNING` environment variable to `true`.
 

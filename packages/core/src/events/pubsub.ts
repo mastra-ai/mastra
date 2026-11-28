@@ -152,9 +152,7 @@ export abstract class PubSub {
    *
    * Workflow recovery leaves the evented runs on such a pubsub to the broker:
    * the message of the step a dead worker held is redelivered, so no recovery
-   * pass restarts the run. The broker's abandonment threshold must be at least
-   * 30 s, the evented step fence a dead worker leaves behind; a redelivery that
-   * arrives before the fence expires is dropped as a duplicate.
+   * pass restarts the run.
    *
    * Evented workflows and agents that run on several processes need `true`
    * here. Without it, no other worker picks up the step a stopped worker held.

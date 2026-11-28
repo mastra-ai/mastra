@@ -13,11 +13,10 @@ function deferred<T = void>() {
   return { promise, resolve };
 }
 
-// A workflow step that finishes while its process is shutting down fails to
-// publish its result, releases its step lease and nacks. The nack republishes
-// through the writer that close() keeps open, so the lease release must reach
-// Redis too; otherwise the worker that gets the redelivery finds the lease held and
-// drops the step.
+// A run that ends while its process is shutting down releases its agent thread
+// lease and nacks its event. The nack republishes through the writer that
+// close() keeps open, so the lease release must reach Redis too; otherwise the
+// worker that gets the redelivery finds the thread lease still held.
 describe('releaseLease while close() is in progress', () => {
   let pubsubs: RedisStreamsPubSub[] = [];
 
@@ -30,7 +29,7 @@ describe('releaseLease while close() is in progress', () => {
     const keyPrefix = `close-release-${randomUUID()}`;
     const topic = 'workflows';
     const group = 'workers';
-    const leaseKey = 'workflow-step-run:run-1:event-1';
+    const leaseKey = 'resource-1\u0000thread-1';
     // A's large blockMs keeps close() waiting on the `hold` reader until the
     // test publishes to it.
     const a = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix, blockMs: 20_000 });

@@ -194,8 +194,6 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   /**
    * True while the reclaim loop runs (`reclaimIntervalMs > 0`): a message a dead
    * consumer held goes to a sibling once it has been idle for `reclaimIdleMs`.
-   * Keep `reclaimIdleMs` at 30 s or more, the evented step fence a dead worker
-   * leaves behind; a message reclaimed sooner is dropped as a duplicate.
    */
   override get redeliversUnacked(): boolean {
     return this.#reclaimIntervalMs > 0;
@@ -978,8 +976,9 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
    * from other processes.
    */
   async releaseLease(key: string, owner: string): Promise<void> {
-    // Not `#closed`: a nack during close() still republishes through the
-    // writer, and the redelivery must not find the lease still held.
+    // Not `#closed`: a run that releases its agent thread lease and nacks during
+    // close() still republishes through the writer, so the release has to reach
+    // Valkey too, or the process that gets the redelivery finds the lease held.
     if (this.#writerReleased) return;
     await this.#ensureWriterConnected();
     const script = `

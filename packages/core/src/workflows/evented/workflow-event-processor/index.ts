@@ -19,8 +19,7 @@ import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../.
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
-import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
-import type { LeaseProvider, PubSub } from '../../../events/pubsub';
+import type { PubSub } from '../../../events/pubsub';
 import { reachesOtherProcesses } from '../../../events/reach';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
@@ -288,8 +287,6 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
-  /** TTL of the lease fencing a running `workflow.step.run`; renewed every ttl/3. */
-  static STEP_FENCE_TTL_MS = 30_000;
   // Sentinel value stored in deliveryAttempts to mark an event whose terminal
   // workflow.fail has already been published. Any subsequent redelivery of
   // the same logical event short-circuits as terminal and does NOT re-run
@@ -1633,10 +1630,14 @@ export class WorkflowEventProcessor extends EventProcessor {
    * forwards `perStep` so a parent workflow pauses after this nested run.
    */
   protected async endWorkflow(
-    args: ProcessorArgs,
+    endArgs: ProcessorArgs,
     status: 'success' | 'failed' | 'canceled' | 'paused' = 'success',
-    pausesRun = !!args.perStep,
+    pausesRun = !!endArgs.perStep,
   ) {
+    // `__bailed` marks the bailing step's stored record. The run's result, which a parent run
+    // continues from, must not carry it.
+    const { __bailed: _bailed, ...endMetadata } = endArgs.prevResult?.metadata ?? {};
+    const args = _bailed ? { ...endArgs, prevResult: { ...endArgs.prevResult, metadata: endMetadata } } : endArgs;
     const {
       workflowId,
       runId,
@@ -2637,9 +2638,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
     const leaf = step as LeafEntry;
 
-    // Nothing serializes two deliveries of this occurrence except the event-id fence in
-    // #handleDelivery, which keeps same-id deliveries apart and only on a pubsub with a lease
-    // provider (Google Cloud Pub/Sub has none). Deliveries it doesn't fence that read the same saved
+    // Nothing serializes two deliveries of this occurrence. Deliveries that read the same saved
     // result can both continue the run from it. The extra chain can run the next step a second time
     // and ends at the first step whose check finds that step finished and the run past it.
     const store = await this.#finishedCheckStore(workflow);
@@ -3096,9 +3095,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         args = { ...args, stepResults: { ...args.stepResults, [leafId]: stepResult } };
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed' || !error.storedResult) throw error;
-        // The condition threw on an earlier delivery. Report it again only if the run has not ended.
+        // A non-retryable failure is the condition that threw on an earlier delivery: report it
+        // again only if the run has not ended. Any other failure is a body attempt another copy
+        // saved, and that copy's own delivery retries or fails the run.
         if (error.storedResult.status === 'failed') {
-          if (error.storedSnapshot?.status !== 'running') return;
+          if (error.storedSnapshot?.status !== 'running' || !error.storedResult.nonRetryable) return;
           throw markNonRedeliverable(getErrorFromUnknown(error.storedResult.error, { serializeStack: false }));
         }
         stepResult = error.storedResult;
@@ -3114,6 +3115,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext: restoreLiveRequestContext(error.storedRequestContext, args.requestContext),
         };
       }
+    }
+    // A bailing copy of the body saved this result: end the run with it instead of looping.
+    if (stepResult.metadata?.__bailed) {
+      const stepResults = { ...args.stepResults, [leafId]: stepResult };
+      return this.endWorkflow({ ...args, stepResults, prevResult: stepResult }, 'success', false);
     }
     return processWorkflowLoop(
       { ...args, prevResult: stepResult },
@@ -3702,6 +3708,8 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         // Auto-detect the suspended step within the nested workflow
         const suspendedStepId = Object.keys(snapshot?.suspendedPaths ?? {})?.[0];
+        // Another copy of this delivery already resumed the nested run.
+        if (!suspendedStepId && snapshot && snapshot.status !== 'suspended') return;
         if (!suspendedStepId) {
           return this.errorWorkflow(
             {
@@ -4420,17 +4428,26 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      // Marks the saved success as a bail, so a copy of this step that adopts it ends the run too.
+      if (guardStart) (stepResult as any).metadata = { ...(stepResult as any).metadata, __bailed: true };
       const updatedState = (stepResult as any).__state ?? currentState;
 
       // A bail skips workflow.step.end (publishing it would advance the graph), so nothing else
       // persists this leaf: write its completed result and state, or the stored run keeps the
       // leaf 'running' and the finish prune, which reloads from storage, never sees its output.
-      await this.#runStorage(workflowId, runId).writeStepResult({
-        stepId: leafId,
-        result: stepResult,
-        requestContext: withoutAuthToken(requestContext),
-        state: updatedState,
-      });
+      try {
+        await this.#runStorage(workflowId, runId).writeStepResult({
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(requestContext),
+          state: updatedState,
+          ...(guardStart ? { completionGuard: { eventId: args.eventId! } } : {}),
+        });
+      } catch (error) {
+        // Another copy of this step already saved its result and ends the run.
+        if (isWorkflowStepConflictError(error) && error.reason === 'completed') return;
+        throw error;
+      }
 
       // A bail ends this run, so it doesn't pause it.
       await this.endWorkflow(
@@ -4504,10 +4521,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       // engine does (#29389). Waiting here rather than in a detached timer
       // keeps this delivery unacked until the retry is published, so a worker
       // that dies mid-delay gets the event redelivered instead of dropping the
-      // retry. The step fence lease keeps renewing during the wait, so a broker
-      // redelivery after an ack deadline is dropped as a duplicate rather than
-      // starting a second retry. A run canceled meanwhile drops the retry at
-      // dispatch.
+      // retry. On stores with step guards, a broker redelivery during the wait
+      // gets a `completed` conflict on the saved failed attempt, waits again and
+      // publishes a second retry. Without step guards it runs the attempt again.
+      // A run canceled meanwhile drops the retry at dispatch.
       const retryDelay = workflow.retryConfig.delay ?? 0;
       if (retryDelay > 0) {
         await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -5459,6 +5476,9 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
       } catch (error) {
         if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+        // Another copy of this step saved a failed attempt. Its own delivery retries or fails the
+        // run, so a copy that did not fail publishes nothing.
+        if (error.storedResult?.status === 'failed' && prevResult?.status !== 'failed') return;
         // Only the committed winner's values may drive a reclaimed continuation.
         newStepResults = storedContext(error.storedSnapshot);
         storedResult = error.storedResult!;
@@ -5484,6 +5504,16 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Update stepResults with current state
     stepResults = { ...stepResults, __state: currentState };
+
+    // This delivery continues from a result a bailing copy of the step saved: end the run with it.
+    if (prevResult?.status === 'success' && prevResult.metadata?.__bailed) {
+      const end = { workflow, parentWorkflow, workflowId, runId, executionPath, resumeSteps, stepResults, prevResult };
+      return this.endWorkflow(
+        { ...end, activeStepsPath, requestContext, actor, perStep, state: currentState, outputOptions },
+        'success',
+        false,
+      );
+    }
 
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.#pubsub.publish('workflows', {
@@ -5798,18 +5828,18 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
-    if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handleDelivery(event);
+    if (!reachesOtherProcesses(this.mastra.pubsub)) return this.#handle(event);
     const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
     if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) {
       await carryEndedSegment(this.mastra, event);
-      const result = await this.#handleDelivery(event);
+      const result = await this.#handle(event);
       if (result.ok) endFailedIteration(this.mastra, event);
       return result;
     }
     try {
       if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
       const execute = async () => {
-        const result = await this.#handleDelivery(event);
+        const result = await this.#handle(event);
         if (result.ok) {
           endFailedIteration(this.mastra, event);
           await settleEventedDurableExecution(this.mastra, event);
@@ -5830,74 +5860,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: durable execution delivery failed', { error });
       return { ok: false, retry: true };
     }
-  }
-
-  async #handleDelivery(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
-    // Fence step execution so a broker redelivery of a still-running
-    // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
-    // running the step concurrently (#24589). Redeliveries keep the same event
-    // id, so the id identifies the logical delivery; genuinely new executions
-    // (loop iterations, retries, foreach items) are published as new events.
-    if (event.type !== 'workflow.step.run' || !event.id) {
-      return this.#handle(event);
-    }
-
-    const leaseProvider = this.#getLeaseProvider();
-    const key = `workflow-step-run:${event.runId}:${event.id}`;
-    const owner = globalThis.crypto.randomUUID();
-    const ttl = WorkflowEventProcessor.STEP_FENCE_TTL_MS;
-
-    let acquired: boolean;
-    try {
-      ({ acquired } = await leaseProvider.acquireLease(key, owner, ttl));
-    } catch (err) {
-      // Fencing is best-effort; never block execution on a lease backend error.
-      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: failed to acquire step fence', { key, error: err });
-      return this.#handle(event);
-    }
-
-    if (!acquired) {
-      this.mastra.getLogger()?.debug('WorkflowEventProcessor.handle: dropping duplicate delivery of running step', {
-        runId: event.runId,
-        eventId: event.id,
-        deliveryAttempt: event.deliveryAttempt,
-      });
-      return { ok: true };
-    }
-
-    const renewal = setInterval(
-      () => {
-        leaseProvider.renewLease(key, owner, ttl).catch(err => {
-          this.mastra
-            .getLogger()
-            ?.warn('WorkflowEventProcessor.handle: failed to renew step fence', { key, error: err });
-        });
-      },
-      Math.max(1, Math.floor(ttl / 3)),
-    );
-
-    let result: { ok: true } | { ok: false; retry: boolean } | undefined;
-    try {
-      result = await this.#handle(event);
-      return result;
-    } finally {
-      clearInterval(renewal);
-      // On success keep the lease until it expires so a late duplicate of the
-      // completed delivery is still dropped. On failure release it so the
-      // transport's retry can run the step.
-      if (!result?.ok) {
-        await leaseProvider.releaseLease(key, owner).catch(() => {});
-      }
-    }
-  }
-
-  #getLeaseProvider(): LeaseProvider {
-    const pubsub = this.#pubsub as unknown;
-    const unwrap = (pubsub as { getLeaseProvider?: () => LeaseProvider | undefined } | undefined)?.getLeaseProvider;
-    if (typeof unwrap === 'function') {
-      return unwrap.call(pubsub) ?? NoopLeaseProvider;
-    }
-    return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
   }
 
   /**
