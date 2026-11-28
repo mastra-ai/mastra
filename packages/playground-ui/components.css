@@ -314,6 +314,19 @@
   }
 }
 
+/* A save bar's status icon arrives when its tone changes: a small scale-up from 80%, never from 0. */
+@keyframes save-bar-icon-in {
+  from {
+    opacity: 0;
+    scale: 0.8;
+  }
+
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
 @keyframes click-ripple {
   0% {
     transform: scale(0);
