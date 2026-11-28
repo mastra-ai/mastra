@@ -2,7 +2,10 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { MockMemory } from '../../memory/mock';
+import { ProcessorStepSchema } from '../../processors/index';
 import { InMemoryStore } from '../../storage';
+import { createWorkflow } from '../../workflows/create';
+import { createStep } from '../../workflows/workflow';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
 import { KNOWLEDGE_READ_INSTRUCTIONS, KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
@@ -298,6 +301,114 @@ describe('Knowledge attached to an Agent without Memory', () => {
     await agent([]).generate('hello', { maxSteps: 1, memory: { thread: 'thread-2', resource: 'user-1' } });
     expect(JSON.stringify(prompts[0])).toContain('<pinned-knowledge count=');
     expect(JSON.stringify(prompts[0])).toContain('Answer in French.');
+  });
+
+  // r479: the agent learns which scopes it holds, and what it can do there, before it calls any tool.
+  it('tells an agent with Memory and Knowledge tools every scope it holds on its first turn', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held' }), scopes, tools: true });
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held',
+      name: 'held',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    const prompt = JSON.stringify(prompts[0]);
+    expect(prompt).toContain('<knowledge-scopes>');
+    expect(prompt).toContain('Your session has access to:');
+    expect(prompt).toContain('- thread:thread-9 (owner)');
+    expect(prompt).toContain('- resource:user-1 (owner)');
+  });
+
+  // A scope type only the store declares loads when the runtime first resolves; a cold instance must
+  // still list it on the first turn, before any tool call or write has warmed the runtime.
+  async function storeDeclaredAgent(getScopeDeclarations: () => Promise<unknown>) {
+    const storage = new InMemoryStore({ id: 'held-store-declared' });
+    const knowledge = new Knowledge({ storage, scopes: knowledgeMemoryScopes(), tools: true });
+    vi.spyOn((await storage.getStore('knowledge'))!, 'getScopeDeclarations').mockImplementation(
+      getScopeDeclarations as never,
+    );
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-store-declared',
+      name: 'held-store-declared',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['partner:acme'],
+    });
+    return { agent, prompts };
+  }
+
+  it('lists a scope only the store declares on a cold instance, from the first turn', async () => {
+    const { agent, prompts } = await storeDeclaredAgent(async () => ({
+      'partner:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
+    }));
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    expect(JSON.stringify(prompts[0])).toContain('- partner:acme (owner)');
+  });
+
+  it('fails the turn when the store declarations cannot be read, rather than sending no list', async () => {
+    const { agent } = await storeDeclaredAgent(async () => {
+      throw new Error('store down');
+    });
+    await expect(
+      agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } }),
+    ).rejects.toThrow('store down');
+  });
+
+  it('sends no held-scopes list when the knowledge option turns on no tools', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-none' }), scopes, tools: false });
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-none',
+      name: 'held-none',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+      tools: { ...knowledge.createTools() },
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    expect(JSON.stringify(prompts[0])).not.toContain('<knowledge-scopes>');
+  });
+
+  it('lets a knowledge-scopes processor inside a processor workflow replace the built-in one', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-wf' }), scopes, tools: true });
+    const replacement = {
+      id: 'knowledge-scopes',
+      processInput: ({ messages }: { messages: unknown[] }) => messages,
+    };
+    const workflow = createWorkflow({
+      id: 'scopes-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: { validateInputs: false },
+    })
+      .then(createStep(replacement as never))
+      .commit();
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-wf',
+      name: 'held-wf',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['org:acme'],
+      inputProcessors: [workflow],
+    });
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    const prompt = JSON.stringify(prompts[0]);
+    expect(prompt).not.toContain('<knowledge-scopes>');
+    expect(prompt).not.toContain('Your session has access to:');
   });
 
   it('warns and delivers no pins to an agent without Memory', async () => {
