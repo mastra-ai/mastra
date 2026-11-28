@@ -429,6 +429,14 @@ export function createWorkflowStepGuardTests({
         expect((await load())!.context.step).toMatchObject(claimed);
       });
 
+      it('refuses the running record of the expected occurrence once the run ended', async () => {
+        const { a, runId, claim, load } = await setupTakeover(runningUnder('old'));
+        await a!.updateWorkflowState({ workflowName, runId, storageVersion, opts: { status: 'failed' } });
+        const before = await load();
+        await expect(claim(a, 'restart', 'old')).rejects.toMatchObject({ reason: 'stale' });
+        expect(await load()).toEqual(before);
+      });
+
       it('refuses a running record of another occurrence', async () => {
         const { a, claim, load } = await setupTakeover(runningUnder('other'));
         const before = await load();
