@@ -6,7 +6,7 @@ import { useAvailableModelsQuery, useModelReasoningOptions } from '@mastra/react
 import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatModels } from '../../context/useChatModels';
-import { useChatThinking } from '../../context/useChatThinking';
+import { useOptionalChatThinking } from '../../context/useChatThinking';
 import {
   ALL_THINKING_LEVEL_OPTIONS,
   DEFAULT_SOURCE_LABELS,
@@ -49,14 +49,16 @@ function levelSummary(options: ThinkingLevelOption<ThinkingLevelSetting>[], stat
 }
 
 /** The session's thinking level for `modelId`, shared by the controls on and inside the model picker. */
+/** `undefined` when the host has no thinking capability; callers hide their thinking UI. */
 export function useSessionThinking(modelId: string | undefined, switchingModel: boolean) {
-  const thinking = useChatThinking();
+  const thinking = useOptionalChatThinking();
   const { selectedPack } = useChatModels();
   const { catalogTarget } = useChatModelScope();
   const catalog = useAvailableModelsQuery(catalogTarget);
   const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
   const options = modelId ? thinkingLevelOptionsForModel(modelId, reasoningOptions) : ALL_THINKING_LEVEL_OPTIONS;
 
+  if (!thinking) return undefined;
   const state = sessionThinkingState(modelId, catalog.isPending, thinking, switchingModel, selectedPack?.name);
 
   return {

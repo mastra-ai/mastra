@@ -67,10 +67,10 @@ function useDraftThinking(): Omit<ChatThinkingApi, 'sessionLevel'> {
     loadError,
     override: selectedThinkingLevel,
     setLevel: async next => {
-      if (activeModelId) await select({ kind: 'model', modelId: activeModelId, thinkingLevel: next });
+      if (activeModelId) await select?.({ kind: 'model', modelId: activeModelId, thinkingLevel: next });
     },
     resetLevel: async () => {
-      if (activeModelId) await select({ kind: 'model', modelId: activeModelId });
+      if (activeModelId) await select?.({ kind: 'model', modelId: activeModelId });
     },
   };
 }
@@ -103,10 +103,10 @@ function useLiveThinking(): Omit<ChatThinkingApi, 'sessionLevel'> {
     loadError: settingsLoaded ? effective.loadError : (settingsQuery.error ?? undefined),
     override,
     setLevel: async next => {
-      if (activeModelId) await select({ kind: 'model', modelId: activeModelId, thinkingLevel: next });
+      if (activeModelId) await select?.({ kind: 'model', modelId: activeModelId, thinkingLevel: next });
     },
     resetLevel: async () => {
-      if (selectedPack && activeModelId) await select({ kind: 'model', modelId: activeModelId });
+      if (selectedPack && activeModelId) await select?.({ kind: 'model', modelId: activeModelId });
       await updateSettings({ thinkingLevel: null });
     },
   };

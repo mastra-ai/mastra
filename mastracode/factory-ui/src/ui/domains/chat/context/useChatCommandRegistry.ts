@@ -16,9 +16,9 @@ import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinki
 import type { ThinkingDefault } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
-import { useChatPermissions } from './useChatPermissions';
+import { useOptionalChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
-import { useChatThinking } from './useChatThinking';
+import { useOptionalChatThinking } from './useChatThinking';
 import { useChatRuntime } from './useChatRuntime';
 import { useChatTranscript } from './useChatTranscript';
 
@@ -41,14 +41,15 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
 
   const actions = useChatSessionActions();
   const { goal, followUp } = actions;
-  const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
-  const { thinkingDefault, setLevel, resetLevel, sessionLevel } = useChatThinking();
+  const permissions = useOptionalChatPermissions();
+  const thinking = useOptionalChatThinking();
+  const thinkingDefault = thinking?.thinkingDefault;
 
   const openSessionDefaults = () => {
     if (factoryId) navigate(links.settings('models', sessionDefaultsAnchor(modelScope)), { returnHere: true });
   };
 
-  const currentThinkingLevel = sessionLevel.level;
+  const currentThinkingLevel = thinking?.sessionLevel.level;
   const runningThinkingLevel =
     currentThinkingLevel && runThinkingLevel(activeModelId ?? '', currentThinkingLevel, activeModelReasoningOptions);
   const thinkingLevelOptions: SlashCommandOption[] = [
@@ -56,7 +57,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       value: 'default',
       label: 'Default',
       ...(thinkingDefault ? { description: DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
-      active: sessionLevel.loaded && currentThinkingLevel === undefined,
+      active: Boolean(thinking?.sessionLevel.loaded) && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
       value: level,
@@ -66,17 +67,21 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   ];
 
   const commandsWithoutHelp: SlashCommand[] = [
-    {
-      name: 'model',
-      args: '<id>',
-      description: 'Switch model',
-      requiresSession: true,
-      execute: async rawArguments => {
-        if (!rawArguments) return;
-        if (modelLockedReason) return pushNotice(modelLockedReason);
-        await select({ kind: 'model', modelId: rawArguments });
-      },
-    },
+    ...(select
+      ? ([
+          {
+            name: 'model',
+            args: '<id>',
+            description: 'Switch model',
+            requiresSession: true,
+            execute: async rawArguments => {
+              if (!rawArguments) return;
+              if (modelLockedReason) return pushNotice(modelLockedReason);
+              await select({ kind: 'model', modelId: rawArguments });
+            },
+          },
+        ] satisfies SlashCommand[])
+      : []),
     ...(goal
       ? ([
           {
@@ -114,35 +119,39 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           },
         ] satisfies SlashCommand[])
       : []),
-    {
-      name: 'permissions',
-      description: 'Show permission rules',
-      requiresSession: true,
-      execute: async () => {
-        if (permissionsLoading) return;
-        const rules = permissions ?? { categories: {}, tools: {} };
-        const categories =
-          Object.entries(rules.categories ?? {})
-            .map(([key, value]) => `  ${key}: ${value}`)
-            .join('\n') || '  (none)';
-        const tools =
-          Object.entries(rules.tools ?? {})
-            .map(([key, value]) => `  ${key}: ${value}`)
-            .join('\n') || '  (none)';
-        pushNotice(`Categories:\n${categories}\nTools:\n${tools}`);
-      },
-    },
-    {
-      name: 'yolo',
-      description: 'Auto-allow all tool categories',
-      requiresSession: true,
-      execute: async () => {
-        for (const category of TOOL_CATEGORIES) {
-          await setPermissionForCategory(category, 'allow');
-        }
-        pushNotice('YOLO mode: all tool categories set to auto-allow');
-      },
-    },
+    ...(permissions
+      ? ([
+          {
+            name: 'permissions',
+            description: 'Show permission rules',
+            requiresSession: true,
+            execute: async () => {
+              if (permissions.permissionsLoading) return;
+              const rules = permissions.permissions ?? { categories: {}, tools: {} };
+              const categories =
+                Object.entries(rules.categories ?? {})
+                  .map(([key, value]) => `  ${key}: ${value}`)
+                  .join('\n') || '  (none)';
+              const tools =
+                Object.entries(rules.tools ?? {})
+                  .map(([key, value]) => `  ${key}: ${value}`)
+                  .join('\n') || '  (none)';
+              pushNotice(`Categories:\n${categories}\nTools:\n${tools}`);
+            },
+          },
+          {
+            name: 'yolo',
+            description: 'Auto-allow all tool categories',
+            requiresSession: true,
+            execute: async () => {
+              for (const category of TOOL_CATEGORIES) {
+                await permissions.setPermissionForCategory(category, 'allow');
+              }
+              pushNotice('YOLO mode: all tool categories set to auto-allow');
+            },
+          },
+        ] satisfies SlashCommand[])
+      : []),
     {
       name: 'cost',
       description: 'Show token usage',
@@ -155,53 +164,57 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
         );
       },
     },
-    {
-      ...THINK_COMMAND_DESCRIPTOR,
-      requiresSession: true,
-      options: thinkingLevelOptions,
-      execute: async (rawArguments, originalText) => {
-        const action = parseThinkCommand(rawArguments, availableThinkingLevels);
-        try {
-          if (action.kind === 'invalid') {
-            prefillComposer(originalText);
-            pushNotice(
-              `Unknown thinking level: ${action.value}. Use: ${action.levels.join(', ')}, default, status`,
-              'error',
-            );
-            return;
-          }
-          const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
-          if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
-          if (action.kind === 'set') {
-            await sessionLevel.load();
-            await setLevel(action.level);
-            pushNotice(`Thinking level set to ${action.level}.`);
-            return;
-          }
-          if (action.kind === 'clear') {
-            await sessionLevel.load();
-            await resetLevel();
-            pushNotice(
-              thinkingDefault
-                ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`
-                : 'Thinking level set to default. Current default is unavailable.',
-            );
-            return;
-          }
-          const sessionThinkingLevel = await sessionLevel.load();
-          if (!thinkingDefault) throw new Error('The thinking default is unavailable');
-          const defaultLevel = describeThinkingDefault(thinkingDefault);
-          pushNotice(
-            sessionThinkingLevel
-              ? `Thinking level: ${sessionThinkingLevel} (session override). Default: ${defaultLevel}.`
-              : `Thinking level: ${defaultLevel}.`,
-          );
-        } catch (error) {
-          prefillComposer(originalText);
-          throw error;
-        }
-      },
-    },
+    ...(thinking
+      ? ([
+          {
+            ...THINK_COMMAND_DESCRIPTOR,
+            requiresSession: true,
+            options: thinkingLevelOptions,
+            execute: async (rawArguments, originalText) => {
+              const action = parseThinkCommand(rawArguments, availableThinkingLevels);
+              try {
+                if (action.kind === 'invalid') {
+                  prefillComposer(originalText);
+                  pushNotice(
+                    `Unknown thinking level: ${action.value}. Use: ${action.levels.join(', ')}, default, status`,
+                    'error',
+                  );
+                  return;
+                }
+                const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
+                if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
+                if (action.kind === 'set') {
+                  await thinking.sessionLevel.load();
+                  await thinking.setLevel(action.level);
+                  pushNotice(`Thinking level set to ${action.level}.`);
+                  return;
+                }
+                if (action.kind === 'clear') {
+                  await thinking.sessionLevel.load();
+                  await thinking.resetLevel();
+                  pushNotice(
+                    thinkingDefault
+                      ? `Thinking level set to default: ${describeThinkingDefault(thinkingDefault)}.`
+                      : 'Thinking level set to default. Current default is unavailable.',
+                  );
+                  return;
+                }
+                const sessionThinkingLevel = await thinking.sessionLevel.load();
+                if (!thinkingDefault) throw new Error('The thinking default is unavailable');
+                const defaultLevel = describeThinkingDefault(thinkingDefault);
+                pushNotice(
+                  sessionThinkingLevel
+                    ? `Thinking level: ${sessionThinkingLevel} (session override). Default: ${defaultLevel}.`
+                    : `Thinking level: ${defaultLevel}.`,
+                );
+              } catch (error) {
+                prefillComposer(originalText);
+                throw error;
+              }
+            },
+          },
+        ] satisfies SlashCommand[])
+      : []),
     {
       name: 'om',
       description: 'Show observational-memory phase',

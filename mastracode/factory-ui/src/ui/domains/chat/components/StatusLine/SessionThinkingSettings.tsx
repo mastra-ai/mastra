@@ -9,7 +9,9 @@ interface SessionThinkingSettingsProps {
 
 /** The thinking level inside the model picker, under the model list. Same size while loading or unavailable. */
 export function SessionThinkingSettings({ modelId, switchingModel }: SessionThinkingSettingsProps) {
-  const { options, state, summary, setLevel, resetLevel } = useSessionThinking(modelId, switchingModel);
+  const thinking = useSessionThinking(modelId, switchingModel);
+  if (!thinking) return null;
+  const { options, state, summary, setLevel, resetLevel } = thinking;
 
   if ('unavailableReason' in state) {
     return (

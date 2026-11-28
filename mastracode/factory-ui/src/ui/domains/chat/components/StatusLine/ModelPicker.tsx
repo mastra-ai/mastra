@@ -19,7 +19,7 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
-import { useChatThinking } from '../../context/useChatThinking';
+import { useOptionalChatThinking } from '../../context/useChatThinking';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import { sessionDefaultsAnchor } from '../../services/sessionSettings';
 import { ModelCredential } from './ModelCredential';
@@ -45,13 +45,13 @@ function canSwitchModel({
 function useModelSwitch() {
   const chatSession = useChatSessionContext();
   const { activeModelId, modelPacks, defaultModelPack, selectedPack, switching, select } = useChatModels();
-  const thinking = useChatThinking();
+  const thinking = useOptionalChatThinking();
   const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
   const defaultPackModelId = defaultModelPack?.models[0]?.modelId;
 
   const pick = (selection: ModelSelectionRequest, fallbackMessage: string) => {
-    if (switching) return;
+    if (switching || !select) return;
     void select(selection).catch((cause: unknown) => {
       toast.error(cause instanceof Error ? cause.message : fallbackMessage);
     });
@@ -65,7 +65,7 @@ function useModelSwitch() {
     selectedPack,
     scopeLoading,
     busy: switching,
-    switchable: canSwitchModel(chatSession),
+    switchable: select !== undefined && canSwitchModel(chatSession),
     locked: switching || modelsQuery.isPending || scopeLoading,
     canReset:
       chatSession.kind === 'user' &&
@@ -75,7 +75,7 @@ function useModelSwitch() {
       Boolean(modelsQuery.data?.some(model => model.id === defaultPackModelId)),
     pickModel: (modelId: string) => {
       if (selectedPack || modelId !== activeModelId) {
-        pick({ kind: 'model', modelId, thinkingLevel: thinking.override }, 'Failed to switch model');
+        pick({ kind: 'model', modelId, thinkingLevel: thinking?.override }, 'Failed to switch model');
       }
     },
     pickPack: (pack: ModelPack) => {
@@ -181,7 +181,7 @@ function LockedModelMenu({
   lockedReason: string;
   modelAriaLabel: string;
 }) {
-  const { summary } = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
+  const thinking = useSessionThinking(modelSwitch.activeModelId, modelSwitch.busy);
   const modelCredential = useModelCredential(modelSwitch.activeModelId);
   const credentialNote =
     modelCredential &&
@@ -189,7 +189,7 @@ function LockedModelMenu({
   return (
     <ModelMenu
       modelSwitch={modelSwitch}
-      triggerAriaLabel={`${modelAriaLabel}. Thinking: ${summary}`}
+      triggerAriaLabel={thinking ? `${modelAriaLabel}. Thinking: ${thinking.summary}` : modelAriaLabel}
       triggerClassName={triggerClassName}
       unavailableReason={credentialNote ? `${lockedReason} ${credentialNote}.` : lockedReason}
     >

@@ -12,7 +12,8 @@ export interface ChatModelsApi {
   switching: boolean;
   isLoading: boolean;
   error: Error | undefined;
-  select: (selection: ModelSelectionRequest) => Promise<void>;
+  /** Absent when the host can't switch models; the picker is read-only. */
+  select?: (selection: ModelSelectionRequest) => Promise<void>;
 }
 
 export const ChatModelsContext = createContext<ChatModelsApi | null>(null);
