@@ -418,6 +418,99 @@ describe('createCodeMode run-scoped cancellation', () => {
     expect(settled.filter(result => result === 'ok')).toHaveLength(1);
     expect(settled.filter(result => result instanceof Error)).toHaveLength(5);
   });
+
+  it('does not start nested calls dispatched after the run is aborted', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const ping = createTool({
+      id: 'ping',
+      description: 'ping',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute,
+    });
+
+    const controller = new AbortController();
+    let rejected: unknown;
+    const transport = scripted(async opts => {
+      // A call that arrives after the abort must be rejected untouched, so the
+      // guest cannot keep starting work behind a cancelled run.
+      controller.abort(new Error('user stopped'));
+      try {
+        await opts.dispatch('ping', {});
+      } catch (error) {
+        rejected = error;
+      }
+      return { success: false, logs: [], error: { message: 'aborted', name: 'AbortError' } };
+    });
+
+    const { tool } = createCodeMode({ tools: { ping } }, transport);
+    const result = await run(tool, 'ignored', ctx({ abortSignal: controller.signal }));
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(rejected).toBeInstanceOf(Error);
+    expect((rejected as Error).message).toBe('user stopped');
+    expect(result.success).toBe(false);
+  });
+
+  it('keeps the caller’s abort as the failure when a result exceeds the cap after an abort', async () => {
+    const controller = new AbortController();
+    const big = createTool({
+      id: 'big',
+      description: 'big',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      execute: async () => {
+        // The caller cancels while the call is in flight; its result then also
+        // exceeds maxResultBytes. The abort came first, so it stays terminal.
+        controller.abort(new Error('user stopped'));
+        return { blob: 'x'.repeat(5_000) };
+      },
+    });
+
+    const transport = scripted(async opts => {
+      try {
+        await opts.dispatch('big', {});
+      } catch {
+        // guest swallows the rejection
+      }
+      return { success: false, logs: [], error: { message: 'aborted', name: 'AbortError' } };
+    });
+
+    const { tool } = createCodeMode({ tools: { big }, maxResultBytes: 100 }, transport);
+    const result = await run(tool, 'ignored', ctx({ abortSignal: controller.signal }));
+
+    expect(result.error?.name).toBe('AbortError');
+  });
+});
+
+describe('createCodeMode dispatch — tool shape', () => {
+  it('preserves a plain tool action’s `this` receiver', async () => {
+    // ToolAction.execute is a method that may read `this`; extracting it without
+    // binding would call it with an undefined receiver.
+    const counter = {
+      id: 'counter',
+      description: 'counts calls on itself',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ count: z.number() }),
+      count: 0,
+      async execute(this: { count: number }) {
+        this.count += 1;
+        return { count: this.count };
+      },
+    };
+
+    const transport = scripted(async opts => {
+      const first = await opts.dispatch('counter', {});
+      const second = await opts.dispatch('counter', {});
+      return { success: true, result: [first, second], logs: [] };
+    });
+
+    const { tool } = createCodeMode({ tools: { counter: counter as any } }, transport);
+    const result = await run(tool, 'ignored');
+
+    expect(result.success).toBe(true);
+    expect(result.result).toEqual([{ count: 1 }, { count: 2 }]);
+  });
 });
 
 describe('createCodeMode log caps — core replay guard', () => {

@@ -245,7 +245,14 @@ export function createCodeModeTool(
 
       // Each external_* call re-enters the real Mastra tool pipeline (validation,
       // request-context checks, tracing) on the host, with the outer tool's context.
+      const abortReason = () => runController.signal.reason ?? new Error('Code Mode run aborted');
+
       const dispatch: CodeModeToolDispatcher = async (toolId, args) => {
+        // A run that is already aborted — the caller cancelled, or a limit
+        // tripped — must not start new nested work, and the abort that came
+        // first stays the run's terminal failure.
+        if (runController.signal.aborted) throw abortReason();
+
         // Count every dispatch attempt before doing any work, so a guest cannot
         // exceed the budget by targeting an unavailable tool.
         if (maxCalls !== undefined && ++callCount > maxCalls) {
@@ -259,10 +266,13 @@ export function createCodeModeTool(
         if (!tool?.execute) {
           throw new Error(`Tool "${toolId}" is not available in Code Mode`);
         }
-        // Capture so the narrowing survives into the async closure below.
-        const execute = tool.execute;
+        // Capture so the narrowing survives into the async closure below. Bind it
+        // so a plain ToolAction whose `execute` reads `this` keeps its receiver.
+        const execute = tool.execute.bind(tool);
 
         const invoke = async () => {
+          // Covers a call whose slot was granted just before the run aborted.
+          if (runController.signal.aborted) throw abortReason();
           const result = await execute(args, {
             mastra: ctx?.mastra,
             requestContext: ctx?.requestContext,
@@ -280,6 +290,9 @@ export function createCodeModeTool(
                 maxResultBytes,
                 `a nested tool result was ${size} bytes for tool "${toolId}"`,
               );
+              // If the caller aborted while this call was pending, the guest
+              // still sees the limit error but the abort stays terminal.
+              if (runController.signal.aborted) throw error;
               limitError ??= error;
               runController.abort(error);
               throw limitError;
