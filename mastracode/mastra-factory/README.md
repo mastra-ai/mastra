@@ -51,7 +51,7 @@ Pass `--help` to see all options:
 npx create-factory@latest --help
 ```
 
-Platform projects are created in the US region by default. To create the project in the EU instead, pass `--region eu`:
+Platform projects are created in the US region by default, without a region prompt. Pass `--region` with `us`, `eu`, `pdx`, `iad`, `sfo`, or `ams` to select placement for the project and its production environment. Neon uses the nearest supported region: `us`, `pdx`, and `sfo` use `aws-us-west-2`; `iad` uses `aws-us-east-1`; `eu` and `ams` use `aws-eu-central-1`. For example:
 
 ```bash
 npx create-factory@latest my-mastra-factory --region eu

@@ -28,7 +28,7 @@ import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failu
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
 import { detectProjectType } from '../../utils/detect-project-type.js';
-import { isEuRegion } from '../../utils/platform-region.js';
+import { DEPLOY_REGIONS, isDeployRegion, isEuRegion } from '../../utils/platform-region.js';
 import { abortableDelay, isRetryablePollingError, withPollingRetries } from '../../utils/polling.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
@@ -955,7 +955,7 @@ export async function resolveProject(
 /* ------------------------------------------------------------------ */
 
 function toServerProjectRegion(region: string | undefined): ServerProjectRegion | undefined {
-  return region === 'eu' || region === 'us' ? region : undefined;
+  return region !== undefined && isDeployRegion(region) ? region : undefined;
 }
 
 /**
@@ -1058,24 +1058,6 @@ export async function resolveNonFactoryTarget(input: {
   return choice;
 }
 
-async function promptDeployRegion(): Promise<string> {
-  const selectedRegion = await p.select({
-    message: 'Select a deployment region',
-    initialValue: 'us',
-    options: [
-      { value: 'us', label: 'United States' },
-      { value: 'eu', label: 'Europe' },
-    ],
-  });
-
-  if (p.isCancel(selectedRegion)) {
-    p.cancel('Deploy cancelled.');
-    process.exit(0);
-  }
-
-  return selectedRegion;
-}
-
 /* ------------------------------------------------------------------ */
 /*  Resolve environment                                               */
 /* ------------------------------------------------------------------ */
@@ -1120,12 +1102,7 @@ export async function resolveEnvironment(
     }
   }
 
-  let region = requestedRegion;
-  if (!region && !autoAccept) {
-    region = await promptDeployRegion();
-  }
-
-  return { existing: false, name: envName, type: envType, ...(region ? { region } : {}) };
+  return { existing: false, name: envName, type: envType, ...(requestedRegion ? { region: requestedRegion } : {}) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -1488,8 +1465,10 @@ export async function unifiedDeployAction(dir: string | undefined, opts: DeployO
   if (opts.workers !== undefined && opts.workers !== 'dedicated' && opts.workers !== 'in-process') {
     throw new Error(`--workers must be "dedicated" or "in-process" (got "${String(opts.workers)}")`);
   }
-  if (opts.region !== undefined && opts.region !== 'us' && opts.region !== 'eu') {
-    throw new Error(`--region must be "us" or "eu" (got "${String(opts.region)}")`);
+  if (opts.region !== undefined && !isDeployRegion(opts.region)) {
+    throw new Error(
+      `--region must be one of ${DEPLOY_REGIONS.map(region => `"${region}"`).join(', ')} (got "${String(opts.region)}")`,
+    );
   }
   const analytics = getAnalytics();
   if (!analytics) {
@@ -1571,9 +1550,8 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   let projectId: string;
   let projectName: string;
   let projectSlug: string;
-  // Region for a newly created environment. A new Factory project asks for
-  // it once and reuses the answer for both the project and the environment.
-  let requestedRegion = opts.region;
+  // Only the explicit flag sets placement for new projects and environments.
+  const requestedRegion = opts.region;
 
   if (resolution.existing) {
     projectId = resolution.projectId;
@@ -1603,10 +1581,6 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
         p.cancel('Deploy cancelled.');
         process.exit(0);
       }
-    }
-
-    if (isFactoryProject && !requestedRegion && !autoAccept) {
-      requestedRegion = await promptDeployRegion();
     }
 
     // Create the project

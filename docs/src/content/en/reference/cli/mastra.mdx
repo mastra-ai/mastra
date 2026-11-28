@@ -411,7 +411,7 @@ mastra deploy --env staging --env-file .env.staging.local
 
 #### `--region`
 
-Region for a newly created environment (for example `eu`). Applied only when the CLI creates the environment.
+Region for a newly created environment or Factory project. Accepts the `us` or `eu` shorthand, or one of the region codes `pdx`, `iad`, `sfo`, or `ams`. Shorthands resolve to the default region in their zone (`us` → `pdx`, `eu` → `ams`). Any other value is rejected. Region selection is flag-only: the CLI never prompts for a region. The default is `us` (`pdx`). Existing environments aren't relocated. See [Regions](/docs/mastra-platform/deploy/regions).
 
 #### `--skip-build`
 

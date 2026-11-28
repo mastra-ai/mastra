@@ -6,6 +6,7 @@ import fastStringWidth from 'fast-string-width';
 import pc from 'picocolors';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEPLOY_REGIONS } from '../../utils/platform-region.js';
 import { MASTRA_PROJECTS_URL } from '../auth/client.js';
 import * as credentials from '../auth/credentials.js';
 import type { ProjectDatabase } from '../db/platform-api.js';
@@ -149,10 +150,20 @@ describe('project resolution', () => {
 });
 
 describe('deploy option validation', () => {
-  it('rejects a --region other than us or eu before doing anything', async () => {
-    await expect(unifiedDeployAction(undefined, { region: 'ap-southeast' })).rejects.toThrow(
-      '--region must be "us" or "eu" (got "ap-southeast")',
+  it.each(['ap-southeast', 'sin', 'EU', 'us-west1'])('rejects --region %j before doing anything', async region => {
+    await expect(unifiedDeployAction(undefined, { region })).rejects.toThrow(
+      `--region must be one of "us", "eu", "pdx", "iad", "sfo", "ams" (got "${region}")`,
     );
+  });
+
+  it.each(DEPLOY_REGIONS)('accepts --region %j and continues to the deploy', async region => {
+    // Past option validation, the first step is the directory check.
+    await expect(unifiedDeployAction('./missing-deploy-dir', { region })).rejects.toThrow(
+      'Directory not found: ./missing-deploy-dir.',
+    );
+  });
+
+  it('rejects an unknown --workers mode before doing anything', async () => {
     await expect(unifiedDeployAction(undefined, { workers: 'sometimes' as never })).rejects.toThrow(
       '--workers must be "dedicated" or "in-process"',
     );
@@ -188,6 +199,17 @@ describe('project creation', () => {
       region: 'eu',
     });
     expect(createProjectMock).not.toHaveBeenCalled();
+  });
+
+  it.each(DEPLOY_REGIONS)('forwards region %j unchanged when creating a factory project', async region => {
+    createServerProjectMock.mockResolvedValue({ id: 'project-1', name: 'Factory', slug: null });
+
+    await createDeployProject('token', 'org-1', 'Factory', { projectType: 'factory', region });
+
+    expect(createServerProjectMock).toHaveBeenCalledWith('token', 'org-1', 'Factory', {
+      factoryEnabled: true,
+      region,
+    });
   });
 
   it('omits an unsupported region when creating a factory project', async () => {
@@ -396,22 +418,26 @@ describe('environment resolution', () => {
     selectMock.mockReset().mockResolvedValue('eu');
   });
 
-  it('prompts for a region when the requested environment must be created', async () => {
-    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'preview', false)).resolves.toEqual({
+  it.each(['production', 'staging', 'preview'])('uses default placement without a region prompt for %s', async name => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', name, false)).resolves.toEqual({
       existing: false,
-      name: 'preview',
-      type: 'preview',
-      region: 'eu',
+      name,
+      type: name,
     });
 
-    expect(selectMock).toHaveBeenCalledWith({
-      message: 'Select a deployment region',
-      initialValue: 'us',
-      options: [
-        { value: 'us', label: 'United States' },
-        { value: 'eu', label: 'Europe' },
-      ],
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it('does not relocate an existing environment when a different region is requested', async () => {
+    const environment = { id: 'env-1', name: 'production', type: 'production', region: 'ams' };
+    fetchEnvironmentsMock.mockResolvedValue([environment]);
+
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', false, 'iad')).resolves.toEqual({
+      existing: true,
+      environment,
     });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(confirmMock).not.toHaveBeenCalled();
   });
 
   it('uses an explicitly requested region without prompting', async () => {
@@ -420,6 +446,17 @@ describe('environment resolution', () => {
       name: 'production',
       type: 'production',
       region: 'eu',
+    });
+
+    expect(selectMock).not.toHaveBeenCalled();
+  });
+
+  it.each(DEPLOY_REGIONS)('forwards requested region %j unchanged without prompting', async region => {
+    await expect(resolveEnvironment('token', 'org-1', 'project-1', 'production', true, region)).resolves.toEqual({
+      existing: false,
+      name: 'production',
+      type: 'production',
+      region,
     });
 
     expect(selectMock).not.toHaveBeenCalled();

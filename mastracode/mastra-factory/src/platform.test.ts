@@ -27,6 +27,7 @@ import {
   createServerProject,
   ensureProductionEnvironment,
   PlatformApiError,
+  PROJECT_REGIONS,
   waitForDatabaseReady,
 } from './platform.js';
 
@@ -51,7 +52,7 @@ afterEach(() => {
 });
 
 describe('createServerProject', () => {
-  it('marks projects as factory-enabled', async () => {
+  it.each(PROJECT_REGIONS)('creates a factory project with region %s unchanged in the request', async region => {
     cliAuth.platformFetch.mockImplementationOnce(
       async () =>
         new Response(JSON.stringify({ project: { id: 'proj_1', slug: 'my-factory', name: 'My Factory' } }), {
@@ -60,12 +61,12 @@ describe('createServerProject', () => {
         }),
     );
 
-    await createServerProject({ token: 'wos-token', orgId: 'org_123', name: 'My Factory', region: 'eu' });
+    await createServerProject({ token: 'wos-token', orgId: 'org_123', name: 'My Factory', region });
 
     expect(cliAuth.platformFetch).toHaveBeenCalledWith(
       'https://platform.example.test/v1/server/projects',
       expect.objectContaining({
-        body: JSON.stringify({ name: 'My Factory', region: 'eu', factoryEnabled: true }),
+        body: JSON.stringify({ name: 'My Factory', region, factoryEnabled: true }),
       }),
     );
   });
@@ -91,15 +92,15 @@ describe('ensureProductionEnvironment', () => {
     });
   });
 
-  it('creates production in the selected region when it does not exist', async () => {
+  it.each(PROJECT_REGIONS)('creates production with region %s unchanged in the request', async region => {
     cliAuth.platformFetch
       .mockImplementationOnce(jsonResponseFactory(200, { environments: [] }))
       .mockImplementationOnce(jsonResponseFactory(201, { environment: { id: 'env_new' } }));
-    await expect(ensureProductionEnvironment(options)).resolves.toBe('env_new');
+    await expect(ensureProductionEnvironment({ ...options, region })).resolves.toBe('env_new');
     expect(cliAuth.platformFetch).toHaveBeenLastCalledWith(url, {
       method: 'POST',
       headers: { Authorization: 'Bearer wos-token', 'x-mastra-org-id': 'org_123', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'production', type: 'production', region: 'eu' }),
+      body: JSON.stringify({ name: 'production', type: 'production', region }),
     });
   });
 

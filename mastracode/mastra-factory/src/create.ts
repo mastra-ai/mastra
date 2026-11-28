@@ -18,6 +18,8 @@ import {
   ensureProductionEnvironment,
   getDatabaseConnection,
   mintOrgApiKey,
+  isProjectRegion,
+  PROJECT_REGIONS,
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
@@ -41,7 +43,7 @@ export interface CreateArgs {
    * `.env.example`.
    */
   noPlatform?: boolean;
-  /** Optional platform project region. Accepted values are `eu` and `us`. */
+  /** Optional platform project region: us/eu aliases or pdx/iad/sfo/ams. */
   region?: string;
   /**
    * Optional org identifier (id or name) to skip the interactive org picker.
@@ -69,17 +71,21 @@ interface PlatformProvisionResult {
 const NEON_REGION_BY_PROJECT_REGION = {
   eu: 'aws-eu-central-1',
   us: 'aws-us-west-2',
+  pdx: 'aws-us-west-2',
+  iad: 'aws-us-east-1',
+  sfo: 'aws-us-west-2',
+  ams: 'aws-eu-central-1',
 } as const satisfies Record<ProjectRegion, string>;
 
 function parseProjectRegion(region: string): ProjectRegion {
-  if (region === 'eu' || region === 'us') return region;
-  throw new Error(`Invalid --region "${region}". Expected one of: eu, us.`);
+  if (isProjectRegion(region)) return region;
+  throw new Error(`Invalid --region "${region}". Expected one of: ${PROJECT_REGIONS.join(', ')}.`);
 }
 
 export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Factory '));
 
-  const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
+  const requestedRegion = args.region !== undefined ? parseProjectRegion(args.region) : undefined;
   const cwd = process.cwd();
   const cwdIsUsable = canScaffoldInto(cwd);
   const nameInput =

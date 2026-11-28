@@ -48,7 +48,10 @@ const cliAuth = vi.hoisted(() => ({
 
 vi.mock('@clack/prompts', () => clack);
 vi.mock('tinyexec', () => tinyexec);
-vi.mock('./platform.js', () => platform);
+vi.mock('./platform.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('./platform.js')>()),
+  ...platform,
+}));
 vi.mock('mastra/internal/auth', () => cliAuth);
 
 import { create, PLATFORM_TEMPLATE_REPO } from './create.js';
@@ -648,35 +651,42 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region eu to project creation and the database region', async () => {
+  it.each([
+    ['us', 'aws-us-west-2'],
+    ['eu', 'aws-eu-central-1'],
+    ['pdx', 'aws-us-west-2'],
+    ['iad', 'aws-us-east-1'],
+    ['sfo', 'aws-us-west-2'],
+    ['ams', 'aws-eu-central-1'],
+  ])('passes --region %s unchanged to project and environment creation with Neon in %s', async (region, regionId) => {
     await create({
       projectName: 'my-factory',
       template: PLATFORM_TEMPLATE_REPO,
-      region: 'eu',
+      region,
       analytics,
     });
 
     expect(clack.select).not.toHaveBeenCalled();
-    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
-    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region }));
+    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith(expect.objectContaining({ region }));
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-eu-central-1',
+      regionId,
     });
   });
 
-  it('rejects unsupported --region values before scaffolding', async () => {
+  it.each(['aws-us-east-2', 'sin', 'EU', ''])('rejects unsupported --region %j before scaffolding', async region => {
     await expect(
       create({
         projectName: 'my-factory',
         template: PLATFORM_TEMPLATE_REPO,
-        region: 'aws-us-east-2',
+        region,
         analytics,
       }),
-    ).rejects.toThrow('Invalid --region "aws-us-east-2". Expected one of: eu, us.');
+    ).rejects.toThrow(`Invalid --region "${region}". Expected one of: us, eu, pdx, iad, sfo, ams.`);
 
     expect(tinyexec.x).not.toHaveBeenCalled();
     expect(platform.createServerProject).not.toHaveBeenCalled();

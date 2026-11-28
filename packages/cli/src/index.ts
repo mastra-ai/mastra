@@ -46,6 +46,7 @@ import { parseComponents, parseLlmProvider, parseMcp, wrapAction } from './comma
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
 import { startWorker } from './commands/worker/start';
+import { DEPLOY_REGIONS } from './utils/platform-region';
 
 const mastraPkg = pkgJson as PackageJson;
 export const version = mastraPkg.version;
@@ -270,7 +271,10 @@ program
   .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
   .option('--skip-build', 'Skip the build step and use existing .mastra/output')
   .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
-  .option('--region <region>', 'Region for new environments (e.g., us, eu)')
+  .option(
+    '--region <region>',
+    `Region for new environments and Factory projects: ${DEPLOY_REGIONS.join(', ')} (default: us)`,
+  )
   .option(
     '--workers <mode>',
     'Background worker deployment mode: "dedicated" (dedicated workers service, recommended; requires Redis) or "in-process" (run background tasks inside the API server container; spins down an existing workers service). Prompts on new environments when omitted.',
