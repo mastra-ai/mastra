@@ -34,12 +34,14 @@ describe('unsubscribe acquired batches', () => {
     xPendingRange: ReturnType<typeof vi.fn>;
     xClaim: ReturnType<typeof vi.fn>;
     duplicate: ReturnType<typeof vi.fn>;
+    sendCommand: ReturnType<typeof vi.fn>;
   };
   let reader: {
     on: ReturnType<typeof vi.fn>;
     connect: ReturnType<typeof vi.fn>;
     quit: ReturnType<typeof vi.fn>;
     xReadGroup: ReturnType<typeof vi.fn>;
+    sendCommand: ReturnType<typeof vi.fn>;
   };
   beforeEach(() => {
     vi.useFakeTimers();
@@ -58,8 +60,17 @@ describe('unsubscribe acquired batches', () => {
       xClaim: vi.fn(() => claim.promise),
       // Readers are created from the writer with duplicate().
       duplicate: vi.fn(() => reader),
+      // CLIENT UNBLOCK reply: 1 when a client was actually unblocked.
+      sendCommand: vi.fn(async () => 1),
     };
-    reader = { on: vi.fn(), connect: vi.fn(), quit: vi.fn(), xReadGroup: vi.fn(() => read.promise) };
+    reader = {
+      on: vi.fn(),
+      connect: vi.fn(),
+      quit: vi.fn(),
+      xReadGroup: vi.fn(() => read.promise),
+      // CLIENT ID reply: the reader connection's id.
+      sendCommand: vi.fn(async () => 42),
+    };
     clients.create.mockReset().mockReturnValueOnce(writer);
     // The fake writer models bare XGROUP CREATE / XADD (no MULTI); the idle-TTL
     // MULTI path is covered against real Redis in connection-and-cleanup.test.ts.
@@ -218,5 +229,64 @@ describe('unsubscribe acquired batches', () => {
     await Promise.all([first, second]);
     expect(writer.xGroupCreate).toHaveBeenCalledTimes(1);
     expect(writer.duplicate).toHaveBeenCalledTimes(1);
+  });
+
+  it('captures the reader id at subscribe time', async () => {
+    const cb = vi.fn();
+    await ps.subscribe('topic', cb);
+    expect(reader.sendCommand).toHaveBeenCalledWith(['CLIENT', 'ID']);
+  });
+
+  it("cancels the reader's blocking read before closing it", async () => {
+    const cb = vi.fn();
+    await ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb);
+    read.resolve(null);
+    await stop;
+    // The unblock must be issued before the close, otherwise quit() would wait
+    // out the rest of the blocking read.
+    expect(writer.sendCommand).toHaveBeenCalledWith(['CLIENT', 'UNBLOCK', '42', 'TIMEOUT']);
+    expect(writer.sendCommand.mock.invocationCallOrder[0]).toBeLessThan(reader.quit.mock.invocationCallOrder[0]!);
+  });
+
+  it('resolves unsubscribe while the read is still idle', async () => {
+    // Model real Redis: CLIENT UNBLOCK makes the parked read return nil, so the
+    // loop can exit. Without the cancel this read never settles and the loop
+    // join in #stopSubscription would hang.
+    writer.sendCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === 'CLIENT' && args[1] === 'UNBLOCK') read.resolve(null);
+      return 1;
+    });
+    const cb = vi.fn();
+    await ps.subscribe('topic', cb);
+    await ps.unsubscribe('topic', cb);
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('still drains a reply that arrives after stop was requested', async () => {
+    const cb = vi.fn();
+    await ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb);
+    await vi.advanceTimersByTimeAsync(0);
+    // The unblock was a no-op (a reply was already on its way); that batch must
+    // still reach the callbacks as before, not be discarded by the close.
+    read.resolve([{ name: 'topic', messages: entries }]);
+    await stop;
+    expect(cb).toHaveBeenCalledTimes(10);
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to a plain quit when CLIENT UNBLOCK fails', async () => {
+    writer.sendCommand = vi.fn(async (args: string[]) => {
+      if (args[0] === 'CLIENT' && args[1] === 'UNBLOCK') throw new Error('NOPERM');
+      return 1;
+    });
+    const cb = vi.fn();
+    await ps.subscribe('topic', cb);
+    const stop = ps.unsubscribe('topic', cb);
+    read.resolve([{ name: 'topic', messages: entries }]);
+    await stop;
+    expect(reader.quit).toHaveBeenCalledTimes(1);
+    expect(cb).toHaveBeenCalledTimes(10);
   });
 });
