@@ -6,7 +6,8 @@ import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { readMutableSettingsFixture } from './settings-fixture.js';
 import type { McE2eScenario } from './types.js';
 
-const FAST_MODEL = 'openai/gpt-6.2-sol:fast';
+const FAST_BASE_MODEL = 'openai/gpt-6.2-sol';
+const FAST_MODEL = `${FAST_BASE_MODEL}:fast`;
 
 export const codexFastModelPickerScenario = {
   name: 'codex-fast-model-picker',
@@ -21,7 +22,8 @@ export const codexFastModelPickerScenario = {
       skippedAt: null,
       version: 1,
     };
-    settings.models = { ...settings.models, activeModelPackId: null, modeDefaults: {} };
+    // Start on a model that has Fast, so its Fast entry is the row checked below, whatever the app's default is.
+    settings.models = { ...settings.models, activeModelPackId: null, modeDefaults: { build: FAST_BASE_MODEL } };
     settings.customModelPacks = [];
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 

@@ -21,7 +21,12 @@ describe('parseCodexModelSelection', () => {
     'acme/local:fast',
   ])('does not reserve the suffix for %s', modelId => expect(parseCodexModelSelection(modelId)).toEqual({ modelId }));
 
-  it.each(['openai/gpt-5.3', 'openai/gpt-5.4-mini', 'mastra/openai/gpt-4.1'])(
+  it.each(['openai/gpt-5.6-terra', 'openai/gpt-5.6-luna'])(
+    'requests Fast on %s, which the Codex catalog lists with a Fast tier',
+    modelId => expect(parseCodexModelSelection(`${modelId}:fast`)).toEqual({ modelId, codexServiceTier: 'fast' }),
+  );
+
+  it.each(['openai/gpt-5.3', 'openai/gpt-5.4', 'openai/gpt-5.4-mini', 'openai/gpt-5.5', 'mastra/openai/gpt-4.1'])(
     'drops the suffix without requesting Fast on %s, which has no Fast tier',
     modelId => expect(parseCodexModelSelection(`${modelId}:fast`)).toEqual({ modelId }),
   );
