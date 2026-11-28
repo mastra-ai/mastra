@@ -5,9 +5,9 @@
 
 Both transports now bound the console logs they capture during execution when the run sets a log cap, so a chatty or long-running program can no longer grow a transport's log buffer without bound. Each retained line costs at least one byte, so `maxLogBytes` also caps the number of lines, and an overflowing log truncates instead of failing the program.
 
-The packages now require `@mastra/core >=1.87.0-0 <2.0.0-0`, because they use the per-run log-cap options and the shared log collector added in this release. The `-0` admits the unreleased `1.87.0` prerelease line that carries the collector; `@mastra/core` and these transports are published together.
+The packages now require `@mastra/core >=1.87.0-alpha.8 <2.0.0-0`, because they use the per-run log-cap options and the shared log collector that this release adds. `1.87.0-alpha.8` is the first release that exports `createCodeModeLogCollector`, so the floor names that prerelease instead of the `>=1.87.0-0 <2.0.0-0` sentinel used elsewhere: the sentinel also admits `1.87.0-alpha.0` through `1.87.0-alpha.7`, which satisfy it but do not export the collector, and the transports fail to load against them.
 
-Install the core release published alongside these packages. Earlier `1.87.0-alpha.*` prereleases satisfy the range but do not export `createCodeModeLogCollector`, so the transports fail to load against them. The floor cannot be raised past those prereleases here: `scripts/validate-peerdeps.mjs` validates every peer range against the in-repo core version, and the `>=X.Y.Z-0` sentinel is the repository-wide convention. Tighten the floor in a follow-up once the release that carries the collector is published.
+Upgrade `@mastra/core` to `1.87.0-alpha.8` or newer — `1.87.0` once it ships — whenever you upgrade a transport; the two are published together. The range still passes `scripts/validate-peerdeps.mjs`, which validates peer ranges after `changeset pre exit && changeset version` has bumped `@mastra/core` to `1.87.0`.
 
 Pass the caps to `createCodeMode()`; the transport applies them while it runs the program:
 
@@ -32,11 +32,11 @@ const { tool, instructions } = createCodeMode(
 }
 ```
 
-**After** — upgrade `@mastra/core` to the release published alongside these transports first, then upgrade the transport:
+**After** — upgrade `@mastra/core` to `1.87.0-alpha.8` or newer along with the transport:
 
 ```json
 {
-  "@mastra/core": ">=1.87.0-0 <2.0.0-0",
+  "@mastra/core": ">=1.87.0-alpha.8 <2.0.0-0",
   "@mastra/quickjs": "0.2.0"
 }
 ```
