@@ -58,6 +58,13 @@ interface CodeModeSemaphoreWaiter {
 }
 
 /**
+ * Consumed queue entries are dropped once this many have accumulated, and only
+ * when they are at least half of the queue. Small queues never pay for it, and
+ * no single release does more than one bounded slice.
+ */
+const COMPACT_AFTER = 1024;
+
+/**
  * Abort-aware FIFO semaphore. At most `limit` tasks run at once; excess callers
  * wait in arrival order. Every slot is released in `finally`, and waiters reject
  * on abort without running their task.
@@ -65,13 +72,14 @@ interface CodeModeSemaphoreWaiter {
  * Both ends are O(1) amortized and do no work proportional to the queue size:
  * the run's signal carries a single listener (per-waiter listeners make
  * `addEventListener`/`removeEventListener` quadratic once thousands of calls are
- * queued), and the queue is drained by advancing a head index. Guest code
- * controls how many calls it queues, so a large backlog must stay cheap.
+ * queued), and the queue is drained by advancing a head index over consumed
+ * entries. Guest code controls how many calls it queues, so a large backlog
+ * must stay cheap.
  */
 function createCallSemaphore(limit: number, signal: AbortSignal) {
   const abortReason = () => signal.reason ?? new Error('Code Mode execution aborted');
   let active = 0;
-  let waiters: CodeModeSemaphoreWaiter[] = [];
+  let waiters: (CodeModeSemaphoreWaiter | undefined)[] = [];
   let head = 0;
 
   // One listener for the whole run: on abort, reject every queued waiter at once.
@@ -81,18 +89,32 @@ function createCallSemaphore(limit: number, signal: AbortSignal) {
       const pending = waiters.slice(head);
       waiters = [];
       head = 0;
-      for (const waiter of pending) waiter.reject(abortReason());
+      for (const waiter of pending) waiter?.reject(abortReason());
     },
     { once: true },
   );
 
+  // Consumed entries sit before `head`. Drop the consumed prefix once it is both
+  // large and comparable to the live queue, so a steady stream of calls (a call
+  // starts as one finishes, leaving the backlog small) cannot retain every
+  // completed waiter. Slicing keeps FIFO order and amortized O(1) dequeue.
+  const compact = () => {
+    if (head >= COMPACT_AFTER && head * 2 >= waiters.length) {
+      waiters = waiters.slice(head);
+      head = 0;
+    }
+  };
+
   const release = () => {
     active -= 1;
     while (head < waiters.length) {
-      const next = waiters[head++];
+      const next = waiters[head];
+      waiters[head] = undefined; // release the consumed waiter's callbacks
+      head += 1;
       if (next) {
         active += 1;
         next.resolve();
+        compact();
         return;
       }
     }
