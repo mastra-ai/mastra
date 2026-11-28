@@ -340,15 +340,14 @@ describe('provisioning protocol', () => {
           const del = a.deleteIndex({ indexName: name }).catch(e => e);
           await reached(p);
           await b.deleteIndex({ indexName: name });
-          // Atlas Local can briefly list the dropped collection's indexes as DOES_NOT_EXIST, a
-          // retryable CONFLICT; retry as the error says.
-          const stuck = createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT');
-          await waitFor(() =>
-            b.createIndex({ indexName: name, dimension: 4 }).then(
-              () => true,
-              e => (e?.id === stuck ? false : Promise.reject(e)),
-            ),
-          );
+          // Atlas Local lists a dropped collection's search indexes again once a collection of that
+          // name is recreated, until it finishes removing them, so a recreate right away can be
+          // refused or attach an index that then disappears. Let that removal finish on a scratch
+          // collection, then drop it so the recreate below starts from nothing.
+          await db.createCollection(name);
+          await waitFor(async () => (await db.collection(name).listSearchIndexes().toArray()).length === 0);
+          await db.collection(name).drop();
+          await b.createIndex({ indexName: name, dimension: 4 });
           await b.upsert({ indexName: name, vectors: [[1, 0, 0, 0]], ids: ['kept'] });
           p.release.resolve();
           expect(await del).toBeUndefined();
@@ -362,9 +361,6 @@ describe('provisioning protocol', () => {
         expect(replacement?.generation).not.toBe(original);
         expect(await db.collection(name).countDocuments({ _id: 'kept' as any })).toBe(1);
         expect(await searchIndexNames(db, name)).toContain(`${name}_vector_index`);
-        // Atlas Local revives a dropped collection's search indexes when it is recreated, so the
-        // replacement attaches them without recording ownership; a real cluster drops them.
-        clean.opts = { expectedLeaks: [`${name}_vector_index`, `${name}_search_index`] };
       });
 
       it('P-STALE-DEL-byo: a delete that read the old lifetime leaves a recreated BYO registration and its search index alone', async () => {
