@@ -119,7 +119,7 @@ export const shopAgent = new Agent({
             name: 'maxLogBytes',
             type: 'number',
             description:
-              'Maximum UTF-8 bytes of captured console logs. Overflow truncates the logs and the program still succeeds. `0` captures no logs. Must be a non-negative integer. Unset by default.',
+              'Maximum UTF-8 bytes of captured console logs. Each retained line costs at least one byte, so a finite cap also bounds the line count. Overflow truncates the logs and the program still succeeds. `0` captures no logs. Must be a non-negative integer. Unset by default.',
             isOptional: true,
           },
           {
@@ -149,7 +149,7 @@ All five execution limits are opt-in. When unset, call counts, concurrency, resu
 
 - `maxCalls` and `maxResultBytes` fail the whole run with a `CodeModeLimitError` when exceeded, even if the program catches the individual rejection. Use them to cap how many tools a program can reach and how much data each nested result can carry.
 - `maxConcurrentCalls` queues calls in arrival order instead of failing, so a program that fans out with `Promise.all` still completes, with less host-side pressure at once.
-- `maxLogBytes` and `maxLogLines` truncate the captured logs instead of failing. The program still succeeds, and `logs` in the result stays within the cap.
+- `maxLogBytes` and `maxLogLines` truncate the captured logs instead of failing. The program still succeeds, and `logs` in the result stays within the cap. Each retained line costs at least one byte, so a byte cap also bounds the line count.
 
 The limits layer on top of `timeout` and, for in-process transports, their own runtime budgets such as the QuickJS `maxInterruptTicks`. For multi-tenant deployments, set explicit call, concurrency, result, log, and timeout budgets rather than relying on defaults.
 

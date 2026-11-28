@@ -66,9 +66,10 @@ export interface CodeModeConfig {
   /**
    * Maximum UTF-8 bytes of captured console logs.
    *
-   * Overflow truncates the logs — the program still succeeds. Must be a
-   * non-negative integer (0 captures no logs). Optional; omitted means
-   * unlimited.
+   * Each retained line costs at least one byte, so a finite cap always bounds
+   * the number of lines too. Overflow truncates the logs — the program still
+   * succeeds. Must be a non-negative integer (0 captures no logs). Optional;
+   * omitted means unlimited.
    */
   maxLogBytes?: number;
 
@@ -206,8 +207,9 @@ export interface CodeModeTransport {
     /**
      * Maximum UTF-8 bytes of captured console logs. A transport that buffers
      * logs during execution should honor this to keep its memory bounded;
-     * omitted means unlimited. Core additionally replays the returned logs
-     * through the same cap as a compatibility guard.
+     * each retained line should cost at least one byte so a finite cap also
+     * bounds the line count. Omitted means unlimited. Core additionally
+     * replays the returned logs through the same cap as a compatibility guard.
      */
     maxLogBytes?: number;
     /**

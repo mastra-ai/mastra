@@ -1,7 +1,5 @@
 ---
 '@mastra/core': minor
-'@mastra/quickjs': minor
-'@mastra/isolated-vm': minor
 ---
 
 Code mode now enforces per-run execution limits, so you can bound what a single program of model-authored code may consume.
@@ -11,15 +9,13 @@ Code mode now enforces per-run execution limits, so you can bound what a single 
 - `maxCalls` caps how many `external_*` calls a program may attempt.
 - `maxConcurrentCalls` caps how many run at once; extra calls queue instead of failing.
 - `maxResultBytes` caps the UTF-8 size of each nested tool result.
-- `maxLogBytes` and `maxLogLines` bound captured console logs.
+- `maxLogBytes` and `maxLogLines` bound captured console logs when a log cap is configured. Each retained line costs at least one byte, so a byte cap also bounds the line count.
 
 `maxCalls` and `maxResultBytes` fail the whole run with a `CodeModeLimitError` when exceeded, even if the program catches the rejection. The log caps truncate the captured logs and the program still succeeds. All five are unset by default, so existing behavior is unchanged.
 
-The same limits apply to every built-in transport. Captured logs are now bounded during execution by a shared collector, so a long-running or chatty program can no longer grow a transport's log buffer without bound. Custom transports keep receiving the result they returned, and core replays it through the collector when a log cap is configured.
+The calling tool's abort signal now cancels the run: it reaches the transport and every nested `external_*` call, in-flight calls are aborted, and calls still queued behind `maxConcurrentCalls` are rejected without starting.
 
-The calling tool's abort signal now cancels the run and aborts in-flight `external_*` calls.
-
-`@mastra/quickjs` and `@mastra/isolated-vm` now require `@mastra/core >=1.87.0-0 <2.0.0-0`, because they consume the shared log collector and the new per-run log-cap options.
+When a log cap is configured, core also replays the logs a transport returns through the same collector, so a custom transport that ignores the caps still yields bounded output.
 
 ```ts
 const { tool } = createCodeMode({
