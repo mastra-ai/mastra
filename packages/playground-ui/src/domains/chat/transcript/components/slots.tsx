@@ -29,6 +29,12 @@ export interface TranscriptDataPartSlot {
   Component: ComponentType<{ part: DataPart }>;
 }
 
+export interface TranscriptChannelReplyErrorProps {
+  toolCallId: string;
+  /** The reply that didn't reach the channel. */
+  text: string;
+}
+
 export interface TranscriptSubmitPlanProps {
   toolCallId: string;
   input?: unknown;
@@ -48,6 +54,8 @@ export interface TranscriptSubmitPlanProps {
  *   no way to answer. A paused call inside a message that asks a question keeps its inline answer form.
  * - `Subagent`: nothing; the tool call that started the subagent already names it in the message.
  * - `SubmitPlan`: the generic tool row, with no way to approve or revise the plan.
+ * - `ChannelReplyError`: nothing; a reply that failed to post only says so, with no way to retry. Draw its
+ *   actions as `Button variant="ghost" size="icon-sm"` with a tooltip, like the copy button on a sent reply.
  * - `DataPart`: nothing; every `data-*` part stays hidden and leaves the activity line whole.
  */
 export interface TranscriptSlots {
@@ -66,6 +74,7 @@ export interface TranscriptSlots {
   }>;
   Subagent?: ComponentType<{ entry: SubagentEntry }>;
   SubmitPlan?: ComponentType<TranscriptSubmitPlanProps>;
+  ChannelReplyError?: ComponentType<TranscriptChannelReplyErrorProps>;
   DataPart?: TranscriptDataPartSlot;
 }
 

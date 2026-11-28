@@ -4,11 +4,13 @@ import type { ReactNode } from 'react';
 import { ChannelReplyMessage, REPLY_IN_THREAD_TOOL, replyText } from './ChannelReplyMessage';
 import type { ReplyFooter } from './ChannelReplyMessage';
 import { useTranscriptSlots } from './slots';
+import type { TranscriptSlots } from './slots';
 
 import { SkillMessage } from '@/domains/chat/messages/skill-message';
 import { AskUser } from '@/ds/components/ai/ask-user';
 import type { AskUserAnswer, AskUserOption, AskUserPayload } from '@/ds/components/ai/ask-user';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
+import { MessageActions } from '@/ds/components/Message';
 
 type ToolStatus = 'running' | 'done' | 'error';
 
@@ -72,6 +74,31 @@ function askUserPayload(input: unknown): AskUserPayload | undefined {
   return { question, ...(options ? { options, selectionMode } : {}) };
 }
 
+function channelReplyFooter({
+  status,
+  text,
+  toolCallId,
+  replyFooter,
+  ErrorActions,
+}: {
+  status: ToolStatus;
+  text: string;
+  toolCallId: string;
+  replyFooter?: (text: string) => ReplyFooter;
+  ErrorActions?: TranscriptSlots['ChannelReplyError'];
+}): ReplyFooter | undefined {
+  if (status === 'done') return replyFooter?.(text);
+  if (status === 'error' && ErrorActions)
+    return {
+      actions: (
+        <MessageActions visibility="always">
+          <ErrorActions toolCallId={toolCallId} text={text} />
+        </MessageActions>
+      ),
+    };
+  return undefined;
+}
+
 function ToolFactoryComponent({
   toolName,
   toolCallId,
@@ -84,7 +111,7 @@ function ToolFactoryComponent({
   onRespond,
   fallback,
 }: ToolFactoryProps) {
-  const { SubmitPlan } = useTranscriptSlots();
+  const { SubmitPlan, ChannelReplyError } = useTranscriptSlots();
   if (toolName === 'ask_user') {
     const payload = askUserPayload(input);
     if (status === 'running' && (!payload || !onRespond)) return null;
@@ -116,7 +143,13 @@ function ToolFactoryComponent({
         <ChannelReplyMessage
           text={text}
           status={replyStatus}
-          footer={replyStatus === 'done' ? replyFooter?.(text) : undefined}
+          footer={channelReplyFooter({
+            status: replyStatus,
+            text,
+            toolCallId,
+            replyFooter,
+            ErrorActions: ChannelReplyError,
+          })}
         />
       );
   }
