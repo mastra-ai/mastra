@@ -14,10 +14,12 @@
  * CommonJS globals (`__filename`, …) that `typescript` — reached through
  * `ts-blank-space` — reads at module initialisation. A static import of the
  * stripper therefore crashed Workers at startup. This smoke runs the *built* ESM
- * inside real workerd via `wrangler`'s `unstable_dev`, constructs the transport,
- * and asserts a successful response. It is deliberately an import/startup smoke,
- * not a claim that the test compiles WASM in workerd — execution still uses the
- * caller-supplied `module` option.
+ * inside real workerd via `wrangler`'s `unstable_dev`, constructs the transport
+ * with a host-runnable `stripTypes`, and asserts a successful response. It then
+ * runs without `stripTypes`, which cannot load the default stripper on this host,
+ * and asserts the failure names the cause and the fix. It never compiles WASM:
+ * execution still uses the caller-supplied `module` option, so that path is not
+ * claimed here.
  *
  * The third suite guards the frozen-clock escape: a run that can only be ended by
  * the tick budget runs in its own process, so a regression fails the test instead
@@ -99,7 +101,7 @@ describe('frozen-clock execution guard', () => {
   });
 });
 
-describe('workerd import smoke (hosted-safe startup)', () => {
+describe('workerd smoke (hosted-safe startup)', () => {
   let projectDir: string;
 
   beforeAll(async () => {
@@ -110,17 +112,35 @@ describe('workerd import smoke (hosted-safe startup)', () => {
     await rm(projectDir, { recursive: true, force: true });
   });
 
-  it('starts in workerd and constructs the transport from the built ESM', { timeout: 120_000 }, async () => {
-    // Import only — never run a program. The regression is at module
-    // initialisation: evaluating `ts-blank-space` (and its `typescript`
-    // dependency) at startup throws `ReferenceError: __filename is not defined`.
+  it('starts in workerd and reports the hosted stripper failure from the built ESM', { timeout: 120_000 }, async () => {
+    // Import only — the Worker never runs WASM. The startup regression is at
+    // module initialisation: evaluating `ts-blank-space` (and its `typescript`
+    // dependency) there throws `ReferenceError: __filename is not defined`.
+    //
+    // The first run supplies its own stripper and asserts it was the one used, so
+    // the default is never loaded. The second omits `stripTypes`, so the default
+    // stripper is loaded lazily, on the run — where the same missing Node.js
+    // globals make it fail, and the failure must name the cause and the fix.
     const worker = `
         import { QuickJsCodeModeTransport } from ${JSON.stringify(esmEntry)};
 
+        const program = { program: 'return 1;', toolIds: [], dispatch: async () => undefined };
+
         export default {
-          fetch() {
-            const transport = new QuickJsCodeModeTransport();
-            return Response.json({ requiresSandbox: transport.requiresSandbox });
+          async fetch() {
+            const injected = new QuickJsCodeModeTransport({
+              stripTypes: () => { throw new Error('injected stripper ran') },
+            });
+            const injectedResult = await injected.run(program);
+            const defaultsResult = await new QuickJsCodeModeTransport().run(program).then(
+              () => ({ success: true }),
+              (error) => ({ thrown: String((error && error.message) || error) }),
+            );
+            return Response.json({
+              requiresSandbox: injected.requiresSandbox,
+              injected: injectedResult.error && injectedResult.error.message,
+              defaults: defaultsResult.thrown,
+            });
           },
         };
       `;
@@ -168,7 +188,18 @@ describe('workerd import smoke (hosted-safe startup)', () => {
       ]).finally(() => clearTimeout(readinessTimer));
 
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ requiresSandbox: false });
+      const body = (await response.json()) as {
+        requiresSandbox: boolean;
+        injected: string | null;
+        defaults: string | undefined;
+      };
+      expect(body.requiresSandbox).toBe(false);
+      // The injected stripper ran, so the default one was never loaded.
+      expect(body.injected).toBe('injected stripper ran');
+      // Omitting `stripTypes` on this host must name the cause and the fix.
+      expect(body.defaults).toMatch(/default TypeScript stripper could not be loaded/);
+      expect(body.defaults).toMatch(/__filename is not defined/);
+      expect(body.defaults).toMatch(/pass a stripTypes function/);
     } finally {
       await dev?.stop();
       process.chdir(cwd);

@@ -35,27 +35,17 @@ const { tool, instructions } = createCodeMode(
 
 ### Hosted runtimes
 
-Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper. The stripper ([ts-blank-space](https://github.com/bloomberg/ts-blank-space)) loads lazily, on the first run that needs it, so the import is safe on hosts that don't provide Node.js globals such as `__filename`, including Cloudflare Workers. Pass your own `stripTypes` to keep even that load off the host, and a preloaded `module` when you want to control when the WebAssembly module loads:
+Importing `@mastra/quickjs` doesn't initialize the default TypeScript stripper, so the import is safe on hosts that don't provide Node.js globals such as `__filename`, including Cloudflare Workers. The default stripper ([ts-blank-space](https://github.com/bloomberg/ts-blank-space)) loads on the first run that needs it, and on those hosts it can't load at all: it pulls in the `typescript` package, which reads `__filename` while it initializes. Pass a stripper that runs on the host instead:
 
 ```typescript
-import { createCodeMode } from '@mastra/core/tools'
 import { QuickJsCodeModeTransport } from '@mastra/quickjs'
-import { getQuickJS } from 'quickjs-emscripten'
 
-const module = await getQuickJS()
-
-// Import the stripper where it is used, never at module scope: importing it
-// eagerly pulls in TypeScript, whose module initialization needs Node.js
-// globals.
-async function createHostedTransport() {
-  const { default: stripTypes } = await import('ts-blank-space')
-  return new QuickJsCodeModeTransport({ module, stripTypes })
-}
-
-const { tool, instructions } = createCodeMode({ tools }, await createHostedTransport())
+// Programs that are already plain JavaScript need no transform, and nothing
+// that depends on Node.js globals is loaded.
+const transport = new QuickJsCodeModeTransport({ stripTypes: code => code })
 ```
 
-A stripper passed this way receives the whole program and returns the JavaScript to evaluate, so it has to be synchronous. If the program is already plain JavaScript, an identity function is enough and needs no import at all: `stripTypes: (code) => code`.
+A stripper receives the whole program and returns the JavaScript that runs, so it has to be synchronous. Where a build step can strip the types instead, send the program already stripped. To control when the WebAssembly module loads, pass a preloaded `module` as well.
 
 ## Constructor parameters
 
@@ -97,7 +87,7 @@ A stripper passed this way receives the whole program and returns the JavaScript
             name: 'stripTypes',
             type: '(code: string) => string',
             description:
-              "Function that removes TypeScript type syntax from the program before it runs. Supply one to control stripping, for example on a host that can't load the default stripper. Defaults to ts-blank-space, loaded lazily on the first run that needs it.",
+              "Function that removes TypeScript type syntax from the program before it runs. Supply one on a host that can't load the default stripper, such as Cloudflare Workers, where it can't load at all. Defaults to ts-blank-space, loaded on the first run that needs it.",
             isOptional: true,
           },
           {

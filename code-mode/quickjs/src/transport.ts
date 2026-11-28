@@ -29,7 +29,8 @@
  * CommonJS globals such as `__filename` that hosted runtimes like workerd do not
  * provide, so it is imported lazily — merely importing this package no longer
  * evaluates it, and a caller that injects its own `stripTypes` avoids it
- * entirely.
+ * entirely. A caller that does not, on such a host, gets an error naming the fix
+ * rather than the `ReferenceError` from inside `typescript`.
  *
  * ## Concurrency
  *
@@ -275,8 +276,23 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     // as a real SyntaxError, with QuickJS's own diagnostics.
     //
     // An injected stripper is used as-is and skips the default entirely, so a
-    // host that cannot initialise `ts-blank-space` never pays for loading it.
-    const strip = this.#stripTypes ?? (await loadDefaultStripTypes());
+    // host that cannot initialise `ts-blank-space` pays nothing for it. A caller
+    // that omits `stripTypes` on such a host would otherwise see the raw
+    // `ReferenceError` raised from inside `typescript`; name the fix instead.
+    let strip: QuickJsStripTypes;
+    if (this.#stripTypes) {
+      strip = this.#stripTypes;
+    } else {
+      try {
+        strip = await loadDefaultStripTypes();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `The default TypeScript stripper could not be loaded (${message}). On a runtime without Node.js globals, such as Cloudflare Workers, it cannot load at all: pass a stripTypes function, or send a program that is already plain JavaScript.`,
+          { cause: error },
+        );
+      }
+    }
     let strippedProgram: string;
     try {
       strippedProgram = strip(`(async () => {\n${program}\n})`);
