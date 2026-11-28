@@ -93,3 +93,13 @@ export type {
 } from './client.js';
 export { PROVIDERS, CHANNELS } from './registry.js';
 export type { ProviderRegistration } from './registry.js';
+export type { ResolvedClient } from './client.js';
+export { resolveClient } from './client.js';
+export type { McpProviderRegistration, ProxyProviderRegistration } from './registry.js';
+export {
+  buildMcpMultiConnectionTools,
+  buildProxyMultiConnectionTools,
+  listConnectionsToolKey,
+  toNamedConnections,
+} from './multi-connection.js';
+export type { NamedConnection } from './multi-connection.js';
