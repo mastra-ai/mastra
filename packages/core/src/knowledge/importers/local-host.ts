@@ -253,6 +253,12 @@ function hostError(error: unknown): unknown {
   return failure;
 }
 
+/** A committed receipt as replayed; receipts written before the `merged` count existed read it as 0. */
+const storedReceipt = (receipt: unknown): KnowledgeImporterFlushReceipt => {
+  const stored = receipt as KnowledgeImporterFlushReceipt;
+  return { ...stored, merged: stored.merged ?? 0 };
+};
+
 const receiptCounts = (counts: Record<string, number>): KnowledgeImportCounts => ({
   created: counts.created ?? 0,
   updated: counts.updated ?? 0,
@@ -260,6 +266,7 @@ const receiptCounts = (counts: Record<string, number>): KnowledgeImportCounts =>
   moved: counts.moved ?? 0,
   removed: counts.removed ?? 0,
   stubbed: counts.stubbed ?? 0,
+  merged: counts.merged ?? 0,
   refused: counts.refused ?? 0,
 });
 
@@ -569,7 +576,7 @@ export function createLocalKnowledgeImporterHost(
         });
       if (replayed) {
         if (replayed.digest !== digest) throw conflict('digest_mismatch', 'This seq was committed with other content.');
-        return replayed.receipt as KnowledgeImporterFlushReceipt;
+        return storedReceipt(replayed.receipt);
       }
       const [peek, peekRun] = await Promise.all([
         rootImporters.readWriterGuard(),
@@ -617,7 +624,7 @@ export function createLocalKnowledgeImporterHost(
                 if (stored.digest !== digest) {
                   throw conflict('digest_mismatch', 'This seq was committed with other content.');
                 }
-                return stored.receipt as KnowledgeImporterFlushReceipt;
+                return storedReceipt(stored.receipt);
               }
               if (!run || run.status !== 'running') throw conflict('run_not_active', 'The run is not running.');
               if (run.generation !== flush.generation || guard.generation !== flush.generation) {
