@@ -1,9 +1,8 @@
-import * as React from 'react';
-import { useTreeDepth } from './tree-context';
+import { useRef } from 'react';
+import { TreeIcon } from './tree-icon';
 import { IconFileBend } from '@/ds/icons/central/IconFileBend';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface TreeInputProps {
@@ -16,83 +15,54 @@ export interface TreeInputProps {
   className?: string;
 }
 
-export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
-  ({ type, onSubmit, onCancel, defaultValue = '', placeholder, autoFocus = true, className }, ref) => {
-    const depth = useTreeDepth();
-    const inputRef = React.useRef<HTMLInputElement>(null);
-    const submittedRef = React.useRef(false);
+export function TreeInput({
+  type,
+  onSubmit,
+  onCancel,
+  defaultValue = '',
+  placeholder,
+  autoFocus = true,
+  className,
+}: TreeInputProps) {
+  const submitted = useRef(false);
+  const Icon = type === 'folder' ? IconFolder1 : IconFileBend;
 
-    const handleSubmit = React.useCallback(
-      (value: string) => {
-        if (submittedRef.current) return;
-        const trimmed = value.trim();
-        if (trimmed) {
-          submittedRef.current = true;
-          onSubmit(trimmed);
-        } else {
-          onCancel?.();
-        }
-      },
-      [onSubmit, onCancel],
-    );
+  const submit = (value: string) => {
+    if (submitted.current) return;
+    const name = value.trim();
+    if (!name) return onCancel?.();
+    submitted.current = true;
+    onSubmit(name);
+  };
 
-    const handleKeyDown = React.useCallback(
-      (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleSubmit(e.currentTarget.value);
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          onCancel?.();
-        }
-      },
-      [handleSubmit, onCancel],
-    );
-
-    const handleBlur = React.useCallback(
-      (e: React.FocusEvent<HTMLInputElement>) => {
-        handleSubmit(e.currentTarget.value);
-      },
-      [handleSubmit],
-    );
-
-    const handleFocus = React.useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-      e.currentTarget.select();
-    }, []);
-
-    const Icon = type === 'folder' ? IconFolder1 : IconFileBend;
-
-    return (
-      <li
-        ref={ref}
-        role="treeitem"
-        aria-level={depth + 1}
-        data-tree-item-kind="input"
+  return (
+    <>
+      <TreeIcon>
+        <Icon className="text-muted-foreground" />
+      </TreeIcon>
+      <input
+        type="text"
+        defaultValue={defaultValue}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        autoFocus={autoFocus}
+        onKeyDown={event => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            submit(event.currentTarget.value);
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            onCancel?.();
+          }
+        }}
+        onBlur={event => submit(event.currentTarget.value)}
+        onFocus={event => event.currentTarget.select()}
+        {...passwordManagerOptOutProps}
         className={cn(
-          'group flex h-7 min-w-0 items-center gap-1.5 rounded-sm px-1',
-          transitions.colors,
-          'focus-within:bg-fill-subtle focus-within:text-foreground focus-within:outline-hidden',
+          'min-w-0 flex-1 border-none bg-transparent text-caption zoom-safe-text text-foreground outline-hidden placeholder:text-muted-foreground',
           className,
         )}
-        style={{ paddingLeft: depth * 12 + 18 }}
-      >
-        <span className="flex shrink-0 items-center [&>svg]:size-icon-sm">
-          <Icon className="text-muted-foreground" />
-        </span>
-        <input
-          ref={inputRef}
-          type="text"
-          defaultValue={defaultValue}
-          placeholder={placeholder}
-          autoFocus={autoFocus}
-          onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          onFocus={handleFocus}
-          {...passwordManagerOptOutProps}
-          className="min-w-0 flex-1 border-none bg-transparent text-caption zoom-safe-text text-foreground outline-hidden placeholder:text-muted-foreground"
-        />
-      </li>
-    );
-  },
-);
-TreeInput.displayName = 'Tree.Input';
+      />
+    </>
+  );
+}

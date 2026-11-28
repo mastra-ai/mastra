@@ -1,4 +1,3 @@
-import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { pluralize } from '@mastra/playground-ui/utils/string';
 
@@ -6,8 +5,8 @@ import type { WorkspaceChangesRepository } from '../../../../../../api/types';
 import { ChangeCounts } from '../ChangeCounts';
 import { buildChangeTree } from './change-tree';
 import type { RepositoryProvider } from './change-tree';
-import { ChangeTreeItem } from './ChangeTreeItem';
-import type { ChangeTreeFolderState } from './ChangeTreeItem';
+import { ChangeFileTree } from './ChangeFileTree';
+import type { ChangeTreeFolderState } from './ChangeFileTree';
 import { RepositoryGroupHeader } from './RepositoryGroupHeader';
 
 interface RepositoryChangesGroupProps extends ChangeTreeFolderState {
@@ -49,16 +48,14 @@ export function RepositoryChangesGroup({
         ) : null}
       </RepositoryGroupHeader>
       {open && tree.length > 0 ? (
-        <Tree selectedId={selectedPath} onSelect={onSelect} className="pl-2">
-          {tree.map(node => (
-            <ChangeTreeItem
-              key={node.path}
-              node={node}
-              openFolders={openFolders}
-              onFolderOpenChange={onFolderOpenChange}
-            />
-          ))}
-        </Tree>
+        <ChangeFileTree
+          nodes={tree}
+          openFolders={openFolders}
+          onFolderOpenChange={onFolderOpenChange}
+          selectedPath={selectedPath}
+          onSelect={onSelect}
+          className="pl-2"
+        />
       ) : null}
     </section>
   );

@@ -65,8 +65,6 @@ export const popoverSizeClass: Record<WorkspacePanelSize, string> = {
   full: `h-(--popover-room) ${popoverBoundsClass}`,
 };
 
-export const treeRowContainmentClass = '[content-visibility:auto] [contain-intrinsic-size:auto_1.75rem]';
-
 export { overviewClass } from '@mastra/playground-ui/domains/factory';
 
 /** Read through descendant selectors: a variable or `group-*` variant on this box would restyle the whole transcript. */

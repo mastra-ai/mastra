@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { useQueries } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import type {
   KnowledgeExplorerQueryState,
   KnowledgeExplorerSource,
   KnowledgeExplorerTreeLevel,
+  KnowledgeExplorerTreeRequest,
   KnowledgeExplorerView,
 } from '../KnowledgePageExplorer';
 import { KnowledgePageExplorer } from '../KnowledgePageExplorer';
@@ -168,6 +170,7 @@ function OutsidePickerHost() {
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}
@@ -176,6 +179,12 @@ beforeAll(() => {
 });
 
 const pageView = () => screen.getByRole('region', { name: 'Selected page' });
+
+function chevron(row: HTMLElement) {
+  const toggle = row.querySelector<HTMLElement>('[data-tree-toggle]');
+  if (!toggle) throw new Error(`no chevron on ${row.textContent}`);
+  return toggle;
+}
 
 describe('KnowledgePageExplorer page view', () => {
   describe('when a page is open', () => {
@@ -393,7 +402,7 @@ describe('KnowledgePageExplorer page view', () => {
       renderWithProviders(<Host />);
       const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
       expect(tree.getAllByRole('treeitem').map(row => row.textContent)).toEqual(['Acmeorg:acme', 'Policies']);
-      fireEvent.click(tree.getByRole('button', { name: 'Expand Policies' }));
+      fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
       expect(tree.getByRole('treeitem', { name: /Refund Policy/ })).toBeTruthy();
       expect(tree.queryByText('Escalation Process')).toBeNull();
       fireEvent.click(tree.getByRole('button', { name: 'Load more' }));
@@ -410,7 +419,7 @@ describe('KnowledgePageExplorer page view', () => {
       it('stays collapsed, hiding the selected page', () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('false');
         expect(tree.queryByRole('treeitem', { selected: true })).toBeNull();
       });
@@ -418,7 +427,7 @@ describe('KnowledgePageExplorer page view', () => {
       it('opens the path again when another page is selected under it', async () => {
         renderWithProviders(<Host initial="child-2" initialView="page" />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
         expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
       });
@@ -426,12 +435,118 @@ describe('KnowledgePageExplorer page view', () => {
       it('opens the path again when the same page is picked after the selection was cleared', () => {
         renderWithProviders(<OutsidePickerHost />);
         const tree = within(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(chevron(tree.getByRole('treeitem', { name: /^Policies/ })));
         fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
         fireEvent.click(screen.getByRole('button', { name: 'Pick child-2' }));
         expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('true');
         expect(tree.getByRole('treeitem', { selected: true })).toBeTruthy();
       });
     });
+  });
+});
+
+const handbook = page('handbook', 'org', { name: 'Handbook', childCount: 3 });
+const billing = page('billing', 'handbook', { name: 'Billing', childCount: 1 });
+const invoices = page('invoices', 'billing', { name: 'Invoices', childCount: 1 });
+const handbookPages = [
+  handbook,
+  billing,
+  invoices,
+  page('payouts', 'handbook', { name: 'Payouts', position: 'a1', childCount: 0 }),
+  page('tax', 'invoices', { name: 'Tax', childCount: 0 }),
+  page('disputes', 'handbook', { name: 'Disputes', position: 'a2', childCount: 0 }),
+];
+const handbookLevels = new Map(
+  Object.entries({
+    handbook: {
+      pages: handbookPages.filter(entry => entry.id === 'billing' || entry.id === 'payouts'),
+      nextCursor: 'more',
+    },
+    'handbook@more': { pages: handbookPages.filter(entry => entry.id === 'disputes') },
+    billing: { pages: [invoices], nextCursor: 'more' },
+    invoices: { pages: handbookPages.filter(entry => entry.id === 'tax') },
+  }),
+);
+const levelKey = ({ parentId, cursor }: KnowledgeExplorerTreeRequest) =>
+  `${parentId ?? ''}${cursor ? `@${cursor}` : ''}`;
+
+function HandbookHost({ requested, failOnce = new Set<string>() }: { requested: string[][]; failOnce?: Set<string> }) {
+  const handbookSource: KnowledgeExplorerSource = {
+    usePage: pageId =>
+      ok({
+        page: handbookPages.find(entry => entry.id === pageId) ?? handbook,
+        notes: [],
+        ancestors: [org],
+        related: [],
+      }),
+    useSearch: () => ({ data: { results: [] } }),
+    useTreeLevels: requests => {
+      requested.push(requests.map(levelKey));
+      return useQueries({
+        queries: requests.map(request => ({
+          queryKey: ['handbook-levels', levelKey(request)],
+          queryFn: async (): Promise<KnowledgeExplorerTreeLevel> => {
+            if (failOnce.delete(levelKey(request))) throw new Error('Network down');
+            return handbookLevels.get(levelKey(request)) ?? { pages: [] };
+          },
+        })),
+      }).map(result => ({
+        data: result.data,
+        isPending: result.isPending,
+        isError: result.isError,
+        error: result.error,
+      }));
+    },
+  };
+  return (
+    <KnowledgePageExplorer
+      graph={{ pages: [org, handbook], edges: [], pinnedIds: [], truncated: true }}
+      source={handbookSource}
+      selectedPageId="handbook"
+      onSelect={() => {}}
+      view="page"
+      onViewChange={() => {}}
+    />
+  );
+}
+
+const handbookTree = async () => within(await within(pageView()).findByRole('tree', { name: 'Pages' }));
+
+describe('KnowledgePageExplorer child pages, loaded a batch at a time', () => {
+  it('stops loading the levels under a folder once its parent is collapsed', async () => {
+    const requested: string[][] = [];
+    renderWithProviders(<HandbookHost requested={requested} />);
+    const pages = await handbookTree();
+    fireEvent.click(chevron(pages.getByRole('treeitem', { name: /^Billing/ })));
+    fireEvent.click(chevron(await pages.findByRole('treeitem', { name: /^Invoices/ })));
+    expect(await pages.findByRole('treeitem', { name: /^Tax/ })).toBeTruthy();
+
+    fireEvent.click(chevron(pages.getByRole('treeitem', { name: /^Billing/ })));
+
+    expect(pages.queryByRole('treeitem', { name: /^Invoices/ })).toBeNull();
+    expect(requested.at(-1)).not.toContain('invoices');
+    fireEvent.click(chevron(pages.getByRole('treeitem', { name: /^Billing/ })));
+    expect((await pages.findByRole('treeitem', { name: /^Invoices/ })).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('counts Load more as one of the pages beside it', async () => {
+    renderWithProviders(<HandbookHost requested={[]} />);
+    const pages = await handbookTree();
+    fireEvent.click(chevron(pages.getByRole('treeitem', { name: /^Billing/ })));
+    const invoicesRow = await pages.findByRole('treeitem', { name: /^Invoices/ });
+    const more = pages.getByRole('button', { name: 'Load more' }).closest('[role="treeitem"]');
+    expect([invoicesRow.getAttribute('aria-posinset'), invoicesRow.getAttribute('aria-setsize')]).toEqual(['1', '2']);
+    expect([more?.getAttribute('aria-posinset'), more?.getAttribute('aria-setsize')]).toEqual(['2', '2']);
+  });
+
+  it('offers to try again when the next batch fails, and loads it on retry', async () => {
+    renderWithProviders(<HandbookHost requested={[]} failOnce={new Set(['handbook@more'])} />);
+    const pages = await handbookTree();
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Couldn’t load more. Try again' }));
+
+    expect(await pages.findByRole('treeitem', { name: /^Disputes/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Try again/ })).toBeNull();
   });
 });

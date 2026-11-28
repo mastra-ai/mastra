@@ -39,7 +39,7 @@ const pages = [
 function Tree({ initiallySelected }: { initiallySelected?: string }) {
   const [selected, setSelected] = useState<string | null>(initiallySelected ?? null);
   return (
-    <div className="h-120 w-72 overflow-auto rounded-xl border border-border bg-card p-1">
+    <div className="flex h-120 w-72 flex-col rounded-xl border border-border bg-card p-1">
       <KnowledgePageTree
         pages={pages}
         pinnedIds={['refunds']}

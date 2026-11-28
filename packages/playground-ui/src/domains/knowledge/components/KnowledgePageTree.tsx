@@ -1,39 +1,23 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { scopeSource, scopeTitle } from '../lib/pageAddress';
-import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
-import { prefersMotion } from '../lib/useLeavingNodes';
+import { buildPageTree, childCountLabel, pageAncestorIds } from '../lib/pageTree';
+import type { KnowledgePageTreeNode } from '../lib/pageTree';
 import type { KnowledgePagePayload } from '../pageTypes';
 import { KnowledgeSourceIcon } from './KnowledgeSourceIcon';
 
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Tree } from '@/ds/components/Tree';
+import type { TreeRow } from '@/ds/components/Tree';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
 import { IconPin } from '@/ds/icons/central/IconPin';
 import { cn } from '@/utils/cn';
 
-/**
- * The box of the nearest ancestor (or the element itself) that really scrolls vertically. The tree sets
- * `overflow-y: auto` itself but, as tall as its rows, never overflows; a parent is what scrolls, so a
- * node counts only when its content is taller than it is.
- */
-function scrollingBox(element: HTMLElement | null): DOMRect | undefined {
-  let overflowing: HTMLElement | undefined;
-  for (let node = element; node; node = node.parentElement) {
-    const { overflowY } = getComputedStyle(node);
-    if (overflowY !== 'auto' && overflowY !== 'scroll' && overflowY !== 'overlay') continue;
-    if (node.scrollHeight > node.clientHeight) return node.getBoundingClientRect();
-    overflowing ??= node;
-  }
-  return (overflowing ?? element)?.getBoundingClientRect();
-}
-
-/** Where in the scroller a row focused from elsewhere lands, as a fraction of its height from the top. */
-const SCROLL_ROW_AT = 1 / 3;
-/** A row between these fractions of the scroller is comfortably in view and is not moved. */
-const COMFORT_TOP = 0.1;
-const COMFORT_BOTTOM = 0.7;
+type KnowledgeTreeRow = TreeRow &
+  (
+    | { kind: 'page'; page: KnowledgePagePayload; hasChildren: boolean }
+    | { kind: 'more'; parentId: string; load: () => void }
+  );
 
 /** The key {@link KnowledgePageTree}'s `loadMore` uses for the root level. */
 export const KNOWLEDGE_TREE_ROOT = '';
@@ -78,8 +62,6 @@ export function KnowledgePageTree({
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(initiallyExpanded ?? roots.map(root => root.page.id)),
   );
-  const [focusedId, setFocusedId] = useState<string | null>(null);
-  const itemRefs = useRef(new Map<string, HTMLDivElement>());
 
   // Open the path to a selection once. Later renders with the same selection and path (a refetch, a
   // level loading) leave it alone, so a parent the user collapses over the selection stays collapsed.
@@ -101,51 +83,28 @@ export function KnowledgePageTree({
     onExpandedChange?.(expanded);
   }, [expanded, onExpandedChange]);
 
-  const rows = useMemo(
-    () =>
-      visiblePageRows(roots, expanded).map(row =>
-        !row.hasChildren && mayHaveChildren?.(row.page) ? { ...row, hasChildren: true } : row,
-      ),
-    [roots, expanded, mayHaveChildren],
-  );
-  // Bring the selected row into view when it is selected, as soon as it exists, and again if rows that load
-  // later push it out of view (a deep page's levels arrive one after another). Once the user scrolls, presses a key or
-  // a pointer in the tree it is left alone. The row goes a third of the way down the scroller, middle-top, not
-  // hard against its bottom edge; keyboard focus is not moved.
-  const scroller = useRef<HTMLDivElement>(null);
-  const scrolledTo = useRef<string | null>(null);
-  const userScrolled = useRef(false);
-  useEffect(() => {
-    if (!selectedPageId) {
-      scrolledTo.current = null;
-      return;
-    }
-    const element = itemRefs.current.get(selectedPageId);
-    if (!element) return;
-    const first = scrolledTo.current !== selectedPageId;
-    if (first) {
-      scrolledTo.current = selectedPageId;
-      userScrolled.current = false;
-    } else if (userScrolled.current) return;
-    const box = scrollingBox(scroller.current);
-    const at = element.getBoundingClientRect();
-    if (!first && !box) return;
-    if (!first && box && box.height === 0 && at.top >= box.top && at.bottom <= box.bottom) return;
-    if (box && box.height > 0) {
-      // A row already well inside the scroller stays where it is.
-      const inView = at.top >= box.top + box.height * COMFORT_TOP && at.bottom <= box.top + box.height * COMFORT_BOTTOM;
-      if (inView) return;
-      // Otherwise it lands a third of the way down; the browser clamps this at the top and bottom of the list.
-      element.style.scrollMarginTop = `${box.height * SCROLL_ROW_AT}px`;
-    }
-    element.scrollIntoView?.({ block: 'start', behavior: first && prefersMotion() ? 'smooth' : 'auto' });
-    // The margin only steers this scroll; left on, focus() scrolls and a resized pane would keep a stale gap.
-    element.style.scrollMarginTop = '';
-  }, [rows, selectedPageId]);
-  const activeId =
-    focusedId && rows.some(row => row.page.id === focusedId)
-      ? focusedId
-      : (rows.find(row => row.page.id === selectedPageId)?.page.id ?? rows[0]?.page.id);
+  const rows: KnowledgeTreeRow[] = [];
+  const addLevel = (nodes: KnowledgePageTreeNode[], level: number, parentId: string) => {
+    const load = loadMore?.get(parentId);
+    const setSize = nodes.length + (load ? 1 : 0);
+    nodes.forEach(({ page, children }, index) => {
+      const open = expanded.has(page.id);
+      const hasChildren = children.length > 0 || !!mayHaveChildren?.(page);
+      rows.push({
+        kind: 'page',
+        id: page.id,
+        page,
+        hasChildren,
+        level,
+        posInSet: index + 1,
+        setSize,
+        expanded: hasChildren ? open : undefined,
+      });
+      if (open) addLevel(children, level + 1, page.id);
+    });
+    if (load) rows.push({ kind: 'more', id: `${parentId}\0more`, parentId, load, level, posInSet: setSize, setSize });
+  };
+  addLevel(roots, 0, KNOWLEDGE_TREE_ROOT);
 
   const toggle = (id: string, open: boolean) =>
     setExpanded(current => {
@@ -156,159 +115,71 @@ export function KnowledgePageTree({
       return next;
     });
 
-  const focus = (id: string | undefined) => {
-    if (!id) return;
-    setFocusedId(id);
-    itemRefs.current.get(id)?.focus();
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
-    const row = rows[index];
-    if (!row) return;
-    switch (event.key) {
-      case 'ArrowDown':
-        focus(rows[index + 1]?.page.id);
-        break;
-      case 'ArrowUp':
-        focus(rows[index - 1]?.page.id);
-        break;
-      case 'ArrowRight':
-        if (row.hasChildren && !row.expanded) toggle(row.page.id, true);
-        else if (row.expanded) focus(rows[index + 1]?.page.id);
-        break;
-      case 'ArrowLeft':
-        if (row.expanded) toggle(row.page.id, false);
-        else focus(rows.slice(0, index).findLast(candidate => candidate.depth < row.depth)?.page.id);
-        break;
-      case 'Enter':
-      case ' ':
-        onSelect(row.page);
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-  };
-
   if (rows.length === 0) {
     return <p className="px-3 py-2 text-body text-muted-foreground">No pages yet.</p>;
   }
 
-  const ancestorAt: string[] = [];
   return (
-    <div
-      ref={scroller}
-      role="tree"
+    <Tree
       aria-label={ariaLabel}
-      className="min-h-0 overflow-y-auto py-1"
-      onWheel={() => (userScrolled.current = true)}
-      onTouchMove={() => (userScrolled.current = true)}
-      onPointerDown={() => (userScrolled.current = true)}
-      onKeyDown={() => (userScrolled.current = true)}
-    >
-      {rows.map((row, index) => {
-        const selected = row.page.id === selectedPageId;
-        ancestorAt[row.depth] = row.page.id;
-        // Levels whose last loaded child is this row's subtree end here: offer their next children.
-        const nextDepth = rows[index + 1]?.depth ?? -1;
-        const closing: Array<{ parentId: string; depth: number }> = [];
-        for (let depth = row.depth - 1; depth >= nextDepth; depth--) {
-          const parentId = depth < 0 ? KNOWLEDGE_TREE_ROOT : ancestorAt[depth];
-          if (parentId !== undefined) closing.push({ parentId, depth: depth + 1 });
-        }
-        if (row.expanded && rows[index + 1]?.depth !== row.depth + 1)
-          closing.unshift({ parentId: row.page.id, depth: row.depth + 1 });
-        return (
-          <Fragment key={row.page.id}>
-            <div
-              ref={element => {
-                if (element) itemRefs.current.set(row.page.id, element);
-                else itemRefs.current.delete(row.page.id);
-              }}
-              role="treeitem"
-              aria-level={row.depth + 1}
-              aria-selected={selected}
-              aria-expanded={row.hasChildren ? row.expanded : undefined}
-              tabIndex={row.page.id === activeId ? 0 : -1}
-              onFocus={() => setFocusedId(row.page.id)}
-              onKeyDown={event => onKeyDown(event, index)}
-              onClick={() => {
-                onSelect(row.page);
-                // Selecting a page with children opens it too, which loads them in a lazily loaded tree.
-                if (row.hasChildren) toggle(row.page.id, true);
-              }}
-              className={cn(
-                'flex h-8 cursor-pointer items-center gap-2 rounded-md pr-2 text-body-sm text-foreground outline-none focus-visible:bg-fill-subtle',
-                selected ? 'bg-fill-hover' : 'hover:bg-fill-subtle',
-              )}
-              style={{ paddingLeft: `${row.depth * 12 + 4}px` }}
-            >
-              {row.hasChildren ? (
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={row.expanded ? `Collapse ${scopeTitle(row.page)}` : `Expand ${scopeTitle(row.page)}`}
-                  className="flex size-3 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground"
-                  onClick={event => {
-                    event.stopPropagation();
-                    toggle(row.page.id, !row.expanded);
-                  }}
-                >
-                  <DisclosureChevron direction="right" open={row.expanded} className="size-3" />
-                </button>
-              ) : (
-                <span className="size-3 shrink-0" aria-hidden />
-              )}
-              <span className="flex shrink-0 items-center text-muted-foreground [&>svg]:size-icon-sm" aria-hidden>
-                {scopeSource(row.page)?.icon ? (
-                  <KnowledgeSourceIcon page={row.page} />
-                ) : row.page.isScope || row.hasChildren ? (
-                  <IconFolder1 />
-                ) : (
-                  <IconFileText />
-                )}
-              </span>
-              <span className={cn('min-w-0 flex-1 truncate', row.page.isScope && 'font-medium')}>
-                {scopeTitle(row.page)}
-              </span>
-              {row.page.childCount ? (
-                <span
-                  data-testid="knowledge-tree-count"
-                  aria-label={`${childCountLabel(row.page)} below`}
-                  className="shrink-0 text-caption text-subtle-foreground tabular-nums"
-                >
-                  {childCountLabel(row.page)}
-                </span>
-              ) : null}
-              {pinned.has(row.page.id) ? (
-                <IconPin className="size-icon-xs shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
-              ) : null}
-              {row.page.isScope && row.page.address && row.page.address !== scopeTitle(row.page) ? (
-                <span
-                  data-testid="knowledge-tree-address"
-                  className="max-w-1/2 min-w-0 truncate text-caption text-muted-foreground"
-                >
-                  {row.page.address}
-                </span>
-              ) : null}
-            </div>
-            {closing.map(({ parentId, depth }) => {
-              const more = loadMore?.get(parentId);
-              return more ? (
-                <button
-                  key={`more-${parentId}`}
-                  type="button"
-                  className="flex h-8 w-full items-center text-left text-caption text-muted-foreground hover:text-foreground"
-                  style={{ paddingLeft: `${depth * 12 + 42}px` }}
-                  onClick={more}
-                >
-                  Load more
-                </button>
-              ) : null;
-            })}
-          </Fragment>
-        );
-      })}
-    </div>
+      size="md"
+      contentClassName="py-1"
+      rows={rows}
+      getRowLabel={row => (row.kind === 'page' ? scopeTitle(row.page) : '')}
+      selectedId={selectedPageId ?? undefined}
+      onActivate={row => {
+        if (row.kind === 'more') return row.load();
+        onSelect(row.page);
+        if (row.hasChildren) toggle(row.page.id, true);
+      }}
+      onExpandedChange={(row, open) => toggle(row.id, open)}
+      renderRow={row => <KnowledgePageTreeRowContent row={row} pinned={pinned.has(row.id)} />}
+    />
+  );
+}
+
+function KnowledgePageTreeRowContent({ row, pinned }: { row: KnowledgeTreeRow; pinned: boolean }) {
+  if (row.kind === 'more') {
+    return (
+      <>
+        <span className="size-icon-sm shrink-0" aria-hidden />
+        <button type="button" className="text-caption text-muted-foreground hover:text-foreground" onClick={row.load}>
+          Load more
+        </button>
+      </>
+    );
+  }
+  const { page } = row;
+  return (
+    <>
+      <Tree.Icon className="text-muted-foreground">
+        {scopeSource(page)?.icon ? (
+          <KnowledgeSourceIcon page={page} />
+        ) : page.isScope || row.hasChildren ? (
+          <IconFolder1 />
+        ) : (
+          <IconFileText />
+        )}
+      </Tree.Icon>
+      <Tree.Label className={cn('flex-1', page.isScope && 'font-medium')}>{scopeTitle(page)}</Tree.Label>
+      {page.childCount ? (
+        <span
+          data-testid="knowledge-tree-count"
+          aria-label={`${childCountLabel(page)} below`}
+          className="shrink-0 text-caption text-subtle-foreground tabular-nums"
+        >
+          {childCountLabel(page)}
+        </span>
+      ) : null}
+      {pinned ? <IconPin className="size-icon-xs shrink-0 text-badge-amber-indicator" aria-label="Pinned" /> : null}
+      {page.isScope && page.address && page.address !== scopeTitle(page) ? (
+        <span
+          data-testid="knowledge-tree-address"
+          className="max-w-1/2 min-w-0 truncate text-caption text-muted-foreground"
+        >
+          {page.address}
+        </span>
+      ) : null}
+    </>
   );
 }

@@ -94,6 +94,7 @@ function Host({ initialView = 'graph' }: { initialView?: KnowledgeExplorerView }
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}

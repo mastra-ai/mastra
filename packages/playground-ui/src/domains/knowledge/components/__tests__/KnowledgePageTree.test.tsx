@@ -71,6 +71,12 @@ function ControlledTree({ initial, onSelect }: { initial?: string; onSelect?: (i
 
 const names = () => screen.getAllByRole('treeitem').map(item => item.textContent);
 
+function chevron(row: HTMLElement) {
+  const toggle = row.querySelector<HTMLElement>('[data-tree-toggle]');
+  if (!toggle) throw new Error(`no chevron on ${row.textContent}`);
+  return toggle;
+}
+
 describe('KnowledgePageTree', () => {
   it('opens roots by default and shows siblings in stored order', () => {
     renderWithProviders(<ControlledTree />);
@@ -82,7 +88,7 @@ describe('KnowledgePageTree', () => {
   it('expands with the chevron without selecting, and selects on click', async () => {
     const onSelect = vi.fn();
     renderWithProviders(<ControlledTree onSelect={onSelect} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Expand Refunds' }));
+    await userEvent.click(chevron(screen.getByRole('treeitem', { name: /Refunds/ })));
     expect(names()).toContain('Refund policy');
     expect(onSelect).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole('treeitem', { name: 'Refund policy' }));
@@ -120,17 +126,16 @@ describe('KnowledgePageTree', () => {
 });
 
 describe('KnowledgePageTree scope rows and pins', () => {
-  it('renders declared labels and accessible expansion names from real route payloads', async () => {
+  it('renders declared labels and opens and closes scopes from real route payloads', async () => {
     server.use(http.get(`${TEST_BASE_URL}/api/knowledge/company/graph`, () => HttpResponse.json(scopeLabelsGraph)));
     renderWithProviders(<RouteTree />);
-    expect(await screen.findByRole('treeitem', { name: /Acme/ })).toBeTruthy();
-    expect(screen.getByRole('treeitem', { name: /Roadmap/ })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Collapse Acme' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Collapse Roadmap' })).toBeTruthy();
+    const acme = await screen.findByRole('treeitem', { name: /Acme/ });
+    expect(screen.getByRole('treeitem', { name: /Roadmap/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(acme.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('org:org-1')).toBeTruthy();
-    await userEvent.click(screen.getByRole('button', { name: 'Collapse Acme' }));
+    await userEvent.click(chevron(acme));
     expect(screen.queryByRole('treeitem', { name: /Roadmap/ })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: 'Expand Acme' }));
+    await userEvent.click(chevron(screen.getByRole('treeitem', { name: /Acme/ })));
     expect(screen.getByRole('treeitem', { name: /Roadmap/ })).toBeTruthy();
   });
 
@@ -148,7 +153,7 @@ describe('KnowledgePageTree scope rows and pins', () => {
     expect(row.querySelector('[data-central-icon="IconFolder1"]')).toBeTruthy();
     expect(row.querySelector('[data-central-icon="IconFileText"]')).toBeNull();
     expect(row.hasAttribute('aria-expanded')).toBe(false);
-    expect(within(row).queryByRole('button')).toBeNull();
+    expect(row.querySelector('[data-tree-toggle]')).toBeNull();
   });
 
   it('names a scope that only has its address by its kind', () => {

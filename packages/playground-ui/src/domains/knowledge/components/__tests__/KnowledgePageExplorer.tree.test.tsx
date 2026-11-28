@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgePagePayload } from '../../pageTypes';
@@ -133,6 +133,7 @@ function Host({
 }
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   window.ResizeObserver ??= class {
     observe() {}
     unobserve() {}
@@ -161,17 +162,17 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   describe('when a page has no children', () => {
     it('offers no expand button', () => {
       renderWithProviders(<Host requested={[]} />);
-      expect(within(row('Pricing')).queryByRole('button')).toBeNull();
+      expect(row('Pricing').querySelector('[data-tree-toggle]')).toBeNull();
       expect(row('Pricing').getAttribute('aria-expanded')).toBeNull();
-      expect(within(row('Articles')).getByRole('button', { name: 'Expand Articles' })).toBeTruthy();
+      expect(row('Articles').getAttribute('aria-expanded')).toBe('false');
     });
   });
 
   describe('when a page was just created and no count covers it yet', () => {
     it('offers no expand arrow, while an older uncounted page still does', () => {
       renderWithProviders(<Host requested={[]} freshLeaf />);
-      expect(within(row('Fresh')).queryByRole('button')).toBeNull();
-      expect(within(row('Stale')).getByRole('button', { name: 'Expand Stale' })).toBeTruthy();
+      expect(row('Fresh').getAttribute('aria-expanded')).toBeNull();
+      expect(row('Stale').getAttribute('aria-expanded')).toBe('false');
     });
   });
 
@@ -188,158 +189,22 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   });
 
   describe('when a page is focused in the graph while its row is out of sight', () => {
-    const scrolled: Array<{ id: string | null; options: unknown; margin: string }> = [];
-    beforeEach(() => {
-      scrolled.length = 0;
-      Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: unknown) {
-        scrolled.push({
-          id: this.getAttribute('aria-selected') === 'true' ? this.textContent : null,
-          options,
-          margin: (this as HTMLElement).style.scrollMarginTop,
-        });
-      };
-    });
-    afterEach(() => {
-      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
-    });
+    afterEach(() => vi.restoreAllMocks());
 
-    it('opens its ancestors, highlights its row and scrolls it to the start of the view', () => {
-      renderWithProviders(<Host requested={[]} />);
+    it('opens its ancestors, highlights its row and scrolls the tree to it', () => {
+      const scrollTo = vi.spyOn(Element.prototype, 'scrollTo');
+      renderWithProviders(<Host requested={[]} extraSiblings={3} />);
       expect(within(tree().getByRole('treeitem', { name: /^Site/ })).queryByText('Second article')).toBeNull();
       const dot = document.querySelector('.react-flow__node [data-page-id="second"]')?.closest('.react-flow__node');
       if (!dot) throw new Error('no second dot');
       fireEvent.click(dot);
-      expect(row('Second article').getAttribute('aria-selected')).toBe('true');
-      const hit = scrolled.find(entry => entry.id?.startsWith('Second article'));
-      expect(hit?.options).toMatchObject({ block: 'start' });
-    });
 
-    // The tree is 100px tall; every row sits below it, as a deep row does while rows above it are still loading.
-    const stubLayout = () => {
-      const original = HTMLElement.prototype.getBoundingClientRect;
-      HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
-        const role = this.getAttribute('role');
-        if (role === 'tree') return { top: 0, bottom: 100, left: 0, right: 100, width: 100, height: 100 } as DOMRect;
-        if (role === 'treeitem')
-          return { top: 300, bottom: 332, left: 0, right: 100, width: 100, height: 32 } as DOMRect;
-        return original.call(this);
-      };
-      return () => {
-        HTMLElement.prototype.getBoundingClientRect = original;
-      };
-    };
-    const selectedScrolls = () => scrolled.filter(entry => entry.id?.startsWith('Second article')).length;
-
-    describe('where the row lands', () => {
-      const withRowAt = (top: number) => {
-        const original = HTMLElement.prototype.getBoundingClientRect;
-        const rect = (from: number, to: number) =>
-          ({ top: from, bottom: to, left: 0, right: 100, width: 100, height: to - from }) as DOMRect;
-        HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
-          if (this.getAttribute('role') === 'tree') return rect(0, 300);
-          if (this.getAttribute('role') === 'treeitem') return rect(top, top + 32);
-          return original.call(this);
-        };
-        return () => {
-          HTMLElement.prototype.getBoundingClientRect = original;
-        };
-      };
-      const focusSecond = () => {
-        renderWithProviders(<Host requested={[]} />);
-        fireEvent.click(row('Articles'));
-        fireEvent.click(row('Second article'));
-      };
-
-      it('puts a row at the bottom edge a third of the way down the scroller instead', () => {
-        const restore = withRowAt(260);
-        focusSecond();
-        expect(selectedScrolls()).toBeGreaterThan(0);
-        expect(scrolled.find(entry => entry.id?.startsWith('Second article'))?.margin).toBe('100px');
-        // It steers the one scroll and is gone after, so focus() on the row does not leave a gap.
-        expect(row('Second article').style.scrollMarginTop).toBe('');
-        expect(scrolled.find(entry => entry.id?.startsWith('Second article'))?.options).toMatchObject({
-          block: 'start',
-        });
-        restore();
-      });
-
-      it('leaves a row that is already comfortably in view where it is', () => {
-        const restore = withRowAt(80);
-        focusSecond();
-        expect(selectedScrolls()).toBe(0);
-        restore();
-      });
-    });
-
-    it('scrolls again when more rows load and leave the selected row out of view', () => {
-      const restore = stubLayout();
-      renderWithProviders(<Host requested={[]} extraSiblings={3} />);
-      fireEvent.click(row('Articles'));
-      fireEvent.click(row('Second article'));
-      const first = selectedScrolls();
-      expect(first).toBeGreaterThan(0);
-      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
-      expect(selectedScrolls()).toBeGreaterThan(first);
-      restore();
-    });
-
-    it('measures the ancestor that actually scrolls, not the tree element inside it', () => {
-      // In the explorer the tree is as tall as its rows; a wrapper around it is what scrolls.
-      const original = HTMLElement.prototype.getBoundingClientRect;
-      const rect = (top: number, bottom: number) =>
-        ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top }) as DOMRect;
-      HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
-        if (this.dataset.testid === 'outer-scroller') return rect(0, 100);
-        if (this.getAttribute('role') === 'tree') return rect(-2800, 8500);
-        if (this.getAttribute('role') === 'treeitem') return rect(300, 332);
-        return original.call(this);
-      };
-      renderWithProviders(
-        <div data-testid="outer-scroller" style={{ overflowY: 'auto' }}>
-          <Host requested={[]} extraSiblings={3} />
-        </div>,
-      );
-      // As in the app, the tree sets overflow-y itself but is as tall as its rows, so it does not scroll.
-      const treeElement = screen.getByRole('tree', { name: 'Knowledge pages' });
-      treeElement.style.overflowY = 'auto';
-      const heights = (element: HTMLElement, scrollHeight: number, clientHeight: number) => {
-        Object.defineProperty(element, 'scrollHeight', { configurable: true, value: scrollHeight });
-        Object.defineProperty(element, 'clientHeight', { configurable: true, value: clientHeight });
-      };
-      heights(treeElement, 11300, 11300);
-      heights(screen.getByTestId('outer-scroller'), 11300, 100);
-      fireEvent.click(row('Articles'));
-      fireEvent.click(row('Second article'));
-      const first = selectedScrolls();
-      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
-      expect(selectedScrolls()).toBeGreaterThan(first);
-      HTMLElement.prototype.getBoundingClientRect = original;
-    });
-
-    describe.each([
-      ['scrolls the wheel', (tree: HTMLElement) => fireEvent.wheel(tree)],
-      ['presses a key in the tree', (tree: HTMLElement) => fireEvent.keyDown(tree, { key: 'ArrowDown' })],
-      ['presses the pointer on the tree (a scrollbar drag)', (tree: HTMLElement) => fireEvent.pointerDown(tree)],
-    ])('when the user %s', (_name, act) => {
-      it('leaves the scroll alone as more rows load', () => {
-        const restore = stubLayout();
-        renderWithProviders(<Host requested={[]} extraSiblings={3} />);
-        fireEvent.click(row('Articles'));
-        fireEvent.click(row('Second article'));
-        const first = selectedScrolls();
-        act(screen.getByRole('tree', { name: 'Knowledge pages' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
-        expect(selectedScrolls()).toBe(first);
-        restore();
-      });
-    });
-
-    it('scrolls once per selection, not on every refresh', () => {
-      renderWithProviders(<Host requested={[]} />);
-      fireEvent.click(row('Pricing'));
-      const count = scrolled.length;
-      fireEvent.click(row('Pricing'));
-      expect(scrolled.length).toBe(count);
+      const selected = row('Second article');
+      expect(selected.getAttribute('aria-selected')).toBe('true');
+      const viewport = screen.getByRole('tree', { name: 'Knowledge pages' }).parentElement?.parentElement;
+      const rowIndex = tree().getAllByRole('treeitem').indexOf(selected);
+      const scrolls = scrollTo.mock.calls.filter((_, call) => scrollTo.mock.contexts[call] === viewport);
+      expect(scrolls).toContainEqual([expect.objectContaining({ top: rowIndex * 32 })]);
     });
   });
 

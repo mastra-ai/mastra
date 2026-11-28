@@ -181,7 +181,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await openFiles(user);
-      await user.click(await screen.findByRole('button', { name: 'src' }));
+      await user.click(await screen.findByRole('treeitem', { name: 'src' }));
       await user.click(await screen.findByText(largeTypescriptFile.name));
 
       const editor = await screen.findByRole('textbox', { name: largeTypescriptFile.path });

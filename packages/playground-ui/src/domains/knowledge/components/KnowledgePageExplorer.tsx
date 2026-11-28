@@ -44,7 +44,7 @@ import { SearchInput } from '@/ds/components/SearchInput';
 import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tree } from '@/ds/components/Tree';
-import { useTreeFileIndent } from '@/ds/components/Tree/tree-context';
+import type { TreeRow } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
@@ -339,6 +339,9 @@ const SKELETON_ROW_WIDTHS = ['w-32', 'w-24', 'w-40', 'w-28', 'w-36', 'w-20'];
 const skeletonBar = 'motion-reduce:before:animate-none';
 const CHILD_PAGES_CARD = cn('rounded-xl p-1', raisedSurfaceStyle);
 const CHILD_PAGES_TREE = 'rounded-lg bg-nested p-1';
+const CHILD_PAGE_FILE_INDENT = 18;
+const CHILD_PAGES_MAX_HEIGHT = '24rem';
+const RETRY_MORE_LABEL = 'Couldn’t load more. Try again';
 
 function PageTreeSkeleton({ rows }: { rows: number }) {
   return (
@@ -359,11 +362,10 @@ function PageTreeSkeleton({ rows }: { rows: number }) {
 }
 
 function ChildPageRowsSkeleton({ rows, className }: { rows: number; className?: string }) {
-  const indent = useTreeFileIndent();
   return (
     <div role="status" aria-label="Loading pages" className={cn('flex flex-col', className)}>
       {SKELETON_ROW_WIDTHS.slice(0, rows).map(width => (
-        <div key={width} className="flex h-7 items-center gap-1.5 pr-1" style={{ paddingLeft: indent }}>
+        <div key={width} className="flex h-7 items-center gap-1.5 pr-1" style={{ paddingLeft: CHILD_PAGE_FILE_INDENT }}>
           <Skeleton className={cn('size-icon-sm shrink-0', skeletonBar)} />
           <SkeletonText line="text-caption" className={cn(width, skeletonBar)} />
         </div>
@@ -422,6 +424,14 @@ function MoreNotes({
   );
 }
 
+type ChildPageRow = TreeRow &
+  (
+    | { kind: 'page'; page: KnowledgePagePayload }
+    | { kind: 'more'; parentId: string; cursor: string; retry: boolean }
+    | { kind: 'note'; text: string }
+    | { kind: 'loading' }
+  );
+
 /** A page's children, a page at a time. */
 function ChildPages({
   useTreeLevels,
@@ -432,12 +442,21 @@ function ChildPages({
   parentId: string;
   onOpen: (pageId: string) => void;
 }) {
-  const [cursors, setCursors] = useState<string[]>([]);
-  const requests = useMemo(() => [{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))], [parentId, cursors]);
-  const levels = useTreeLevels(requests);
-  const pages = levels.flatMap(level => level.data?.pages ?? []);
-  const last = levels[levels.length - 1];
-  if (levels[0]?.isPending) {
+  const [open, setOpen] = useState<ReadonlyArray<readonly [id: string, parent: string]>>([]);
+  const [cursors, setCursors] = useState<Record<string, string[]>>({});
+  const requests = [parentId, ...open.map(([id]) => id)].flatMap(id => [
+    { parentId: id },
+    ...(cursors[id] ?? []).map(cursor => ({ parentId: id, cursor })),
+  ]);
+  const results = useTreeLevels(requests);
+  const levels = new Map<string, typeof results>();
+  requests.forEach((request, index) => {
+    const result = results[index];
+    if (result && request.parentId) levels.set(request.parentId, [...(levels.get(request.parentId) ?? []), result]);
+  });
+
+  const top = levels.get(parentId) ?? [];
+  if (top[0]?.isPending) {
     return (
       <KnowledgeDetailSection label="Pages">
         <div className={CHILD_PAGES_CARD}>
@@ -446,40 +465,141 @@ function ChildPages({
       </KnowledgeDetailSection>
     );
   }
-  const next = last?.data?.nextCursor;
-  if (pages.length === 0 && !next) return null;
+  const pagination = (id: string) => {
+    const results = levels.get(id) ?? [];
+    const last = results[results.length - 1];
+    if (last?.data?.nextCursor) return { cursor: last.data.nextCursor, retry: false };
+    const failed = cursors[id]?.at(-1);
+    if (last?.isError && results.length > 1 && failed) return { cursor: failed, retry: true };
+    return undefined;
+  };
+  const topPages = top.flatMap(level => level.data?.pages ?? []);
+  const next = pagination(parentId);
+  if (topPages.length === 0 && !next) return null;
+
+  const rows: ChildPageRow[] = [];
+  const addLevel = (pages: KnowledgePagePayload[], level: number, setSize: number) =>
+    pages.forEach((page, index) => {
+      const folder = page.childCount !== 0;
+      const expanded = folder ? open.some(([id]) => id === page.id) : undefined;
+      rows.push({ kind: 'page', id: page.id, page, level, posInSet: index + 1, setSize, expanded });
+      if (expanded) addChildren(page.id, level + 1);
+    });
+  const addChildren = (id: string, level: number) => {
+    const results = levels.get(id) ?? [];
+    const pages = results.flatMap(result => result.data?.pages ?? []);
+    const more = pagination(id);
+    const alone = { level, posInSet: 1, setSize: 1 };
+    if (results[0]?.isPending) rows.push({ kind: 'loading', id: `${id}/\0loading`, ...alone });
+    else if (results[0]?.isError)
+      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'Couldn’t load the pages under this one.', ...alone });
+    else if (pages.length === 0 && !more)
+      rows.push({ kind: 'note', id: `${id}/\0note`, text: 'No pages under this one.', ...alone });
+    else addLevel(pages, level, pages.length + (more ? 1 : 0));
+    if (more) {
+      const place = { level, posInSet: pages.length + 1, setSize: pages.length + 1 };
+      rows.push({ kind: 'more', id: `${id}/\0more`, parentId: id, ...more, ...place });
+    }
+  };
+  addLevel(topPages, 0, topPages.length);
+
+  const setFolderOpen = (id: string, parent: string, expanded: boolean) =>
+    setOpen(current => {
+      if (expanded) return current.some(([open]) => open === id) ? current : [...current, [id, parent]];
+      const closed = new Set([id]);
+      for (const [open, under] of current) if (closed.has(under)) closed.add(open);
+      return current.filter(([open]) => !closed.has(open));
+    });
+  const loadMore = (id: string, cursor: string, retry: boolean) => {
+    if (retry) flushSync(() => setCursors(current => ({ ...current, [id]: (current[id] ?? []).slice(0, -1) })));
+    setCursors(current => ({ ...current, [id]: [...(current[id] ?? []), cursor] }));
+  };
+
   return (
     <KnowledgeDetailSection label="Pages">
       <div className={CHILD_PAGES_CARD}>
-        <Tree className={CHILD_PAGES_TREE} onSelect={onOpen}>
-          <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
-        </Tree>
+        <Tree
+          aria-label="Pages"
+          className={CHILD_PAGES_TREE}
+          maxHeight={CHILD_PAGES_MAX_HEIGHT}
+          rows={rows}
+          getRowLabel={row => (row.kind === 'page' ? row.page.name : row.kind === 'note' ? row.text : '')}
+          onActivate={row => {
+            if (row.kind === 'more') loadMore(row.parentId, row.cursor, row.retry);
+            if (row.kind !== 'page') return;
+            if (row.expanded === undefined) onOpen(row.page.id);
+            else setFolderOpen(row.page.id, row.page.parentId ?? parentId, !row.expanded);
+          }}
+          onExpandedChange={(row, expanded) => {
+            if (row.kind === 'page') setFolderOpen(row.page.id, row.page.parentId ?? parentId, expanded);
+          }}
+          renderRow={row => <ChildPageRowContent row={row} onOpen={onOpen} onLoadMore={loadMore} />}
+        />
       </div>
-      {next ? <MoreButton onClick={() => setCursors(current => [...current, next])} /> : null}
+      {next ? (
+        <MoreButton
+          label={next.retry ? RETRY_MORE_LABEL : undefined}
+          onClick={() => loadMore(parentId, next.cursor, next.retry)}
+        />
+      ) : null}
     </KnowledgeDetailSection>
   );
 }
 
-function ChildPageItems({
-  pages,
-  useTreeLevels,
+function ChildPageRowContent({
+  row,
   onOpen,
+  onLoadMore,
 }: {
-  pages: KnowledgePagePayload[];
-  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
+  row: ChildPageRow;
   onOpen: (pageId: string) => void;
+  onLoadMore: (parentId: string, cursor: string, retry: boolean) => void;
 }) {
-  return pages.map(child =>
-    child.childCount !== 0 ? (
-      <ChildPageFolder key={child.id} page={child} useTreeLevels={useTreeLevels} onOpen={onOpen} />
-    ) : (
-      <Tree.File key={child.id} id={child.id}>
-        <Tree.Icon className="text-muted-foreground">
-          <IconFileText />
-        </Tree.Icon>
-        <ChildPageLabel page={child} />
-      </Tree.File>
-    ),
+  if (row.kind === 'loading') {
+    return (
+      <>
+        <Skeleton className={cn('size-icon-sm shrink-0', skeletonBar)} />
+        <SkeletonText line="text-caption" className={cn('w-32', skeletonBar)} />
+        <span className="sr-only">Loading pages</span>
+      </>
+    );
+  }
+  if (row.kind === 'note') return <span className="text-muted-foreground">{row.text}</span>;
+  if (row.kind === 'more') {
+    return (
+      <MoreButton
+        label={row.retry ? RETRY_MORE_LABEL : undefined}
+        onClick={() => onLoadMore(row.parentId, row.cursor, row.retry)}
+      />
+    );
+  }
+  const { page } = row;
+  return (
+    <>
+      <Tree.Icon className="text-muted-foreground">
+        {row.expanded === undefined ? <IconFileText /> : <IconFolder1 />}
+      </Tree.Icon>
+      <ChildPageLabel page={page} />
+      {row.expanded === undefined ? null : (
+        <>
+          {page.childCount ? (
+            <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
+              {page.childCount}
+            </Txt>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={page.childCount ? undefined : 'ml-auto'}
+            tooltip={`Open ${page.name}`}
+            aria-label={`Open ${page.name}`}
+            onClick={() => onOpen(page.id)}
+          >
+            <IconArrowRight />
+          </Button>
+        </>
+      )}
+    </>
   );
 }
 
@@ -489,90 +609,6 @@ function ChildPageLabel({ page }: { page: KnowledgePagePayload }) {
     <KnowledgeTooltip label={page.description}>
       <Tree.Label>{page.name}</Tree.Label>
     </KnowledgeTooltip>
-  );
-}
-
-function ChildPageFolder({
-  page,
-  useTreeLevels,
-  onOpen,
-}: {
-  page: KnowledgePagePayload;
-  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
-  onOpen: (pageId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <Tree.Folder id={page.id} open={open} onOpenChange={setOpen}>
-      <Tree.FolderTrigger
-        actions={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            tooltip={`Open ${page.name}`}
-            aria-label={`Open ${page.name}`}
-            onClick={() => onOpen(page.id)}
-          >
-            <IconArrowRight />
-          </Button>
-        }
-      >
-        <Tree.Icon className="text-muted-foreground">
-          <IconFolder1 />
-        </Tree.Icon>
-        <ChildPageLabel page={page} />
-        {page.childCount ? (
-          <Txt as="span" variant="caption" tone="muted" className="ml-auto pl-2 tabular-nums">
-            {page.childCount}
-          </Txt>
-        ) : null}
-      </Tree.FolderTrigger>
-      <Tree.FolderContent>
-        {open ? <ChildPageLevel parentId={page.id} useTreeLevels={useTreeLevels} onOpen={onOpen} /> : null}
-      </Tree.FolderContent>
-    </Tree.Folder>
-  );
-}
-
-function ChildPageLevel({
-  parentId,
-  useTreeLevels,
-  onOpen,
-}: {
-  parentId: string;
-  useTreeLevels: NonNullable<KnowledgeExplorerSource['useTreeLevels']>;
-  onOpen: (pageId: string) => void;
-}) {
-  const [cursors, setCursors] = useState<string[]>([]);
-  const levels = useTreeLevels([{ parentId }, ...cursors.map(cursor => ({ parentId, cursor }))]);
-  const pages = levels.flatMap(level => level.data?.pages ?? []);
-  const next = levels[levels.length - 1]?.data?.nextCursor;
-  if (levels[0]?.isPending) {
-    return (
-      <li role="none">
-        <ChildPageRowsSkeleton rows={2} />
-      </li>
-    );
-  }
-  if (levels[0]?.isError) return <ChildPageLevelNote>Couldn’t load the pages under this one.</ChildPageLevelNote>;
-  if (pages.length === 0 && !next) return <ChildPageLevelNote>No pages under this one.</ChildPageLevelNote>;
-  return (
-    <>
-      <ChildPageItems pages={pages} useTreeLevels={useTreeLevels} onOpen={onOpen} />
-      {next ? (
-        <li role="none" className="pl-9">
-          <MoreButton onClick={() => setCursors(current => [...current, next])} />
-        </li>
-      ) : null}
-    </>
-  );
-}
-
-function ChildPageLevelNote({ children }: { children: ReactNode }) {
-  return (
-    <li role="none" className="flex h-8 items-center pl-9 text-caption text-muted-foreground">
-      {children}
-    </li>
   );
 }
 
@@ -1341,7 +1377,7 @@ export function KnowledgePageExplorer({
           </Button>
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col">
         {source.useTreeLevels && lazy.rootsPending ? (
           <PageTreeSkeleton rows={6} />
         ) : (

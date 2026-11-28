@@ -18,7 +18,7 @@ function repositoryGroups(container: HTMLElement) {
 }
 
 function treeItemIds(container: HTMLElement) {
-  return Array.from(container.querySelectorAll<HTMLElement>('[data-tree-item-id]')).map(
+  return Array.from(container.querySelectorAll<HTMLElement>('[role="treeitem"]:not([aria-expanded])')).map(
     item => item.dataset.treeItemId,
   );
 }
@@ -83,7 +83,7 @@ describe('workspace repository groups', () => {
 
     expect(repositoryGroups(tree)).toHaveLength(0);
     expect(treeItemIds(tree)).toEqual(['src/agent.ts', 'README.md']);
-    expect(within(tree).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(tree).getByRole('treeitem', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('names a repository it could not read when the others have no changes', async () => {
