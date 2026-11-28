@@ -254,21 +254,29 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
 
 function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string, args?: unknown) {
   const messages = messageList.get.all.db();
+  // Newest occurrence first, in call order. A reused id may have several occurrences
+  // (#31609), and only the newest one describing the call being resolved can hold its
+  // committed output — a caller that only holds a sanitized subset of the arguments still
+  // matches ({@link toolResultArgsMatch}).
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
+    const parts = msg.content.parts;
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const part = parts[j];
       if (
-        part?.type === 'tool-invocation' &&
-        part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation.state === 'result' &&
-        // A reused id may have several committed occurrences (#31609); pick the
-        // one whose arguments describe the call being resolved, tolerating a
-        // caller that only holds a sanitized subset.
-        toolResultArgsMatch(args, part.toolInvocation.args)
+        part?.type !== 'tool-invocation' ||
+        part.toolInvocation?.toolCallId !== toolCallId ||
+        !toolResultArgsMatch(args, part.toolInvocation.args)
       ) {
-        return part as typeof part & { toolInvocation: { result?: unknown } };
+        continue;
       }
+      // The newest occurrence is still pending, so nothing has been committed for the call
+      // being resolved. An older occurrence with the same id and arguments belongs to a
+      // different call: reading it would hand this call's sibling output — say an earlier
+      // occurrence's `modelOutput` — to a processor that has not committed anything yet.
+      if (part.toolInvocation.state !== 'result') return undefined;
+      return part as typeof part & { toolInvocation: { result?: unknown } };
     }
   }
   return undefined;

@@ -541,6 +541,66 @@ describe('MessageList.updateToolInvocation', () => {
     expect(parts[2].toolInvocation.result).toEqual({ answer: 'result-b-final' });
   });
 
+  it('should fold a background result into the waiting copy, not into a finished call with the same remaining args (#31609)', () => {
+    const messageList = new MessageList();
+
+    // The model called the tool in the foreground, then dispatched the same tool in the
+    // background on a later step, where the gateway reused `call_0`. The stored copy of
+    // the background dispatch keeps the model's `_background` key; the result that closes
+    // it arrives with that key stripped.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison' },
+          result: { name: 'comparison', amount: 42 },
+        },
+      },
+      { type: 'step-start' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison', _background: { disposition: 'deferred' } },
+          result: 'Background task started. Task ID: task-B.',
+        },
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-B', status: 'running' } } },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison' },
+          result: { name: 'comparison', amount: 42 },
+        },
+      },
+      { backgroundTasks: { call_0: { taskId: 'task-B' } } },
+    );
+
+    expect(updated).toBe(true);
+
+    const parts = msg.content.parts as any[];
+    // The finished foreground call keeps its own result...
+    expect(parts[0].toolInvocation.state).toBe('result');
+    expect(parts[0].toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(parts[0].toolInvocation.args).toEqual({ name: 'comparison' });
+    // ...and the dispatch still waiting for its outcome receives it, with the stored args intact.
+    expect(parts[2].toolInvocation.state).toBe('result');
+    expect(parts[2].toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(parts[2].toolInvocation.args).toEqual({ name: 'comparison', _background: { disposition: 'deferred' } });
+  });
+
   it('should skip user-role messages when searching', () => {
     const messageList = new MessageList();
 

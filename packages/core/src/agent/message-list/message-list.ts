@@ -66,7 +66,7 @@ import {
   advancesToolInvocationState,
   isClientToolInvocationUpdate,
   isSameToolCall,
-  isSameToolInvocation,
+  isSameToolInvocationIgnoringInternalArgs,
   isTerminalToolInvocationState,
 } from './utils/tool-invocation-state';
 
@@ -1307,12 +1307,19 @@ export class MessageList {
         // that same order rather than letting the last one stand for every occurrence. An occurrence
         // without a mapping keeps a hole rather than borrowing a sibling's output, so its raw result
         // reaches the model.
+        //
+        // Every occurrence the conversion turns into a tool result holds a slot: a failed call
+        // (`output-error`) emits an error result and a declined one (`output-denied`) is downgraded
+        // to an output-available result, so leaving them out would slide a later occurrence's
+        // mapping onto an earlier one.
+        const holdsToolResultSlot = (state: string | undefined) =>
+          state === 'result' || state === 'output-error' || state === 'output-denied';
         const outputsByToolCallId = new Map<string, (unknown | undefined)[]>();
         for (const dbMsg of this.messages) {
           if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
 
           for (const part of dbMsg.content.parts) {
-            if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+            if (part.type !== 'tool-invocation' || !holdsToolResultSlot(part.toolInvocation?.state)) continue;
 
             const mastra = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
             // A nullish `modelOutput` means the tool's toModelOutput opted out of mapping, so the raw
@@ -2054,6 +2061,15 @@ export class MessageList {
     }
     const toolCallId = inputPart.toolInvocation.toolCallId;
 
+    // A background dispatch owns ONE occurrence, and its task id names it. Incoming
+    // `backgroundTasks` metadata (see `applyBackgroundToolResult`) therefore pins the
+    // write to that task's copy: providers reuse tool-call ids, so several stored parts
+    // can share this id — even with byte-identical args — and the newest-first walk
+    // would otherwise fold the result into a copy that belongs to a different task.
+    const requestedBackgroundTaskId = (metadata?.backgroundTasks as Record<string, { taskId?: string }> | undefined)?.[
+      toolCallId
+    ]?.taskId;
+
     // Pass 1: exact toolCallId match. Covers client tools and well-behaved
     // providers where the call and result share an id.
     //
@@ -2072,9 +2088,19 @@ export class MessageList {
       for (let i = msg.content.parts.length - 1; i >= 0; i--) {
         const part = msg.content.parts[i];
         if (part?.type !== 'tool-invocation' || part.toolInvocation?.toolCallId !== toolCallId) continue;
+        // Skip a copy that names a DIFFERENT background task. Its identity is its task id,
+        // not its args, so an identical-args copy for another dispatch must not receive this
+        // result. A copy without background metadata is not distinguishable and is left in.
+        if (requestedBackgroundTaskId !== undefined) {
+          const partBackgroundTask = part.providerMetadata?.mastra?.backgroundTask as { taskId?: string } | undefined;
+          if (partBackgroundTask?.taskId !== undefined && partBackgroundTask.taskId !== requestedBackgroundTaskId) {
+            continue;
+          }
+        }
         const pending = !isTerminalToolInvocationState(part.toolInvocation.state);
+
         if (pending && anyPending === -1) anyPending = i;
-        if (!isSameToolInvocation(part.toolInvocation, inputPart.toolInvocation)) continue;
+        if (!isSameToolInvocationIgnoringInternalArgs(part.toolInvocation, inputPart.toolInvocation)) continue;
         if (pending) {
           if (sameCallPending === -1) sameCallPending = i;
         } else if (sameCallFinished === -1) {

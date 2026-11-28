@@ -37,6 +37,39 @@ export function isSameToolInvocation(a: MastraToolInvocation, b: MastraToolInvoc
   return isSameToolCall(a.toolCallId, a.args, b);
 }
 
+/** Argument keys the model never writes: Mastra strips them before a call runs. */
+const INTERNAL_TOOL_ARG_KEYS: readonly string[] = ['_background'];
+
+/** `args` without the internal keys, returning the original record when it holds none. */
+function withoutInternalToolArgs(args: unknown): unknown {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) return args;
+  const record = args as Record<string, unknown>;
+  if (!INTERNAL_TOOL_ARG_KEYS.some(key => key in record)) return args;
+  const rest: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (!INTERNAL_TOOL_ARG_KEYS.includes(key)) rest[key] = value;
+  }
+  return rest;
+}
+
+/**
+ * Whether two copies of a call describe the same invocation once Mastra's internal argument keys
+ * are set aside.
+ *
+ * A background dispatch's stored copy keeps the arguments the model produced, `_background`
+ * included, while the outcome that later closes the call arrives without it (the fork strips that
+ * key before a tool runs, see `applyBackgroundToolResult`). An exact comparison would then miss the
+ * copy waiting for this outcome and could fold the result into a finished occurrence that shares
+ * only the id and the remaining arguments. The read-back matcher sets the same keys aside
+ * (`toolResultArgsMatch`), so the write path compares the same way.
+ */
+export function isSameToolInvocationIgnoringInternalArgs(a: MastraToolInvocation, b: MastraToolInvocation): boolean {
+  return isSameToolCall(a.toolCallId, withoutInternalToolArgs(a.args), {
+    ...b,
+    args: withoutInternalToolArgs(b.args),
+  });
+}
+
 /**
  * Whether `incoming` is a copy of a call the message already stores, rather than a new invocation
  * that happens to reuse the same id (and even the same arguments).

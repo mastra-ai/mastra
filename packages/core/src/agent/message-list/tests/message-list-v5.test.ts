@@ -1926,6 +1926,76 @@ describe('MessageList V5 Support', () => {
       expect(toolResultOutputs[1]).toEqual('mapped-b');
     });
 
+    it('should hold a slot for a failed or declined occurrence of a reused toolCallId (#31609)', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Search three times', 'input');
+
+      // A failure and a decline also reach the model as tool results of their own, so both hold a slot:
+      // the finished occurrence's mapped output must stay on the finished occurrence.
+      const reusedIdMessage: MastraDBMessage = {
+        id: 'msg-reused-id-error',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: {
+          format: 2,
+          parts: [
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'output-error',
+                args: { q: 'a' },
+                errorText: 'boom',
+              },
+            },
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'output-denied',
+                args: { q: 'b' },
+                approval: { id: 'approval-1', approved: false, reason: 'needs review' },
+              },
+            },
+            { type: 'step-start' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-0',
+                toolName: 'search',
+                state: 'result',
+                args: { q: 'c' },
+                result: { raw: 'c-raw' },
+              },
+              providerMetadata: { mastra: { modelOutput: { type: 'text', value: 'mapped-c' } } },
+            },
+          ],
+        },
+      };
+
+      list.add(reusedIdMessage, 'response');
+
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolResultOutputs = prompt
+        .filter(m => m.role === 'tool')
+        .flatMap(m => (m as any).content as any[])
+        .filter(part => part.type === 'tool-result')
+        .map(part => part.output?.value ?? part.output);
+      expect(toolResultOutputs).toHaveLength(3);
+      // The failed and declined occurrences keep their own error outputs ...
+      expect(toolResultOutputs[0]).not.toEqual('mapped-c');
+      expect(toolResultOutputs[1]).not.toEqual('mapped-c');
+      // ... and the finished one keeps its mapped output.
+      expect(toolResultOutputs[2]).toEqual('mapped-c');
+    });
+
     it('should preserve raw result in stored messages when modelOutput is set', async () => {
       const list = new MessageList({ threadId, resourceId });
 

@@ -278,6 +278,77 @@ describe('applyBackgroundToolResult occurrence args tolerance', () => {
 });
 
 /**
+ * (toolCallId, taskId) identifies the occurrence the scan found, so the WRITE
+ * must honour that task id too — not just the args. When two still-running
+ * dispatches reuse the provider's call id with byte-identical args, an
+ * args-only match cannot tell them apart: `updateToolInvocation` walks
+ * newest-first and would fold the older task's result into the newer task's
+ * placeholder, leaving the older one unresolved and the newer one holding a
+ * result for a task it does not own. (#31609)
+ */
+describe('applyBackgroundToolResult task-identity routing', () => {
+  it("routes a completed task to its own occurrence and leaves the newer task's identical-args placeholder untouched", async () => {
+    const messageList = new MessageList();
+    const sharedArgs = { name: 'comparison', _background: { disposition: 'deferred' } };
+    // Two dispatches in this turn reused the provider's call id (call_0) with
+    // byte-identical args: task-A is the older occurrence, task-B the newer
+    // one. Both are still running, so both are eligible for an in-place write.
+    messageList.add(
+      makeAssistantMessage(
+        [
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-A',
+            status: 'running',
+            result: 'Background task started. Task ID: task-A.',
+            args: sharedArgs,
+          }),
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-B',
+            status: 'running',
+            result: 'Background task started. Task ID: task-B.',
+            args: sharedArgs,
+          }),
+        ],
+        'msg-1',
+      ),
+      'response',
+    );
+
+    const { deps, flush } = makeDeps(messageList, {
+      taskId: 'task-A',
+      result: { name: 'comparison', amount: 42 },
+    });
+
+    await expect(
+      applyBackgroundToolResult({ ...deps, hasResumeData: true, args: { name: 'comparison' } }),
+    ).resolves.toBeUndefined();
+
+    const parts = messageList.get.all
+      .db()
+      .flatMap(message => message.content?.parts ?? [])
+      .filter((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'call_0') as any[];
+    expect(parts).toHaveLength(2);
+
+    const byTask = (taskId: string) =>
+      parts.find(part => (part.providerMetadata as any).mastra.backgroundTask.taskId === taskId);
+
+    // Task A's own occurrence carries the result and the terminal status.
+    const partA = byTask('task-A');
+    expect(partA.toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(partA.providerMetadata.mastra.backgroundTask).toEqual({ taskId: 'task-A', status: 'completed' });
+
+    // Task B is a different dispatch: still running, still showing its placeholder.
+    const partB = byTask('task-B');
+    expect(partB.toolInvocation.result).toBe('Background task started. Task ID: task-B.');
+    expect(partB.providerMetadata.mastra.backgroundTask).toEqual({ taskId: 'task-B', status: 'running' });
+
+    expect(flush).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * A background tool whose input, request context or output failed validation
  * completes with a ValidationError. The mapper is typed to receive only the
  * tool's output, so it must not run on the error, and the error must reach
