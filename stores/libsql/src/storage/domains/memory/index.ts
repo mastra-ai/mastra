@@ -1577,9 +1577,8 @@ export class MemoryLibSQL extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const check = this.#runFenceCheck(fence, 'updateThread');
-    const thread = await this.getThreadById({ threadId: id });
-    if (!thread) {
-      throw new MastraError({
+    const notFound = () =>
+      new MastraError({
         id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'NOT_FOUND'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
@@ -1589,9 +1588,50 @@ export class MemoryLibSQL extends MemoryStorage {
           threadId: id,
         },
       });
-    }
+    const updateFailed = (error: unknown) =>
+      new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `Failed to update thread ${id}`,
+          details: { threadId: id },
+        },
+        error,
+      );
 
     const now = new Date();
+    if (metadata === undefined) {
+      // Leave the metadata column alone: rewriting it from an earlier read would
+      // drop a metadata write that landed in between.
+      let row: Record<string, unknown> | undefined;
+      try {
+        const result = await this.#fencedWrite('updateThread', check, writer =>
+          writer.execute({
+            sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), updatedAt = ? WHERE id = ?
+                  RETURNING id, resourceId, title, json(metadata) AS metadata, createdAt`,
+            args: [title ?? null, now.toISOString(), id],
+          }),
+        );
+        row = result.rows[0];
+      } catch (error) {
+        if (isRunFenceConflictError(error)) throw error;
+        throw updateFailed(error);
+      }
+      if (!row) throw notFound();
+      return {
+        id: row.id as string,
+        resourceId: row.resourceId as string,
+        title: row.title as string,
+        // Base spread a NULL column into {}; keep returning an object.
+        metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : ((row.metadata as any) ?? {}),
+        createdAt: new Date(row.createdAt as string),
+        updatedAt: now,
+      };
+    }
+
+    const thread = await this.getThreadById({ threadId: id });
+    if (!thread) throw notFound();
     const updatedThread = {
       ...thread,
       title: title ?? thread.title,
@@ -1614,16 +1654,7 @@ export class MemoryLibSQL extends MemoryStorage {
       return updatedThread;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
-      throw new MastraError(
-        {
-          id: createStorageErrorId('LIBSQL', 'UPDATE_THREAD', 'FAILED'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to update thread ${id}`,
-          details: { threadId: id },
-        },
-        error,
-      );
+      throw updateFailed(error);
     }
   }
 
