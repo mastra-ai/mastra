@@ -72,6 +72,12 @@ export interface FactoryProject {
   activeTemplateId: string | null;
   /** Repository slug → commit the active template was built at. */
   activeTemplateHeads: Record<string, string> | null;
+  /**
+   * Fingerprint of the settings, repositories, setup commands and Build
+   * variables the active template was built with; `null` for a template pinned
+   * before it was recorded.
+   */
+  activeTemplateInputs: string | null;
   /** Provider build id of the most recent build attempt; its status is read live from the provider. */
   lastBuildId: string | null;
   /** Repository slug → commit the most recent build attempt pinned, so its status can be read back. */
@@ -153,6 +159,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
+    active_template_inputs: { type: 'text', nullable: true },
     last_build_id: { type: 'text', nullable: true },
     last_build_heads: { type: 'json', nullable: true },
     last_build_inputs: { type: 'text', nullable: true },
@@ -192,6 +199,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   workspace_setup_command: string | null;
   active_template_id: string | null;
   active_template_heads: Record<string, string> | null;
+  active_template_inputs?: string | null;
   last_build_id: string | null;
   last_build_heads: Record<string, string> | null;
   last_build_inputs: string | null;
@@ -251,6 +259,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     workspaceSetupCommand: row.workspace_setup_command ?? null,
     activeTemplateId: row.active_template_id ?? null,
     activeTemplateHeads: row.active_template_heads ?? null,
+    activeTemplateInputs: row.active_template_inputs ?? null,
     lastBuildId: row.last_build_id ?? null,
     lastBuildHeads: row.last_build_heads ?? null,
     lastBuildInputs: row.last_build_inputs ?? null,
@@ -590,7 +599,13 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
         if (current.last_build_id !== buildId) return null;
         pinned = true;
-        return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
+        // The build being pinned is the last one started, so its inputs are the recorded last ones.
+        return {
+          active_template_id: templateId,
+          active_template_heads: heads,
+          active_template_inputs: current.last_build_inputs ?? null,
+          updated_at: now,
+        };
       }),
     );
     return pinned;

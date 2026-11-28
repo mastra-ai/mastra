@@ -76,6 +76,13 @@ export interface SessionSetupGate {
    * sandbox fails the same way and holds the session up while it does.
    */
   failedInBuild?: boolean;
+  /**
+   * True when the Factory's environment is built as a template and this
+   * build has no result for the setup command (it predates the command, or
+   * the repository joined after it). Setup commands run only in the
+   * environment build, so the boot leaves it for the next build.
+   */
+  notBuilt?: boolean;
   /** Write the marker once the setup command succeeded. Best-effort. */
   markSetupDone: () => Promise<void>;
 }
@@ -472,6 +479,7 @@ export function createEnvironmentSetupHook(
   sessionId: string,
   repoFullName: string,
   environment: { repos: SessionEnvironmentRepository[]; workspaceSetupCommand?: string },
+  options: { setupOnlyInBuild?: boolean } = {},
 ): SandboxStartHook {
   const workspaceCommand = environment.workspaceSetupCommand?.trim() ? environment.workspaceSetupCommand : undefined;
   const workspaceMarker = workspaceCommand ? setupMarkerContent(workspaceCommand) : undefined;
@@ -490,12 +498,15 @@ export function createEnvironmentSetupHook(
         : 'done';
       const setupDone = setup === 'done';
       const failedInBuild = setup === 'failed-in-build';
+      const notBuilt = setup === 'missing' && options.setupOnlyInBuild === true;
       if (marker) {
         const outcome = setupDone
           ? 'marker matches, skipping setup command'
           : failedInBuild
             ? 'setup command failed in the environment build, not running it again'
-            : 'no matching marker, setup command will run';
+            : notBuilt
+              ? 'setup command is not in this environment build, leaving it to the next build'
+              : 'no matching marker, setup command will run';
         process.stderr.write(`[factory:setup] ${repo.slug}: ${outcome} (${root}/${repoSetupMarkerPath(repoDir)})\n`);
       }
       repos.push({
@@ -504,6 +515,7 @@ export function createEnvironmentSetupHook(
         gate: {
           setupDone,
           ...(failedInBuild ? { failedInBuild } : {}),
+          ...(notBuilt ? { notBuilt } : {}),
           markSetupDone: () => (marker ? writeRepoMarker(sandbox, root, repoDir, marker) : Promise.resolve()),
         },
       });
@@ -518,6 +530,7 @@ export function createEnvironmentSetupHook(
       repos,
       workspace: {
         setupDone: workspaceDone,
+        ...(!workspaceDone && options.setupOnlyInBuild ? { notBuilt: true } : {}),
         markSetupDone: () =>
           workspaceMarker ? writeWorkspaceMarker(sandbox, root, workspaceMarker) : Promise.resolve(),
       },

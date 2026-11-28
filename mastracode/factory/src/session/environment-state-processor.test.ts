@@ -7,6 +7,7 @@ import {
   FactoryEnvironmentStateProcessor,
   peekSessionEnvironmentTeardown,
   recordSessionEnvironment,
+  setSessionEnvironmentBuildNote,
   setSessionEnvironmentNote,
   updateSessionEnvironmentRepository,
 } from './environment-state-processor.js';
@@ -244,6 +245,30 @@ describe('FactoryEnvironmentStateProcessor', () => {
     expect(cleared.cacheKey).toBe(first.cacheKey);
     expect(cleared.contents).not.toContain('GH_TOKEN');
     expect('note' in environment).toBe(false);
+  });
+
+  it('keeps the build note across a new boot record, renders it before the boot note, and drops it when cleared', async () => {
+    recordSessionEnvironment('sess-1', environment);
+    const processor = new FactoryEnvironmentStateProcessor();
+    const first = (await processor.computeStateSignal(stateArgs(requestContext()))) as { cacheKey: string };
+
+    setSessionEnvironmentBuildNote('sess-1', 'This sandbox runs the previous build.');
+    // A boot records the environment afresh; the build note is not part of it.
+    recordSessionEnvironment('sess-1', { ...environment, note: 'Boot note.' });
+    const noted = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(noted.contents.endsWith('\nThis sandbox runs the previous build.\nBoot note.')).toBe(true);
+
+    recordSessionEnvironment('sess-1', environment);
+    setSessionEnvironmentBuildNote('sess-1', null);
+    const cleared = (await processor.computeStateSignal(stateArgs(requestContext()))) as {
+      cacheKey: string;
+      contents: string;
+    };
+    expect(cleared.cacheKey).toBe(first.cacheKey);
+    expect(cleared.contents).not.toContain('previous build');
   });
 
   it('never renders a token or a clone URL: the state only carries slugs, paths, branches and statuses', async () => {

@@ -1698,7 +1698,42 @@ export class MastraFactory {
               : undefined,
             logger: { info: (msg, meta) => console.info(`[Mastra Factory] ${msg}`, meta ?? {}) },
           },
-          { getMastra: () => this.#prepared?.base.controller.getMastra() },
+          {
+            getMastra: () => this.#prepared?.base.controller.getMastra(),
+            // Only sessions whose command was refused for the build hear how it ended.
+            notifySession: async (waiter, message) => {
+              const reporting = await factoryReporting();
+              // The workspace may not know the run's thread; a live session's current thread is the one that waited.
+              const threadId =
+                waiter.threadId ??
+                (await this.#prepared?.base.controller.getSession(waiter.sessionId))?.thread.getId() ??
+                undefined;
+              if (!reporting || !threadId) {
+                console.info('[Mastra Factory] environment build waiter not told', {
+                  sessionId: waiter.sessionId,
+                  reason: reporting ? 'no-thread' : 'no-reporting',
+                });
+                return;
+              }
+              const result = await reporting.deliver(
+                { sessionId: waiter.sessionId, threadId },
+                {
+                  kind: 'environment-build',
+                  priority: 'medium',
+                  summary: message,
+                  payload: { message },
+                  sourceId: waiter.sessionId,
+                },
+              );
+              if (result.delivered === 'skipped') {
+                console.info('[Mastra Factory] environment build waiter not told', {
+                  sessionId: waiter.sessionId,
+                  threadId,
+                  reason: result.reason,
+                });
+              }
+            },
+          },
         )
       : undefined;
     const environmentBuilds = this.#environmentBuilds;
@@ -2005,7 +2040,12 @@ export class MastraFactory {
               : [],
           ),
           ...(factoryProjectsStorage ? { projects: factoryProjectsStorage } : {}),
-          ...(this.#environmentBuilds ? { onSandboxCreated: this.#environmentBuilds.onSandboxCreated } : {}),
+          ...(this.#environmentBuilds
+            ? {
+                onSandboxCreated: this.#environmentBuilds.onSandboxCreated,
+                awaitEnvironmentBuild: this.#environmentBuilds.awaitEnvironmentBuild,
+              }
+            : {}),
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,

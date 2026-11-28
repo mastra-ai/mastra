@@ -4140,6 +4140,8 @@ describe('factory environment sandbox context', () => {
     workspaceRegistry?: FactoryWorkspaceRegistry;
     sandboxEnvs?: CreateWorkspaceFactoryOptions['sandboxEnvs'];
     onSandboxCreated?: CreateWorkspaceFactoryOptions['onSandboxCreated'];
+    /** Models a provider that builds templates, with the host waiting on its builds. */
+    awaitEnvironmentBuild?: CreateWorkspaceFactoryOptions['awaitEnvironmentBuild'];
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -4171,6 +4173,9 @@ describe('factory environment sandbox context', () => {
     };
     const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
     const sandbox = new RecordingFactorySandbox();
+    if (options.awaitEnvironmentBuild) {
+      Object.defineProperty(sandbox, 'builds', { value: { start: vi.fn(), get: vi.fn() } });
+    }
     const resolver = createWorkspaceFactory({
       sandbox,
       github: github as any,
@@ -4178,8 +4183,9 @@ describe('factory environment sandbox context', () => {
       workspaceRegistry: options.workspaceRegistry,
       ...(options.sandboxEnvs ? { sandboxEnvs: options.sandboxEnvs } : {}),
       ...(options.onSandboxCreated ? { onSandboxCreated: options.onSandboxCreated } : {}),
+      ...(options.awaitEnvironmentBuild ? { awaitEnvironmentBuild: options.awaitEnvironmentBuild } : {}),
     });
-    return { resolver, projects, sandbox, github };
+    return { resolver, projects, sandbox, github, project };
   }
 
   const twoLinks = [
@@ -4423,6 +4429,80 @@ describe('factory environment sandbox context', () => {
     await workspace!.sandbox!.getInfo!();
 
     expect(onSandboxCreated).not.toHaveBeenCalled();
+  });
+
+  describe('when setup runs only in the environment build', () => {
+    const BUILDING = "The sandbox can't start yet: the environment is being built.";
+
+    it('refuses commands without starting a sandbox until a build finishes, then boots that build', async () => {
+      const awaitEnvironmentBuild = vi
+        .fn<NonNullable<CreateWorkspaceFactoryOptions['awaitEnvironmentBuild']>>()
+        .mockResolvedValueOnce({ refuse: BUILDING })
+        .mockResolvedValue({});
+      const { resolver, project } = environmentFixture({
+        links: twoLinks,
+        project: { activeTemplateHeads: null },
+        awaitEnvironmentBuild,
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const created = mocks.createSandbox.mock.results[0]!.value as { start: ReturnType<typeof vi.fn> };
+
+      await expect(workspace!.sandbox!.executeCommand!('echo ok')).rejects.toThrow(BUILDING);
+      expect(created.start).not.toHaveBeenCalled();
+      expect(awaitEnvironmentBuild).toHaveBeenCalledWith(expect.objectContaining({ id: 'factory-1' }), {
+        sessionId: 'session-a',
+        threadId: 'session-a',
+      });
+
+      // The build finished: the next command boots it, pinned to its commits.
+      const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+      (project as Record<string, unknown>).activeTemplateHeads = built;
+      await workspace!.sandbox!.executeCommand!('echo ok');
+      await workspace!.sandbox!.executeCommand!('echo again');
+      expect(created.start).toHaveBeenCalledTimes(1);
+      // Settled once the sandbox may boot; later commands do not ask again.
+      expect(awaitEnvironmentBuild).toHaveBeenCalledTimes(2);
+      const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+      await expect(ctx.resolveHead('https://github.com/octocat/hello.git')).resolves.toBe(built['octocat/hello']);
+    });
+
+    it('tells the agent what the decision says about the build its sandbox boots from', async () => {
+      const note =
+        "The environment's latest saved change failed to build (boom), so this sandbox runs the previous build.";
+      const { resolver } = environmentFixture({
+        links: twoLinks,
+        awaitEnvironmentBuild: async () => ({ note }),
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await workspace!.sandbox!.executeCommand!('echo ok');
+
+      const signal = await new FactoryEnvironmentStateProcessor().computeStateSignal({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        contextWindow: { hasSnapshot: false },
+      } as never);
+      expect((signal as { contents: string }).contents).toContain(`\n${note}`);
+    });
+
+    it('fails a start that did not come through a command while nothing is built', async () => {
+      const { resolver } = environmentFixture({
+        links: twoLinks,
+        project: { activeTemplateHeads: null },
+        awaitEnvironmentBuild: async () => ({ refuse: BUILDING }),
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      await expect(workspace!.sandbox!.getInfo!()).rejects.toThrow(BUILDING);
+      expect(mocks.materializeRepo).not.toHaveBeenCalled();
+    });
   });
 
   it('passes no working directory or workspace setup when the project leaves them unset', async () => {
@@ -5144,6 +5224,64 @@ describe('factory environment sandbox context', () => {
       // The build's own result stays on the repository: a session start has nothing new to record.
       expect((github.sourceControlStorage.projectRepositories as any).setBuildStatus).not.toHaveBeenCalled();
       warn.mockRestore();
+    });
+
+    describe('when setup runs only in the environment build', () => {
+      const built = { 'octocat/hello': 'a'.repeat(40), 'octocat/docs': 'b'.repeat(40) };
+      const buildOnly = (links = [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }]) =>
+        environmentFixture({
+          links,
+          project: { activeTemplateHeads: built },
+          awaitEnvironmentBuild: async () => ({}),
+        });
+
+      it('never runs a setup command the build does not have, and says it is not built', async () => {
+        const { resolver, github } = buildOnly();
+        addProject({ setupCommand: 'pnpm i' });
+        addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+        await boot(resolver, { repos: { hello: false, docs: false }, workspace: false });
+
+        expect(mocks.runSetupCommand).not.toHaveBeenCalled();
+        expect(peekSessionEnvironment('session-a')?.repositories).toMatchObject([
+          { slug: 'octocat/hello', setupStatus: 'not built' },
+          { slug: 'octocat/docs', setupStatus: 'not built' },
+        ]);
+        expect((github.sourceControlStorage.projectRepositories as any).setBuildStatus).not.toHaveBeenCalled();
+      });
+
+      it("reports the build's setup results on the repositories, not the session's own sync failures", async () => {
+        const { resolver, github } = buildOnly([
+          twoLinks[0]!,
+          { ...twoLinks[1]!, setupCommand: 'pnpm docs' },
+          { ...twoLinks[2]!, inEnvironment: true, setupCommand: 'make' },
+        ]);
+        addProject({ setupCommand: 'pnpm i' });
+        addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+        mocks.syncEnvironmentRepository.mockImplementation(async (_sandbox: unknown, dir: string) => {
+          if (dir.endsWith('/legacy')) throw new Error('fetch timed out');
+          return { outcome: 'resumed', branch: 'main' };
+        });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        await boot(resolver, { repos: { hello: true, docs: 'failed-in-build', legacy: true }, workspace: true });
+
+        const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
+          (call: [unknown]) => call[0],
+        );
+        expect(writes).toEqual([
+          { orgId: 'org-1', id: 'project-1', status: 'configured', error: null },
+          {
+            orgId: 'org-1',
+            id: 'link-2',
+            status: 'failed',
+            error: 'The setup command failed in the environment build.',
+          },
+          // Its sync failed in this session, but the build set it up.
+          { orgId: 'org-1', id: 'link-3', status: 'configured', error: null },
+        ]);
+        warn.mockRestore();
+      });
     });
 
     it('keeps the recorded setup failure when a later start skips the command that failed', async () => {
