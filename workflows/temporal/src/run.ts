@@ -1,15 +1,24 @@
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
-import { Run } from '@mastra/core/workflows';
-import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import type { ObservabilityContext, TracingOptions } from '@mastra/core/observability';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
+import { createTimeTravelExecutionParams, getStepIds, Run } from '@mastra/core/workflows';
+import type {
+  Step,
+  TimeTravelContext,
+  WorkflowResult,
+  WorkflowRunStartOptions,
+  WorkflowRunState,
+} from '@mastra/core/workflows';
 import {
   ApplicationFailure,
   CancelledFailure,
   WorkflowExecutionAlreadyStartedError,
   WorkflowFailedError,
 } from '@temporalio/client';
-import type { Client, WorkflowHandle } from '@temporalio/client';
+import type { Client, WorkflowHandle, WorkflowOptions } from '@temporalio/client';
 import type { WorkflowFailureDetails } from './transforms/temporal-workflow-runtime';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
@@ -35,10 +44,10 @@ type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
 } & WorkflowRunStartOptions;
 
 export class TemporalWorkflowStatusUnknownError extends Error {
-  constructor(runId: string, cause: unknown, afterResumeSignal = false) {
+  constructor(runId: string, cause: unknown, afterResumeOperation = false) {
     super(
-      afterResumeSignal
-        ? `Unable to determine Temporal workflow status for run "${runId}" after sending a resume signal. The signal may have been delivered; do not retry resume() blindly.`
+      afterResumeOperation
+        ? `Unable to determine Temporal workflow status for run "${runId}" after executing a resume Update. The Update was accepted; do not retry resume() with different inputs.`
         : `Unable to determine Temporal workflow status for run "${runId}".`,
       { cause },
     );
@@ -77,6 +86,25 @@ export class TemporalRun<
     this.taskQueue = temporalParams.taskQueue;
   }
 
+  private workflowStartOptions(
+    args: Record<string, unknown>,
+    options: Pick<WorkflowOptions, 'workflowIdReusePolicy' | 'workflowIdConflictPolicy'> = {},
+  ) {
+    return {
+      taskQueue: this.taskQueue,
+      workflowId: this.runId,
+      args: [args],
+      ...options,
+    };
+  }
+
+  private startWorkflow(
+    args: Record<string, unknown>,
+    options: Pick<WorkflowOptions, 'workflowIdReusePolicy' | 'workflowIdConflictPolicy'> = {},
+  ) {
+    return this.client.workflow.start(toWorkflowType(this.workflowId), this.workflowStartOptions(args, options));
+  }
+
   async start(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
     const input = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState);
@@ -104,22 +132,16 @@ export class TemporalRun<
     initialState: unknown,
     requestContext: RequestContext,
   ): Promise<WorkflowHandle> {
-    return this.client.workflow.start(toWorkflowType(this.workflowId), {
-      taskQueue: this.taskQueue,
-      workflowId: this.runId,
-      args: [
-        {
-          inputData: input,
-          initialState,
-          requestContext: Object.fromEntries(requestContext.entries()),
-          runId: this.runId,
-          resourceId: this.resourceId,
-          outputOptions: args.outputOptions,
-          tracingOptions: args.tracingOptions,
-          perStep: args.perStep,
-          validateInputs: this.validateInputs,
-        },
-      ],
+    return this.startWorkflow({
+      inputData: input,
+      initialState,
+      requestContext: Object.fromEntries(requestContext.entries()),
+      runId: this.runId,
+      resourceId: this.resourceId,
+      outputOptions: args.outputOptions,
+      tracingOptions: args.tracingOptions,
+      perStep: args.perStep,
+      validateInputs: this.validateInputs,
     });
   }
 
@@ -264,6 +286,26 @@ export class TemporalRun<
     });
   }
 
+  private resolveSuspendedStep(
+    status: unknown,
+    payload: { step?: string; label?: string },
+  ): { stepId: string; suspendedAt?: number } {
+    if (!isSuspendedWorkflowResult(status)) {
+      throw new Error(`Workflow run "${this.runId}" is not suspended.`);
+    }
+
+    const stepId =
+      payload.step ??
+      (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
+      (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined);
+    const stepResult = stepId ? status.steps[stepId] : undefined;
+    if (!stepId || !isSuspendedStepResult(stepResult)) {
+      throw new Error(`No suspended step matches the requested resume target for run "${this.runId}".`);
+    }
+
+    return { stepId, suspendedAt: stepResult.suspendedAt };
+  }
+
   private async resumePayload(params: {
     step?:
       | Step<string, any, any, any, any, any, TemporalEngineType, any>
@@ -340,15 +382,17 @@ export class TemporalRun<
     const handle = this.client.workflow.getHandle(this.runId);
     const payload = await this.resumePayload(params);
     const status = await this.queryStatus(handle);
-    const stepId = isSuspendedWorkflowResult(status)
-      ? (payload.step ??
-        (payload.label ? status.resumeLabels?.[payload.label]?.stepId : undefined) ??
-        (status.suspended?.length === 1 && status.suspended[0]?.length === 1 ? status.suspended[0][0] : undefined))
-      : undefined;
-    const previousStep = stepId && isSuspendedWorkflowResult(status) ? status.steps[stepId] : undefined;
-    const previousSuspension =
-      stepId && isSuspendedStepResult(previousStep) ? { stepId, suspendedAt: previousStep.suspendedAt } : undefined;
-    await handle.signal('mastra.resume', payload);
+    const previousSuspension = this.resolveSuspendedStep(status, payload);
+    await handle.executeUpdate('mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: randomUUID(),
+          target: { step: previousSuspension.stepId },
+          resumeData: payload.resumeData,
+        },
+      ],
+    });
     return this.awaitResultOrSuspended(handle, undefined, undefined, requestContext, previousSuspension, true);
   }
 
@@ -376,7 +420,19 @@ export class TemporalRun<
     actor?: any;
   }) {
     const handle = this.client.workflow.getHandle(this.runId);
-    await handle.signal('mastra.resume', await this.resumePayload(params));
+    const payload = await this.resumePayload(params);
+    const status = await this.queryStatus(handle);
+    const suspension = this.resolveSuspendedStep(status, payload);
+    await handle.executeUpdate('mastra.executeOperation', {
+      args: [
+        {
+          operation: 'resume',
+          operationId: randomUUID(),
+          target: { step: suspension.stepId },
+          resumeData: payload.resumeData,
+        },
+      ],
+    });
     return { runId: this.runId };
   }
 
@@ -386,8 +442,189 @@ export class TemporalRun<
     return this.unsupported('restart');
   }
 
-  override timeTravel(..._args: unknown[]): never {
-    return this.unsupported('timeTravel');
+  override async timeTravel<TTimeTravelInput>(
+    args: {
+      inputData?: TTimeTravelInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TTimeTravelInput, any, any, any, TemporalEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TemporalEngineType, any>[],
+            Step<string, any, TTimeTravelInput, any, any, any, TemporalEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: unknown;
+      tracingOptions?: TracingOptions;
+      outputOptions?: { includeState?: boolean; includeResumeLabels?: boolean };
+      perStep?: boolean;
+      actor?: unknown;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>> {
+    const stepParam = args.step;
+    if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
+      throw new Error('Step is required and must be a valid step or array of steps');
+    }
+    const newStepParam = typeof stepParam === 'string' ? stepParam.split('.') : stepParam;
+    const steps = (Array.isArray(newStepParam) ? newStepParam : [newStepParam]).map(step =>
+      typeof step === 'string' ? step : step.id,
+    );
+    if (steps.length !== 1) {
+      throw new Error('Temporal time travel currently supports only top-level sequential step targets.');
+    }
+
+    const sourceHandle = this.client.workflow.getHandle(this.runId);
+    let sourceDescription: Awaited<ReturnType<typeof sourceHandle.describe>>;
+    let sourceStatus: unknown;
+    try {
+      sourceDescription = await sourceHandle.describe();
+      sourceStatus = await sourceHandle.query('mastra.status');
+    } catch (error) {
+      throw new TemporalWorkflowStatusUnknownError(this.runId, error);
+    }
+    if (!sourceStatus || typeof sourceStatus !== 'object') {
+      throw new Error(`Temporal workflow status for run "${this.runId}" is invalid.`);
+    }
+    const status = sourceStatus as Record<string, any>;
+    const sourceExecutionIsOpen = sourceDescription.status?.name
+      ? sourceDescription.status.name === 'RUNNING'
+      : status.status === 'running' || status.status === 'suspended';
+    if (sourceExecutionIsOpen && status.status === 'running') {
+      throw new Error('This workflow run is still running, cannot time travel');
+    }
+
+    const inputData = args.inputData;
+    const snapshot: WorkflowRunState = {
+      runId: this.runId,
+      status: status.status,
+      result: status.result,
+      error: status.error,
+      requestContext: status.requestContext ?? {},
+      value: status.state ?? {},
+      context: { input: status.input, ...(status.steps ?? {}) },
+      serializedStepGraph: this.serializedStepGraph,
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: Object.fromEntries(
+        ((status.suspended as string[][] | undefined) ?? []).map(path => [path.at(-1)!, []]),
+      ),
+      resumeLabels: status.resumeLabels ?? {},
+      waitingPaths: {},
+      timestamp: Date.now(),
+    };
+    const timeTravel = createTimeTravelExecutionParams({
+      steps,
+      inputData,
+      resumeData: args.resumeData,
+      context: args.context,
+      nestedStepsContext: args.nestedStepsContext,
+      snapshot,
+      initialState: args.initialState,
+      graph: this.executionGraph,
+      perStep: args.perStep,
+    });
+    const [targetIndex, ...innerPath] = timeTravel.executionPath;
+    const targetEntry = this.executionGraph.steps[targetIndex!];
+    if (
+      !Number.isInteger(targetIndex) ||
+      innerPath.length > 0 ||
+      targetEntry?.type !== 'step' ||
+      targetEntry.step.id !== steps[0]
+    ) {
+      throw new Error('Temporal time travel currently supports only top-level sequential step targets.');
+    }
+    for (const entry of this.executionGraph.steps.slice(0, targetIndex)) {
+      const stepIds = getStepIds(entry);
+      const allowsMissingResults =
+        entry.type === 'sleep' ||
+        entry.type === 'sleepUntil' ||
+        entry.type === 'foreach' ||
+        entry.type === 'loop' ||
+        entry.type === 'conditional';
+      for (const stepId of stepIds) {
+        const sourceStepResult = status.steps?.[stepId];
+        if (!sourceStepResult) {
+          if (allowsMissingResults) continue;
+          throw new Error(
+            `Cannot time travel to step "${steps[0]}" because preceding step "${stepId}" is missing from the source execution.`,
+          );
+        }
+        if (entry.type === 'conditional' && sourceStepResult.status === 'skipped') continue;
+        if (sourceStepResult.status !== 'success') {
+          throw new Error(
+            `Cannot time travel to step "${steps[0]}" because preceding step "${stepId}" did not succeed in the source execution.`,
+          );
+        }
+        timeTravel.stepResults[stepId] ??= sourceStepResult;
+      }
+    }
+    const storedRequestContext = { ...(status.requestContext ?? {}) };
+    delete storedRequestContext[MASTRA_AUTH_TOKEN_KEY];
+    const requestContext = new RequestContext<TRequestContext>();
+    const mutableRequestContext = requestContext as RequestContext<any>;
+    for (const [key, value] of Object.entries(storedRequestContext)) {
+      mutableRequestContext.set(key, value);
+    }
+    for (const [key, value] of args.requestContext?.entries() ?? []) {
+      mutableRequestContext.set(key, value);
+    }
+    await this._validateRequestContext(requestContext as RequestContext<unknown>);
+
+    const previousTemporalRunId = sourceDescription.runId;
+    const operationId = `timeTravel:${previousTemporalRunId}:${steps[0]}`;
+    const sourceIsSuspended = sourceExecutionIsOpen && status.status === 'suspended';
+    if (sourceIsSuspended) {
+      await sourceHandle.executeUpdate('mastra.executeOperation', {
+        args: [{ operation: 'timeTravel', operationId }],
+      });
+    }
+
+    const workflowArgs = {
+      inputData: status.input,
+      initialState: timeTravel.state,
+      requestContext: Object.fromEntries(requestContext.entries()),
+      runId: this.runId,
+      resourceId: this.resourceId,
+      outputOptions: args.outputOptions,
+      tracingOptions: args.tracingOptions,
+      perStep: args.perStep,
+      validateInputs: this.validateInputs,
+      timeTravel,
+      timeTravelLineage: { previousTemporalRunId, target: steps, operationId },
+    };
+    let handle: WorkflowHandle;
+    if (sourceIsSuspended) {
+      try {
+        handle = await this.startWorkflow(workflowArgs, {
+          workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+          workflowIdConflictPolicy: 'TERMINATE_EXISTING',
+        });
+      } catch (error) {
+        if (
+          !(error instanceof WorkflowExecutionAlreadyStartedError) &&
+          (!(error instanceof Error) || error.name !== 'WorkflowExecutionAlreadyStartedError')
+        ) {
+          throw error;
+        }
+        handle = await this.startWorkflow(workflowArgs, { workflowIdReusePolicy: 'TERMINATE_IF_RUNNING' });
+      }
+    } else {
+      handle = await this.startWorkflow(workflowArgs, {
+        workflowIdReusePolicy: 'ALLOW_DUPLICATE',
+        workflowIdConflictPolicy: 'USE_EXISTING',
+      });
+    }
+
+    return this.awaitResultOrSuspended(
+      handle,
+      status.input as TInput,
+      timeTravel.state as TState,
+      requestContext as RequestContext,
+    ) as unknown as Promise<WorkflowResult<TState, TTimeTravelInput, TOutput, TSteps>>;
   }
 
   override timeTravelStream(..._args: unknown[]): never {
