@@ -17,6 +17,7 @@ import { DEBUG_SYNC, TestQuickJSWASMModule, newQuickJSWASMModuleFromVariant } fr
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { QuickJsCodeModeTransport } from './transport';
+import type { QuickJsCodeModeTransportOptions } from './transport';
 
 function run(
   program: string,
@@ -611,10 +612,13 @@ describe('QuickJsCodeModeTransport handle disposal', () => {
    * process is a slow, hard-to-attribute memory bug. The debug build ships a
    * leak sanitizer, so assert against it directly rather than trusting review.
    */
-  async function expectNoLeaks(exercise: (transport: QuickJsCodeModeTransport) => Promise<unknown>) {
+  async function expectNoLeaks(
+    exercise: (transport: QuickJsCodeModeTransport) => Promise<unknown>,
+    options: Partial<QuickJsCodeModeTransportOptions> = {},
+  ) {
     const wasm = await newQuickJSWASMModuleFromVariant(DEBUG_SYNC);
     const sanitizer = new TestQuickJSWASMModule(wasm);
-    await exercise(new QuickJsCodeModeTransport({ module: wasm }));
+    await exercise(new QuickJsCodeModeTransport({ module: wasm, ...options }));
     expect(() => sanitizer.assertNoMemoryAllocated()).not.toThrow();
   }
 
@@ -656,6 +660,34 @@ describe('QuickJsCodeModeTransport handle disposal', () => {
       const result = await run(`while (true) {}`, { transport, timeout: 200 });
       expect(result.error?.name).toBe('TimeoutError');
     });
+  });
+
+  it('leaves nothing allocated after a tick-budget interruption', async () => {
+    // The budget is spent inside the loop, and the guest job queued ahead of it
+    // still has to run before the runtime is freed. Its host call is what proves
+    // the job got there.
+    await expectNoLeaks(
+      async transport => {
+        const dispatched: string[] = [];
+        const result = await run(
+          `
+            Promise.resolve().then(() => external_late({}));
+            while (true) {}
+          `,
+          {
+            transport,
+            toolIds: ['late'],
+            dispatch: async tool => {
+              dispatched.push(tool);
+              return tool;
+            },
+          },
+        );
+        expect(result.error?.name).toBe('ExecutionLimitError');
+        expect(dispatched).toEqual(['late']);
+      },
+      { maxInterruptTicks: 200 },
+    );
   });
 });
 

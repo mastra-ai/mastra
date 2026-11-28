@@ -355,12 +355,13 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     // ended the run.
     const deadline = Date.now() + timeout;
 
-    // One interrupt policy governs every guest-execution period — the bootstrap,
-    // the main evaluation, the microtask pumping around it, and the final drain.
-    // QuickJS calls it between operations, and a truthy return unwinds whatever
-    // guest code is running. It cannot help while the guest is merely awaiting a
-    // host call — no guest code is running then — which is what the host-side
-    // races below are for.
+    // One interrupt policy governs every period of guest execution — the
+    // bootstrap, the main evaluation and the microtask pumping around it. The
+    // final drain opts out of it and runs under its own deadline (see below).
+    // QuickJS calls the handler between operations, and a truthy return unwinds
+    // whatever guest code is running. It cannot help while the guest is merely
+    // awaiting a host call — no guest code is running then — which is what the
+    // host-side races below are for.
     //
     // Order matters: outer cancellation and the wall clock keep their existing
     // precedence, and only then do the new, clock-independent budgets apply.
@@ -370,16 +371,20 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
     let interrupted: 'timeout' | 'abort' | 'limit' | 'predicate' | undefined;
 
     const interruptHandler = (): boolean => {
+      // The drain is exempt from the policy below. It exists to unwind guest
+      // jobs left over by a run that already ended, so the conditions that ended
+      // that run — an abort signal still aborted, a tick budget already spent, a
+      // predicate that already returned true — must not be re-applied to it. It
+      // runs under its own short deadline instead.
+      if (draining) return Date.now() >= drainDeadline;
       if (abortSignal?.aborted) {
         interrupted = 'abort';
         return true;
       }
-      // Wall clock. During the drain the budget is the drain deadline, not the
-      // run deadline: a run that already hit its own deadline must still be
-      // allowed to unwind its leftover jobs, which is what keeps a leaked-handle
-      // abort away.
-      if (Date.now() >= (draining ? drainDeadline : deadline)) {
-        if (!draining) interrupted = 'timeout';
+      // Wall clock. The drain returns above on its own deadline, so this is the
+      // run deadline proper.
+      if (Date.now() >= deadline) {
+        interrupted = 'timeout';
         return true;
       }
       // A tick is one interrupt-handler check, not a millisecond and not a
