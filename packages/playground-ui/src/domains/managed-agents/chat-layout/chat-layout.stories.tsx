@@ -26,6 +26,7 @@ import {
 import { ShortcutHint } from '@/ds/components/Kbd/shortcut-hint';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { PageLayout } from '@/ds/components/PageLayout';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
@@ -194,23 +195,25 @@ function Conversation() {
           New thread
         </Button>
       </div>
-      <div className="flex min-h-0 w-full max-w-170 flex-1 flex-col justify-end gap-5 overflow-y-auto">
-        <div className="self-end rounded-2xl bg-fill px-3.5 py-2">
-          <Txt variant="body">Which deals close this week?</Txt>
-        </div>
-        <span className="flex items-center gap-2 self-start">
-          <Badge variant="success" emphasis="subtle" size="sm" indicator="dot">
-            attio-search
-          </Badge>
-          <Txt as="span" variant="caption" tone="muted">
-            4 deals, 312 ms
-          </Txt>
-        </span>
-        <MarkdownRenderer>{REPLY}</MarkdownRenderer>
-        <div className="self-end rounded-2xl bg-fill px-3.5 py-2">
-          <Txt variant="body">Yes, keep it short and mention the pilot results.</Txt>
-        </div>
-      </div>
+      <ScrollArea autoScroll className="min-h-0 w-full max-w-170 flex-1">
+        <ScrollAreaViewport contentClassName="flex min-h-full flex-col justify-end gap-5">
+          <div className="self-end rounded-2xl bg-fill px-3.5 py-2">
+            <Txt variant="body">Which deals close this week?</Txt>
+          </div>
+          <span className="flex items-center gap-2 self-start">
+            <Badge variant="success" emphasis="subtle" size="sm" indicator="dot">
+              attio-search
+            </Badge>
+            <Txt as="span" variant="caption" tone="muted">
+              4 deals, 312 ms
+            </Txt>
+          </span>
+          <MarkdownRenderer>{REPLY}</MarkdownRenderer>
+          <div className="self-end rounded-2xl bg-fill px-3.5 py-2">
+            <Txt variant="body">Yes, keep it short and mention the pilot results.</Txt>
+          </div>
+        </ScrollAreaViewport>
+      </ScrollArea>
       <div className="flex w-full max-w-170 flex-col pb-2">
         <Composer onSubmit={event => event.preventDefault()}>
           <ComposerRing>
