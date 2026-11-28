@@ -393,7 +393,13 @@ export function describeResumeOccurrenceCases({
             event.data.resumeSteps?.length &&
             event.data.executionPath?.[0] === 0
           ) {
-            releaseFirst = () => publish(topic, event, options);
+            // Single use, so the cleanup below only publishes an event the case never released.
+            let released = false;
+            releaseFirst = async () => {
+              if (released) return;
+              released = true;
+              await publish(topic, event, options);
+            };
             firstStepEvent.resolve();
             return;
           }
