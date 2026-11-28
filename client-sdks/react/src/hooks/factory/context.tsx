@@ -1,4 +1,4 @@
-import type { Factory } from '@mastra/client-js';
+import type { Factory, FactoryWeb } from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { createContext, useContext, useMemo } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
@@ -23,4 +23,20 @@ export function useFactory(factoryProjectId: string | undefined): Factory | unde
     () => (factoryProjectId ? client.getFactory(factoryProjectId, basePath ? { basePath } : undefined) : undefined),
     [client, factoryProjectId, basePath],
   );
+}
+
+const FactoryWebBasePathContext = createContext<string | undefined>(undefined);
+
+/**
+ * Where the host serves Factory's routes outside `/web/factory` (model config, providers, voice,
+ * workspace). Standalone Factory serves them at `/web`, the client's default.
+ */
+export function FactoryWebBasePathProvider({ webBasePath, children }: { webBasePath: string; children: ReactNode }) {
+  return <FactoryWebBasePathContext.Provider value={webBasePath}>{children}</FactoryWebBasePathContext.Provider>;
+}
+
+export function useFactoryWeb(): FactoryWeb {
+  const client = useMastraClient();
+  const webBasePath = useContext(FactoryWebBasePathContext);
+  return useMemo(() => client.getFactoryWeb(webBasePath ? { webBasePath } : undefined), [client, webBasePath]);
 }
