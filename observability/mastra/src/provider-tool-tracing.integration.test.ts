@@ -346,6 +346,22 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 
+  it('exports a provider result delivered on a later model call', async () => {
+    const { agent, testExporter } = buildAgent(crossStepProviderToolModel());
+    await runToCompletion(agent, testExporter);
+
+    const stepSpans = testExporter.getSpansByType('model_step' as any);
+    expect(stepSpans).toHaveLength(2);
+
+    // The provider delivered srvtoolu_2's result a step after the call, merged into the
+    // assistant message that had already carried the call. The delivering step exports that
+    // one part; the earlier call's own output is not replayed with it.
+    const [callStep, resultStep] = stepSpans;
+    expect(partTypes(callStep)).toEqual([['tool-call', 'tool-call']]);
+    expect(partTypes(resultStep)).toEqual([['tool-result'], ['text']]);
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
   it('keeps each model call to its own messages when every tool is provider-executed', async () => {
     const { agent, testExporter } = buildAgent(hostedToolOnlyModel());
     await runToCompletion(agent, testExporter);
@@ -353,12 +369,12 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     const stepSpans = testExporter.getSpansByType('model_step' as any);
     expect(stepSpans).toHaveLength(2);
 
-    // The first call only emitted the tool call; the second delivered its result and the
-    // answer. No locally executed tool message separates them, so the step history is the
-    // only boundary — without it the second call replays the first call's output.
+    // The first call only emitted the tool call; the second delivered its result and the answer.
+    // No locally executed tool message separates them, so the step history is the only boundary:
+    // the second call keeps the just-delivered result but not the first call's own output.
     const [firstCall, secondCall] = stepSpans;
     expect(partTypes(firstCall)).toEqual([['tool-call']]);
-    expect(partTypes(secondCall)).toEqual([['text']]);
+    expect(partTypes(secondCall)).toEqual([['tool-result'], ['text']]);
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 
@@ -369,12 +385,12 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     const stepSpans = testExporter.getSpansByType('model_step' as any);
     expect(stepSpans).toHaveLength(2);
 
-    // A file part has no comparable identity, so the first call's message cannot be matched
-    // by what it holds. The step history still marks the boundary, so the second call must
-    // not carry over the first call's file, reasoning or provider tool result.
+    // A file part has no comparable identity, so the first call's message cannot be matched by
+    // what it holds. The step history still marks the boundary: the second call keeps the result
+    // the provider delivered late but must not carry over the first call's file, reasoning or call.
     const [firstCall, secondCall] = stepSpans;
     expect(partTypes(firstCall)).toEqual([['file', 'reasoning', 'tool-call']]);
-    expect(partTypes(secondCall)).toEqual([['text']]);
+    expect(partTypes(secondCall)).toEqual([['tool-result'], ['text']]);
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 

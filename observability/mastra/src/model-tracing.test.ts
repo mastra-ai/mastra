@@ -2294,9 +2294,24 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
+      // The provider delivered srvtoolu_1's result after the call was made, merged into the
+      // message that already carried the call. That message grew by one part: the delivering
+      // call keeps the result, and does not replay the earlier call's own output with it.
+      const deliveredResult = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_1',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'search results' } },
+          },
+        ],
+      };
+
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
-        expect(JSON.stringify(span.output)).not.toContain('search results');
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
+        expect(JSON.stringify(span.output)).not.toContain('AI news');
       }
     });
 
@@ -2310,8 +2325,8 @@ describe('ModelSpanTracker', () => {
       const tracker = new ModelSpanTracker(modelSpan);
 
       // A file part has no comparable identity, so the earlier call's message cannot be
-      // recognised by its parts. The step history still marks where the second call begins,
-      // so none of the first call's output — its reasoning included — may reach this call.
+      // recognised by its parts. The step history still marks where the second call begins:
+      // the first call's file, reasoning and call must not reach this one.
       const earlierCall = {
         role: 'assistant',
         content: [
@@ -2360,10 +2375,115 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
+      // The earlier call's file and reasoning are not replayed, but the provider result it
+      // gained after the call was made only exists now: it is this call's information and is
+      // exported, while the earlier output that came with it stays out.
+      const deliveredResult = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_9',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'search results' } },
+          },
+        ],
+      };
+
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
         expect(JSON.stringify(span.output)).not.toContain('Read the file first.');
-        expect(JSON.stringify(span.output)).not.toContain('search results');
+        expect(JSON.stringify(span.output)).not.toContain('base64file');
+      }
+    });
+
+    it('exports a provider result delivered a step late', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // Step 1 asked a provider-executed tool and a locally executed one; step 2 delivered the
+      // provider result, merged into the message that already carried the call. The result only
+      // exists from step 2 on, so it is step 2's information; the call that asked for it is not.
+      const callStep = {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'srvtoolu_2', toolName: 'web_search', input: { query: 'deferred' } },
+          { type: 'tool-call', toolCallId: 'call-client-1', toolName: 'get_weather', input: { city: 'Paris' } },
+        ],
+      };
+      const callStepWithResult = {
+        role: 'assistant',
+        content: [
+          (callStep.content as unknown[])[0],
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_2',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'late results' } },
+          },
+          (callStep.content as unknown[])[1],
+        ],
+      };
+      const localToolResult = {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-client-1',
+            toolName: 'get_weather',
+            output: { type: 'json', value: { city: 'Paris', tempC: 21 } },
+          },
+        ],
+      };
+      const answer = { role: 'assistant', content: [{ type: 'text', text: 'done' }] };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'done' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'done',
+              usage: { totalTokens: 10 },
+              steps: [
+                { response: { messages: [callStep] } },
+                { response: { messages: [callStepWithResult, localToolResult, answer] } },
+              ],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      const deliveredResult = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_2',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'late results' } },
+          },
+        ],
+      };
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
+        expect(JSON.stringify(span.output)).not.toContain('deferred');
+        expect(JSON.stringify(span.output)).not.toContain('Paris');
       }
     });
 
