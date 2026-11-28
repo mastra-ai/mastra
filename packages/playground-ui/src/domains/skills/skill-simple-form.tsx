@@ -43,7 +43,7 @@ export function SkillSimpleForm({
   nameReadOnly,
 }: SkillSimpleFormProps) {
   return (
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex min-h-full flex-col gap-4">
       {readOnly || nameReadOnly ? (
         <LockedValue label="Name" value={name} />
       ) : (
@@ -66,7 +66,7 @@ export function SkillSimpleForm({
         </Field>
       )}
 
-      <Field className="flex min-h-0 flex-1 flex-col gap-1.5">
+      <Field className="flex flex-1 shrink-0 flex-col gap-1.5">
         <FieldLabel>Instructions</FieldLabel>
 
         {readOnly ? (
@@ -80,7 +80,7 @@ export function SkillSimpleForm({
             )}
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-48 flex-1 flex-col">
             <CodeEditor
               data-testid="skill-instructions-input"
               value={instructions}
