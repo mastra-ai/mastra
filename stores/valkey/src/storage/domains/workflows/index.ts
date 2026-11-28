@@ -630,11 +630,18 @@ export class WorkflowsValkey extends WorkflowsStorage {
               createdAt: string | Date;
               updatedAt: string | Date;
               resourceId: string;
+              namespace?: string;
             },
         );
 
       const data = workflows.find(workflow => {
         if (!workflow) {
+          return false;
+        }
+
+        // The `…:resourceId:*` scan can match a record in a namespace that merely starts with
+        // `workflows` (e.g. `workflows:archive`), so only this store's default namespace counts.
+        if ((workflow.namespace ?? 'workflows') !== 'workflows') {
           return false;
         }
 

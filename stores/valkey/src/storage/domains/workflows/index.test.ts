@@ -763,6 +763,22 @@ describe('WorkflowsValkey resourceId keying', () => {
     expect(listed.runs.some(run => run.runId === runId && run.workflowName === workflowName)).toBe(false);
   });
 
+  it("does not read a run stored under a namespace whose name mimics this run's key", async () => {
+    const runId = randomUUID();
+    // A foreign namespace can spell out `:workflow_name:…:run_id:…:resourceId:…`, so its key lands
+    // under the `:resourceId:*` scan this lookup uses. The record still belongs to another namespace.
+    const foreignNamespace = `workflows:workflow_name:${workflowName}:run_id:${runId}:resourceId:archive`;
+    await store.persistWorkflowSnapshot({
+      namespace: foreignNamespace,
+      workflowName,
+      runId,
+      snapshot: snapshot(runId),
+    });
+
+    // The scan reaches that key, but only records in the default namespace may answer this lookup.
+    expect(await store.getWorkflowRunById({ workflowName, runId })).toBeNull();
+  });
+
   it('keeps runs apart whose only difference is the delimiter a joined key would fold on', async () => {
     const token = randomUUID();
     const [wfA, runA] = [`${token}a`, 'b\u0000c'];
