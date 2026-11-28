@@ -123,6 +123,7 @@ const RUNS_ON_WRAPPER = new Set([
   'requireAgentExecutionFGA',
   'resolveFallbackDynamic',
   'resolveInputProcessors',
+  'resolveKnowledgePersona',
   'resolveModelConfig',
   'resolveModelFromSelection',
   'resolveModelSelection',

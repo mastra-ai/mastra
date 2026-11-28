@@ -4,7 +4,7 @@ import { Agent } from '../../agent';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
-import { Knowledge } from '../index';
+import { Knowledge, knowledgePersonaScopes } from '../index';
 import { KNOWLEDGE_READ_INSTRUCTIONS, KNOWLEDGE_WRITE_INSTRUCTIONS } from '../instructions';
 
 type Call = { toolName: string; input: unknown } | { text: string };
@@ -71,6 +71,44 @@ const scopes = {
 
 describe('Knowledge attached to an Agent without Memory', () => {
   const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' } });
+
+  it.each(['none', 'identity', 'persona'] as const)(
+    'keeps Knowledge tools working with rejecting metadata and %s mint declarations',
+    async mint => {
+      const metadata = vi.fn(async () => {
+        throw new Error('metadata unavailable');
+      });
+      const knowledge = new Knowledge({
+        storage: new InMemoryStore(),
+        scopes: {
+          ...scopes,
+          ...(mint === 'identity' ? { 'agent:$agentId': { mint: 'run-identity' as const, access: [] } } : {}),
+          ...(mint === 'persona' ? knowledgePersonaScopes() : {}),
+        },
+        tools: true,
+      });
+      const agent = new Agent({
+        id: 'writer',
+        name: 'writer',
+        instructions: 'Keep notes.',
+        model: scriptedModel(
+          [
+            { toolName: 'knowledge_page', input: { op: 'write', scope: 'org:acme', name: 'Still works' } },
+            { text: 'Done.' },
+          ],
+          [],
+        ),
+        knowledge,
+        metadata,
+        scopes: ['org:acme'],
+      });
+      const result = await agent.generate('Write a page.', { maxSteps: 2, ...runOptions() });
+      expect(toolErrors(result)).toEqual([]);
+      expect((toolResults(result)[0] as any).result.page.name).toBe('Still works');
+      if (mint === 'persona') expect(metadata).toHaveBeenCalled();
+      else expect(metadata).not.toHaveBeenCalled();
+    },
+  );
 
   it('gives the agent read and write tools and its usage instructions', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), scopes, tools: true });

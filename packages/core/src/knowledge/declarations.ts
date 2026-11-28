@@ -45,6 +45,8 @@ export interface KnowledgeScopeDeclaration {
   /** A short name for the scope type in UIs, e.g. `Organization`. Not shown to the model. */
   displayLabel?: string;
   access?: KnowledgeAccessRule[];
+  /** Opts this agent pattern into binding identities from the running Agent. */
+  mint?: 'run-identity';
   /** Tree placement only; grants nothing. A scope pattern, e.g. `org:$orgId`. */
   belongsTo?: string;
   /** Child scopes created with this scope, at `<address>/<name>`. */
@@ -376,6 +378,18 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
 
   for (const [key, declaration] of Object.entries(declarations)) {
     const pattern = parsePattern(key, 'Knowledge scope key');
+    if (declaration.mint !== undefined) {
+      if (declaration.mint !== 'run-identity' || pattern.type !== 'agent' || pattern.params.length === 0) {
+        throw new KnowledgeDeclarationError(
+          `Knowledge scope "${key}" can mint only an agent pattern with mint: 'run-identity'.`,
+        );
+      }
+      for (const param of pattern.params) {
+        if (!['agentId', 'orgId', 'resourceId', 'role', 'teamId'].includes(param)) {
+          throw new KnowledgeDeclarationError(`Knowledge scope "${key}" cannot mint unknown parameter $${param}.`);
+        }
+      }
+    }
     if (pattern.params.length === 0) {
       concreteEntries.push([key, declaration]);
       continue;

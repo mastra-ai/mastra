@@ -32,6 +32,7 @@ import type { Knowledge } from '../knowledge';
 import { KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID, KnowledgeInstructionsProcessor } from '../knowledge/instructions';
 import { PINNED_KNOWLEDGE_STATE_ID } from '../knowledge/pinned';
 import { PinnedStateProcessor } from '../knowledge/pinned-state-processor';
+import type { KnowledgeRunContext } from '../knowledge/run';
 import type { CoreMessage } from '../llm';
 import { resolveModelConfig } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -2541,10 +2542,25 @@ export class Agent<
         }
         return processors;
       }
+      // Both callbacks receive the same fresh context object for one pin computation.
+      // Share its metadata observation without carrying identity across computations.
+      const contexts = new WeakMap<KnowledgeRunContext, Promise<KnowledgeRunContext>>();
+      const pinContext = (context: KnowledgeRunContext): Promise<KnowledgeRunContext> => {
+        let resolved = contexts.get(context);
+        if (!resolved) {
+          const requestContext = context.requestContext instanceof RequestContext ? context.requestContext : undefined;
+          resolved = this.resolveKnowledgePersona(knowledge, requestContext).then(persona => ({
+            ...context,
+            agent: { ...context.agent, agentId: this.id, persona },
+          }));
+          contexts.set(context, resolved);
+        }
+        return resolved;
+      };
       processors.push(
         new PinnedStateProcessor({
-          principalsKey: context => knowledge.__principalsKey(context),
-          readPins: context => knowledge.__deliveredPins(context),
+          principalsKey: async context => knowledge.__principalsKey(await pinContext(context)),
+          readPins: async context => knowledge.__deliveredPins(await pinContext(context)),
           ...knowledge.__toolGroups,
         }),
       );
@@ -3953,7 +3969,8 @@ export class Agent<
 
   /**
    * Gets the metadata for this agent, resolving function-based metadata if necessary.
-   * Metadata is a classification bag for clients and is never read by the agent runtime.
+   * Metadata is a classification bag for clients. The agent runtime reads only `metadata.persona`, to mint
+   * Knowledge persona scopes; it reads nothing else in metadata.
    *
    * @example
    * ```typescript
@@ -5283,9 +5300,39 @@ export class Agent<
         backgroundConfig: (tool as any).background,
         agentBackgroundConfig: this.#backgroundTasks,
       };
-      converted[toolName] = makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+      const execute = tool.execute;
+      const agentTool = execute
+        ? {
+            ...tool,
+            execute: async (input: Parameters<typeof execute>[0], context: Parameters<typeof execute>[1]) => {
+              const persona = await this.resolveKnowledgePersona(knowledge, requestContext);
+              const runContext = {
+                ...context,
+                agent: context?.agent ? { ...context.agent, agentId: this.id, persona } : undefined,
+              };
+              return execute(input, runContext);
+            },
+          }
+        : tool;
+      converted[toolName] = makeCoreTool(
+        agentTool,
+        options,
+        undefined,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+      );
     }
     return converted;
+  }
+
+  private async resolveKnowledgePersona(knowledge: Knowledge, requestContext?: RequestContext) {
+    if (!(await knowledge.__needsAgentPersona())) return undefined;
+    // Only metadata failures fall back; declaration and store failures still propagate.
+    try {
+      return (await this.getMetadata({ requestContext }))?.persona;
+    } catch {
+      return undefined;
+    }
   }
 
   /**

@@ -1,0 +1,16 @@
+---
+'@mastra/core': minor
+---
+
+Added automatic Knowledge identities for agents. Spread `knowledgeAgentScopes()` into your Knowledge `scopes`; runs with eligible run scopes or Memory then hold `agent:<agentId>`. Per-org identities require an `org:` run scope, and per-user identities require a Memory resource. Role and team scopes come from `metadata.persona` when those fields are present. These identities grant nothing until an access rule names them.
+
+```ts
+const knowledge = new Knowledge({ storage, scopes: { ...knowledgeMemoryScopes(), ...knowledgeAgentScopes() } });
+const agent = new Agent({ ...config, metadata: { persona: { name: 'Sam', role: 'support', teamId: 'billing' } }, knowledge });
+```
+
+`knowledgePersonaScopes()` adds a read-only convention on top: each agent reads its own `#persona` page, and every agent of a role or team reads that scope's `#rules` page, pinned into context. Pass `agent:persona:role:<role>:edit` or `agent:persona:team:<teamId>:edit` in a run's scopes to let a specific agent edit those rules. Pinning to a shared role or team audience now needs editor access there.
+
+`mergeAgentPersona(metadata, persona)` overrides `metadata.persona` field by field for static or function metadata, so a host can set a persona without losing the code's other metadata.
+
+Knowledge reads persona metadata only when a run-identity declaration uses role or team. If metadata fails, tools and pinned context continue without persona scopes; the agent's own identity still applies.
