@@ -34,6 +34,7 @@ import { isPersistedCopy } from './conversion/utils';
 import { TypeDetector } from './detection/TypeDetector';
 import type { StoredMessageLoader } from './memory-message-refs';
 import { MessageMerger } from './merge';
+import { startProcessorCall } from './processor-writes';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { downloadAssetsFromMessages, getAssetUrl } from './prompt/download-assets';
@@ -786,7 +787,9 @@ export class MessageList {
     context: Set<string>;
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
-    return this.stateManager.createSourceChecker();
+    const checker = this.stateManager.createSourceChecker();
+    startProcessorCall(this, checker, this.messages);
+    return checker;
   }
 
   /**

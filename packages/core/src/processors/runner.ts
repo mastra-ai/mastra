@@ -3,6 +3,8 @@ import type { StepResult } from '@internal/ai-sdk-v5';
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
+import { getProcessorCall, recordDataPart } from '../agent/message-list/processor-writes';
+import type { DataPartRecord, ProcessorCallRecord } from '../agent/message-list/processor-writes';
 import type { AgentStateSignalInput } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
 import { TripWire } from '../agent/trip-wire';
@@ -79,6 +81,54 @@ async function invokeOnViolation(processor: Processor, error: TripWire): Promise
   } catch {
     // onViolation errors are silently caught
   }
+}
+
+/**
+ * The message a processor returned, plus the `data-*` parts `writer.custom()` merged into it during the call
+ * (recorded by the writer) that the returned copy does not have. A copy keeps a part's type and id but not its
+ * object identity, and an edit changes its data. So per type and id: copy parts with unchanged content account
+ * for the matching parts first, and each copy part left over beyond the unmatched parts held before the call
+ * accounts for one more written part, earliest first (a copy is a snapshot, so the writes it saw came first).
+ * Parts the message held before the call follow the processor's result, so it can still remove them.
+ */
+function withDataPartsWrittenDuringCall(
+  returned: MastraDBMessage,
+  call: ProcessorCallRecord | undefined,
+  writtenByMessage: Map<string, DataPartRecord[]> | undefined,
+): MastraDBMessage {
+  const written = writtenByMessage?.get(returned.id);
+  if (!call || !written?.length || returned.role !== 'assistant') return returned;
+  // Copy parts not yet accounted for, per key and content.
+  const unclaimed = new Map<string, string[]>();
+  for (const part of returned.content.parts) {
+    if (!part.type.startsWith('data-')) continue;
+    const { key, content } = recordDataPart(part);
+    unclaimed.set(key, [...(unclaimed.get(key) ?? []), content]);
+  }
+  const claim = ({ key, content }: DataPartRecord) => {
+    const pool = unclaimed.get(key);
+    const at = pool?.indexOf(content) ?? -1;
+    if (at === -1) return false;
+    pool!.splice(at, 1);
+    return true;
+  };
+  const beforeUnmatched = new Map<string, number>();
+  for (const part of call.before.get(returned.id) ?? []) {
+    if (!claim(part)) beforeUnmatched.set(part.key, (beforeUnmatched.get(part.key) ?? 0) + 1);
+  }
+  const unmatchedWrites = written.filter(part => !claim(part));
+  const covered = new Map<string, number>();
+  const missing = unmatchedWrites
+    .filter(({ key }) => {
+      const index = (covered.get(key) ?? 0) + 1;
+      covered.set(key, index);
+      // Edited copies of written parts: copy parts left over after the edited parts held before the call.
+      return index > (unclaimed.get(key)?.length ?? 0) - (beforeUnmatched.get(key) ?? 0);
+    })
+    .map(({ part }) => part);
+  if (!missing.length) return returned;
+  const parts = [...returned.content.parts, ...missing];
+  return { ...returned, content: { ...returned.content, parts } };
 }
 
 function getProcessableResponseMessages(messageList: MessageList): MastraDBMessage[] {
@@ -954,9 +1004,15 @@ export class ProcessorRunner {
             messageList.removeByIds(deletedIds);
           }
           processableMessages = processResult || [];
+          const call = getProcessorCall(check);
+          const written = call?.written();
           for (const message of processResult) {
             messageList.removeByIds([message.id]);
-            messageList.add(message, check.getSource(message) || 'response', { merge: false });
+            messageList.add(
+              withDataPartsWrittenDuringCall(message, call, written),
+              check.getSource(message) || 'response',
+              { merge: false },
+            );
           }
         }
 
@@ -2594,8 +2650,11 @@ export class ProcessorRunner {
           }
 
           // Re-add messages with correct sources
-          for (const message of result) {
+          const call = getProcessorCall(check);
+          const written = call?.written();
+          for (let message of result) {
             messageList.removeByIds([message.id]);
+            message = withDataPartsWrittenDuringCall(message, call, written);
             if (message.role === 'system') {
               const systemText =
                 (message.content.content as string | undefined) ??
@@ -3044,9 +3103,12 @@ export class ProcessorRunner {
     }
 
     const currentById = new Map(messageList.get.all.db().map(message => [message.id, message]));
+    const call = getProcessorCall(check);
+    const written = call?.written();
 
     // Re-add messages with correct sources
-    for (const message of messages) {
+    for (const returned of messages) {
+      const message = withDataPartsWrittenDuringCall(returned, call, written);
       if (currentById.get(message.id) === message) {
         continue;
       }

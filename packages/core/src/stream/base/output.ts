@@ -4,6 +4,7 @@ import type { TransformStreamDefaultController } from 'node:stream/web';
 import type { StepResult } from '@internal/ai-sdk-v5';
 import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
+import { addWriterDataPart } from '../../agent/message-list/processor-writes';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -145,7 +146,7 @@ export function persistProcessorDataChunk(
     },
     createdAt: new Date(),
   };
-  messageList.add(message, 'response');
+  addWriterDataPart(messageList, message);
 }
 
 type ToolCallStreamingMeta = {
