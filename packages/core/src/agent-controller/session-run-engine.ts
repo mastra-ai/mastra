@@ -1945,7 +1945,7 @@ export class SessionRunEngine {
     const { resourceId, threadId } = binding;
     const agent = this.#session.stream.getAgent({ subscription }) ?? this.#machinery.getAgent();
     let currentRun: StreamState | undefined;
-    let requestContext!: RequestContext;
+    let requestContext: RequestContext | undefined;
     let bailed = false;
 
     const consume = async (): Promise<void> => {
@@ -1963,7 +1963,7 @@ export class SessionRunEngine {
         if (runId && runId === abortedRunId) continue;
         if (runId && abortedRunId) this.#session.stream.clearAbortedRun();
 
-        if (!currentRun) {
+        if (!currentRun || !requestContext) {
           currentRun = this.createStreamState(threadId, resourceId);
           this.#session.run.nextOperation();
           this.#session.run.ensureAbortController();
@@ -2029,6 +2029,8 @@ export class SessionRunEngine {
               abortReason: aborted ? getString(getRecord(chunk.payload)?.reason) : undefined,
             });
             currentRun = undefined;
+            // The subscription stays open between runs; release its per-run context.
+            requestContext = undefined;
             if (aborted) {
               // The thread subscription remains live across runs. Ignore any
               // trailing chunks from the aborted run while continuing to drain
@@ -2039,6 +2041,7 @@ export class SessionRunEngine {
         } catch (error) {
           await this.handleSubscribedStreamError(error, resourceId, threadId);
           currentRun = undefined;
+          requestContext = undefined;
         }
       }
     };
