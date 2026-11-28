@@ -1,1 +1,1 @@
-export { formatDuration } from './formatDuration';
+export { formatDuration } from '@mastra/playground-ui/domains/factory';

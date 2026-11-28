@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { AuditEvent } from '@mastra/playground-ui/domains/factory';
 import type { WorkItemStageEntry } from '@internal/factory-contract';
-import { auditOwnerChanges, auditRunIntervals, layoutSessionTrack } from '../sessionTrack';
+import { auditOwnerChanges, auditRunIntervals, layoutSessionTrack } from '@mastra/playground-ui/domains/factory';
 
 const HOUR = 3_600_000;
 const sessionStart = Date.parse('2026-10-20T08:00:00.000Z');

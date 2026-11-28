@@ -1,8 +1,7 @@
-import { PanelHeading } from '../../workspace-viewer/components/PanelHeading';
-import { changeRequestsHeading } from '@mastra/playground-ui/domains/factory';
-import type { SessionChangeRequest } from '@mastra/playground-ui/domains/factory';
-import { CappedRows } from './CappedRows';
-import { ChangeRequestLink } from './ChangeRequestLink';
+import { PanelHeading, changeRequestsHeading } from '..';
+import type { SessionChangeRequest } from '..';
+import { CappedRows } from './capped-rows';
+import { ChangeRequestLink } from './change-request-link';
 
 export function ChangeRequestList({
   requests,

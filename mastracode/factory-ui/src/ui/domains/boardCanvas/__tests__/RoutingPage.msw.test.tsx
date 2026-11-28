@@ -300,15 +300,15 @@ describe('Routing page: the intake order', () => {
       serveRules({ rules: [] });
       const { saved } = serveOrder(order());
       // jsdom lays nothing out: each board in the order stands 100px tall, one under the other.
-      const layout = vi
-        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
-        .mockImplementation(function (this: HTMLElement) {
-          const rows = this.parentElement?.matches('[aria-label="Boards in intake order"]')
-            ? Array.from(this.parentElement.children)
-            : [];
-          const top = rows.indexOf(this) * 100;
-          return { top, bottom: top + 100, height: 100, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) };
-        });
+      const layout = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+        this: HTMLElement,
+      ) {
+        const rows = this.parentElement?.matches('[aria-label="Boards in intake order"]')
+          ? Array.from(this.parentElement.children)
+          : [];
+        const top = rows.indexOf(this) * 100;
+        return { top, bottom: top + 100, height: 100, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) };
+      });
       onTestFinished(() => layout.mockRestore());
       const user = userEvent.setup();
       renderRouting();

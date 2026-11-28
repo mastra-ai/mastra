@@ -3,7 +3,7 @@ import type { FactoryProject } from '../../workspaces/services/github';
 import { useCardSessionRepository } from '../hooks/useCardSessionRepository';
 import { linkedSessionRepository } from '../hooks/useSessionRepository';
 import type { WorkItem } from '@internal/factory-contract';
-import { CardOverview, OverviewSkeleton } from './CardOverview';
+import { CardPanelOverview, CardPanelOverviewSkeleton } from '@mastra/playground-ui/domains/factory';
 
 export function CardDraftOverview({
   factory,
@@ -17,14 +17,13 @@ export function CardDraftOverview({
   boardsFailed: boolean;
 }) {
   const lookup = useCardSessionRepository(factory.id, item);
-  if (lookup.isPending) return <OverviewSkeleton />;
+  if (lookup.isPending) return <CardPanelOverviewSkeleton />;
 
   const { repository } = linkedSessionRepository(factory, lookup.data?.status === 'resolved' ? lookup.data : undefined);
   return (
-    <CardOverview
+    <CardPanelOverview
       item={item}
       sessionItems={[item]}
-      factoryId={factory.id}
       boards={boards}
       boardsFailed={boardsFailed}
       repository={repository}

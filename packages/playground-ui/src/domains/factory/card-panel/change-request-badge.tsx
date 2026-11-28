@@ -1,15 +1,10 @@
 import type { PullRequestStatus } from '@internal/factory-contract';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { changeRequestLinkLabel, changeRequestNumberLabel, changeRequestReference, PullRequestStatusIcon } from '..';
+import type { SessionChangeRequest } from '..';
+import { textStyle } from '@/ds/primitives/text';
 
-import {
-  changeRequestLinkLabel,
-  changeRequestNumberLabel,
-  changeRequestReference,
-  PullRequestStatusIcon,
-} from '@mastra/playground-ui/domains/factory';
-import type { SessionChangeRequest } from '@mastra/playground-ui/domains/factory';
+import { focusRing } from '@/ds/primitives/transitions';
+import { cn } from '@/utils/cn';
 
 const STATUS_TONES: Record<PullRequestStatus, string> = {
   open: 'bg-badge-green-subtle text-badge-green-foreground',

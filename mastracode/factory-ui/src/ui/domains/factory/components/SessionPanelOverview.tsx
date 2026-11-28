@@ -5,11 +5,13 @@ import {
   changeRequestsHeading,
   changeRequestsNoun,
   sessionChangeRequests,
+  CardPanelOverview,
+  CardPanelOverviewSkeleton,
+  overviewSectionClass,
+  ChangeRequestList,
 } from '@mastra/playground-ui/domains/factory';
 import { useSessionCard } from '../hooks/useSessionCard';
 import { useSessionSubscriptions } from '../hooks/useSessionSubscriptions';
-import { CardOverview, OverviewSkeleton, overviewSectionClass } from './CardOverview';
-import { ChangeRequestList } from './ChangeRequestList';
 import { SectionLoadError } from './SectionLoadError';
 
 // Must render inside `ChatSessionBoundary`: the subscriptions follow the chat session.
@@ -22,7 +24,7 @@ export function SessionPanelOverview({ workspace }: { workspace: WorkspaceSlot |
 
   // All at once: a section arriving late would push down the ones under it.
   if (card.loading || session.loading || links.pending || (card.item && card.boardsLoading)) {
-    return <OverviewSkeleton workspace={workspace !== undefined} />;
+    return <CardPanelOverviewSkeleton workspace={workspace !== undefined} />;
   }
 
   if (card.failed || !card.item || !factoryId) {
@@ -50,10 +52,9 @@ export function SessionPanelOverview({ workspace }: { workspace: WorkspaceSlot |
   }
 
   return (
-    <CardOverview
+    <CardPanelOverview
       item={card.item}
       sessionItems={card.sessionItems}
-      factoryId={factoryId}
       boards={card.boards}
       boardsFailed={card.boardsFailed}
       repository={repository}

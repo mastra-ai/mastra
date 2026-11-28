@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { workBoardInfo } from '../../../../e2e/ui/board-catalog';
-import { movesGraph } from './movesGraph';
+import { cardMovesGraph } from '@mastra/playground-ui/domains/factory';
 
 const minute = 60_000;
 const now = Date.parse('2026-07-10T12:00:00.000Z');
@@ -22,7 +22,7 @@ function history(stays: Array<[stage: string, minutes: number]>) {
 
 describe('movesGraph', () => {
   it('draws every stay as long as it lasted, so days in Intake dwarf a short review', () => {
-    const { stays } = movesGraph(
+    const { stays } = cardMovesGraph(
       history([
         ['intake', 4 * 24 * 60],
         ['pr-review', 20],
@@ -44,7 +44,7 @@ describe('movesGraph', () => {
   it('lets stays that ran at the same time share the axis', () => {
     const start = now - 120 * minute;
     const time = (minutes: number) => new Date(start + minutes * minute).toISOString();
-    const { lanes, stays } = movesGraph(
+    const { lanes, stays } = cardMovesGraph(
       [
         { stage: 'planning', enteredAt: time(0), exitedAt: time(60), by: 'user-1' },
         { stage: 'execute', enteredAt: time(30), exitedAt: time(90), by: 'user-1' },
@@ -63,7 +63,7 @@ describe('movesGraph', () => {
   });
 
   it('stacks the phases in board order, whatever order the card met them in, with retired ones last', () => {
-    const { lanes, stays } = movesGraph(
+    const { lanes, stays } = cardMovesGraph(
       history([
         ['execute', 30],
         ['review', 10],

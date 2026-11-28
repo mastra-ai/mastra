@@ -1,7 +1,7 @@
 import { cardChangeRequest, contextLabel, phaseContext, isPullRequestSource } from '@internal/factory-contract';
 
-import type { InstalledPhaseInfo } from '../../../api/types';
-import { formatDuration } from '../../../lib/date/formatDuration';
+import type { WorkItem } from '@internal/factory-contract';
+import type { InstalledPhaseInfo } from '@mastra/client-js';
 import {
   allowsMove,
   boardLoop,
@@ -12,10 +12,8 @@ import {
   changeRequestStatus,
   isOpenChangeRequest,
   changeRequestReference,
-} from '@mastra/playground-ui/domains/factory';
-import type { BoardInfo } from '@mastra/playground-ui/domains/factory';
-import type { PullRequestSubscription } from './services/githubSubscriptions';
-import type { WorkItem } from '@internal/factory-contract';
+} from '..';
+import type { BoardInfo, PullRequestSubscription } from '..';
 
 type Phase = InstalledPhaseInfo;
 
@@ -113,8 +111,4 @@ export function enteredCurrentStageAt(item: WorkItem, stage: string): number | u
   const entry = item.stageHistory.findLast(candidate => candidate.stage === stage && !candidate.exitedAt);
   const at = entry ? Date.parse(entry.enteredAt) : Number.NaN;
   return Number.isNaN(at) ? undefined : at;
-}
-
-export function elapsedLabel(from: number, to: number): string {
-  return to - from < 60_000 ? '<1m' : formatDuration(to - from);
 }

@@ -8,12 +8,7 @@
  */
 
 export type JiraStatusReason =
-  | 'missing_config'
-  | 'auth_required'
-  | 'organization_required'
-  | 'not_connected'
-  | 'ready'
-  | 'unavailable';
+  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
 
 export interface JiraStatus {
   enabled: boolean;

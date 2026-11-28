@@ -13,3 +13,4 @@ export * from './rules';
 export * from './card';
 export * from './board-page';
 export * from './settings';
+export * from './card-panel';

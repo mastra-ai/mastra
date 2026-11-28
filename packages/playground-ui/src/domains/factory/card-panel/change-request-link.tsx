@@ -1,7 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
-
 import {
   CHANGE_REQUEST_TERMS,
   changeRequestLinkLabel,
@@ -12,10 +8,12 @@ import {
   SourceIcon,
   PullRequestStatusIcon,
   outboundArrowClass,
-} from '@mastra/playground-ui/domains/factory';
-import type { SessionChangeRequest } from '@mastra/playground-ui/domains/factory';
+} from '..';
+import type { SessionChangeRequest } from '..';
+import { Button } from '@/ds/components/Button';
 
-export { outboundArrowClass };
+import { Txt } from '@/ds/components/Txt';
+import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
 
 export function ChangeRequestLink({
   request,

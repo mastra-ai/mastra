@@ -1,3 +1,7 @@
+import type { WorkItem } from '@internal/factory-contract';
+import type { InstalledBoardInfo } from '@mastra/client-js';
+
+import type { PullRequestSubscription } from '..';
 import {
   CardOverview as SharedCardOverview,
   OverviewSkeleton as SharedOverviewSkeleton,
@@ -7,38 +11,29 @@ import {
   sessionChangeRequests,
   relatedWorkItemIndex,
   genericExternalWorkItemUrl,
-} from '@mastra/playground-ui/domains/factory';
-import { useClock } from '@mastra/playground-ui/hooks/use-clock';
+  SectionLoadError,
+} from '..';
 
-import type { InstalledBoardInfo } from '../../../../api/types';
-import { useFactoryQuery } from '../../../../hooks/useFactories';
-import type { WorkspaceSlot } from '../../workspace-viewer/context/WorkspacePanelContext';
-import { WorkspaceSectionSkeleton } from '../../workspace-viewer/components/WorkspaceSection';
-import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
-import { repositoryProvider } from '../hooks/useSessionRepository';
-import { cardProjectRepositoryId } from '../boardRepository';
-import type { PullRequestSubscription } from '../services/githubSubscriptions';
-import type { WorkItem } from '@internal/factory-contract';
-import { toMinute } from '../stageStays';
-import { CardDescription } from './CardDescription';
-import { CardSourceRow } from './CardSourceRow';
-import { ChangeRequestBadge } from './ChangeRequestBadge';
-import { ChangeRequestLink } from './ChangeRequestLink';
-import { ChangeRequestList } from './ChangeRequestList';
-import { MovesGraph } from './MovesGraph';
-import { RelatedCards } from './RelatedCards';
-import { SectionLoadError } from './SectionLoadError';
+import { CardPanelDescription } from './card-description';
+import { CardPanelMovesGraph } from './card-moves-graph';
+import { useCardPanelHost } from './card-panel-host';
+import type { CardPanelRepository, CardWorkspaceSlot } from './card-panel-host';
+import { CardPanelSourceRow } from './card-source-row';
+import { ChangeRequestBadge } from './change-request-badge';
+import { ChangeRequestLink } from './change-request-link';
+import { ChangeRequestList } from './change-request-list';
+import { RelatedCards } from './related-cards';
+import { toMinute } from './stage-stays';
+import { useClock } from '@/hooks/use-clock';
 
-export { overviewSectionClass } from '@mastra/playground-ui/domains/factory';
-
-export function OverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
-  return <SharedOverviewSkeleton workspace={workspace ? <WorkspaceSectionSkeleton /> : null} />;
+export function CardPanelOverviewSkeleton({ workspace = false }: { workspace?: boolean }) {
+  const host = useCardPanelHost();
+  return <SharedOverviewSkeleton workspace={workspace ? (host.workspaceSkeleton ?? null) : null} />;
 }
 
-export function CardOverview({
+export function CardPanelOverview({
   item,
   sessionItems,
-  factoryId,
   boards,
   boardsFailed,
   repository,
@@ -49,18 +44,16 @@ export function CardOverview({
 }: {
   item: WorkItem;
   sessionItems: readonly WorkItem[];
-  factoryId: string;
   boards: readonly InstalledBoardInfo[] | undefined;
   boardsFailed: boolean;
-  repository: LinkedRepositoryPayload | undefined;
+  repository: CardPanelRepository | undefined;
   repositoryFailed: boolean;
   subscriptions: readonly PullRequestSubscription[];
   pullRequestsFailed: boolean;
-  workspace?: WorkspaceSlot;
+  workspace?: CardWorkspaceSlot;
 }) {
-  const factoryQuery = useFactoryQuery(factoryId);
   const now = useClock(toMinute);
-  const provider = repositoryProvider(repository);
+  const provider = repository?.provider === 'gitlab' ? 'gitlab' : 'github';
   const related = relatedWorkItemIndex(sessionItems)(item);
   const ownRequest = ownChangeRequest(item, repository?.slug, subscriptions);
   const sourceUrl = genericExternalWorkItemUrl(item);
@@ -81,19 +74,8 @@ export function CardOverview({
           <ChangeRequestLink request={ownRequest} sessionRepository={repository?.slug} label="reference" />
         ) : null
       }
-      source={<CardSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
-      description={
-        <CardDescription
-          item={item}
-          projectRepositoryId={cardProjectRepositoryId(
-            factoryQuery.data?.repositories ?? [],
-            item,
-            repository?.projectRepositoryId,
-          )}
-          factoryId={factoryId}
-          repositoryFailed={repositoryFailed}
-        />
-      }
+      source={<CardPanelSourceRow item={item} url={sourceUrl} repository={repository?.slug} />}
+      description={<CardPanelDescription item={item} repository={repository} repositoryFailed={repositoryFailed} />}
       workspace={workspace?.({
         repository: repository && { slug: repository.slug, provider },
         changeRequest: ownRequest && {
@@ -115,14 +97,13 @@ export function CardOverview({
             <RelatedCards
               related={related}
               boards={boards}
-              factoryId={factoryId}
               repository={repository?.slug}
               subscriptions={subscriptions}
             />
             {boardsFailed && showsPhases ? (
               <SectionLoadError>Couldn't load the board, so phases aren't shown.</SectionLoadError>
             ) : moved ? (
-              <MovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
+              <CardPanelMovesGraph history={item.stageHistory} board={boardOf(boards, item)} now={now} />
             ) : null}
           </>
         ) : null

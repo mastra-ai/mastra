@@ -3,10 +3,14 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '@mastra/playground-ui/domains/factory';
+import {
+  fetchAuditEvents,
+  MAX_AUDIT_PAGE_SIZE,
+  auditOwnerChanges,
+  auditRunIntervals,
+} from '@mastra/playground-ui/domains/factory';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
-import { auditOwnerChanges, auditRunIntervals } from '../services/sessionTrack';
-import type { OwnerChange, RunInterval } from '../services/sessionTrack';
+import type { OwnerChange, RunInterval } from '@mastra/playground-ui/domains/factory';
 
 const TRAIL_STALE_TIME = 15_000;
 
