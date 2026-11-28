@@ -2103,6 +2103,117 @@ export class Workflow<
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>> = new Map();
 
+  /**
+   * Runs evicted from `#runs`, held weakly: while a caller still holds one, reopening its run id
+   * returns that same instance, so one run id never has two live instances in this process.
+   */
+  #evictedRuns = new Map<
+    string,
+    WeakRef<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>>
+  >();
+
+  /**
+   * Forgets an evicted run once nobody holds it. Its persistence override goes with it: a later
+   * reopen builds a new instance from storage and options, as a reopen in a new process would.
+   */
+  // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, provide neither
+  // WeakRef nor FinalizationRegistry. There, a suspended run stays strongly cached until it finishes or is
+  // forgotten, as before eviction existed; every other path is unchanged.
+  #forgetEvictedRun =
+    typeof FinalizationRegistry === 'function' && typeof WeakRef === 'function'
+      ? new FinalizationRegistry<{ runId: string; ref: WeakRef<object> }>(({ runId, ref }) => {
+          if (this.#evictedRuns.get(runId) !== ref) return;
+          this.#evictedRuns.delete(runId);
+          if (!this.#runs.has(runId)) this.executionEngine.clearRunPersistenceOverride(runId);
+        })
+      : undefined;
+
+  /** Reopens of a run id in flight, so concurrent reopens resolve to one instance. */
+  #runOpenings = new Map<string, Promise<void>>();
+
+  /** The instance of `runId` live in this process: cached, or evicted but still held by a caller. */
+  protected liveRun(runId: string) {
+    return this.#runs.get(runId) ?? this.#evictedRuns.get(runId)?.deref();
+  }
+
+  /**
+   * Runs `open` once every earlier open of the same run id settled, so an open that finds no live
+   * instance builds the one instance later opens reuse.
+   */
+  protected openRunOnce<T>(runId: string, open: () => Promise<T>): Promise<T> {
+    const earlier = this.#runOpenings.get(runId);
+    const opening = earlier ? earlier.then(open) : open();
+    const settled = opening.then(
+      () => {},
+      () => {},
+    );
+    this.#runOpenings.set(runId, settled);
+    void settled.then(() => {
+      if (this.#runOpenings.get(runId) === settled) this.#runOpenings.delete(runId);
+    });
+    return opening;
+  }
+
+  /** Makes `run` the cached instance of its run id. */
+  protected cacheRun(run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>) {
+    this.#runs.set(run.runId, run);
+    this.#evictedRuns.delete(run.runId);
+  }
+
+  /**
+   * The cache hooks a new run instance gets: `cleanup` drops it once finished and runs `onFinished`;
+   * `registration` evicts it to a weak hold while suspended and re-caches it when it executes again.
+   * Each acts only while `getRun()` is the run id's live instance.
+   */
+  protected runCacheHooks(
+    runId: string,
+    getRun: () => Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>,
+    onFinished?: () => void,
+  ): { cleanup: () => void; registration: RunRegistration } {
+    return {
+      cleanup: () => {
+        const run = getRun();
+        if (this.#evictedRuns.get(runId)?.deref() === run) this.#evictedRuns.delete(runId);
+        const live = this.liveRun(runId);
+        if (live && live !== run) return;
+        this.#runs.delete(runId);
+        onFinished?.();
+      },
+      registration: {
+        // Unlike cleanup, eviction keeps the run's persistence override: the run is not finished,
+        // and a later resume of it must persist under the same policy.
+        evict: () => {
+          const forgetEvictedRun = this.#forgetEvictedRun;
+          if (!forgetEvictedRun) return;
+          const run = getRun();
+          if (this.#runs.get(runId) !== run) return;
+          this.#runs.delete(runId);
+          const ref = new WeakRef(run);
+          this.#evictedRuns.set(runId, ref);
+          forgetEvictedRun.register(run, { runId, ref });
+        },
+        reattach: () => {
+          const run = getRun();
+          const live = this.liveRun(runId);
+          if ((live && live !== run) || this.#forgottenRuns.has(run)) return;
+          this.cacheRun(run);
+        },
+      },
+    };
+  }
+
+  /** Instances dropped by {@link forgetRun}: a handle still held must not cache itself again. */
+  #forgottenRuns = new WeakSet<object>();
+
+  /** Drops this process's instance of a run, cached or held. */
+  protected forgetRun(runId: string) {
+    const live = this.liveRun(runId);
+    if (live) this.#forgottenRuns.add(live);
+    this.#runs.delete(runId);
+    this.#evictedRuns.delete(runId);
+    this.executionEngine.clearRunPersistenceOverride(runId);
+  }
+
   #schedules: WorkflowScheduleConfig[];
 
   constructor({
@@ -3211,7 +3322,7 @@ export class Workflow<
   }): Promise<{
     storageVersion: 1 | 2;
     existsInStorage: boolean;
-    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'>;
+    stored?: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> & { resourceId?: string };
   }> {
     // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
     // With autoStorageVersion, a new run takes v2 only where it can be stored as v2, on an engine
@@ -3249,20 +3360,25 @@ export class Workflow<
         getStore: async () => (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows'),
       }).loadHeader();
     let existsInStorage = false;
-    let stored: Pick<WorkflowRunState, 'status' | 'parentWorkflow'> | undefined;
+    let stored: (Pick<WorkflowRunState, 'status' | 'parentWorkflow'> & { resourceId?: string }) | undefined;
 
     if (storageVersion === 2) {
-      // The header holds the status and parent this reads, so one header read replaces the
-      // existence check and a snapshot load.
-      const header = lookUpStoredRun ? await loadStoredHeader(2) : null;
-      if (header) {
+      // The header holds the status, parent and resource this reads, so one header read replaces
+      // the existence check and a snapshot load.
+      const storedHeader = lookUpStoredRun
+        ? await workflowsStore?.loadWorkflowRunHeader({ workflowName: this.id, runId })
+        : null;
+      if (storedHeader) {
         existsInStorage = true;
-        stored = header;
+        stored = { ...storedHeader.header, resourceId: storedHeader.resourceId };
       } else if (probeOtherVersion) {
         const v1Header = await loadStoredHeader(1);
         if (v1Header) {
           existsInStorage = true;
-          stored = v1Header;
+          const resourceId = (
+            await workflowsStore?.getWorkflowRunById({ runId, workflowName: this.id, storageVersion: 1 })
+          )?.resourceId;
+          stored = { ...v1Header, resourceId };
           storageVersion = 1;
         }
       }
@@ -3278,7 +3394,11 @@ export class Workflow<
           header = await loadStoredHeader(2);
           if (header) storageVersion = 2;
         }
-        stored = { status: existingRun.status as WorkflowRunStatus, parentWorkflow: header?.parentWorkflow };
+        stored = {
+          status: existingRun.status as WorkflowRunStatus,
+          parentWorkflow: header?.parentWorkflow,
+          resourceId: existingRun.resourceId,
+        };
       }
     }
     if (unsupportedV2 && !existsInStorage) throwUnsupportedV2();
@@ -3393,113 +3513,126 @@ export class Workflow<
       }) ||
       globalThis.crypto.randomUUID();
 
-    const cachedRun = this.#runs.get(runIdToUse);
-    const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
-      workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
-      stepResults: {},
-    });
-
-    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
-    // transient processor workflows from #17344) cannot have a stored row, so this
-    // existence read would be a guaranteed miss. Skipping it removes one storage
-    // round trip per streamed chunk on the agent output-processor hot path (#19015).
-    const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
-    const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
-      runId: runIdToUse,
-      reopen: !!options?.runId,
-      cachedRun,
-      nestedRun,
-      lookUpStoredRun,
-    });
-
-    const leaseTtlMs = normalizeLeaseTtlMs(
-      options?.leaseTtlMs,
-      normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
-    );
-    const reused = this.#runs.get(runIdToUse);
-    // A cached run takes a lease passed here for its next claim; a claim it holds keeps its length.
-    if (reused && options?.leaseTtlMs !== undefined) setRunLeaseTtlMs(reused, leaseTtlMs);
-
-    // Return a new Run instance with object parameters
-    const run =
-      reused ??
-      new Run({
-        workflowId: this.id,
-        stateSchema: this.stateSchema,
-        inputSchema: this.inputSchema,
-        requestContextSchema: this.requestContextSchema,
-        runId: runIdToUse,
-        parentWorkflow: options?.parentWorkflow,
-        resourceId: options?.resourceId,
-        isInternalWorkflow: this.isInternal,
-        executionEngine: this.executionEngine,
-        executionGraph: this.executionGraph,
-        mastra: this.#mastra,
-        retryConfig: this.retryConfig,
-        serializedStepGraph: this.serializedStepGraph,
-        disableScorers: options?.disableScorers,
-        cleanup: () => {
-          this.#runs.delete(runIdToUse);
-          this.executionEngine.clearRunPersistenceOverride(runIdToUse);
-        },
-        tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
-        workflowSteps: this.steps,
-        validateInputs: this.#options?.validateInputs,
-        workflowEngineType: this.engineType,
-        pubsub: options?.pubsub,
-        storageVersion,
-        recoverable:
-          this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
-        leaseTtlMs,
+    const open = async () => {
+      const cachedRun = this.liveRun(runIdToUse);
+      const shouldPersistSnapshot = (options?.shouldPersistSnapshot ?? this.#options.shouldPersistSnapshot)({
+        workflowStatus: cachedRun?.workflowRunStatus ?? 'pending',
+        stepResults: {},
       });
 
-    this.#runs.set(runIdToUse, run);
-
-    if (options?.shouldPersistSnapshot) {
-      this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
-    }
-
-    if (stored) {
-      run.workflowRunStatus = stored.status;
-      run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
-    }
-
-    if (!existsInStorage && shouldPersistSnapshot) {
-      const initialSnapshot: WorkflowRunState = {
+      // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+      // transient processor workflows from #17344) cannot have a stored row, so this
+      // existence read would be a guaranteed miss. Skipping it removes one storage
+      // round trip per streamed chunk on the agent output-processor hot path (#19015).
+      const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
+      const { storageVersion, existsInStorage, stored } = await this.resolveRunStorage({
         runId: runIdToUse,
-        status: 'pending',
-        parentWorkflow: options?.parentWorkflow,
-        // A nested run restarted before its first step only has this snapshot to rebuild from,
-        // so it must carry the parent's state alongside the input.
-        value: nestedRunStart?.state ?? {},
-        // Only a truthy input is kept, as on main: a restart recognizes this snapshot by its input and
-        // restarts it without calling onStart, so a falsy input stays unrecognized and fails recovery.
-        // @ts-expect-error - context type mismatch
-        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
-        activePaths: [],
-        activeStepsPath: {},
-        serializedStepGraph: this.serializedStepGraph,
-        suspendedPaths: {},
-        resumeLabels: {},
-        waitingPaths: {},
-        result: undefined,
-        error: undefined,
-        timestamp: Date.now(),
-      };
-      await run.runStorage.writeSnapshot(
-        // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
-        this.#options.pruneSnapshot && storageVersion === 1
-          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
-          : initialSnapshot,
-        options?.resourceId,
-        // The nested run starts from exactly that version of the parent's state.
-        { stateBase: nestedRunStart?.inheritedState?.ref },
-      );
-      if (nestedRun) nestedRun.inserted = true;
-    }
+        reopen: !!options?.runId,
+        cachedRun,
+        nestedRun,
+        lookUpStoredRun,
+      });
 
-    run.inheritedState = nestedRunStart?.inheritedState;
-    return run;
+      // Read again after the storage await: a held instance may have been evicted meanwhile.
+      if (!this.liveRun(runIdToUse) && this.#evictedRuns.delete(runIdToUse)) {
+        // Collected before its finalizer ran, which now finds no entry: its override goes with it here.
+        this.executionEngine.clearRunPersistenceOverride(runIdToUse);
+      }
+      const hooks = this.runCacheHooks(
+        runIdToUse,
+        () => run,
+        () => this.executionEngine.clearRunPersistenceOverride(runIdToUse),
+      );
+      const leaseTtlMs = normalizeLeaseTtlMs(
+        options?.leaseTtlMs,
+        normalizeLeaseTtlMs(this.#options.leaseTtlMs, WORKFLOW_RUN_LEASE_TTL_MS),
+      );
+      const reused = this.liveRun(runIdToUse);
+      // A cached run takes a lease passed here for its next claim; a claim it holds keeps its length.
+      if (reused && options?.leaseTtlMs !== undefined) setRunLeaseTtlMs(reused, leaseTtlMs);
+      const run: Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion> =
+        reused ??
+        new Run({
+          workflowId: this.id,
+          stateSchema: this.stateSchema,
+          inputSchema: this.inputSchema,
+          requestContextSchema: this.requestContextSchema,
+          runId: runIdToUse,
+          parentWorkflow: options?.parentWorkflow,
+          // A reopen without a resourceId keeps the one the run was stored under.
+          resourceId: options?.resourceId ?? stored?.resourceId,
+          isInternalWorkflow: this.isInternal,
+          executionEngine: this.executionEngine,
+          executionGraph: this.executionGraph,
+          mastra: this.#mastra,
+          retryConfig: this.retryConfig,
+          serializedStepGraph: this.serializedStepGraph,
+          disableScorers: options?.disableScorers,
+          ...hooks,
+          tracingPolicy: options?.tracingPolicy ?? this.#options?.tracingPolicy,
+          workflowSteps: this.steps,
+          validateInputs: this.#options?.validateInputs,
+          workflowEngineType: this.engineType,
+          pubsub: options?.pubsub,
+          storageVersion,
+          recoverable:
+            this.engineType === 'default' && this.#options.autoRestartActiveRuns !== false && this.type !== 'processor',
+          leaseTtlMs,
+        });
+
+      const wasCached = this.runs.get(runIdToUse) === run;
+      this.cacheRun(run);
+
+      if (options?.shouldPersistSnapshot) {
+        this.executionEngine.setRunPersistenceOverride(runIdToUse, options.shouldPersistSnapshot);
+      }
+
+      if (stored) {
+        run.workflowRunStatus = stored.status;
+        run.parentWorkflow = stored.parentWorkflow ?? run.parentWorkflow;
+      }
+      // A reopen does not execute, so no later settle would evict a run stored as suspended.
+      if (stored?.status === 'suspended' && !wasCached) hooks.registration.evict();
+
+      if (!existsInStorage && shouldPersistSnapshot) {
+        const initialSnapshot: WorkflowRunState = {
+          runId: runIdToUse,
+          status: 'pending',
+          parentWorkflow: options?.parentWorkflow,
+          // A nested run restarted before its first step only has this snapshot to rebuild from,
+          // so it must carry the parent's state alongside the input.
+          value: nestedRunStart?.state ?? {},
+          // Only a truthy input is kept, as on main: a restart recognizes this snapshot by its input and
+          // restarts it without calling onStart, so a falsy input stays unrecognized and fails recovery.
+          // @ts-expect-error - context type mismatch
+          context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: this.serializedStepGraph,
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          result: undefined,
+          error: undefined,
+          timestamp: Date.now(),
+        };
+        await run.runStorage.writeSnapshot(
+          // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
+          this.#options.pruneSnapshot && storageVersion === 1
+            ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+            : initialSnapshot,
+          options?.resourceId,
+          // The nested run starts from exactly that version of the parent's state.
+          { stateBase: nestedRunStart?.inheritedState?.ref },
+        );
+        if (nestedRun) nestedRun.inserted = true;
+      }
+
+      run.inheritedState = nestedRunStart?.inheritedState;
+      return run;
+    };
+    // Only a caller-named run id can already have an instance; a minted one opens directly.
+    return options?.runId ? this.openRunOnce(runIdToUse, open) : open();
   }
 
   async listScorers({
@@ -4032,9 +4165,17 @@ export class Workflow<
       return;
     }
 
-    await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
-    // deleting the run from the in memory runs
-    this.#runs.delete(runId);
+    // Queued behind opens in flight, so an open cannot store or cache the run between the storage
+    // delete and dropping this process's instance; a held instance would otherwise come back.
+    await this.openRunOnce(runId, async () => {
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: this.id, ...options });
+      // An unversioned delete removes every record of the run; deleting only the other storage
+      // version's record leaves this instance's record, so the instance stays live.
+      const live = this.liveRun(runId);
+      if (!live || options?.storageVersion === undefined || live.storageVersion === options.storageVersion) {
+        this.forgetRun(runId);
+      }
+    });
   }
 
   protected async getWorkflowRunSteps({ runId, workflowId }: { runId: string; workflowId: string }) {
@@ -4284,6 +4425,14 @@ let setRunLeaseTtlMs: (run: Run<any, any, any, any, any, any, any>, leaseTtlMs: 
  * Represents a workflow run that can be executed
  */
 
+/** How a run reaches its workflow's in-memory run cache. */
+interface RunRegistration {
+  /** Drops the run from the cache, if it is still the cached instance. */
+  evict(): void;
+  /** Re-adds the run when it executes again and no other instance holds its slot. */
+  reattach(): void;
+}
+
 export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -4431,6 +4580,27 @@ export class Run<
 
   protected cleanup?: () => void;
 
+  /** Lifecycle hooks into the owning workflow's in-memory run cache. */
+  #registration?: RunRegistration;
+
+  /** Bumped when an execution (start, resume, restart, time travel) begins on this run. */
+  #executionEpoch = 0;
+
+  /** Epochs of executions that began and have not returned yet. The run may only be evicted while this is empty. */
+  #activeExecutions = new Set<number>();
+
+  /** The latest execution epoch when the run was last canceled; executions up to it keep the cancel. */
+  #canceledAtEpoch = 0;
+
+  /** The result that decides how the run is released once no execution is active. Kept across executions. */
+  #result?: { epoch: number; status: WorkflowRunStatus };
+
+  /** The latest epoch whose execution storage refused because another process took the run over. */
+  #lostAtEpoch = 0;
+
+  /** In-process watchers that expect this instance to carry the run's next events. */
+  #liveWatchers = 0;
+
   protected retryConfig?: {
     attempts?: number;
     delay?: number;
@@ -4453,6 +4623,8 @@ export class Run<
       delay?: number;
     };
     cleanup?: () => void;
+    /** Hooks that drop a persisted suspended run from the workflow's run cache and re-add it when it executes again. */
+    registration?: RunRegistration;
     serializedStepGraph: SerializedStepFlowEntry[];
     disableScorers?: boolean;
     tracingPolicy?: TracingPolicy;
@@ -4480,6 +4652,7 @@ export class Run<
     this.pubsub = params.pubsub ?? new EventEmitterPubSub();
     this.retryConfig = params.retryConfig;
     this.cleanup = params.cleanup;
+    this.#registration = params.registration;
     this.disableScorers = params.disableScorers;
     this.tracingPolicy = params.tracingPolicy;
     this.workflowSteps = params.workflowSteps;
@@ -4501,6 +4674,145 @@ export class Run<
     });
     this.#recoverable = params.recoverable ?? false;
     this.#leaseTtlMs = params.leaseTtlMs ?? WORKFLOW_RUN_LEASE_TTL_MS;
+  }
+
+  /**
+   * Runs one execution (start, resume, restart, time travel) under a fresh epoch, so a pending
+   * suspended-run eviction can tell it went stale. The execution counts as active until it
+   * returns or throws, so a rejected start or resume still leaves the run evictable. An execution
+   * that returns before its work ends passes that work to `holdUntil` to stay active until it
+   * settles. Hands back the execution's own promise: an extra await here delays callers by a tick.
+   */
+  protected runExecution<T>(
+    execute: (epoch: number, holdUntil: (work: Promise<unknown>) => void) => Promise<T>,
+  ): Promise<T> {
+    this.#registration?.reattach();
+    const epoch = ++this.#executionEpoch;
+    this.#activeExecutions.add(epoch);
+    let held: Promise<unknown> | undefined;
+    let execution: Promise<T>;
+    try {
+      execution = execute(epoch, work => (held = work));
+    } catch (error) {
+      execution = Promise.reject(error);
+    }
+    // Usually already settled by releaseAfterExecution; this covers executions that threw or returned early.
+    const settle = () => this.#settleExecution(epoch);
+    execution
+      .then(
+        () => held,
+        error => {
+          if (runFenceConflictOf(error)?.runId === this.runId) this.#lostAtEpoch = Math.max(this.#lostAtEpoch, epoch);
+          return held;
+        },
+      )
+      .then(settle, settle)
+      .catch(() => {});
+    return execution;
+  }
+
+  /**
+   * Marks the run canceled, so executions already begun keep the cancel over the status they return.
+   * With none active, nothing else will release the run, so it leaves the cache now.
+   */
+  protected markCanceled(): void {
+    this.workflowRunStatus = 'canceled';
+    this.#canceledAtEpoch = this.#executionEpoch;
+    if (this.#activeExecutions.size === 0) this.cleanup?.();
+  }
+
+  /** Applies the status an execution returned, unless the run was canceled after it began. */
+  protected applyExecutionStatus(status: WorkflowRunStatus, epoch: number): void {
+    if (epoch > this.#canceledAtEpoch) this.workflowRunStatus = status;
+  }
+
+  /** Whether no execution began after the one that started at `epoch`. */
+  protected isLatestExecution(epoch: number): boolean {
+    return epoch === this.#executionEpoch;
+  }
+
+  /**
+   * Counts an in-process watcher until its unwatch runs (once). A suspended run is kept in
+   * the workflow's run cache while watched, so a later resume reuses this instance and its
+   * events reach the watcher; the last unwatch lets the run be evicted.
+   */
+  protected trackWatcher<T>(unwatch: () => T): () => T | undefined {
+    this.#liveWatchers++;
+    let done = false;
+    return () => {
+      if (done) return undefined;
+      done = true;
+      this.#liveWatchers--;
+      const result = unwatch();
+      if (this.#liveWatchers === 0) void this.releaseIfSuspended();
+      return result;
+    };
+  }
+
+  /** Drops the run from the workflow's run cache once it finished, or suspended with a persisted snapshot. */
+  protected async releaseAfterExecution(status: WorkflowRunStatus, epoch: number): Promise<void> {
+    // Results win in the order they return, except that an older execution's suspension
+    // cannot hide a finish another execution already returned.
+    const kept = this.#result;
+    const olderSuspensionHidesFinish =
+      status === 'suspended' && !!kept && kept.status !== 'suspended' && epoch <= kept.epoch;
+    if (!olderSuspensionHidesFinish) this.#result = { epoch, status };
+    await this.#settleExecution(epoch);
+  }
+
+  /**
+   * Ends an execution. Once none is active, a cancel or else the kept result decides the release:
+   * an ended run leaves the cache now, a suspended one once its snapshot is persisted.
+   */
+  async #settleExecution(epoch: number): Promise<void> {
+    if (!this.#activeExecutions.delete(epoch) || this.#activeExecutions.size > 0) return;
+    // An execution that went stale, or threw after it began, may have left another status. A
+    // cancel stands, and releases the run like any other end.
+    const status = this.workflowRunStatus === 'canceled' ? 'canceled' : this.#result?.status;
+    if (status) this.workflowRunStatus = status;
+    // Another process drives the run now, so this instance is stale whatever it last returned. Evicted,
+    // not cleaned up: the run is not finished, and a later resume here keeps its persistence override.
+    if (this.#lostAtEpoch > (this.#result?.epoch ?? 0)) {
+      this.#registration?.evict();
+      return;
+    }
+    if (status && status !== 'suspended') {
+      this.cleanup?.();
+      return;
+    }
+    await this.releaseIfSuspended();
+  }
+
+  /**
+   * Evicts a suspended run from the workflow's run cache when its snapshot is stored as
+   * suspended, or as finished by another instance, and nothing in-process still depends on this instance. `resume()` rebuilds
+   * the run from storage, so keeping it only pins memory until the process exits (see #30774).
+   */
+  protected async releaseIfSuspended(): Promise<void> {
+    const registration = this.#registration;
+    // An execution that began and has not returned yet still uses this instance, though the
+    // run reads as suspended until it gets going.
+    const settled = () => this.#activeExecutions.size === 0;
+    if (!registration || !settled() || this.workflowRunStatus !== 'suspended' || this.#liveWatchers > 0) return;
+    const epoch = this.#executionEpoch;
+    const unchanged = () =>
+      epoch === this.#executionEpoch && settled() && this.workflowRunStatus === 'suspended' && this.#liveWatchers === 0;
+    let storedStatus: WorkflowRunStatus | undefined;
+    // No later event retries a failed read, so a transient storage error would keep the run cached.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        storedStatus = (await this.runStorage.loadHeader())?.status;
+        break;
+      } catch {
+        if (attempt === 2) return;
+        await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
+        if (!unchanged()) return;
+      }
+    }
+    // A stored finish means another instance finished the run, which leaves this one stale.
+    if (storedStatus !== 'suspended' && !(storedStatus && TERMINAL_WORKFLOW_RUN_STATUSES.has(storedStatus))) return;
+    if (!unchanged()) return;
+    registration.evict();
   }
 
   public get abortController(): AbortController {
@@ -4604,7 +4916,7 @@ export class Run<
 
     // Abort any running execution and update in-memory status
     this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
-    this.workflowRunStatus = 'canceled';
+    this.markCanceled();
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
@@ -4739,19 +5051,8 @@ export class Run<
     return this._validateTimetravelInputData(inputData, step);
   }
 
-  protected async _start(
-    {
-      inputData,
-      initialState,
-      requestContext,
-      outputWriter,
-      tracingOptions,
-      format,
-      outputOptions,
-      perStep,
-      actor,
-      ...rest
-    }: (TInput extends unknown
+  protected _start(
+    params: (TInput extends unknown
       ? {
           inputData?: TInput;
         }
@@ -4776,6 +5077,25 @@ export class Run<
         perStep?: boolean;
         actor?: ActorSignal;
       } & Partial<ObservabilityContext>,
+    onDispatched?: () => void,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeStart(executionEpoch, params, onDispatched));
+  }
+
+  async #executeStart(
+    executionEpoch: number,
+    {
+      inputData,
+      initialState,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      format,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: Parameters<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_start']>[0],
     onDispatched?: () => void,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -4912,10 +5232,8 @@ export class Run<
       held,
     );
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    this.applyExecutionStatus(result.status, executionEpoch);
+    await this.releaseAfterExecution(result.status, executionEpoch);
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
@@ -5481,10 +5799,10 @@ export class Run<
     void this.pubsub.subscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
     void this.pubsub.subscribe('nested-watch', nestedWatchCb);
 
-    return () => {
+    return this.trackWatcher(() => {
       void this.pubsub.unsubscribe(`workflow.events.v2.${this.runId}`, wrappedCb);
       void this.pubsub.unsubscribe('nested-watch', nestedWatchCb);
-    };
+    });
   }
 
   /**
@@ -5799,7 +6117,7 @@ export class Run<
     });
   }
 
-  protected async _resume<TResume>(
+  protected _resume<TResume>(
     params: {
       resumeData?: TResume;
       step?:
@@ -5830,6 +6148,15 @@ export class Run<
       /** Hands over a run lease the caller already holds, which the execution uses instead of claiming one. */
       takeHeldOwnership?: () => WorkflowRunOwnership | undefined;
     } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeResume(executionEpoch, params));
+  }
+
+  async #executeResume(
+    executionEpoch: number,
+    params: Parameters<
+      Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_resume']
+    >[0],
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(params);
     const fgaProvider = this.#mastra?.getServer()?.fga;
@@ -6231,10 +6558,8 @@ export class Run<
       if (!params.isVNext && result.status !== 'suspended') {
         this.closeStreamAction?.().catch(() => {});
       }
-      this.workflowRunStatus = result.status;
-      if (result.status !== 'suspended') {
-        this.cleanup?.();
-      }
+      this.applyExecutionStatus(result.status, executionEpoch);
+      await this.releaseAfterExecution(result.status, executionEpoch);
       if (result.status === 'success') {
         if (claimedParent && this.parentWorkflow) {
           let parentExecutionStarted = false;
@@ -6371,23 +6696,32 @@ export class Run<
     return undefined;
   }
 
-  protected async _restart({
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    actor,
-    ...rest
-  }: {
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+  protected _restart(
+    params: {
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeRestart(executionEpoch, params));
+  }
+
+  async #executeRestart(
+    executionEpoch: number,
+    {
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      outputOptions,
+      actor,
+      ...rest
+    }: Parameters<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext, TStorageVersion>['_restart']>[0],
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
     if (!allowedEngines.includes(this.workflowEngineType)) {
@@ -6506,54 +6840,84 @@ export class Run<
       await ownership.release();
     }
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    this.applyExecutionStatus(result.status, executionEpoch);
+    await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
     result.spanId = spanId;
     return result;
   }
 
-  protected async _timeTravel<TInput>({
-    inputData,
-    resumeData,
-    initialState,
-    step: stepParam,
-    context,
-    nestedStepsContext,
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    perStep,
-    actor,
-    ...rest
-  }: {
-    inputData?: TInput;
-    resumeData?: any;
-    initialState?: TState;
-    step:
-      | Step<string, any, TInput, any, any, any, TEngineType, any>
-      | [
-          ...Step<string, any, any, any, any, any, TEngineType, any>[],
-          Step<string, any, TInput, any, any, any, TEngineType, any>,
-        ]
-      | string
-      | string[];
-    context?: TimeTravelContext<any, any, any, any>;
-    nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    perStep?: boolean;
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+  protected _timeTravel<TInput>(
+    params: {
+      inputData?: TInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TInput, any, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, TInput, any, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      perStep?: boolean;
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    return this.runExecution(executionEpoch => this.#executeTimeTravel<TInput>(executionEpoch, params));
+  }
+
+  async #executeTimeTravel<TInput>(
+    executionEpoch: number,
+    {
+      inputData,
+      resumeData,
+      initialState,
+      step: stepParam,
+      context,
+      nestedStepsContext,
+      requestContext,
+      outputWriter,
+      tracingOptions,
+      outputOptions,
+      perStep,
+      actor,
+      ...rest
+    }: {
+      inputData?: TInput;
+      resumeData?: any;
+      initialState?: TState;
+      step:
+        | Step<string, any, TInput, any, any, any, TEngineType, any>
+        | [
+            ...Step<string, any, any, any, any, any, TEngineType, any>[],
+            Step<string, any, TInput, any, any, any, TEngineType, any>,
+          ]
+        | string
+        | string[];
+      context?: TimeTravelContext<any, any, any, any>;
+      nestedStepsContext?: Record<string, TimeTravelContext<any, any, any, any>>;
+      requestContext?: RequestContext<TRequestContext>;
+      outputWriter?: OutputWriter;
+      tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
+      perStep?: boolean;
+      actor?: ActorSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const inheritedState = this.inheritedState;
     this.inheritedState = undefined;
@@ -6705,10 +7069,8 @@ export class Run<
       { onFailure: releaseClaimIfUnused },
     );
 
-    this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      this.cleanup?.();
-    }
+    this.applyExecutionStatus(result.status, executionEpoch);
+    await this.releaseAfterExecution(result.status, executionEpoch);
 
     result.traceId = traceId;
     result.spanId = spanId;

@@ -462,6 +462,12 @@ export interface WorkflowRunState {
    * runs; the workflow's `shouldPersistSnapshot` declined it.
    */
   guardedOnlySnapshot?: boolean;
+  /**
+   * @internal Random id the execution that stored a guarded-only snapshot picked for it. A declined
+   * suspend deletes the record only while it still carries this id, so a newer record stored under
+   * the same run id is kept.
+   */
+  guardedOnlySnapshotId?: string;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];

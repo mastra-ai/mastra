@@ -594,10 +594,27 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRun | null>;
 
+  /**
+   * Whether `deleteWorkflowRunById` enforces its `expectedStatus` and `expectedGuardedOnlySnapshotId`
+   * guards atomically with the delete. Adapters that return false ignore them, so callers that need
+   * them must keep the run instead.
+   */
+  supportsGuardedRunDeletes(): boolean {
+    return false;
+  }
+
+  /**
+   * `expectedStatus` and `expectedGuardedOnlySnapshotId` are optional compare-and-delete guards,
+   * honored only by adapters where `supportsGuardedRunDeletes()` is true: when the run is stored (in
+   * `storageVersion`'s store, or in either without it) with a status that is not one of these
+   * values, or without that `guardedOnlySnapshotId`, nothing is deleted.
+   */
   abstract deleteWorkflowRunById(args: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+    expectedGuardedOnlySnapshotId?: string;
   }): Promise<void>;
 }

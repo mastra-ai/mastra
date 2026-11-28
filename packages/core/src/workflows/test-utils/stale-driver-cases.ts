@@ -700,5 +700,52 @@ export function describeStaleDriverCases({ getStorage }: { getStorage: () => Mas
         expect(logged()).toEqual(LOST_RUN_ONLY);
       },
     );
+
+    // A resumed run that suspends again leaves the cache like a started one. A later resume's rollback
+    // of its unused claim runs under its lease, so after a takeover it is refused like any other save.
+    it('releases a re-suspended run, and refuses its rollback after a takeover', async () => {
+      const { store, workflow, id, holdNext, writes } = await setup(({ id, options }) =>
+        createWorkflow({ id, inputSchema: empty, outputSchema: empty, options })
+          .then(
+            createStep({
+              id: 'approve',
+              inputSchema: empty,
+              outputSchema: empty,
+              resumeSchema: z.object({ again: z.boolean() }),
+              execute: async ({ resumeData, suspend }) => (!resumeData || resumeData.again ? suspend({}) : {}),
+            }),
+          )
+          .commit(),
+      );
+
+      const run = await workflow.createRun();
+      expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      await vi.waitFor(() => expect(workflow.runs.has(run.runId)).toBe(false));
+
+      const reopened = await workflow.createRun({ runId: run.runId });
+      expect((await reopened.resume({ step: 'approve', resumeData: { again: true } })).status).toBe('suspended');
+      await vi.waitFor(() => expect(workflow.runs.has(run.runId)).toBe(false));
+
+      const stale = await workflow.createRun({ runId: run.runId });
+      // The resume's status claim goes through; its first save under the lease is held past a takeover.
+      const statusClaim = holdNext();
+      const resumed = stale.resume({ step: 'approve', resumeData: { again: false } });
+      await statusClaim.arrived;
+      const firstSave = holdNext();
+      statusClaim.release();
+      await firstSave.arrived;
+      await takeOver(store, run.runId);
+      const afterTakeover = writes.length;
+      firstSave.release();
+
+      await expect(resumed).rejects.toMatchObject(conflict);
+      // The held save, then the rollback of the unused claim, both refused.
+      expect(writes.slice(afterTakeover)).toEqual([
+        expect.objectContaining({ fenced: true, refused: true }),
+        expect.objectContaining({ fenced: true, refused: true }),
+      ]);
+      expect(await loadStatus(store, id, run.runId)).toBe('running');
+      await vi.waitFor(() => expect(workflow.runs.has(run.runId)).toBe(false));
+    });
   });
 }

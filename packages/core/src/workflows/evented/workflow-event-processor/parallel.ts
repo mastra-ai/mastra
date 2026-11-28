@@ -24,6 +24,7 @@ export async function processWorkflowParallel(
     perStep,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -84,6 +85,7 @@ export async function processWorkflowParallel(
           perStep,
           state: currentState,
           outputOptions,
+          guardedOnlySnapshotId,
         },
       });
     }),
@@ -108,6 +110,7 @@ export async function processWorkflowConditional(
     perStep,
     state,
     outputOptions,
+    guardedOnlySnapshotId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -183,6 +186,7 @@ export async function processWorkflowConditional(
         perStep,
         state: currentState,
         outputOptions,
+        guardedOnlySnapshotId,
       },
     });
   } else {
@@ -212,6 +216,7 @@ export async function processWorkflowConditional(
               perStep,
               state: currentState,
               outputOptions,
+              guardedOnlySnapshotId,
             },
           });
         }
@@ -233,6 +238,7 @@ export async function processWorkflowConditional(
             perStep,
             state: currentState,
             outputOptions,
+            guardedOnlySnapshotId,
           },
         });
       }),

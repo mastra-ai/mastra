@@ -97,6 +97,7 @@ export async function processWorkflowSleep(
     requestContext,
     actor,
     perStep,
+    guardedOnlySnapshotId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -206,6 +207,7 @@ export async function processWorkflowSleep(
         requestContext,
         actor,
         perStep,
+        guardedOnlySnapshotId,
       },
     });
   }, duration);
@@ -228,6 +230,7 @@ export async function processWorkflowSleepUntil(
     requestContext,
     actor,
     perStep,
+    guardedOnlySnapshotId,
   }: ProcessorArgs,
   {
     pubsub,
@@ -338,6 +341,7 @@ export async function processWorkflowSleepUntil(
         requestContext,
         actor,
         perStep,
+        guardedOnlySnapshotId,
       },
     });
   }, duration);

@@ -445,7 +445,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
-  // Test: should retain a run that suspends again and release it after completion
+  // Test: should keep a run resumable when it suspends again and release it after completion
   {
     const firstStepAction = vi.fn().mockImplementation(async ({ suspend, resumeData }) => {
       if (!resumeData) {
@@ -2987,6 +2987,16 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
 export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: WorkflowRegistry) {
   const { execute } = ctx;
 
+  // A suspended run stays resumable either as the cached in-memory run or, once the engine
+  // evicts it, through its snapshot stored as suspended (#30774).
+  const isResumable = async (workflow: { id: string; runs: Map<string, unknown> }, runId: string) => {
+    if (workflow.runs.has(runId)) return true;
+    const store = await ctx.getStorage?.()?.getStore('workflows');
+    const stored = await store?.getWorkflowRunById({ runId, workflowName: workflow.id });
+    const snapshot = typeof stored?.snapshot === 'string' ? JSON.parse(stored.snapshot) : stored?.snapshot;
+    return snapshot?.status === 'suspended';
+  };
+
   describe('Suspend and Resume', () => {
     it('should return the correct runId', async () => {
       const { workflow, mocks } = registry!['suspend-resume-runid-workflow']!;
@@ -3186,7 +3196,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
       // First execution - should suspend
       const suspendResult = await execute(workflow, {}, { runId });
       expect(suspendResult.status).toBe('suspended');
-      expect(workflow.runs.has(runId)).toBe(true);
+      expect(await isResumable(workflow, runId)).toBe(true);
       expect(mocks.step1Action).toHaveBeenCalledTimes(1);
       expect(suspendResult.steps.step2).toMatchObject({
         status: 'suspended',
@@ -3209,7 +3219,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     });
 
     it.skipIf(ctx.skipTests.resumeBasic || !ctx.resume)(
-      'should retain a run that suspends again and release it after completion',
+      'should keep a run resumable when it suspends again and release it after completion',
       async () => {
         const { workflow, resetMocks } = registry!['repeated-suspend-resume-workflow']!;
         resetMocks?.();
@@ -3218,7 +3228,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
 
         const startResult = await execute(workflow, {}, { runId });
         expect(startResult.status).toBe('suspended');
-        expect(workflow.runs.has(runId)).toBe(true);
+        expect(await isResumable(workflow, runId)).toBe(true);
 
         const firstResumeResult = await ctx.resume!(workflow, {
           runId,
@@ -3226,7 +3236,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           resumeData: { value: 'first' },
         });
         expect(firstResumeResult.status).toBe('suspended');
-        expect(workflow.runs.has(runId)).toBe(true);
+        expect(await isResumable(workflow, runId)).toBe(true);
 
         const secondResumeResult = await ctx.resume!(workflow, {
           runId,

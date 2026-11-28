@@ -448,10 +448,14 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   /** SQL for a snapshot's status. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
   async #statusExpression(column: string): Promise<string> {
+    return this.#snapshotFieldExpression(column, 'status');
+  }
+
+  async #snapshotFieldExpression(column: string, field: 'status' | 'guardedOnlySnapshotId'): Promise<string> {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     return snapshotType === 'jsonb'
-      ? `${column} ->> 'status'`
-      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+      ? `${column} ->> '${field}'`
+      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> '${field}'`;
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -2377,33 +2381,59 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  supportsGuardedRunDeletes(): boolean {
+    return true;
+  }
+
   async deleteWorkflowRunById({
     runId,
     workflowName,
     storageVersion,
     fence,
+    expectedStatus,
+    expectedGuardedOnlySnapshotId,
   }: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+    expectedGuardedOnlySnapshotId?: string;
   }): Promise<void> {
     const resolvedFence = resolveRunFence(this, fence, runId);
+    const expected = expectedStatus === undefined ? undefined : [expectedStatus].flat();
+    const guarded = expected !== undefined || expectedGuardedOnlySnapshotId !== undefined;
+    const matches = (record: { status: string | null; guardedOnlySnapshotId: string | null }) =>
+      (!expected || expected.includes(record.status as WorkflowRunStatus)) &&
+      (expectedGuardedOnlySnapshotId === undefined || record.guardedOnlySnapshotId === expectedGuardedOnlySnapshotId);
+    const snapshotTable = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
     try {
       if (storageVersion === 1) {
-        const del = `DELETE FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE run_id = $1 AND workflow_name = $2`;
+        // The guards sit on the delete itself, so a concurrent write can't land between the check
+        // and the delete.
+        const params: unknown[] = [runId, workflowName];
+        let guard = '';
+        if (expected) {
+          params.push(expected);
+          guard += ` AND ${await this.#statusExpression('snapshot')} = ANY($${params.length}::text[])`;
+        }
+        if (expectedGuardedOnlySnapshotId !== undefined) {
+          params.push(expectedGuardedOnlySnapshotId);
+          guard += ` AND ${await this.#snapshotFieldExpression('snapshot', 'guardedOnlySnapshotId')} = $${params.length}`;
+        }
+        const del = `DELETE FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2${guard}`;
         if (!resolvedFence) {
-          await this.#db.client.none(del, [runId, workflowName]);
+          await this.#db.client.none(del, params);
           return;
         }
         await runFencedStatement(
           this.#db.client,
           resolvedFence,
           'deleteWorkflowRunById',
-          `WITH ${runFenceCte(this.#runOwnersTable(), 3)},
+          `WITH ${runFenceCte(this.#runOwnersTable(), params.length + 1)},
            w AS (${del} AND EXISTS (SELECT 1 FROM claim) RETURNING 1)
            ${fencedResultSql('w', '')}`,
-          [runId, workflowName, ...runFenceParams(resolvedFence)],
+          [...params, ...runFenceParams(resolvedFence)],
         );
         return;
       }
@@ -2412,18 +2442,31 @@ export class WorkflowsPG extends WorkflowsStorage {
         // The storage v2 header is locked first: its row lock waits out an in-flight append, and the
         // entries delete, a later statement, then sees that append's entries. The runs built on
         // this one's state are detached while its entries can still be read.
-        const run = await t.oneOrNone<{ stateShared: boolean }>(
-          `SELECT "stateShared" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+        const run = await t.oneOrNone<{
+          stateShared: boolean;
+          status: WorkflowRunStatus;
+          guardedOnlySnapshotId: string | null;
+        }>(
+          `SELECT "stateShared", status, header ->> 'guardedOnlySnapshotId' AS "guardedOnlySnapshotId" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
           [workflowName, runId],
         );
+        if (guarded && run && !matches(run)) return;
+        let snapshot: { status: string | null; guardedOnlySnapshotId: string | null } | null = null;
+        if (guarded && storageVersion !== 2) {
+          // Locked like the header, so the record checked is the one deleted.
+          snapshot = await t.oneOrNone<{ status: string | null; guardedOnlySnapshotId: string | null }>(
+            `SELECT ${await this.#statusExpression('snapshot')} AS status, ${await this.#snapshotFieldExpression('snapshot', 'guardedOnlySnapshotId')} AS "guardedOnlySnapshotId" FROM ${snapshotTable} WHERE run_id = $1 AND workflow_name = $2 FOR UPDATE`,
+            [runId, workflowName],
+          );
+          if (snapshot && !matches(snapshot)) return;
+        }
         if (run?.stateShared) await this.#detachStateChildren(t, workflowName, runId);
-        for (const table of [
-          this.#runsTable(),
-          this.#entriesTable(),
-          ...(storageVersion === 2
-            ? []
-            : [getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })]),
-        ]) {
+        // A row lock can't cover a row that isn't there yet, so a guarded delete only touches the
+        // rows it locked and checked: a run stored after the lookup is not deleted unchecked.
+        const tables = guarded
+          ? [...(run ? [this.#runsTable(), this.#entriesTable()] : []), ...(snapshot ? [snapshotTable] : [])]
+          : [this.#runsTable(), this.#entriesTable(), ...(storageVersion === 2 ? [] : [snapshotTable])];
+        for (const table of tables) {
           await t.none(`DELETE FROM ${table} WHERE run_id = $1 AND workflow_name = $2`, [runId, workflowName]);
         }
       });

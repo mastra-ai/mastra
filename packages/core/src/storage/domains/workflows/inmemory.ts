@@ -1252,19 +1252,42 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return parsedRun as WorkflowRun;
   }
 
+  supportsGuardedRunDeletes(): boolean {
+    return true;
+  }
+
   async deleteWorkflowRunById({
     runId,
     workflowName,
     storageVersion,
     fence,
+    expectedStatus,
+    expectedGuardedOnlySnapshotId,
   }: {
     runId: string;
     workflowName: string;
     storageVersion?: 1 | 2;
     fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+    expectedGuardedOnlySnapshotId?: string;
   }): Promise<void> {
     this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
+    if (expectedStatus !== undefined || expectedGuardedOnlySnapshotId !== undefined) {
+      const header = storageVersion === 1 ? undefined : this.db.workflowRunHeaders.get(key)?.header;
+      const stored = storageVersion === 2 ? undefined : this.db.workflows.get(key)?.snapshot;
+      const snapshot = typeof stored === 'string' ? (JSON.parse(stored) as WorkflowRunState) : stored;
+      for (const record of [header, snapshot]) {
+        if (!record) continue;
+        if (expectedStatus !== undefined && !matchesExpectedWorkflowStatus(record.status, expectedStatus)) return;
+        if (
+          expectedGuardedOnlySnapshotId !== undefined &&
+          record.guardedOnlySnapshotId !== expectedGuardedOnlySnapshotId
+        ) {
+          return;
+        }
+      }
+    }
     if (storageVersion !== 2) this.db.workflows.delete(key);
     if (storageVersion === 1) return;
     this.detachStateChildren(workflowName, runId);
