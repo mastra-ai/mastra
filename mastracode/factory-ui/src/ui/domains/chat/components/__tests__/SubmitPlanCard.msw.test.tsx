@@ -258,6 +258,34 @@ describe('SubmitPlanCard', () => {
       });
     });
 
+    it('reads a workspace-root-relative plan path through the checkout-scoped lookup', async () => {
+      stubUserSession();
+      const roots: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          const root = params.get('root') ?? '';
+          roots.push(root);
+          return HttpResponse.json({
+            workspacePath: params.get('workspacePath') ?? '',
+            root,
+            rootPath: root === 'mastra/.artifacts' ? '/workspace/mastra/.artifacts' : '/workspace/.artifacts',
+            entries: [],
+          });
+        }),
+      );
+      const requests = stubPlanFile();
+      const path = '/mastra/.artifacts/plans/issue-30361.md';
+      renderCard({ input: { toolId: 'submit_plan', path }, onRespond: () => {} });
+
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+      expect(roots).toContain('mastra/.artifacts');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('workspacePath')).toBe(WORKSPACE);
+      expect(requests[0].get('path')).toBe('mastra/.artifacts/plans/issue-30361.md');
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
+    });
+
     it('does not fetch an absolute path outside the workspace artifacts root', async () => {
       stubUserSession();
       stubRenderedList('/leadrvision/.artifacts');
