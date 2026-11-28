@@ -290,6 +290,9 @@ export abstract class ProcessHandle {
   private _outputLimitError?: ProcessOutputLimitError;
   private _killedByAbort = false;
   private _abortKill?: Promise<void>;
+  private _exited = false;
+  private _exitPromise?: Promise<void>;
+  private _exitResolve?: (() => void) | undefined;
   private _stdoutListeners = new Set<(data: string) => void>();
   private _stderrListeners = new Set<(data: string) => void>();
   private _reader?: Readable;
@@ -348,7 +351,16 @@ export abstract class ProcessHandle {
           stderrDroppedBytes: this.stderrDroppedBytes,
         };
       } finally {
-        abortSignal?.removeEventListener('abort', onAbort);
+        // `wait()` resolving is not proof that the process exited: a descendant
+        // the command left behind can hold the output open, so the handle keeps
+        // counting as running (and stays killable) after `wait()` settles.
+        // Record an exit we can already see; otherwise drop the abort listener
+        // when the handle actually exits.
+        if (this.exitCode !== undefined) this.notifyExited();
+        if (abortSignal) {
+          const detach = () => abortSignal.removeEventListener('abort', onAbort);
+          void this.whenExited().then(detach);
+        }
         if (waitOptions?.onStdout) this._stdoutListeners.delete(waitOptions.onStdout);
         if (waitOptions?.onStderr) this._stderrListeners.delete(waitOptions.onStderr);
       }
@@ -384,6 +396,35 @@ export abstract class ProcessHandle {
       this._abortKill = undefined;
       throw error;
     }
+  }
+
+  /**
+   * @internal Resolves once the handle's process has actually exited.
+   *
+   * `wait()` is not a proxy for this: a descendant the command left behind can
+   * hold the process's output open, so `wait()` settles while the handle still
+   * counts as running (`exitCode` undefined) and can still be killed. Providers
+   * that only learn the real exit after `wait()` returned call
+   * {@link notifyExited}.
+   */
+  whenExited(): Promise<void> {
+    if (this._exited || this.exitCode !== undefined) return Promise.resolve();
+    return (this._exitPromise ??= new Promise<void>(resolve => {
+      this._exitResolve = resolve;
+    }));
+  }
+
+  /**
+   * @internal Providers call this right after setting {@link exitCode}, so
+   * everything waiting on {@link whenExited} runs as soon as the process is
+   * really gone.
+   */
+  protected notifyExited(): void {
+    if (this._exited) return;
+    this._exited = true;
+    const resolve = this._exitResolve;
+    this._exitResolve = undefined;
+    resolve?.();
   }
 
   /** Retained stdout so far */

@@ -203,6 +203,10 @@ class LocalProcessHandle extends ProcessHandle {
         } else {
           this.exitCode = toExitCode(code, signal);
         }
+        // 'close' means the process and whatever held its output are gone, so
+        // this is the real exit: anything coupled to the handle's lifetime can
+        // let go of it, and the run's abort signal is no longer needed.
+        this.notifyExited();
         settle(this.exitCode, signal);
       });
       // 'close' waits for stdout and stderr to close too, and a descendant the
@@ -226,6 +230,7 @@ class LocalProcessHandle extends ProcessHandle {
         flushStderrDecoder();
         this.emitStderr(err.message);
         this.exitCode = 1;
+        this.notifyExited();
         resolve({
           success: false,
           exitCode: 1,
