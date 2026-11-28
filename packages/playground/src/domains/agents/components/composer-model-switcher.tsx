@@ -9,7 +9,7 @@ import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
 import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { findProviderById } from '@/domains/llm';
+import { findProviderById, resolveProviderModel } from '@/domains/llm';
 import { useAllModels } from '@/domains/llm/hooks/use-filtered-models';
 import { useFilteredProviders } from '@/domains/llm/hooks/use-filtered-providers';
 
@@ -30,10 +30,6 @@ export const ComposerModelSwitcher = () => {
   }));
 
   if (!selection) return null;
-  const resolveProviderId = (providerId: string) => {
-    const cleaned = cleanProviderId(providerId);
-    return findProviderById(allProviders, cleaned)?.id || cleaned;
-  };
   // Reserve the picker footprint so the action row doesn't collapse then pop in.
   if (providersLoading) {
     // Lighter than the default `bg-muted`: the composer surface is already light, so the
@@ -58,15 +54,15 @@ export const ComposerModelSwitcher = () => {
     );
   }
 
-  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
-  const fullProviderId = resolveProviderId(selectedProvider);
+  // Match the providers list ids, e.g. 'custom' -> 'acme/custom', or 'acme' + 'custom/gpt-4o' -> 'acme/custom' + 'gpt-4o'
+  const selected = resolveProviderModel(allProviders, selectedProvider, selectedModel);
 
   return (
     <ModelPicker
       providers={pickerProviders}
-      value={fullProviderId ? { provider: fullProviderId, model: selectedModel } : undefined}
+      value={selected.provider ? selected : undefined}
       onValueChange={({ provider, model }) => setModel(provider, model)}
-      defaultModel={agentModel && { provider: resolveProviderId(agentModel.provider), model: agentModel.model }}
+      defaultModel={agentModel && resolveProviderModel(allProviders, agentModel.provider, agentModel.model)}
       reset={resetModel && { label: "Reset to the agent's model", onClick: resetModel }}
       openOnSelectedProvider
       triggerClassName="max-w-48"
@@ -88,9 +84,8 @@ export const ComposerModelWarning = () => {
 
   const providers = dataProviders?.providers || [];
   const { provider, model, modelWarning } = selection;
-  const currentModelProvider = cleanProviderId(provider);
+  const { provider: currentModelProvider, model: selectedModel } = resolveProviderModel(providers, provider, model);
   const currentProvider = findProviderById(providers, currentModelProvider);
-  const selectedModel = model;
 
   const stale =
     Boolean(currentModelProvider && selectedModel) &&

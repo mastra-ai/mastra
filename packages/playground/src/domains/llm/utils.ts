@@ -37,3 +37,36 @@ export const findProviderById = <T extends { id: string }>(providers: T[], provi
 
   return undefined;
 };
+
+/**
+ * Resolves an agent's `provider` and `modelId` to the provider id and model name used by the
+ * providers list. The server reports a prefixed gateway model (`acme/custom/gpt-4o`) as provider
+ * `acme` and model `custom/gpt-4o`, while the providers list has provider `acme/custom` with model
+ * `gpt-4o`.
+ *
+ * @example
+ * resolveProviderModel([{id: 'acme/custom', models: ['gpt-4o']}], 'acme', 'custom/gpt-4o')
+ * // returns { provider: 'acme/custom', model: 'gpt-4o' }
+ */
+export const resolveProviderModel = (
+  providers: { id: string; models: readonly string[] }[],
+  providerId: string,
+  modelId: string,
+): { provider: string; model: string } => {
+  const cleanId = cleanProviderId(providerId);
+  const directMatch = findProviderById(providers, cleanId);
+  if (directMatch?.models.includes(modelId)) {
+    return { provider: directMatch.id, model: modelId };
+  }
+
+  const slashIndex = modelId.indexOf('/');
+  if (slashIndex !== -1) {
+    const prefixedId = `${cleanId}/${modelId.slice(0, slashIndex)}`;
+    const prefixedMatch = providers.find(p => p.id === prefixedId);
+    if (prefixedMatch) {
+      return { provider: prefixedMatch.id, model: modelId.slice(slashIndex + 1) };
+    }
+  }
+
+  return { provider: directMatch?.id ?? cleanId, model: modelId };
+};
