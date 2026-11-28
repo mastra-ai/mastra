@@ -8,5 +8,9 @@ Added two parts for chats that come in from Slack:
 - The new **`ChannelReplyError`** transcript slot draws a host's recovery actions, such as Try again and Reconnect Slack, next to a reply that failed to post. Without it, a failed reply only says it failed.
 
 ```tsx
-<TranscriptSlotsProvider slots={{ ChannelReplyError: ({ toolCallId, text }) => <RetryReply id={toolCallId} text={text} /> }}>
+<TranscriptSlotsProvider
+  slots={{ ChannelReplyError: ({ toolCallId, text }) => <RetryReply id={toolCallId} text={text} /> }}
+>
+  <TranscriptEntries {...transcriptProps} />
+</TranscriptSlotsProvider>
 ```
