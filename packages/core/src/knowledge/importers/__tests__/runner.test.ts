@@ -101,6 +101,7 @@ class RecordingHost implements KnowledgeImporterHost {
       moved: 0,
       removed: 0,
       stubbed: 0,
+      merged: 0,
       refused,
     };
   }
@@ -132,7 +133,7 @@ class RecordingHost implements KnowledgeImporterHost {
             httpStatus: request.error.httpStatus ?? null,
           }
         : null,
-      counts: { created: 0, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0, refused: 0 },
+      counts: { created: 0, updated: 0, unchanged: 0, moved: 0, removed: 0, stubbed: 0, merged: 0, refused: 0 },
     };
   }
 }

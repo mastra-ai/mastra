@@ -429,7 +429,6 @@ export async function applyKnowledgeImportFlush(input: KnowledgeImportSinkInput)
     if (page?.mergedInto) return 'merged';
     return !page || !!page.deletedAt || page.scopeId !== scope.id ? 'gone' : 'live';
   };
-  const gone = async (node: KnowledgeImporterNodeRecord) => (await stateOf(node)) === 'gone';
   /**
    * Drops the node of a page that is gone, so its item is written again as new. Pages that linked to
    * it still name its old path: this binding's linking items are marked unsettled so a settle slice
