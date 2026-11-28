@@ -1,0 +1,209 @@
+---
+title: "SurrealDB | Database"
+description: "Store Mastra memory, workflow snapshots, scores and traces in SurrealDB with the SurrealDB-maintained @surrealdb/mastra-ai adapter."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# SurrealDB
+
+[`@surrealdb/mastra-ai`](https://www.npmjs.com/package/@surrealdb/mastra-ai) is a storage adapter for Mastra that keeps agent memory (threads, messages and working memory), workflow snapshots, scores and traces in a [SurrealDB](https://surrealdb.com) database.
+
+:::note
+
+SurrealDB builds and maintains this adapter, not the Mastra team. Report issues and request features with SurrealDB.
+
+:::
+
+## Installation
+
+```bash npm2yarn
+npm install @surrealdb/mastra-ai@beta
+```
+
+SurrealDB v3 support is in the adapter's 1.0 beta, so install the `beta` tag. The `latest` tag (0.1.0) targets SurrealDB v2 and fails to initialize on v3.
+
+The beta needs SurrealDB v3, Node.js 22.13 or later (or Bun 1.0 or later), and a 1.x release of `@mastra/core` from 1.31.0. To run SurrealDB locally:
+
+```bash
+surreal start --user root --pass root memory
+```
+
+## Usage
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { SurrealDBStore } from '@surrealdb/mastra-ai'
+
+const storage = new SurrealDBStore({
+  id: 'surrealdb-storage',
+  url: process.env.SURREALDB_URL!, // e.g. ws://localhost:8000
+  username: process.env.SURREALDB_USERNAME!,
+  password: process.env.SURREALDB_PASSWORD!,
+  namespace: 'mastra',
+  database: 'my_app',
+})
+
+export const mastra = new Mastra({
+  storage,
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this storage instance.',
+    isOptional: false,
+  },
+  {
+    name: 'url',
+    type: 'string',
+    description: 'SurrealDB endpoint, for example `ws://localhost:8000`. Required unless `db` is passed.',
+    isOptional: true,
+  },
+  {
+    name: 'username',
+    type: 'string',
+    description: 'User to sign in with. Pass together with `url` and `password`.',
+    isOptional: true,
+  },
+  {
+    name: 'password',
+    type: 'string',
+    description: 'Password of the user.',
+    isOptional: true,
+  },
+  {
+    name: 'token',
+    type: 'string',
+    description: 'Access token to authenticate with instead of a username and password. Pass together with `url`.',
+    isOptional: true,
+  },
+  {
+    name: 'db',
+    type: 'Surreal',
+    description:
+      "An existing `surrealdb` client to use instead of opening a new connection. Sign in and select the namespace and database on it first: `namespace` and `database` aren't applied to a supplied client.",
+    isOptional: true,
+  },
+  {
+    name: 'namespace',
+    type: 'string',
+    description: 'Namespace for the Mastra tables.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+  {
+    name: 'database',
+    type: 'string',
+    description: 'Database for the Mastra tables.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic table setup is disabled. Call `storage.init()` yourself, for example from a deployment script.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Constructor examples
+
+The existing-client example imports `surrealdb` directly, so add it to your project when you use it (`npm install surrealdb`).
+
+```typescript
+import { Surreal } from 'surrealdb'
+import { SurrealDBStore } from '@surrealdb/mastra-ai'
+
+// Username and password
+const store1 = new SurrealDBStore({
+  id: 'surrealdb-storage-01',
+  url: 'ws://localhost:8000',
+  username: 'root',
+  password: 'root',
+})
+
+// Access token
+const store2 = new SurrealDBStore({
+  id: 'surrealdb-storage-02',
+  url: process.env.SURREALDB_URL!,
+  token: process.env.SURREALDB_TOKEN!,
+  namespace: 'mastra',
+  database: 'my_app',
+})
+
+// Existing client: connect, sign in and select the namespace and database yourself
+const db = new Surreal()
+await db.connect('ws://localhost:8000')
+await db.signin({ username: 'root', password: 'root' })
+await db.use({ namespace: 'mastra', database: 'my_app' })
+const store3 = new SurrealDBStore({ id: 'surrealdb-storage-03', db })
+```
+
+## Additional notes
+
+### Storage domains
+
+`SurrealDBStore` provides the `memory`, `workflows`, `scores` and `observability` domains over one connection. The domain classes (`MemorySurrealDB`, `WorkflowsSurrealDB`, `ScoresSurrealDB` and `ObservabilitySurrealDB`) are also exported for use with [composite storage](/reference/storage/composite).
+
+### Connection management
+
+Call `close()` when your application shuts down. It closes the connection the store opened. A client you passed as `db` stays open, so close it yourself:
+
+```typescript
+await storage.close()
+```
+
+### Vector search
+
+The adapter doesn't include a Mastra vector store. SurrealDB v3 has native HNSW vector indexes, which you can query with SurrealQL through the store's client once it's initialized:
+
+```typescript
+await storage.init()
+
+const results = await storage.client.queryAll(
+  'SELECT content, vector::distance::knn() AS dist FROM documents WHERE embedding <|5,40|> $query ORDER BY dist',
+  { query: queryEmbedding },
+)
+```
+
+Here `queryEmbedding` is the embedding of the search text, and `documents` is a table you define with an HNSW index on `embedding`.
+
+## Usage example
+
+### Adding memory to an agent
+
+```typescript title="src/mastra/agents/example-surrealdb-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { SurrealDBStore } from '@surrealdb/mastra-ai'
+
+export const surrealdbAgent = new Agent({
+  id: 'surrealdb-agent',
+  name: 'surrealdb-agent',
+  instructions:
+    'You are an AI agent with the ability to automatically recall memories from previous interactions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new SurrealDBStore({
+      id: 'surrealdb-storage',
+      url: process.env.SURREALDB_URL!,
+      username: process.env.SURREALDB_USERNAME!,
+      password: process.env.SURREALDB_PASSWORD!,
+    }),
+  }),
+})
+```
+
+## Related
+
+- [`@surrealdb/mastra-ai` on npm](https://www.npmjs.com/package/@surrealdb/mastra-ai)
+- [Storage overview](/reference/storage/overview)
