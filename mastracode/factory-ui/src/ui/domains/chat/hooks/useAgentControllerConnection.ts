@@ -3,7 +3,7 @@ import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
-import type { FactorySessionState } from '../context/ChatSessionContext';
+import type { FactorySessionState } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from '../../../../hooks/useAgentControllerSessionInit';
@@ -11,7 +11,9 @@ import { useAgentControllerSessionSync } from '../../../../hooks/useAgentControl
 import type { AgentControllerLiveState } from '../../../../hooks/useAgentControllerSessionSync';
 import { switchThreadMutationKey } from '../../../../hooks/useAgentControllerThreadMutations';
 
-export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
+import type { ConnectionStatus } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+
+export type { ConnectionStatus };
 type SseConnectionState = 'never' | 'connected' | 'dropped';
 
 function nextSseConnectionState(previous: SseConnectionState, connected: boolean): SseConnectionState {

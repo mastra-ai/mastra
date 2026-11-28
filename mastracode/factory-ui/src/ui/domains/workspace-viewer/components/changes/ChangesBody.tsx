@@ -3,8 +3,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { lazy, Suspense } from 'react';
 import type { Ref } from 'react';
 
-import type { WorkspaceChangesScope } from '../../../../../api/types';
-import { useWorkspacePatches } from '../../../../../hooks/use-fs';
+import type { WorkspaceChangesScope } from '@internal/factory-contract';
+import { useWorkspacePatches } from '@mastra/react/hooks/factory';
 import type { DiffLayout } from '../../hooks/useDiffLayout';
 import { ChangesEmptyState } from './ChangesEmptyState';
 import { ChangesNotice } from './ChangesNotice';

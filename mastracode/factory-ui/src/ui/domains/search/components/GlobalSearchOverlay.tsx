@@ -1,8 +1,8 @@
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { useEffect, useRef } from 'react';
 
-import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
-import { restoreGlobalSearchTriggerFocus } from '../services/searchTriggerFocus';
+import { useGlobalSearchControls } from '@mastra/playground-ui/domains/factory/session/thread/search/hooks/useGlobalSearchControls';
+import { restoreGlobalSearchTriggerFocus } from '@mastra/playground-ui/domains/factory/session/thread/search/services/searchTriggerFocus';
 import { GlobalSearchDialog } from './GlobalSearchDialog';
 
 export function GlobalSearchOverlay() {

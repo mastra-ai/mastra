@@ -1,4 +1,4 @@
-import { SETTINGS_SECTION_LABELS } from '../../chat/services/sessionSettings';
+import { SETTINGS_SECTION_LABELS } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
 
 export type GlobalSearchScope = 'all' | 'navigation' | 'work' | 'review' | 'items' | 'user' | 'factories';
 

@@ -1,9 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { IconChatBubble7Off } from '@mastra/playground-ui/icons/central/IconChatBubble7Off';
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
-import { newUserSessionPath } from '../../workspaces/services/factoryPaths';
 import { ChatPageLayout } from './ChatPageLayout';
 
 export function SessionNotFound({ factoryId }: { factoryId: string | undefined }) {

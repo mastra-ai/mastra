@@ -10,7 +10,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
 import { SidebarNewSessionButton } from '../SidebarNewSessionButton';
 import { testChatSession } from './fixtures/sessionsSection';

@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode, Ref } from 'react';
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 const PAGE_TITLES: Record<string, string> = {
   activity: 'Activity',

@@ -190,7 +190,7 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery(userSessionQueryOptions(baseUrl, sessionId));
 }
 
-export { sessionUnavailableError } from '../ui/domains/chat/services/sessionErrors';
+export { sessionUnavailableError } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionErrors';
 
 export function useCreateWorkspaceMutation(factoryId: string | undefined, projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();

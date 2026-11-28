@@ -2,7 +2,7 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { pluralize } from '@mastra/playground-ui/utils/string';
 
-import type { WorkspaceChangesRepository } from '../../../../../../api/types';
+import type { WorkspaceChangesRepository } from '@internal/factory-contract';
 import { ChangeCounts } from '../ChangeCounts';
 import { buildChangeTree } from './change-tree';
 import type { RepositoryProvider } from './change-tree';

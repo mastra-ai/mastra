@@ -3,7 +3,10 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { RejectedReplyError, isEndedPrompt } from '../ui/domains/chat/context/ChatSessionActionsContext';
+import {
+  RejectedReplyError,
+  isEndedPrompt,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionActionsContext';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,

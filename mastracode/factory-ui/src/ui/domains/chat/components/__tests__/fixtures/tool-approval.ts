@@ -1,4 +1,4 @@
-import type { ApprovalPrompt } from '../../../services/transcript';
+import type { ApprovalPrompt } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 
 export const toolApproval: ApprovalPrompt = {
   kind: 'approval',

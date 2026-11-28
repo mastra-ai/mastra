@@ -1,4 +1,4 @@
-import type { WorkspaceChanges, WorkspaceChangeStatus } from '../../../../../api/types';
+import type { WorkspaceChanges, WorkspaceChangeStatus } from '@internal/factory-contract';
 import { unreadableRepositories } from '../changes/unreadable-repositories';
 import { foldersAbove } from './folders-above';
 

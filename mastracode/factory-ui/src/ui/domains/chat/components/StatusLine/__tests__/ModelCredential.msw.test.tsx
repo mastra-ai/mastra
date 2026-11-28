@@ -9,11 +9,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
 import type { SessionModelCatalog } from '../../../../../../hooks/useSessionModelCatalog';
-import { ChatModelsContext } from '../../../context/ChatModelsContext';
-import type { ChatModelsApi } from '../../../context/ChatModelsContext';
-import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
-import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import { ModelCredential } from '../ModelCredential';
+import { ChatModelsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatModelsContext';
+import type { ChatModelsApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatModelsContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ModelCredential } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/ModelCredential';
 
 const SHANE = { id: 'user-shane', name: 'Shane Thomas' };
 const DAMIEN = { id: 'user-damien', name: 'Damien Schneider' };

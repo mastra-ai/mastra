@@ -3,7 +3,7 @@ import { screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { TranscriptEntries } from '../Transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const reply: MastraDBMessage = {
   id: 'reply-1',

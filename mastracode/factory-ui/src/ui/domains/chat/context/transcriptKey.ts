@@ -1,7 +1,5 @@
 import { createContext, useContext, useState } from 'react';
-import { useSessionHost } from './SessionHostContext';
-
-import { threadPath } from '../../workspaces/services/factoryPaths';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 interface TranscriptIdentity {
   sessionId: string;
@@ -38,10 +36,10 @@ export function continuesTranscript(state: unknown): boolean {
 
 export function useContinueIntoThread() {
   const continueInto = useContext(TranscriptContinuationContext);
-  const { navigate } = useSessionHost();
+  const { navigate, links } = useSessionHost();
   if (!continueInto) throw new Error('useContinueIntoThread must be used within a ChatSessionBoundary');
-  return (factoryId: string, thread: ThreadSession, state?: object) => {
+  return (thread: ThreadSession, state?: object) => {
     continueInto(thread);
-    navigate(threadPath(factoryId, thread), { replace: true, state: { ...state, [CONTINUES_TRANSCRIPT]: true } });
+    navigate(links.thread(thread), { replace: true, state: { ...state, [CONTINUES_TRANSCRIPT]: true } });
   };
 }

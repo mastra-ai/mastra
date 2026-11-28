@@ -8,9 +8,8 @@ import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import { factoryWebKeys } from '@mastra/react/hooks/factory';
+import { factoryWebKeys, useWorkspaceChanges, useWorkspaceTree, useWorkspaceTrees } from '@mastra/react/hooks/factory';
 import { WakeSandbox } from './WakeSandbox';
-import { useWorkspaceChanges, useWorkspaceTree, useWorkspaceTrees } from '../../../../hooks/use-fs';
 import { changeMarks, NO_CHANGE_MARKS } from './files/change-marks';
 import type { ChangeMarks } from './files/change-marks';
 import { BrowserEntryContent } from './files/BrowserEntryContent';

@@ -1,0 +1,72 @@
+import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
+import { useAvailableModelsQuery, useModelReasoningOptions } from '@mastra/react/hooks/factory';
+import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
+
+import { useChatModels } from '../../context/useChatModels';
+import { useChatModelScope } from '../../context/useChatModelScope';
+import { useOptionalChatThinking } from '../../context/useChatThinking';
+import {
+  ALL_THINKING_LEVEL_OPTIONS,
+  DEFAULT_SOURCE_LABELS,
+  thinkingLevelOptionsForModel,
+} from '../../services/thinkingLevels';
+import type { EffectiveThinkingLevel } from '../../services/thinkingLevels';
+import type { ThinkingLevelOption } from '@/ds/components/ThinkingLevel';
+import { toast } from '@/ds/components/Toaster';
+
+type SessionThinkingState =
+  | { unavailableReason: string; loading: boolean }
+  | { effective: EffectiveThinkingLevel; source: string; resettable: boolean };
+
+function sessionThinkingState(
+  modelId: string | undefined,
+  catalogPending: boolean,
+  thinking: ChatThinkingApi,
+  switchingModel: boolean,
+  packName: string | undefined,
+): SessionThinkingState {
+  if (catalogPending) return { unavailableReason: "This model's thinking levels aren't loaded yet.", loading: true };
+  if (thinking.loadError) return { unavailableReason: "The thinking level couldn't be loaded.", loading: false };
+  if (!thinking.level) return { unavailableReason: "The thinking level isn't loaded yet.", loading: true };
+  if (switchingModel) return { unavailableReason: 'Switching model…', loading: true };
+  if (!modelId) return { unavailableReason: 'Pick a model first.', loading: false };
+  const { origin } = thinking.level;
+  if (packName) return { effective: thinking.level, source: `${packName} pack`, resettable: false };
+  return {
+    effective: thinking.level,
+    source: origin === 'session' ? 'this session' : DEFAULT_SOURCE_LABELS[origin],
+    resettable: origin === 'session',
+  };
+}
+
+function showFailure(fallback: string) {
+  return (cause: unknown) => toast.error(cause instanceof Error ? cause.message : fallback);
+}
+
+function levelSummary(options: ThinkingLevelOption<ThinkingLevelSetting>[], state: SessionThinkingState) {
+  if ('unavailableReason' in state) return state.loading ? 'loading' : 'unavailable';
+  return options.find(option => option.value === state.effective.level)?.label ?? state.effective.level;
+}
+
+/** The session's thinking level for `modelId`, shared by the controls on and inside the model picker. */
+/** `undefined` when the host has no thinking capability; callers hide their thinking UI. */
+export function useSessionThinking(modelId: string | undefined, switchingModel: boolean) {
+  const thinking = useOptionalChatThinking();
+  const { selectedPack } = useChatModels();
+  const { catalogTarget } = useChatModelScope();
+  const catalog = useAvailableModelsQuery(catalogTarget);
+  const reasoningOptions = useModelReasoningOptions(modelId, catalogTarget);
+  const options = modelId ? thinkingLevelOptionsForModel(modelId, reasoningOptions) : ALL_THINKING_LEVEL_OPTIONS;
+
+  if (!thinking) return undefined;
+  const state = sessionThinkingState(modelId, catalog.isPending, thinking, switchingModel, selectedPack?.name);
+
+  return {
+    options,
+    state,
+    summary: levelSummary(options, state),
+    setLevel: (next: ThinkingLevelSetting) =>
+      thinking.setLevel(next).catch(showFailure('Failed to change thinking level')),
+    resetLevel: () => thinking.resetLevel().catch(showFailure('Failed to reset thinking level')),
+  };
+}

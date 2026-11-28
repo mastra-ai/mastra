@@ -17,7 +17,7 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import type { DataRouter, RouteObject, ShouldRevalidateFunction } from 'react-router';
 
 import { continuesTranscript } from './domains/chat/context/transcriptKey';
-import { opensWithPrompt } from './domains/chat/services/promptHandoff';
+import { opensWithPrompt } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/promptHandoff';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { boardConfigPath, newBoardPath } from './domains/boardConfig/boardConfigPaths';
 import { NEW_SKILL_PAGE, newSkillPath, settingsSectionPath, skillPath } from './domains/settings/settingsSections';

@@ -1,4 +1,4 @@
-import type { WorkspaceChange, WorkspaceChanges } from '../../../../../../api/types';
+import type { WorkspaceChange, WorkspaceChanges } from '@internal/factory-contract';
 
 export interface ChangeTreeNode {
   path: string;

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '@internal/factory-contract';
 import type { FactoryUserSession } from '../../services/user-sessions';

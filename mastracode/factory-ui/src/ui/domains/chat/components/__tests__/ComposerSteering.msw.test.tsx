@@ -10,9 +10,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { OverlaysProvider } from '../../../../lib/overlays';
+import { OverlaysProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/overlays';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
-import { Composer } from '../Composer';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
 import {
   FACTORY_ID,
   SESSION_ID,

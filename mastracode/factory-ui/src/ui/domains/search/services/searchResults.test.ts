@@ -2,9 +2,21 @@ import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItem, FactoryUserSession } from '@internal/factory-contract';
+import type { SessionLinks } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { createSessionSearchGroups, createWorkItemSearchResults, matchingResults } from './searchResults';
 
 const FACTORY_ID = 'factory-1';
+const LINKS: SessionLinks = {
+  settings: section => `/settings/${section}`,
+  thread: ({ sessionId, threadId }) => `/workspaces/${sessionId}/threads/${threadId}`,
+  userThread: threadId => `/user/threads/${threadId}`,
+  newUserSession: () => '/user/new',
+  channelThread: threadId => `/threads/${threadId}`,
+  knowledgePage: pageId => `/knowledge?page=${pageId}`,
+  project: projectId => `/projects/${projectId}`,
+  card: workItemId => `/cards/${workItemId}`,
+  workItemBoard: () => '/boards/work',
+};
 const AT = '2026-11-01T10:00:00.000Z';
 
 function session(sessionId: string, branch: string): FactoryUserSession {
@@ -117,7 +129,7 @@ const longerNumber = issueCard('card-palette', 'Tidy the palette', 123, { sessio
 const unstarted = issueCard('card-sync', 'Slow sync', 30772);
 
 const sessions = createSessionSearchGroups({
-  factoryId: FACTORY_ID,
+  links: LINKS,
   repositories: [
     {
       workspaces: [session('session-login', 'factory/issue-12'), session('session-palette', 'factory/issue-123')],
@@ -126,7 +138,7 @@ const sessions = createSessionSearchGroups({
   ],
   workItems: [working, longerNumber],
 });
-const cards = createWorkItemSearchResults({ factoryId: FACTORY_ID, workItems: [unstarted] });
+const cards = createWorkItemSearchResults({ links: LINKS, workItems: [unstarted] });
 const rows = [...sessions.work, ...sessions.user, ...cards];
 
 /** The titles of the rows the palette shows for what is typed. */

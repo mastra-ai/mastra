@@ -3,11 +3,16 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useContext, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { ChatTranscriptContext } from '../../chat/context/ChatTranscriptContext';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
 import { useScrollbarGutters } from '../hooks/useScrollbarGutters';
-import { useThreadWorkspacePath } from '../hooks/useThreadWorkspacePath';
-import { useWiderThan } from '../hooks/useWiderThan';
-import { DOCK_MIN_REM, panelStateAttributes, threadGeometryClass, threadGeometryStyle } from '../layout';
+import { useThreadWorkspacePath } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/hooks/useThreadWorkspacePath';
+import { useWiderThan } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/hooks/useWiderThan';
+import {
+  DOCK_MIN_REM,
+  panelStateAttributes,
+  threadGeometryClass,
+  threadGeometryStyle,
+} from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { WorkspacePanelContext } from './WorkspacePanelContext';
 import type { WorkspacePanelPage } from './WorkspacePanelContext';
 

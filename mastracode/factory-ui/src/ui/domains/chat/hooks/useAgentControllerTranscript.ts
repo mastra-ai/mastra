@@ -1,8 +1,12 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import { useCallback, useReducer } from 'react';
 
-import { createInitialTranscript, createLocalMessageId, transcriptReducer } from '../services/transcript';
-import type { OutgoingFile } from '../services/transcript';
+import {
+  createInitialTranscript,
+  createLocalMessageId,
+  transcriptReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import type { OutgoingFile } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 
 export function useAgentControllerTranscript({
   initialThreadId,

@@ -8,7 +8,7 @@ import { useMutationState, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
 import { AGENT_CONTROLLER_ID } from '../ui/domains/chat/services/constants';
-import { readModelSelection } from '../ui/domains/chat/services/modelSelection';
+import { readModelSelection } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/modelSelection';
 
 export type { SessionModelResponse, SessionModelTarget } from '@mastra/client-js';
 

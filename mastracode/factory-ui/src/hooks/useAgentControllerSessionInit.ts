@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import type { FactorySessionState } from '../ui/domains/chat/context/ChatSessionContext';
+import type { FactorySessionState } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,

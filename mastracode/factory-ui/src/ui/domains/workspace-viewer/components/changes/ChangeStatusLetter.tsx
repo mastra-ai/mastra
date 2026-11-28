@@ -1,6 +1,6 @@
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-import type { WorkspaceChangeStatus } from '../../../../../api/types';
+import type { WorkspaceChangeStatus } from '@internal/factory-contract';
 import { CHANGE_STATUSES } from './change-statuses';
 
 export function ChangeStatusLetter({ status }: { status: WorkspaceChangeStatus }) {

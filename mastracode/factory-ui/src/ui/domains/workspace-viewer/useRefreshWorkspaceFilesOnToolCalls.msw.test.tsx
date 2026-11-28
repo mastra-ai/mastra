@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { renderHookWithProviders } from '../../../../e2e/ui/render';
-import type { TimelineEntry } from '../chat/services/transcript';
-import { useRefreshWorkspaceFilesOnToolCalls } from './useRefreshWorkspaceFilesOnToolCalls';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { useRefreshWorkspaceFilesOnToolCalls } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/useRefreshWorkspaceFilesOnToolCalls';
 
 const WORKSPACE = 'session-1';
 const NO_ENTRIES: TimelineEntry[] = [];

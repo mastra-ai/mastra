@@ -8,7 +8,7 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
 import { ChatSessionConfigProvider } from '../ChatSessionProvider';
-import { useChatSessionContext } from '../useChatSessionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 function SessionAddress() {
   const { resourceId, threadTags } = useChatSessionContext();

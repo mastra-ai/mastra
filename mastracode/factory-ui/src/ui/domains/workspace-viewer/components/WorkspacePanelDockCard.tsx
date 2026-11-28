@@ -3,8 +3,14 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { cardHeightClass, cardMotionClass, cardRadiusClass, cardTrackClass, panelRevealClass } from '../layout';
-import type { WorkspacePanelSize } from '../layout';
+import {
+  cardHeightClass,
+  cardMotionClass,
+  cardRadiusClass,
+  cardTrackClass,
+  panelRevealClass,
+} from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
+import type { WorkspacePanelSize } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 
 export function WorkspacePanelDockCard() {

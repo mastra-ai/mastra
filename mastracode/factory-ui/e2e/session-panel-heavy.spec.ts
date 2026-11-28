@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
-import { DOCK_MIN_REM } from '../src/ui/domains/workspace-viewer/layout';
+import { DOCK_MIN_REM } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { HEAVY, heavySessionHandlers } from './ui/heavy-session';
 import { server } from './ui/msw-server';
 

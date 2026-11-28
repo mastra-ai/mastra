@@ -4,9 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import type { TimelineEntry } from '../../services/transcript';
-import { initialTranscript, transcriptReducer } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import {
+  initialTranscript,
+  transcriptReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 

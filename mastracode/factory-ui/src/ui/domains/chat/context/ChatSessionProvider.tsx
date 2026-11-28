@@ -3,29 +3,33 @@ import { ChatAnnotationsProvider } from '@mastra/playground-ui/components/ai/ann
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useSessionHost } from './SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentControllerThreadMessages';
-import { sessionUnavailableError, isSessionNotFound } from '../services/sessionErrors';
+import {
+  sessionUnavailableError,
+  isSessionNotFound,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionErrors';
 import type { LinkedRepositoryPayload, FactoryUserSession } from '@internal/factory-contract';
-import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
+import { isFactoryOwnedSession } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionPresentation';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { readFailedDraft } from '../services/handoffFiles';
-import { opensWithPrompt } from '../services/promptHandoff';
-import { ChatCommandsProvider } from './ChatCommandsProvider';
+import { readFailedDraft } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/handoffFiles';
+import { opensWithPrompt } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/promptHandoff';
+import { ChatCommandsProvider } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatThinkingProvider } from './ChatThinkingProvider';
-import { ChatSessionContext } from './ChatSessionContext';
-import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
-import type { ChatThreadMessagesApi } from './ChatThreadMessagesContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ChatThreadMessagesContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThreadMessagesContext';
+import type { ChatThreadMessagesApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThreadMessagesContext';
 import { ChatSessionActionsProvider } from './ChatSessionActionsProvider';
+import { ChatMessageBoundary } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatMessageBoundary';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
-import { useChatMessagePreparation } from './useChatMessagePreparation';
-import { TranscriptLoading } from '../components/TranscriptLoading';
-import { useChatSessionContext } from './useChatSessionContext';
+import { useChatMessagePreparation } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatMessagePreparation';
+import { TranscriptLoading } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/TranscriptLoading';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 import { TranscriptContinuationContext, useTranscriptKey } from './transcriptKey';
 
 function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
@@ -239,74 +243,6 @@ export function ChatSessionBoundary({
       </ChatSessionActionsProvider>
     </ChatThreadMessagesContext.Provider>
   );
-}
-
-/** Limits delayed thread-history feedback to the transcript content region. */
-export function ChatMessageBoundary({
-  children,
-  showPreparation = true,
-}: {
-  children: ReactNode;
-  showPreparation?: boolean;
-}) {
-  const value = useContext(ChatThreadMessagesContext);
-  if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
-  const { sessionError } = useChatSessionContext();
-  const { preparing } = useChatMessagePreparation();
-
-  if (sessionError) return <ChatMessageFeedback error={sessionError} />;
-
-  if (preparing) {
-    return showPreparation ? <TranscriptLoading /> : null;
-  }
-
-  if (value.threadId && value.error) {
-    return <ChatMessageFallback {...value} />;
-  }
-
-  return <>{children}</>;
-}
-
-function ChatMessageFeedback({ error }: { error: Error }) {
-  const { retrySession } = useChatSessionContext();
-  const notFound = isSessionNotFound(error);
-  return (
-    <div className="flex flex-col items-stretch gap-4">
-      <Notice variant="destructive">
-        {notFound
-          ? 'This session was not found or is private to another user.'
-          : `Failed to prepare the workspace: ${error.message}`}
-      </Notice>
-      {retrySession && (
-        <div>
-          <Button variant="default" onClick={retrySession}>
-            Retry
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function ChatMessageFallback({ threadId, isPending, error }: ChatThreadMessagesApi) {
-  if (threadId && isPending) {
-    return (
-      <div className="flex flex-col gap-4">
-        <SkeletonRows label="Loading messages" rows={6} />
-      </div>
-    );
-  }
-
-  if (threadId && error) {
-    const errorMessage = error instanceof Error ? error.message : undefined;
-    return (
-      <Notice variant="destructive">
-        {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
-      </Notice>
-    );
-  }
-
-  return null;
 }
 
 /** Backward-compatible full chat boundary for focused component tests. */

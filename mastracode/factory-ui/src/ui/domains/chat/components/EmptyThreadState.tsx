@@ -4,9 +4,9 @@ import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useSessionHost } from '../context/SessionHostContext';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import { useChatCommands } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatCommandsContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export const emptyThreadClass =

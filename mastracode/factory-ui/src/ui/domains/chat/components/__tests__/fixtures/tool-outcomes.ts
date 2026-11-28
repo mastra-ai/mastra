@@ -1,4 +1,4 @@
-import type { MessageEntry } from '../../../services/transcript';
+import type { MessageEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 
 export const settledTools: MessageEntry = {
   kind: 'message',

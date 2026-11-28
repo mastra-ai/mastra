@@ -16,7 +16,7 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { useSessionPullRequestSubscriptions } from '../../../../hooks/useSessionPullRequestSubscriptions';
 import { useSessionRowsQuery } from '../../../../hooks/useSessionRows';
-import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { usePinnedSessions } from '../hooks/usePinnedSessions';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';

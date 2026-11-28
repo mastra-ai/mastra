@@ -12,7 +12,8 @@ import { Link, useParams } from 'react-router';
 
 import { ConfigurationErrorNotice, DraftStart, draftPageClass } from '../domains/chat/components/DraftStart';
 import { EmptyThreadState, emptyThreadClass } from '../domains/chat/components/EmptyThreadState';
-import { SessionView } from '../domains/chat/components/SessionView';
+import { SessionView } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/SessionView';
+import { RouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useContinueIntoThread } from '../domains/chat/context/transcriptKey';
 import { useDraftModelGuards } from '../domains/chat/hooks/useDraftModelGuards';
 import { currentItemStage } from '@mastra/playground-ui/domains/factory';
@@ -42,15 +43,19 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
     routedWorkItemId && cardSession && !draftStart.ownsSession(cardSession.sessionId) ? cardSession : undefined;
   const openedSessionId = openedSession?.sessionId;
   const openedThreadId = openedSession?.threadId;
-  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) =>
-    continueIntoThread(factoryId, session),
-  );
+  const openThread = useEffectEvent((session: { sessionId: string; threadId: string }) => continueIntoThread(session));
   useEffect(() => {
     if (openedSessionId && openedThreadId) openThread({ sessionId: openedSessionId, threadId: openedThreadId });
   }, [openedSessionId, openedThreadId]);
 
   const threadOpened = !routedWorkItemId;
-  if (threadOpened) return <SessionView emptyState={<EmptyThreadState />} />;
+  if (threadOpened)
+    return (
+      <>
+        <RouteThreadSync />
+        <SessionView emptyState={<EmptyThreadState />} />
+      </>
+    );
   if (card.isLoadingError) {
     return (
       <div className={draftPageClass}>
@@ -96,26 +101,29 @@ export function CardDraftPage({ workItemId }: { workItemId: string }) {
   if (unconfigured && !openedSession) return <DraftStart heading={item.title} guards={guards} />;
 
   return (
-    <SessionView
-      start={openedSession ? { ...draftStart, ready: false } : draftStart}
-      openingSession={Boolean(openedSession)}
-      emptyState={
-        <section className={emptyThreadClass} aria-labelledby="card-draft-title">
-          <Logo size="md" aria-label="Mastra Code" />
-          <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
-            {item.title}
-          </Txt>
-          <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
-            No session yet. Your first message starts one.
-          </Txt>
-          <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
-            {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
-            <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
-            {board && <CardDraftActions factory={factory} item={item} board={board} />}
-          </div>
-        </section>
-      }
-    />
+    <>
+      <RouteThreadSync />
+      <SessionView
+        start={openedSession ? { ...draftStart, ready: false } : draftStart}
+        openingSession={Boolean(openedSession)}
+        emptyState={
+          <section className={emptyThreadClass} aria-labelledby="card-draft-title">
+            <Logo size="md" aria-label="Mastra Code" />
+            <Txt as="h2" variant="title" tone="ink" id="card-draft-title" className="mt-7 max-w-2xl text-balance">
+              {item.title}
+            </Txt>
+            <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
+              No session yet. Your first message starts one.
+            </Txt>
+            <div className="mt-7 flex w-full max-w-2xl flex-col items-center gap-3">
+              {guards.configurationError && <ConfigurationErrorNotice error={guards.configurationError} />}
+              <CardRepositoryNotice factoryId={factoryId} lookup={sessionRepository} />
+              {board && <CardDraftActions factory={factory} item={item} board={board} />}
+            </div>
+          </section>
+        }
+      />
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
-import { useSessionHost } from '../context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import type { ChangeRequestProvider, PullRequestSubscription } from '@internal/factory-contract';
-import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 const NO_SUBSCRIPTIONS: PullRequestSubscription[] = [];
 const NO_QUERY = { data: undefined, isPending: false, isLoadingError: false };

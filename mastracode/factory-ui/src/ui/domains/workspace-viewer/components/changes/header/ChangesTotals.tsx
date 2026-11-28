@@ -1,7 +1,7 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
-import type { WorkspaceChangesScope } from '../../../../../../api/types';
-import { useWorkspacePatches } from '../../../../../../hooks/use-fs';
+import type { WorkspaceChangesScope } from '@internal/factory-contract';
+import { useWorkspacePatches } from '@mastra/react/hooks/factory';
 import { ChangeCounts } from '../ChangeCounts';
 
 interface ChangesTotalsProps {

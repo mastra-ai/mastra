@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
-import type { WorkspaceChangeStatus } from '../../../../../api/types';
+import type { WorkspaceChangeStatus } from '@internal/factory-contract';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { ChangeStatusLetter } from '../changes/ChangeStatusLetter';
 import { WakeSandbox } from '../WakeSandbox';

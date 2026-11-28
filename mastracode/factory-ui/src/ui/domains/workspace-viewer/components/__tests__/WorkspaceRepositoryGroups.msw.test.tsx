@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceChangePatches, WorkspaceChanges } from '../../../../../api/types';
+import type { WorkspaceChangePatches, WorkspaceChanges } from '@internal/factory-contract';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspaceChangesPanel } from '../WorkspaceChangesPanel';

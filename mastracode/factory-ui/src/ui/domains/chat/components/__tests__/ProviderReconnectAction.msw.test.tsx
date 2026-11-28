@@ -6,9 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import { ChatSessionContext } from '../../context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
-import { ProviderReconnectAction } from '../ProviderReconnectAction';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ProviderReconnectAction } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/ProviderReconnectAction';
 
 const VIEWER_ID = 'user-1';
 const ward = { id: 'user-2', name: 'Ward Peeters' };

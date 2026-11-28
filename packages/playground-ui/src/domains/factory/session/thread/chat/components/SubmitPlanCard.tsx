@@ -1,0 +1,165 @@
+import type { PlanResume } from '@mastra/client-js';
+import { normalizePlanPath, usePlanFile, useWorkspaceRenderedListing } from '@mastra/react/hooks/factory';
+import { useThreadWorkspacePath } from '../../workspace-viewer/hooks/useThreadWorkspacePath';
+
+import { parsePlanMarkdown, resolveInlinePlan } from './submit-plan-source';
+import {
+  Plan,
+  PlanActionGroup,
+  PlanBody,
+  PlanContent,
+  PlanControls,
+  PlanCopyButton,
+  PlanExpandButton,
+  PlanHeader,
+  PlanHeaderActions,
+  PlanIntro,
+  PlanLabel,
+  PlanMain,
+  PlanPath,
+  PlanTitle,
+} from '@/ds/components/ai/plan';
+import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
+
+/**
+ * The `submit_plan` approval and history card.
+ *
+ * Content resolution lives in `submit-plan-source.ts`; this card fetches the
+ * plan file from the session workspace when the call carries no inline plan,
+ * and on approve/reject back-fills `path`/`title`/`plan` into the resume data
+ * so the persisted tool result replays the plan durably even after the plan
+ * file changes or disappears.
+ */
+
+export interface SubmitPlanCardProps {
+  toolCallId: string;
+  input?: unknown;
+  output?: unknown;
+  isSubmitting?: boolean;
+  onRespond?: (response: PlanResume) => void;
+}
+
+export function SubmitPlanCard({ toolCallId, input, output, isSubmitting = false, onRespond }: SubmitPlanCardProps) {
+  const inline = resolveInlinePlan(input, output);
+  const path = inline.path;
+
+  const workspace = useThreadWorkspacePath();
+  // Normalize absolute paths against the server's authoritative workspace or
+  // checkout `.artifacts` root before fetching a workspace-relative file.
+  const needsRoot = inline.plan === undefined && Boolean(path?.startsWith('/'));
+  const rendered = useWorkspaceRenderedListing(workspace.workspacePath, '.artifacts', { enabled: needsRoot });
+  const rootReadablePath = normalizePlanPath(path, rendered.data?.rootPath);
+  const checkout = needsRoot && !rootReadablePath ? path?.match(/\/([^/]+)\/\.artifacts\/[^/]+/)?.[1] : undefined;
+  const checkoutRoot = checkout ? `${checkout}/.artifacts` : undefined;
+  const checkoutRendered = useWorkspaceRenderedListing(workspace.workspacePath, checkoutRoot, {
+    enabled: needsRoot && Boolean(checkoutRoot),
+  });
+  const readablePath = rootReadablePath ?? normalizePlanPath(path, checkoutRendered.data?.rootPath, checkoutRoot);
+  const fetchable = inline.plan === undefined && readablePath !== undefined;
+  const file = usePlanFile(workspace.workspacePath, readablePath, toolCallId, { enabled: fetchable });
+  const fetched = fetchable && file.data?.content !== undefined ? parsePlanMarkdown(file.data.content) : undefined;
+
+  const title = inline.title ?? fetched?.title ?? 'Plan';
+  const plan = inline.plan ?? fetched?.plan ?? '';
+  const loading =
+    inline.plan === undefined &&
+    !fetched &&
+    !file.isError &&
+    (workspace.isPending ||
+      (needsRoot && Boolean(workspace.workspacePath) && rendered.isPending) ||
+      (needsRoot && Boolean(workspace.workspacePath) && Boolean(checkoutRoot) && checkoutRendered.isPending) ||
+      (fetchable && Boolean(workspace.workspacePath) && file.isPending));
+  const unavailable = inline.plan === undefined && !fetched && !loading;
+  // Responding while the plan is still loading would back-fill an empty plan
+  // into the durable result — hold responses until the fetch settles.
+  const respondDisabled = isSubmitting || loading;
+  // Never approve a plan with no visible body (missing, blank, loading, or
+  // submitting). Reject stays available after a load failure.
+  const approveDisabled = respondDisabled || plan.trim().length === 0;
+
+  const respond = (response: PlanResume) =>
+    onRespond?.({
+      ...response,
+      ...(path ? { path } : {}),
+      ...(plan ? { plan } : {}),
+      ...(title !== 'Plan' || plan ? { title } : {}),
+    });
+
+  return (
+    <Plan role="group" aria-label="Plan approval">
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          <PlanCopyButton content={plan} disabled={plan.length === 0} />
+        </PlanHeaderActions>
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>{title}</PlanTitle>
+          {path ? <PlanPath>{path}</PlanPath> : null}
+        </PlanIntro>
+        <PlanMain>
+          {loading ? (
+            <Txt variant="caption" tone="muted" aria-label="Loading plan" className="my-2">
+              Loading plan…
+            </Txt>
+          ) : unavailable ? (
+            <Txt variant="caption" tone="muted" role="note" className="my-2">
+              The plan could not be loaded from {path ?? 'its file'}. You can still respond below.
+            </Txt>
+          ) : (
+            <PlanContent>{plan}</PlanContent>
+          )}
+          {inline.feedback ? (
+            <div role="note" aria-label="Plan feedback" className="mt-4 border-l-2 border-badge-green-indicator pl-3">
+              <Txt variant="meta" tone="muted" className="mb-1">
+                Feedback
+              </Txt>
+              <Txt variant="caption" tone="ink" className="whitespace-pre-wrap">
+                {inline.feedback}
+              </Txt>
+            </div>
+          ) : null}
+          {onRespond ? (
+            <PlanControls>
+              <>
+                <PlanActionGroup>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="primary"
+                    className="whitespace-nowrap"
+                    aria-label="Approve the plan and build it"
+                    disabled={approveDisabled}
+                    onClick={() => respond({ action: 'approved' })}
+                  >
+                    Approve & build
+                  </Button>
+                </PlanActionGroup>
+                <span className="flex justify-center">
+                  <PlanExpandButton />
+                </span>
+                <PlanActionGroup>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="whitespace-nowrap"
+                    aria-label="Reject the plan"
+                    disabled={respondDisabled}
+                    onClick={() => respond({ action: 'rejected' })}
+                  >
+                    Reject
+                  </Button>
+                </PlanActionGroup>
+              </>
+            </PlanControls>
+          ) : (
+            // Resolved cards keep the expand control; it hides itself when the collapsed body is not clipped.
+            <PlanControls />
+          )}
+        </PlanMain>
+      </PlanBody>
+    </Plan>
+  );
+}

@@ -1,10 +1,12 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import {
+  useRouteSessionId,
+  useSessionHost,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
-import { useRouteSessionId } from '../../../../hooks/useRouteSessionId';
 import { workspacePanelKey } from '../context/WorkspacePanelContext';
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { overviewClass } from '../layout';
-import type { WorkspacePanelSize } from '../layout';
+import { overviewClass } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
+import type { WorkspacePanelSize } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { PanelFrame } from './PanelFrame';
 import { WorkspaceViewerPanel } from './WorkspaceViewerPanel';
 

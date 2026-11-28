@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { FACTORY_ID, SESSION_ID, stubPreparingSession } from '../../components/__tests__/composer-session-test-fixture';
-import { ChatMessageBoundary } from '../ChatSessionProvider';
+import { ChatMessageBoundary } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatMessageBoundary';
 import { ChatSessionTestProvider } from '../ChatSessionTestProvider';
 
 function renderDeniedSession() {

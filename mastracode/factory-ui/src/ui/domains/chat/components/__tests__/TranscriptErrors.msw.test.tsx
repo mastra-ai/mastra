@@ -11,15 +11,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
-import { ChatSessionContext } from '../../context/ChatSessionContext';
-import { ChatConnectionContext } from '../../context/ChatConnectionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
 import { ChatSessionActionsProvider } from '../../context/ChatSessionActionsProvider';
 import { ChatThinkingProvider } from '../../context/ChatThinkingProvider';
-import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
-import { TranscriptEntries } from '../Transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const SIGN_IN_REJECTED = 'Anthropic rejected the stored sign-in.';
 

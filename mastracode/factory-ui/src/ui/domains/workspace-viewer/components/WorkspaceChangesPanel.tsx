@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 
 import { factoryWebKeys } from '@mastra/react/hooks/factory';
-import type { WorkspaceChangesScope } from '../../../../api/types';
+import type { WorkspaceChangesScope } from '@internal/factory-contract';
 import { setDiffLayout, useDiffLayout } from '../hooks/useDiffLayout';
 import { ChangesBody } from './changes/ChangesBody';
 import type { StackedDiffsHandle } from './changes/diffs/StackedDiffs';

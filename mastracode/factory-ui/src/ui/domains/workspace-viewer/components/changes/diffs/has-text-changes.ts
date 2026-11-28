@@ -1,4 +1,4 @@
-import type { WorkspaceChange } from '../../../../../../api/types';
+import type { WorkspaceChange } from '@internal/factory-contract';
 
 export function hasTextChanges(change: WorkspaceChange): boolean {
   return !change.binary && (change.additions === undefined || change.additions + (change.deletions ?? 0) > 0);

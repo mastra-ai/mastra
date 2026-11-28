@@ -1,4 +1,4 @@
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import { useBoardCatalog } from '@mastra/react/hooks/factory';
 import { CommandEmpty } from '@mastra/playground-ui/components/Command';
 import {
@@ -11,7 +11,6 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { searchTerms } from '@mastra/factory/work-items/search-terms';
 import { useState } from 'react';
 
-import { cardPath } from '../../workspaces/services/factoryPaths';
 import { useGlobalSearchNavigation } from '../hooks/useGlobalSearchNavigation';
 import { useGlobalSearchSessions } from '../hooks/useGlobalSearchSessions';
 import { useGlobalSearchWorkItems } from '../hooks/useGlobalSearchWorkItems';
@@ -32,7 +31,8 @@ import { GlobalSearchWorkItemResults } from './GlobalSearchWorkItemResults';
 import { GlobalSearchWorkItemsStatus } from './GlobalSearchWorkItemsStatus';
 
 export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factoryId: string; closeSearch: () => void }) {
-  const factories = useSessionHost().data.useProjects().data ?? [];
+  const { data, links } = useSessionHost();
+  const factories = data.useProjects().data ?? [];
   const activeFactory = factories.find(factory => factory.id === factoryId);
   const repositoryIds = activeFactory?.repositories.map(repository => repository.projectRepositoryId) ?? [];
   const searchableFactoryId = repositoryIds.length > 0 ? factoryId : undefined;
@@ -44,13 +44,13 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');
 
   const sessionGroups = createSessionSearchGroups({
-    factoryId,
+    links,
     repositories: sessions.repositories,
     workItems: workItems.withSessions,
     boards: catalog.data,
   });
   const unstartedItems = createWorkItemSearchResults({
-    factoryId,
+    links,
     workItems: workItems.unstarted,
     boards: catalog.data,
   });
@@ -99,7 +99,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
           {scopeIncludes(activeScope, 'items') && (
             <GlobalSearchWorkItemResults
               results={matchingResults(unstartedItems, terms)}
-              onSelect={result => selectPath(cardPath(factoryId, result.item.id, undefined), false)}
+              onSelect={result => selectPath(links.card(result.item.id), false)}
             />
           )}
           {scopeIncludes(activeScope, 'user') && (

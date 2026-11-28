@@ -5,16 +5,19 @@ import { RouterSessionHost } from '../../../context/RouterSessionHost';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
-import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
-import type { ChatConnectionApi } from '../../../context/ChatConnectionContext';
-import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
-import { ChatTranscriptContext } from '../../../context/ChatTranscriptContext';
-import type { ChatTranscriptApi } from '../../../context/ChatTranscriptContext';
-import { RECONNECT_NOTICE_DELAY_MS, useComposerConnectionNotice } from '../../../hooks/useComposerConnectionNotice';
-import { initialTranscript } from '../../../services/transcript';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+import type { ChatConnectionApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import type { ChatTranscriptApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import {
+  RECONNECT_NOTICE_DELAY_MS,
+  useComposerConnectionNotice,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/hooks/useComposerConnectionNotice';
+import { initialTranscript } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 import { ComposerConnectionNotice } from '../../ComposerConnectionNotice';
-import { ConnectionActivity } from '../ConnectionActivity';
+import { ConnectionActivity } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/ConnectionActivity';
 
 const session: ChatSessionContextApi = {
   sessionId: 'session-1',

@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from 'react';
 
-import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatCommands } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatCommandsContext';
 
 export function usePromptButton(prompt: string) {
   const { showComposerPreview, clearComposerPreview, submitComposer } = useChatCommands();

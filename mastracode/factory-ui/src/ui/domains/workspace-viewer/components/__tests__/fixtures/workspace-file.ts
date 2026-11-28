@@ -1,4 +1,4 @@
-import type { WorkspaceFile } from '../../../../../../api/types';
+import type { WorkspaceFile } from '@internal/factory-contract';
 
 export const typescriptFile: WorkspaceFile = {
   workspacePath: 'session-1',

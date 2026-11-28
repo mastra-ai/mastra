@@ -1,14 +1,15 @@
-import { useSessionHost } from '../context/SessionHostContext';
-import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
-import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import { useFallbackModelQuery, useDefaultModelQuery, useProvidersQuery } from '@mastra/react/hooks/factory';
 import { isConnectedAt } from '../../settings/components/provider-credential';
-import { sessionDefaultsAnchor } from '../services/sessionSettings';
-import type { ModelDefaultsAnchor } from '../services/sessionSettings';
+import { sessionDefaultsAnchor } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import type { ModelDefaultsAnchor } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
 import type { FactoryProject } from '@internal/factory-contract';
-import type { ChatSessionContextApi } from '../context/ChatSessionContext';
-import { newChatCatalogTarget, routedDefaultModelId, routedModelDefaults } from '../context/chatDefaultModel';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import {
+  newChatCatalogTarget,
+  routedDefaultModelId,
+  routedModelDefaults,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/chatDefaultModel';
 
 export interface MissingCredentialGuard {
   modelId: string;
@@ -30,7 +31,7 @@ export function useDraftModelGuards(
 ): DraftModelGuards {
   const factoryQuery = useSessionHost().data.useProject(factoryId);
   const activeFactory = factoryQuery.data;
-  const projectQuery = useFactoryProjectQuery(activeFactory?.id);
+  const projectQuery = useSessionHost().data.useProjectSettings(activeFactory?.id);
   const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
   const storedScope = projectQuery.data?.modelScope;

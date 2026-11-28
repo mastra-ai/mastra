@@ -4,7 +4,7 @@ import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceChangePatches, WorkspaceChangesScope } from '../../../../../api/types';
+import type { WorkspaceChangePatches, WorkspaceChangesScope } from '@internal/factory-contract';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { openPropertiesMenu, openPropertySubmenu } from '../../../../../../e2e/ui/properties-menu';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';

@@ -3,16 +3,18 @@ import type { ModelPackSet, ModelSelectionRequest } from '@internal/factory-cont
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
-import { useFallbackModelQuery } from '../../../../hooks/useAvailableModels';
+import { useDefaultModelQuery, useFallbackModelQuery } from '@mastra/react/hooks/factory';
 import { usePendingSessionModel, useSetSessionModelMutation } from '../../../../hooks/useSessionModel';
-import { DEFAULT_MODEL_SELECTION, selectionPack } from '../services/modelSelection';
-import { routedModelDefaults } from './chatDefaultModel';
-import { ChatModelsContext } from './ChatModelsContext';
-import type { ChatModelsApi } from './ChatModelsContext';
-import { useChatConnection } from './useChatConnection';
-import { useChatModelScope } from './useChatModelScope';
-import { useChatSessionContext } from './useChatSessionContext';
+import {
+  DEFAULT_MODEL_SELECTION,
+  selectionPack,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/modelSelection';
+import { routedModelDefaults } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/chatDefaultModel';
+import { ChatModelsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatModelsContext';
+import type { ChatModelsApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatModelsContext';
+import { useChatConnection } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatConnection';
+import { useChatModelScope } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatModelScope';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 /** One provider for a draft and its thread, so a Start keeps the picked model on screen. */
 export function ChatModelsProvider({

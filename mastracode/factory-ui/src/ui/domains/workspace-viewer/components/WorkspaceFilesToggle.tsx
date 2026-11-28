@@ -5,8 +5,12 @@ import { SessionPanelToggle } from '@mastra/playground-ui/domains/factory';
 import { useState } from 'react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
-import { cardRadiusClass, cardWidthStyle, popoverSizeClass } from '../layout';
-import type { WorkspacePanelSize } from '../layout';
+import {
+  cardRadiusClass,
+  cardWidthStyle,
+  popoverSizeClass,
+} from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
+import type { WorkspacePanelSize } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
 import { IconSidebarSimpleRightWide } from '@mastra/playground-ui/icons/central/IconSidebarSimpleRightWide';
 

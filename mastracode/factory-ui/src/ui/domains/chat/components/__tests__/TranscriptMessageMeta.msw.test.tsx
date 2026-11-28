@@ -1,14 +1,17 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
-import type { ThreadOwner } from '../../services/reply-credential';
+import type { ThreadOwner } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/reply-credential';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { act, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { initialTranscript, transcriptReducer } from '../../services/transcript';
-import type { TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import {
+  initialTranscript,
+  transcriptReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 

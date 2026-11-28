@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 
 import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ChatConnectionContext } from './ChatConnectionContext';
-import type { ChatConnectionApi } from './ChatConnectionContext';
-import { useChatSessionContext } from './useChatSessionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+import type { ChatConnectionApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 export function ChatConnectionProvider({
   children,

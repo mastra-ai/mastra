@@ -1,11 +1,10 @@
-import { useFactoryWeb } from '@mastra/react/hooks/factory';
+import { useFactoryWeb, useWorkspaceFileIndex, workspaceFileIndexQueryOptions } from '@mastra/react/hooks/factory';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDeferredValue, useId, useMemo, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import type { WorkspaceFileIndex } from '../../../../../api/types';
-import { useWorkspaceFileIndex, workspaceFileIndexQueryOptions } from '../../../../../hooks/use-fs';
+import type { WorkspaceFileIndex } from '@internal/factory-contract';
 import { findFiles } from './find-files';
 import type { FoundFiles } from './find-files';
 

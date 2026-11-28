@@ -5,9 +5,9 @@ import type { ReactNode } from 'react';
 import { useAgentControllerPermissions } from '../../../../hooks/useAgentControllerPermissions';
 import { useSetPermissionForCategoryMutation } from '../../../../hooks/useAgentControllerPermissionMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { ChatPermissionsContext } from './ChatPermissionsContext';
-import type { ChatPermissionsApi } from './ChatPermissionsContext';
-import { useChatSessionContext } from './useChatSessionContext';
+import { ChatPermissionsContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatPermissionsContext';
+import type { ChatPermissionsApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatPermissionsContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 interface ChatPermissionsProviderProps {
   children: ReactNode;

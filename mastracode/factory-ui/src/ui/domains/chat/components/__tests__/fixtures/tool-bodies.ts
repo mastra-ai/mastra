@@ -1,4 +1,4 @@
-import type { ToolCall } from '../../../services/transcript';
+import type { ToolCall } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 
 export const commandTool: ToolCall = {
   toolCallId: 'command',

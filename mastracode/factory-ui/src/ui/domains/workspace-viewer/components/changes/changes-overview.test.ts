@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceChange } from '../../../../../api/types';
+import type { WorkspaceChange } from '@internal/factory-contract';
 import {
   additionShare,
   changeTone,

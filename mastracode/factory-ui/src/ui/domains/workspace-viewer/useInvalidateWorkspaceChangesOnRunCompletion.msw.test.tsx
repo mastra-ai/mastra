@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { renderHookWithProviders } from '../../../../e2e/ui/render';
-import { useInvalidateWorkspaceChangesOnRunCompletion } from './useInvalidateWorkspaceChangesOnRunCompletion';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from '@mastra/playground-ui/domains/factory/session/thread/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 
 const WORKSPACE = 'session-1';
 

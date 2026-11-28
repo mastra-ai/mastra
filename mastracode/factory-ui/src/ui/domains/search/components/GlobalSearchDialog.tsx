@@ -1,5 +1,5 @@
 import { CommandPaletteDialog } from '@mastra/playground-ui/components/CommandPalette';
-import { useSessionHost } from '../../chat/context/SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 import { FactoryGlobalSearchContent } from './FactoryGlobalSearchContent';
 

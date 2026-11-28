@@ -8,6 +8,7 @@ import { useApiConfig } from '../../../../api/config';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import {
   addCachedSession,
   invalidateSessionQueries,
@@ -25,10 +26,17 @@ import { answerParkedApproval, createUserSession } from '../../workspaces/servic
 import type { FactoryUserSession } from '@internal/factory-contract';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
-import { newUserSessionPath, threadPath } from '../../workspaces/services/factoryPaths';
+import { useTakeSessionOwnership } from '../../workspaces/hooks/useTakeSessionOwnership';
+import { relationshipPath } from '../../factory/services/relationshipPath';
+import { cardPath, factoryHomePath, newUserSessionPath, threadPath } from '../../workspaces/services/factoryPaths';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { SessionHostContext } from './SessionHostContext';
-import type { SessionHost, SessionHostData, SessionLinkProps, SessionRouteKind } from './SessionHostContext';
+import { SessionHostContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import type {
+  SessionHost,
+  SessionHostData,
+  SessionLinkProps,
+  SessionRouteKind,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 
 /** Factory's project, viewer and session data, read through its own query cache. */
 export function useFactorySessionData(): SessionHostData {
@@ -38,6 +46,7 @@ export function useFactorySessionData(): SessionHostData {
     () => ({
       useProject: useFactoryQuery,
       useProjects: useFactoriesQuery,
+      useProjectSettings: useFactoryProjectQuery,
       useViewer: useFactoryAuth,
       useUserSession: useUserSessionQuery,
       useSessionList: useWorkspacesQuery,
@@ -68,6 +77,7 @@ export function useFactorySessionData(): SessionHostData {
         );
         return done;
       },
+      useTakeSessionOwnership,
       answerParkedApproval: (sessionId, decision, toolCallId) =>
         answerParkedApproval(baseUrl, sessionId, decision, toolCallId),
       onSessionTitleChanged: (projectId, sessionId, title) =>
@@ -145,6 +155,11 @@ export function RouterSessionHost({ children }: { children: ReactNode }) {
         userThread: id => `/factories/${factoryId}/user/threads/${id}`,
         newUserSession: () => newUserSessionPath(factoryId),
         channelThread: id => `/factories/${factoryId}/threads/${id}`,
+        knowledgePage: pageId =>
+          `/factories/${encodeURIComponent(factoryId)}/knowledge?page=${encodeURIComponent(pageId)}&view=page`,
+        project: id => factoryHomePath({ id }),
+        card: workItemId => cardPath(factoryId, workItemId, undefined),
+        workItemBoard: item => relationshipPath(item, factoryId),
       },
       data,
     };
@@ -158,5 +173,5 @@ const RouterSessionLink = forwardRef<HTMLAnchorElement, SessionLinkProps>(functi
   ref,
 ) {
   const location = useLocation();
-  return <Link ref={ref} to={href} state={returnHere ? { from: location } : undefined} {...props} />;
+  return <Link ref={ref} to={href ?? ''} state={returnHere ? { from: location } : undefined} {...props} />;
 });

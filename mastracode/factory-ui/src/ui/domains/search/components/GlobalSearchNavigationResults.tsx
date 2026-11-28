@@ -8,8 +8,8 @@ import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullReq
 
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
-import { useSessionHost } from '../../chat/context/SessionHostContext';
-import { SETTINGS_SECTION_LABELS } from '../../chat/services/sessionSettings';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
+import { SETTINGS_SECTION_LABELS } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
 import { IconSettingsGear5 } from '@mastra/playground-ui/icons/central/IconSettingsGear5';
 
 export function GlobalSearchNavigationResults({

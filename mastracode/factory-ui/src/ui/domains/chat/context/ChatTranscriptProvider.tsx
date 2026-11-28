@@ -1,24 +1,33 @@
-import { useSessionHost } from './SessionHostContext';
+import { useSessionHost } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/SessionHostContext';
 import type { AgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import type { ReactNode } from 'react';
 import { useContext, useEffectEvent, useLayoutEffect, useReducer } from 'react';
 
-import { chatSessionPhase } from '../../workspaces/services/sessionStatus';
+import { chatSessionPhase } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionStatus';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
-import { initialChatRuntime, runtimeReducer } from '../services/runtime';
-import type { ChatRuntimeState, SessionStateSnapshot } from '../services/runtime';
-import type { TranscriptState } from '../services/transcript';
+import {
+  initialChatRuntime,
+  runtimeReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/runtime';
+import type {
+  ChatRuntimeState,
+  SessionStateSnapshot,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/runtime';
+import type { TranscriptState } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
 import { SessionFavicon } from '../components/SessionFavicon';
 import { ChatConnectionProvider } from './ChatConnectionProvider';
-import { ChatRuntimeContext } from './ChatRuntimeContext';
-import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
-import { ChatTranscriptContext } from './ChatTranscriptContext';
-import type { ChatTranscriptApi, LoadMoreHistory } from './ChatTranscriptContext';
-import { useChatConnection } from './useChatConnection';
+import { ChatRuntimeContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatRuntimeContext';
+import { ChatThreadMessagesContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatThreadMessagesContext';
+import { ChatTranscriptContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import type {
+  ChatTranscriptApi,
+  LoadMoreHistory,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatTranscriptContext';
+import { useChatConnection } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatConnection';
 import { useChatMessagesError } from './useChatMessagesError';
 import { useChatMessagesInitializing } from './useChatMessagesInitializing';
-import { useChatSessionContext } from './useChatSessionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 export function ChatTranscriptProvider({
   children,

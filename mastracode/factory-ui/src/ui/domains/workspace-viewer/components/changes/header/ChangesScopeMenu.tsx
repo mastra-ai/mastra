@@ -1,7 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useState } from 'react';
 
-import type { WorkspaceChangesScope } from '../../../../../../api/types';
+import type { WorkspaceChangesScope } from '@internal/factory-contract';
 import { IconChevronDownMedium } from '@mastra/playground-ui/icons/central/IconChevronDownMedium';
 
 const SCOPE_LABELS: Record<WorkspaceChangesScope, string> = {

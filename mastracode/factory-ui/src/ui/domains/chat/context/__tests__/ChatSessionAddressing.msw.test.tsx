@@ -9,7 +9,7 @@ import {
   OverlayTestProviders,
   useOverlayControllerHandlers,
 } from '../../components/__tests__/overlay-test-utils';
-import { useChatSessionContext } from '../useChatSessionContext';
+import { useChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/useChatSessionContext';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const SESSION_ID = 'session-overlay';

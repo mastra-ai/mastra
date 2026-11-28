@@ -1,7 +1,7 @@
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { WorkspaceChange } from '../../../../../api/types';
+import type { WorkspaceChange } from '@internal/factory-contract';
 
 export function ChangeCounts({
   additions,

@@ -3,9 +3,12 @@ import { screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
-import { createInitialTranscript, transcriptReducer } from '../../services/transcript';
-import type { TimelineEntry } from '../../services/transcript';
-import { TranscriptEntries } from '../Transcript';
+import {
+  createInitialTranscript,
+  transcriptReducer,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import type { TimelineEntry } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/transcript';
+import { TranscriptEntries } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
 const ROOM_SELECTOR = '[data-holds-room]';

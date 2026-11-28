@@ -7,8 +7,8 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
-import { Composer } from '../Composer';
-import { Transcript } from '../Transcript';
+import { Composer } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Composer';
+import { Transcript } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/Transcript';
 import { OVERLAY_FACTORY_ID, OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`;

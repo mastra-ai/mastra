@@ -66,6 +66,9 @@ importers:
       '@mastra/hono':
         specifier: link:../../server-adapters/hono
         version: link:../../server-adapters/hono
+      '@mastra/playground-ui':
+        specifier: link:../../packages/playground-ui
+        version: link:../../packages/playground-ui
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5

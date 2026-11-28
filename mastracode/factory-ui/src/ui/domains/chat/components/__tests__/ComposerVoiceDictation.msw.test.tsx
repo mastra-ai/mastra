@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { LiveSessionResponse } from '../../../../../api/types';
+import type { LiveSessionResponse } from '@internal/factory-contract';
 import { FACTORY_ID, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 import { acceptTranscribe, answerLiveSession, composerReady, stubVoiceSettings } from './voice-dictation-test-fixture';
 

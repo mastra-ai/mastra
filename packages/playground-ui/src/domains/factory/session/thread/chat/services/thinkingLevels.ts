@@ -1,0 +1,71 @@
+import { DEFAULT_THINKING_LEVEL } from '@internal/factory-contract';
+import type { FactoryModelScope } from '@internal/factory-contract';
+import type { ModelReasoningOption } from '@mastra/core/llm';
+import { getAvailableThinkingLevelsForModel, runThinkingLevel } from '@mastra/core/llm/reasoning';
+import type { ThinkingLevelSetting } from '@mastra/core/llm/reasoning';
+import { thinkingLevelOptions } from '@/domains/factory';
+
+import type { ThinkingLevelOption } from '@/ds/components/ThinkingLevel';
+
+export { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '@/domains/factory';
+
+export function thinkingLevelOptionsForModel(
+  modelId: string,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
+): ThinkingLevelOption<ThinkingLevelSetting>[] {
+  return thinkingLevelOptions(getAvailableThinkingLevelsForModel(modelId, reasoningOptions));
+}
+
+export type ThinkingDefaultOrigin = 'personal' | 'factory' | 'built-in';
+export type ThinkingLevelOrigin = 'session' | ThinkingDefaultOrigin;
+
+export const DEFAULT_SOURCE_LABELS: Record<ThinkingDefaultOrigin, string> = {
+  personal: 'Personal default',
+  factory: 'Factory default',
+  'built-in': 'Built-in default',
+};
+
+export interface ThinkingDefault {
+  level: ThinkingLevelSetting;
+  origin: ThinkingDefaultOrigin;
+}
+
+export interface EffectiveThinkingLevel {
+  level: ThinkingLevelSetting;
+  origin: ThinkingLevelOrigin;
+}
+
+/** Undefined while loading; null when unset. */
+export type PersonalThinkingDefault = ThinkingLevelSetting | null | undefined;
+
+export function personalThinkingDefault(personal: ThinkingLevelSetting | null): ThinkingDefault {
+  return personal ? { level: personal, origin: 'personal' } : { level: DEFAULT_THINKING_LEVEL, origin: 'built-in' };
+}
+
+export function routedThinkingDefault(
+  modelScope: FactoryModelScope | undefined,
+  personal: PersonalThinkingDefault,
+  factory: ThinkingLevelSetting | undefined,
+): ThinkingDefault | undefined {
+  if (modelScope === 'factory') return factory ? { level: factory, origin: 'factory' } : undefined;
+  if (modelScope === undefined || personal === undefined) return undefined;
+  return personalThinkingDefault(personal);
+}
+
+export function resolveEffectiveThinkingLevel({
+  modelId,
+  reasoningOptions,
+  override,
+  thinkingDefault,
+}: {
+  modelId: string | undefined;
+  reasoningOptions: readonly ModelReasoningOption[] | undefined;
+  override: ThinkingLevelSetting | undefined;
+  thinkingDefault: ThinkingDefault | undefined;
+}): EffectiveThinkingLevel | undefined {
+  const chosen: EffectiveThinkingLevel | undefined = override
+    ? { level: override, origin: 'session' }
+    : thinkingDefault;
+  if (!chosen || !modelId) return chosen;
+  return { ...chosen, level: runThinkingLevel(modelId, chosen.level, reasoningOptions) };
+}

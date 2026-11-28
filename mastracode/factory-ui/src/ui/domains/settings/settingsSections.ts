@@ -3,10 +3,20 @@ export {
   SETTINGS_SECTION_LABELS,
   VOICE_INPUT_ANCHOR,
   sessionDefaultsAnchor,
-} from '../chat/services/sessionSettings';
-export type { ModelDefaultsAnchor, SettingsSection } from '../chat/services/sessionSettings';
-import { MODEL_DEFAULTS_ANCHORS, SETTINGS_SECTION_LABELS } from '../chat/services/sessionSettings';
-import type { ModelDefaultsAnchor, SettingsSection, VOICE_INPUT_ANCHOR } from '../chat/services/sessionSettings';
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+export type {
+  ModelDefaultsAnchor,
+  SettingsSection,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import {
+  MODEL_DEFAULTS_ANCHORS,
+  SETTINGS_SECTION_LABELS,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
+import type {
+  ModelDefaultsAnchor,
+  SettingsSection,
+  VOICE_INPUT_ANCHOR,
+} from '@mastra/playground-ui/domains/factory/session/thread/chat/services/sessionSettings';
 
 type SettingsAnchor = ModelDefaultsAnchor | typeof VOICE_INPUT_ANCHOR;
 

@@ -1,6 +1,6 @@
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
+import { useGlobalSearchControls } from '@mastra/playground-ui/domains/factory/session/thread/search/hooks/useGlobalSearchControls';
 import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 
 export function SidebarGlobalSearchButton() {

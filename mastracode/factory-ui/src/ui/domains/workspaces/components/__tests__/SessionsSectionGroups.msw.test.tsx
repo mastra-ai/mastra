@@ -9,7 +9,7 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../../api/types';
-import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { SessionsSection } from '../SessionsSection';
 import {

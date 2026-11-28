@@ -1,4 +1,4 @@
-import type { WorkspaceChange } from '../../../../../api/types';
+import type { WorkspaceChange } from '@internal/factory-contract';
 
 /** Past this many files the overview draws one tile per file instead of a row each. */
 export const FILE_ROWS_LIMIT = 6;

@@ -1,1 +1,1 @@
-export const ASK_ADMIN_FOR_CREDITS = 'Ask an admin of your Mastra organization to add credits.';
+export { ASK_ADMIN_FOR_CREDITS } from '@mastra/playground-ui/domains/factory/session/thread/chat/services/mastra-gateway-credits';

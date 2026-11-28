@@ -13,13 +13,13 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../../../hooks/useSessionModelCatalog';
 import type { SessionModelResponse, SessionModelTarget } from '../../../../../../hooks/useSessionModel';
-import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
+import { ChatConnectionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
-import { ChatSessionContext } from '../../../context/ChatSessionContext';
-import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
+import { ChatSessionContext } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
+import type { ChatSessionContextApi } from '@mastra/playground-ui/domains/factory/session/thread/chat/context/ChatSessionContext';
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
-import { ModelPicker } from '../ModelPicker';
+import { ModelPicker } from '@mastra/playground-ui/domains/factory/session/thread/chat/components/StatusLine/ModelPicker';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};

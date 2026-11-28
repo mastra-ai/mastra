@@ -1,4 +1,4 @@
-import type { WorkspaceFile } from '../../../../api/types';
+import type { WorkspaceFile } from '@internal/factory-contract';
 import { languageForPath } from '@mastra/playground-ui/components/CodeEditor';
 import type { HighlightLanguage } from '@mastra/playground-ui/components/CodeEditor';
 

@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 
-import type { WorkspaceChangeStatus } from '../../../../../api/types';
+import type { WorkspaceChangeStatus } from '@internal/factory-contract';
 import { IconArrowRightSquare } from '@mastra/playground-ui/icons/central/IconArrowRightSquare';
 import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';

@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import type { WorkspaceChange, WorkspacePatchOmission } from '../../../../../../api/types';
+import type { WorkspaceChange, WorkspacePatchOmission } from '@internal/factory-contract';
 import { ChangeCounts } from '../ChangeCounts';
 import { hasTextChanges } from './has-text-changes';
 
