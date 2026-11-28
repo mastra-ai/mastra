@@ -39,4 +39,72 @@ describe('generateBackgroundTaskSystemPrompt', () => {
   it('returns undefined when no tools are eligible', () => {
     expect(generateBackgroundTaskSystemPrompt({ calculator: {} })).toBeUndefined();
   });
+
+  describe('modelOverrides: false (issue #28638)', () => {
+    it('omits _background instructions when no tool accepts overrides', () => {
+      const prompt = generateBackgroundTaskSystemPrompt({
+        research: { background: { enabled: true, modelOverrides: false } },
+        scan: { background: { enabled: true, modelOverrides: false } },
+      });
+
+      expect(prompt).toContain('- research (always runs in the background)');
+      expect(prompt).toContain('- scan (always runs in the background)');
+      expect(prompt).not.toContain('_background');
+    });
+
+    it('marks fixed tools when mixed with overridable tools', () => {
+      const prompt = generateBackgroundTaskSystemPrompt(
+        {
+          research: { background: { enabled: true } },
+          scan: { background: { enabled: true } },
+        },
+        { tools: { research: true, scan: { enabled: true, modelOverrides: false } } },
+      );
+
+      expect(prompt).toContain('- research (default: background)');
+      expect(prompt).toContain('- scan (always runs in the background)');
+      expect(prompt).toContain('Tools marked "always runs in the background" do not accept "_background".');
+    });
+
+    it('returns undefined when the only eligible tool is foreground-default without overrides', () => {
+      expect(
+        generateBackgroundTaskSystemPrompt({
+          research: { background: { enabled: true, defaultDisposition: 'foreground', modelOverrides: false } },
+        }),
+      ).toBeUndefined();
+    });
+  });
+
+  describe('agent-wide modelOverrides: false (#31614, #31612)', () => {
+    it('applies the agent-wide false to tools: "all"', () => {
+      const prompt = generateBackgroundTaskSystemPrompt(
+        {
+          research: { background: { enabled: true } },
+          scan: { background: { enabled: true } },
+        },
+        { tools: 'all', modelOverrides: false },
+      );
+
+      expect(prompt).toContain('- research (always runs in the background)');
+      expect(prompt).toContain('- scan (always runs in the background)');
+      expect(prompt).not.toContain('_background');
+    });
+
+    it('exposes the field only for tools the merged policy allows', () => {
+      const prompt = generateBackgroundTaskSystemPrompt(
+        {
+          research: { background: { enabled: true } },
+          scan: { background: { enabled: true } },
+        },
+        {
+          tools: { research: true, scan: { enabled: true, modelOverrides: true } },
+          modelOverrides: false,
+        },
+      );
+
+      expect(prompt).toContain('- research (always runs in the background)');
+      expect(prompt).toContain('- scan (default: background)');
+      expect(prompt).toContain('Tools marked "always runs in the background" do not accept "_background".');
+    });
+  });
 });

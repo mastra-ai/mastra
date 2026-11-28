@@ -11,7 +11,8 @@ vi.mock('../../../../background-tasks/create', () => ({
   createBackgroundTask: vi.fn(),
 }));
 
-vi.mock('../../../../background-tasks/resolve-config', () => ({
+vi.mock('../../../../background-tasks/resolve-config', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../../background-tasks/resolve-config')>()),
   resolveBackgroundConfig: vi.fn(),
 }));
 
@@ -1517,5 +1518,57 @@ describe('durable tool-call background resume with falsy payload (#22363 parity)
     expect(resume).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalled();
     expect(result.result).toContain('Background task started');
+  });
+});
+
+describe('durable tool-call model override policy (#31614, #31612)', () => {
+  const captureOverrides = () => {
+    const seen: unknown[] = [];
+    vi.mocked(resolveBackgroundConfig).mockImplementation((opts: any) => {
+      seen.push(opts.llmBgOverrides);
+      return { runInBackground: false, disposition: 'foreground', timeoutMs: 30_000, maxRetries: 0 } as any;
+    });
+    return seen;
+  };
+
+  // An agent-wide `modelOverrides: false` (tools: 'all') must drop a stray
+  // `_background` before the dispatch ladder, so a policy that also applies to
+  // the regular loop applies identically in the durable path. The override is
+  // stripped, so the resolved config sees no per-call override and the tool
+  // receives args without the internal key.
+  it('strips a disallowed `_background` override before the dispatch ladder', async () => {
+    const pubsub = mockPubsub();
+    const { entry } = setupRegistry({
+      backgroundTasksConfig: { tools: 'all', modelOverrides: false },
+    });
+    const initData = makeInitData();
+    const seen = captureOverrides();
+
+    await executeStep(pubsub, initData, {
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      args: { topic: 'quantum', _background: { enabled: true } },
+    });
+
+    expect(seen).toEqual([undefined]);
+    expect(entry.tools[TOOL_NAME].execute).toHaveBeenCalledWith({ topic: 'quantum' }, expect.anything());
+  });
+
+  // Control: without an agent-wide override opt-out the same `_background`
+  // reaches the dispatch ladder, proving the previous test exercises the new
+  // policy rather than the pre-existing `_background` stripping.
+  it('honors an allowed `_background` override', async () => {
+    const pubsub = mockPubsub();
+    setupRegistry();
+    const initData = makeInitData();
+    const seen = captureOverrides();
+
+    await executeStep(pubsub, initData, {
+      toolCallId: TOOL_CALL_ID,
+      toolName: TOOL_NAME,
+      args: { topic: 'quantum', _background: { enabled: true } },
+    });
+
+    expect(seen).toEqual([{ enabled: true }]);
   });
 });
