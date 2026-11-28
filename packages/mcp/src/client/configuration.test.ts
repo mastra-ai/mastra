@@ -10,6 +10,7 @@ import { serveHTTP } from '../server/__tests__/harness.mock';
 import { MCPServer } from '../server/server';
 import { InternalMastraMCPClient } from './client';
 import { MCPClient } from './configuration';
+import type { MCPClientCapabilities } from './types';
 
 let clientId = 0;
 
@@ -517,6 +518,78 @@ describe('MCPClient tool discovery retries', () => {
     clients.push(client);
 
     await expect((client as any).getConnectedClientForServer('weather')).rejects.toThrow(/inputRequests/);
+  });
+
+  describe('extension capabilities', () => {
+    const UI_EXTENSION = 'io.modelcontextprotocol/ui';
+    const TASKS_EXTENSION = 'io.modelcontextprotocol/tasks';
+
+    // Stubs connect and reads back the extensions the SDK client actually advertises for one server.
+    async function connectExtensions(
+      capabilities: MCPClientCapabilities | undefined,
+      serverOptions?: { tasks?: boolean },
+    ): Promise<Record<string, unknown>> {
+      vi.spyOn(InternalMastraMCPClient.prototype, 'connect').mockResolvedValue(true);
+
+      const client = new MCPClient({
+        id: `configuration-test-${++clientId}`,
+        servers: {
+          weather: {
+            url: new URL('http://localhost:1234/mcp'),
+            ...(capabilities ? { capabilities } : {}),
+            ...(serverOptions?.tasks ? { tasks: true } : {}),
+          },
+        },
+      });
+
+      clients.push(client);
+
+      const internalClient = await (client as any).getConnectedClientForServer('weather');
+      return (internalClient as any).client._capabilities.extensions as Record<string, unknown>;
+    }
+
+    it('advertises the UI extension by default when capabilities are omitted', async () => {
+      await expect(connectExtensions(undefined)).resolves.toEqual({ [UI_EXTENSION]: {} });
+    });
+
+    it('advertises the UI extension by default when extensions omit it', async () => {
+      const extensions = await connectExtensions({});
+      expect(extensions[UI_EXTENSION]).toEqual({});
+    });
+
+    it('omits the UI extension when configured as false', async () => {
+      const extensions = await connectExtensions({ extensions: { [UI_EXTENSION]: false } });
+      expect(extensions).not.toHaveProperty(UI_EXTENSION);
+    });
+
+    it('omits the UI extension when configured as null', async () => {
+      const extensions = await connectExtensions({ extensions: { [UI_EXTENSION]: null } });
+      expect(extensions).not.toHaveProperty(UI_EXTENSION);
+    });
+
+    it('preserves a custom UI extension object instead of replacing it with {}', async () => {
+      const settings = { mimeTypes: ['text/html;profile=mcp-app'] };
+      const extensions = await connectExtensions({ extensions: { [UI_EXTENSION]: settings } });
+      expect(extensions[UI_EXTENSION]).toBe(settings);
+    });
+
+    it('keeps an unrelated custom extension alongside the default UI entry', async () => {
+      const other = { 'com.example/feature': { level: 2 } };
+      const extensions = await connectExtensions({ extensions: { ...other } });
+      expect(extensions).toEqual({ ...other, [UI_EXTENSION]: {} });
+    });
+
+    it('advertises the tasks and UI extensions together by default', async () => {
+      const extensions = await connectExtensions(undefined, { tasks: true });
+      expect(extensions[UI_EXTENSION]).toEqual({});
+      expect(extensions[TASKS_EXTENSION]).toBeDefined();
+    });
+
+    it('keeps the tasks extension when the UI extension is opted out', async () => {
+      const extensions = await connectExtensions({ extensions: { [UI_EXTENSION]: false } }, { tasks: true });
+      expect(extensions).not.toHaveProperty(UI_EXTENSION);
+      expect(extensions[TASKS_EXTENSION]).toBeDefined();
+    });
   });
 
   it('returns cached server instructions for configured servers', async () => {
