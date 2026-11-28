@@ -6,7 +6,8 @@ Changed thread clones of observed threads to copy only the messages still in the
 
 **What stays the same**
 
-- With thread-scoped memory, or resource-scoped memory cloned within the same resource, the model sees the same context in the clone as in the source: the same observations and the same unobserved messages.
+- With thread-scoped memory, the model sees the same context in the clone as in the source: the same observations and the same unobserved messages.
+- With resource-scoped memory cloned within the same resource, the clone shares the source's observations, and the resource's context can hold both the source's unobserved messages and their copies.
 - The source thread keeps every message.
 - Without observational memory configured, or when it hasn't observed anything yet, clones still copy every message.
 - A `messageFilter` or `messageLimit` you pass still decides which messages are copied.
