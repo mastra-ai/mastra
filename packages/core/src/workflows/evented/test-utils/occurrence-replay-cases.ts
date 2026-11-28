@@ -1131,6 +1131,45 @@ export function describeOccurrenceReplayCases({
         });
       }, 20_000);
 
+      // The bailing delivery saves its result and fails before it ends the run, so its event is
+      // delivered again. That copy finds the saved bail and must end the run with it.
+      it('ends the run with a saved bail when the bailing step is delivered again', async () => {
+        const calls: Record<string, number> = {};
+        const workflow = createWorkflow({ id: `bail-copy-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+          .then(
+            createStep({
+              id: 'bails',
+              inputSchema: schema,
+              outputSchema: schema,
+              execute: async ({ bail }) => bail({ n: 5 }),
+            }),
+          )
+          .then(counted('next', calls))
+          .commit();
+        const store = (await storage.getStore('workflows'))!;
+        const method = storageVersion === 1 ? 'updateWorkflowState' : 'updateWorkflowRunHeader';
+        const update = (store[method] as (args: any) => Promise<any>).bind(store);
+        let endFails = true;
+        const interrupted = vi.spyOn(store, method).mockImplementation(async (args: any) => {
+          if (endFails && args.opts?.status === 'success') {
+            endFails = false;
+            throw new Error('Worker stopped before ending the run');
+          }
+          return update(args);
+        });
+        try {
+          await withWorkflow(workflow, async () => {
+            const run = await workflow.createRun();
+            expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 5 } });
+            await drainHandlers();
+            expect(endFails).toBe(false);
+            expect(calls).toEqual({});
+          });
+        } finally {
+          interrupted.mockRestore();
+        }
+      }, 20_000);
+
       // The copy of the block's dispatch publishes every branch again. Each branch's start guard
       // refuses the second start: one branch is still in its body, the other already finished.
       // Storage v2 reads the expected occurrence from the stored branch, so the finished branch is

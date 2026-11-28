@@ -3112,6 +3112,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         };
       }
     }
+    // A bailing copy of the body saved this result: end the run with it instead of looping.
+    if (stepResult.metadata?.__bailed) {
+      const stepResults = { ...args.stepResults, [leafId]: stepResult };
+      return this.endWorkflow({ ...args, stepResults, prevResult: stepResult }, 'success', false);
+    }
     return processWorkflowLoop(
       { ...args, prevResult: stepResult },
       {
@@ -4419,6 +4424,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      // Marks the saved success as a bail, so a copy of this step that adopts it ends the run too.
+      if (guardStart) (stepResult as any).metadata = { ...(stepResult as any).metadata, __bailed: true };
       const updatedState = (stepResult as any).__state ?? currentState;
 
       // A bail skips workflow.step.end (publishing it would advance the graph), so nothing else
@@ -5493,6 +5500,16 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Update stepResults with current state
     stepResults = { ...stepResults, __state: currentState };
+
+    // This delivery continues from a result a bailing copy of the step saved: end the run with it.
+    if (prevResult?.status === 'success' && prevResult.metadata?.__bailed) {
+      const end = { workflow, parentWorkflow, workflowId, runId, executionPath, resumeSteps, stepResults, prevResult };
+      return this.endWorkflow(
+        { ...end, activeStepsPath, requestContext, actor, perStep, state: currentState, outputOptions },
+        'success',
+        false,
+      );
+    }
 
     if (!prevResult?.status || prevResult.status === 'failed') {
       await this.#pubsub.publish('workflows', {
