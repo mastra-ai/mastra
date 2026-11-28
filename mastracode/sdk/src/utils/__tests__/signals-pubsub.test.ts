@@ -141,8 +141,8 @@ describe('SignalsPubSub', () => {
     mocks.setPublishImpl(async () => {});
     mocks.setCloseImpl(async () => {});
     mocks.setSubscribeImpl(async () => {});
-    // Tests assume the default socket root.
-    vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', '');
+    // Tests assume this socket root; the mocked sockets never touch it.
+    vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', '/tmp/mc');
     vi.resetModules();
   });
 
@@ -706,14 +706,75 @@ describe('SignalsPubSub', () => {
       expect(mocks.mkdir.mock.calls.every(([dir]) => dir === `${root}/${resourceId}`)).toBe(true);
     });
 
-    it('ignores a relative MASTRACODE_SIGNALS_SOCKET_ROOT', async () => {
+    it('ignores a relative MASTRACODE_SIGNALS_SOCKET_ROOT and uses the per-user default root', async () => {
       vi.stubEnv('MASTRACODE_SIGNALS_SOCKET_ROOT', 'relative/root');
+      // The per-user directory on macOS and Linux respectively.
+      vi.stubEnv('TMPDIR', root);
+      vi.stubEnv('XDG_RUNTIME_DIR', root);
       const { createSignalsPubSub } = await import('../signals-pubsub.js');
       const pubsub = createSignalsPubSub(resourceId);
 
       await pubsub.publish('workflows', event);
 
-      expect(socketPaths()).toEqual([`/tmp/mc/${resourceId}/.leases.sock`, `/tmp/mc/${resourceId}/workflows.sock`]);
+      expect(socketPaths()).toEqual([
+        `${root}/mc/${resourceId}/.leases.sock`,
+        `${root}/mc/${resourceId}/workflows.sock`,
+      ]);
+      expect(socketPaths().some(path => path.startsWith('/tmp/mc/'))).toBe(false);
+    });
+
+    it('never lets a resource id that looks like a hashed directory share a long resource id directory', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const macRoot = '/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/mc';
+      const longResourceId = 'my-company-internal-platform-service-0123456789ab';
+      const long = createSignalsPubSub(longResourceId, { rootDir: macRoot });
+      await long.publish('workflows', event);
+      const hashedDir = socketPaths()[0]!.slice(0, socketPaths()[0]!.lastIndexOf('/'));
+      const lookalikeResourceId = hashedDir.slice(macRoot.length + 1);
+      expect(lookalikeResourceId).toMatch(/^_h[0-9a-f]{16}$/);
+
+      // The uppercase spelling names the same directory on case-insensitive volumes such as default APFS.
+      for (const id of [lookalikeResourceId, `_h${lookalikeResourceId.slice(2).toUpperCase()}`]) {
+        const lookalike = createSignalsPubSub(id, { rootDir: macRoot });
+        await lookalike.publish('workflows', event);
+
+        const lookalikeDir = socketPaths().at(-1)!.slice(0, socketPaths().at(-1)!.lastIndexOf('/'));
+        expect(lookalikeDir).toMatch(new RegExp(`^${macRoot}/_h[0-9a-f]{16}$`));
+        expect(lookalikeDir.toLowerCase()).not.toBe(hashedDir);
+      }
+    });
+
+    it('rejects a socket root too long to fit any socket path', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      const pubsub = createSignalsPubSub(resourceId, { rootDir: `/tmp/${'r'.repeat(90)}` });
+
+      await expect(pubsub.publish('workflows', event)).rejects.toThrow(/MASTRACODE_SIGNALS_SOCKET_ROOT/);
+    });
+
+    it('keeps every socket path within the 104-byte limit for a long resource id under a macOS-length root', async () => {
+      const { createSignalsPubSub } = await import('../signals-pubsub.js');
+      // `$TMPDIR/mc` on macOS is about 52 bytes.
+      const macRoot = '/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000/T/mc';
+      const longResourceId = 'my-company-internal-platform-service-0123456789ab';
+      const pubsub = createSignalsPubSub(longResourceId, { rootDir: macRoot });
+
+      await pubsub.publish(threadTopic(longResourceId, '22222222-2222-4222-8222-222222222222'), event);
+      await pubsub.publish('workflows', event);
+
+      expect(socketPaths()).toHaveLength(3);
+      for (const path of socketPaths()) expect(Buffer.byteLength(path)).toBeLessThanOrEqual(104);
+      const dirs = new Set(socketPaths().map(path => path.slice(0, path.lastIndexOf('/'))));
+      expect(dirs.size).toBe(1);
+      expect([...dirs][0]).toMatch(new RegExp(`^${macRoot}/_h[0-9a-f]{16}`));
+
+      // Another process derives the same directory for that resource.
+      const other = createSignalsPubSub('res-a', { rootDir: macRoot });
+      await other.publish(threadTopic(longResourceId, '22222222-2222-4222-8222-222222222222'), event);
+      expect(
+        socketPaths()
+          .at(-1)
+          ?.startsWith(`${[...dirs][0]}/`),
+      ).toBe(true);
     });
 
     it("routes another resource's thread when its resourceId is an ordinary override such as resource:b", async () => {

@@ -526,6 +526,12 @@ vi.mock('../utils/signals-pubsub.js', async importOriginal => ({
   createSignalsPubSub: createSignalsPubSubMock,
 }));
 
+const resolveSignalsSocketRootMock = vi.fn(() => '/run/user/1000/mc');
+
+vi.mock('../utils/signals-socket-root.js', () => ({
+  resolveSignalsSocketRoot: resolveSignalsSocketRootMock,
+}));
+
 vi.mock('../utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
   releaseThreadLock: vi.fn(),
@@ -1548,7 +1554,7 @@ describe('createMastraCode', () => {
       await createMastraCode();
 
       expect(createSignalsPubSubMock).toHaveBeenCalledTimes(1);
-      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true, rootDir: '/run/user/1000/mc' });
     });
 
     it('keeps peer discovery in the project when cross-agent communication is off', async () => {
@@ -1557,7 +1563,7 @@ describe('createMastraCode', () => {
 
       await createMastraCode();
 
-      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false, rootDir: '/run/user/1000/mc' });
     });
 
     it('never shares discovery when the Unix socket PubSub is off', async () => {
@@ -1585,12 +1591,47 @@ describe('createMastraCode', () => {
       const { createMastraCode } = await import('../index.js');
 
       await createMastraCode({ crossAgentSignals: false });
-      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: false, rootDir: '/run/user/1000/mc' });
 
       loadSettingsMock.mockReturnValue(signalSettings({ unixSocketPubSub: true }));
       await createMastraCode({ crossAgentSignals: true });
-      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
+      expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true, rootDir: '/run/user/1000/mc' });
     });
+
+    it.skipIf(process.platform === 'win32')(
+      'runs without cross-process signals when the socket root is refused',
+      async () => {
+        loadSettingsMock.mockReturnValue(
+          signalSettings({ unixSocketPubSub: true, experimentalCrossAgentSignals: true }),
+        );
+        resolveSignalsSocketRootMock.mockImplementationOnce(() => {
+          throw new Error('Refusing to use /run/user/1000/mc for Mastra Code signal sockets: it is a symbolic link.');
+        });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const { createMastraCode } = await import('../index.js');
+
+        await createMastraCode();
+
+        expect(createSignalsPubSubMock).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('Signals between Mastra Code instances are disabled'),
+        );
+        warn.mockRestore();
+      },
+    );
+
+    it.skipIf(process.platform === 'win32')(
+      'puts the dispatch lease store under the per-user socket root',
+      async () => {
+        loadSettingsMock.mockReturnValue(signalSettings({}));
+        const { createMastraCode } = await import('../index.js');
+
+        await createMastraCode();
+
+        expect(createSignalsPubSubMock).toHaveBeenCalledTimes(1);
+        expect(sharedDiscoveryFlag()).toEqual({ rootDir: '/run/user/1000/mc' });
+      },
+    );
   });
 
   it('registers the built-in state signal providers on the code agent', async () => {
