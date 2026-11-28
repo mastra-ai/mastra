@@ -935,6 +935,12 @@ export function describeRestartOccurrenceCases({
           await held.release(0);
           await d.entered;
 
+          // The branches the restart's caller read as running: always b, whose end was held, and a
+          // too unless a's end cleared its entry before b's start wrote the header.
+          const read = Object.values(held.held[1]!.event.data.restart.activeStepsPath as Record<string, number[]>)
+            .map(path => JSON.stringify(path))
+            .sort();
+          expect(read).toContain('[0,1]');
           const from = driver.events.length;
           await settleDeliveries([await held.release(1)]);
           const branchRuns = () =>
@@ -943,8 +949,13 @@ export function describeRestartOccurrenceCases({
               .filter(
                 event => event.type === 'workflow.step.run' && event.data.restart?.isParallelOrConditionalRestarted,
               );
-          // The dispatch that publishes the branches is its own delivery, with storage reads before it.
-          await expect.poll(() => branchRuns().length, { timeout: 10_000 }).toBe(2);
+          await expect
+            .poll(() =>
+              branchRuns()
+                .map(event => JSON.stringify(event.data.executionPath))
+                .sort(),
+            )
+            .toEqual(read);
           await settleDeliveries(branchRuns());
           expect(driver.events.slice(from).filter(event => event.type === 'workflow.step.end')).toEqual([]);
           expect(steps.calls).toEqual({ a: 1, b: 1, c: 1, d: 1 });
