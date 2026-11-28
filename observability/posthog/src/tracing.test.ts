@@ -614,6 +614,28 @@ describe('PosthogExporter', () => {
         },
       );
 
+      it('should send the usage of a hidden model call without the conversation around it', async () => {
+        // A tool that runs an agent with `InternalSpans.ALL`: only the usage of its model call is exported.
+        const { output: _output, endTime: _endTime, ...startedGeneration } = generation;
+        const step = createSpan({ id: 'step-0', traceId, parentSpanId: generation.id, type: SpanType.MODEL_STEP });
+        const tool = createSpan({ id: 'tool', traceId, parentSpanId: step.id, type: SpanType.TOOL_CALL });
+        const usageCall = createSpan({
+          id: 'usage-call',
+          traceId,
+          parentSpanId: tool.id,
+          type: SpanType.MODEL_INFERENCE,
+          attributes: { model: 'gpt-4o-mini', provider: 'openai', usage, usageOnly: true },
+        });
+        for (const span of [startedGeneration as AnyExportedSpan, step, tool, usageCall]) {
+          await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+        }
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: usageCall });
+
+        const [call] = captured('$ai_generation');
+        expect(call.properties).toMatchObject({ $ai_model: 'gpt-4o-mini', $ai_input_tokens: 10, $ai_output_tokens: 5 });
+        expect(call.properties).not.toHaveProperty('$ai_input');
+      });
+
       it('should keep a response out of its own prompt when the span of the call is exported after its step', async () => {
         await exportGeneration([
           {

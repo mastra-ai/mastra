@@ -12,6 +12,11 @@
  *   2. Metric attribution — token / cost metrics still emit, but are
  *      attributed (via labels) to the visible ancestor span instead of
  *      vanishing along with the hidden MODEL_GENERATION.
+ *
+ *   3. Trace exporter pricing — each hidden model call is exported as one
+ *      usage span (a MODEL_GENERATION span and a MODEL_INFERENCE span, with
+ *      model, provider and usage, and no input or output), because trace
+ *      exporters price model spans only.
  */
 
 import { SpanType, SamplingStrategyType, InternalSpans } from '@mastra/core/observability';
@@ -22,8 +27,9 @@ import type {
   ProcessorRunAttributes,
   TracingEvent,
 } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
 
 class CollectingExporter implements ObservabilityExporter {
   name = 'collector';
@@ -78,10 +84,12 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     const hiddenModel = hiddenAgent.createChildSpan({
       type: SpanType.MODEL_GENERATION,
       name: "llm: 'mock'",
+      input: { messages: ['internal prompt'] },
       tracingPolicy: { internal: InternalSpans.ALL },
     });
 
     hiddenModel.end({
+      output: { text: 'internal answer' },
       attributes: {
         provider: 'mock-provider',
         model: 'mock-model-id',
@@ -99,9 +107,39 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     const attrs = exportedProcessor!.attributes as ProcessorRunAttributes;
     expect(attrs.internalUsage).toEqual({ inputTokens: 100, outputTokens: 25 });
 
-    // Hidden descendants must not be exported.
+    // The hidden agent is not exported. The hidden model call is exported as
+    // one usage span under the processor, without its input or output.
     expect(ended.some(s => s.type === SpanType.AGENT_RUN)).toBe(false);
-    expect(ended.some(s => s.type === SpanType.MODEL_GENERATION)).toBe(false);
+    const modelSpans = ended.filter(s => s.type === SpanType.MODEL_GENERATION);
+    expect(modelSpans).toHaveLength(1);
+    expect(modelSpans[0]).toMatchObject({
+      name: "llm: 'mock'",
+      parentSpanId: processorSpan.id,
+      startTime: hiddenModel.startTime,
+      attributes: {
+        provider: 'mock-provider',
+        model: 'mock-model-id',
+        usageOnly: true,
+        usage: { inputTokens: 100, outputTokens: 25 },
+      },
+    });
+    expect(modelSpans[0]!.input).toBeUndefined();
+    expect(modelSpans[0]!.output).toBeUndefined();
+
+    // OpenTelemetry-based exporters read usage from the MODEL_INFERENCE span of a model call.
+    const inferenceSpans = ended.filter(s => s.type === SpanType.MODEL_INFERENCE);
+    expect(inferenceSpans).toHaveLength(1);
+    expect(inferenceSpans[0]).toMatchObject({
+      parentSpanId: processorSpan.id,
+      attributes: {
+        provider: 'mock-provider',
+        model: 'mock-model-id',
+        usageOnly: true,
+        usage: { inputTokens: 100, outputTokens: 25 },
+      },
+    });
+    expect(inferenceSpans[0]!.input).toBeUndefined();
+    expect(inferenceSpans[0]!.output).toBeUndefined();
   });
 
   it('sums usage across multiple hidden model calls onto a single ancestor', async () => {
@@ -229,13 +267,129 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     visibleAgent.end();
     await tracing.flush();
 
-    // The user-visible AGENT_RUN should be the sole exported span and carry the rolled-up usage.
+    // Only the user-visible AGENT_RUN and the usage span of the hidden model call are
+    // exported. The agent carries the rolled-up usage and parents the usage span.
     const ended = exporter.endedSpans();
-    expect(ended).toHaveLength(1);
-    const exportedAgent = ended[0]!;
-    expect(exportedAgent.type).toBe(SpanType.AGENT_RUN);
+    expect(ended.map(s => s.type).sort()).toEqual(
+      [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_INFERENCE].sort(),
+    );
+    const exportedAgent = ended.find(s => s.type === SpanType.AGENT_RUN)!;
     const attrs = exportedAgent.attributes as { internalUsage?: { inputTokens?: number; outputTokens?: number } };
     expect(attrs.internalUsage).toEqual({ inputTokens: 7, outputTokens: 3 });
+    expect(ended.find(s => s.type === SpanType.MODEL_GENERATION)!.parentSpanId).toBe(visibleAgent.id);
+  });
+
+  it('exports the usage spans under the agent when the processor span ended before the hidden call', async () => {
+    const agentSpan = tracing.startSpan({ type: SpanType.AGENT_RUN, name: "agent run: 'weather'" });
+    const processorSpan = agentSpan.createChildSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'output stream processor: Structured Output',
+    });
+    const hiddenModel = processorSpan.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'mock'",
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+    // In a run with tool calls, the processor span ends with the first model step and
+    // the structuring call ends at the end of the stream.
+    processorSpan.end();
+    hiddenModel.end({ attributes: { provider: 'p', model: 'm', usage: { inputTokens: 100, outputTokens: 25 } } });
+    agentSpan.end();
+    await tracing.flush();
+
+    const usageSpans = exporter.endedSpans().filter(s => (s.attributes as { usageOnly?: boolean }).usageOnly);
+    expect(usageSpans.map(s => s.type).sort()).toEqual([SpanType.MODEL_GENERATION, SpanType.MODEL_INFERENCE].sort());
+    expect(usageSpans.every(s => s.parentSpanId === agentSpan.id)).toBe(true);
+  });
+
+  it('exports the usage spans under an exported span when spanFilter drops the processor span', async () => {
+    const filtered = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'filtered-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      exporters: [exporter],
+      spanFilter: span => span.type !== SpanType.PROCESSOR_RUN,
+    });
+    onTestFinished(() => filtered.shutdown());
+    const agentSpan = filtered.startSpan({ type: SpanType.AGENT_RUN, name: "agent run: 'weather'" });
+    const processorSpan = agentSpan.createChildSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'output stream processor: Structured Output',
+    });
+    const hiddenModel = processorSpan.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'mock'",
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+    hiddenModel.end({ attributes: { provider: 'p', model: 'm', usage: { inputTokens: 100, outputTokens: 25 } } });
+    processorSpan.end();
+    agentSpan.end();
+    await filtered.flush();
+
+    const exportedIds = new Set(exporter.endedSpans().map(s => s.id));
+    const usageSpans = exporter.endedSpans().filter(s => (s.attributes as { usageOnly?: boolean }).usageOnly);
+    expect(usageSpans).toHaveLength(2);
+    expect(usageSpans.every(s => s.parentSpanId === agentSpan.id && exportedIds.has(s.parentSpanId))).toBe(true);
+  });
+
+  it('prices a hidden model call whose provider and model are set only when it starts', async () => {
+    const pricing = PricingRegistry.fromModelsDev({
+      openai: { models: { 'gpt-4': { cost: { input: 30, output: 60 } } } },
+    });
+    const pricingSpy = vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricing);
+    onTestFinished(() => pricingSpy.mockRestore());
+
+    const processorSpan = tracing.startSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'output stream processor: Structured Output',
+    });
+    const hiddenModel = processorSpan.createChildSpan({
+      type: SpanType.MODEL_GENERATION,
+      name: "llm: 'gpt-4'",
+      attributes: { provider: 'openai', model: 'gpt-4' },
+      tracingPolicy: { internal: InternalSpans.ALL },
+    });
+    hiddenModel.end({ attributes: { usage: { inputTokens: 100, outputTokens: 25 } } });
+    processorSpan.end();
+    await tracing.flush();
+
+    const usageSpan = exporter.endedSpans().find(s => s.type === SpanType.MODEL_GENERATION);
+    expect(usageSpan?.attributes).toMatchObject({ provider: 'openai', model: 'gpt-4' });
+
+    const inputMetric = exporter.metricEvents.find(e => e.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputMetric?.metric.costContext).toMatchObject({ provider: 'openai', model: 'gpt-4' });
+    expect(inputMetric?.metric.costContext?.estimatedCost).toBeGreaterThan(0);
+  });
+
+  it('exports no MODEL_GENERATION usage span when that span type is excluded', async () => {
+    const localExporter = new CollectingExporter();
+    const localTracing = new DefaultObservabilityInstance({
+      serviceName: 'usage-rollup-test',
+      name: 'test-instance',
+      sampling: { type: SamplingStrategyType.ALWAYS },
+      excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      exporters: [localExporter],
+    });
+
+    const processorSpan = localTracing.startSpan({
+      type: SpanType.PROCESSOR_RUN,
+      name: 'input processor: moderation',
+    });
+    processorSpan
+      .createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: "llm: 'mock'",
+        tracingPolicy: { internal: InternalSpans.ALL },
+      })
+      .end({ attributes: { provider: 'p', model: 'm', usage: { inputTokens: 100, outputTokens: 25 } } });
+    processorSpan.end();
+    await localTracing.flush();
+
+    expect(localExporter.endedSpans().some(s => s.type === SpanType.MODEL_GENERATION)).toBe(false);
+    const inputRows = localExporter.metricEvents.filter(e => e.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputRows.map(e => e.metric.value)).toEqual([100]);
+
+    await localTracing.shutdown();
   });
 
   it('does not roll up usage when the MODEL_GENERATION itself is exported', async () => {

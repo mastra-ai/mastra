@@ -915,9 +915,18 @@ export class TestExporter extends BaseExporter {
       }
     }
 
-    // Sort children by startTime for consistent ordering
+    // Sort children by startTime for consistent ordering. A usage span goes after
+    // its siblings: it starts when its hidden model call started, often in the
+    // same millisecond as the spans around that call, so its place by time is
+    // not stable.
+    const isUsageSpan = (span: AnyExportedSpan) =>
+      (span.attributes as { usageOnly?: boolean } | undefined)?.usageOnly === true;
     const sortChildren = (node: SpanTreeNode) => {
-      node.children.sort((a, b) => new Date(a.span.startTime).getTime() - new Date(b.span.startTime).getTime());
+      node.children.sort(
+        (a, b) =>
+          Number(isUsageSpan(a.span)) - Number(isUsageSpan(b.span)) ||
+          new Date(a.span.startTime).getTime() - new Date(b.span.startTime).getTime(),
+      );
       node.children.forEach(sortChildren);
     };
     roots.forEach(sortChildren);

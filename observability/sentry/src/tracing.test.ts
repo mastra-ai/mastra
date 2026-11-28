@@ -1019,6 +1019,46 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning.output_tokens', 30);
     });
 
+    it("should keep the agent's own model call on AGENT_RUN when a usage-only span ends after it", async () => {
+      const agentSpan = createMockSpan({
+        id: 'agent-span',
+        name: 'test-agent',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: { agentId: 'test-agent' },
+      });
+      const llmSpan = createMockSpan({
+        id: 'llm-span',
+        name: 'gpt-4o',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        parentSpanId: 'agent-span',
+        output: { text: 'Hello' },
+        attributes: { model: 'gpt-4o', usage: { inputTokens: 100, outputTokens: 50 } },
+      });
+      // The usage of a model call that structured output runs in a hidden agent.
+      const usageSpan = createMockSpan({
+        id: 'usage-span',
+        name: 'gpt-4o-mini',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: false,
+        parentSpanId: 'agent-span',
+        attributes: { model: 'gpt-4o-mini', usageOnly: true, usage: { inputTokens: 7, outputTokens: 3 } },
+      });
+      for (const span of [agentSpan, llmSpan, usageSpan]) {
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: span });
+      }
+      for (const span of [llmSpan, usageSpan, agentSpan]) {
+        span.endTime = new Date();
+        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: span });
+      }
+
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.input_tokens', 100);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.response.model', 'gpt-4o');
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.response.text', 'Hello');
+      expect(mockSpan.setAttribute).not.toHaveBeenCalledWith('gen_ai.usage.input_tokens', 7);
+    });
+
     it('should isolate token usage per AGENT_RUN (no cascading to parent agents)', async () => {
       // Create root agent span (has no MODEL_GENERATION child, so no tokens)
       const rootSpan = createMockSpan({

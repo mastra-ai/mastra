@@ -839,6 +839,9 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
     return childNodes.flatMap(spanToTrajectorySteps);
   }
 
+  // A usage-only model span stands in for a model call Mastra hides, so it is no step of the run.
+  if (span.attributes?.usageOnly) return [];
+
   const durationMs =
     span.endedAt != null && span.startedAt != null ? span.endedAt.getTime() - span.startedAt.getTime() : undefined;
 

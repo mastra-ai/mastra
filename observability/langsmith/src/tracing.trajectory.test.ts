@@ -222,6 +222,47 @@ describe('LangSmith trajectory of an agent turn', () => {
     expect(counts.reduce((sum, count) => sum + count, 0)).toBe((await stream.totalUsage).totalTokens);
   });
 
+  it('counts the tokens of the model that structures the answer once, outside the trajectory', async () => {
+    const structuringUsage = { inputTokens: 100, outputTokens: 7, totalTokens: 107 };
+    const structuringModel = {
+      specificationVersion: 'v2',
+      provider: 'openai',
+      modelId: 'gpt-4o',
+      supportedUrls: {},
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(controller) {
+            for (const part of [
+              { type: 'stream-start', warnings: [] },
+              { type: 'text-start', id: 't' },
+              { type: 'text-delta', id: 't', delta: JSON.stringify(FORECAST) },
+              { type: 'text-end', id: 't' },
+              { type: 'finish', finishReason: 'stop', usage: structuringUsage },
+            ])
+              controller.enqueue(part);
+            controller.close();
+          },
+        }),
+      }),
+    } as any;
+    const { agent, sentRuns, llmRuns } = setup();
+    const stream = await agent.stream(QUESTION, {
+      structuredOutput: { schema: z.object({ city: z.string(), condition: z.string() }), model: structuringModel },
+    });
+    expect(await stream.object).toEqual(FORECAST);
+
+    const counts = (await llmRuns()).map(run => run.extra.metadata.usage_metadata?.total_tokens ?? 0);
+    expect(counts.reduce((sum, count) => sum + count, 0)).toBe(
+      (await stream.totalUsage).totalTokens + structuringUsage.totalTokens,
+    );
+    const structuringRuns = (await sentRuns()).filter(run => run.extra.metadata.ls_model_name === 'gpt-4o');
+    expect(structuringRuns.map(run => run.name)).toEqual(["llm: 'gpt-4o'", 'inference: 0']);
+    for (const run of structuringRuns) {
+      expect(run.inputs).not.toHaveProperty('messages');
+      expect(run.extra.metadata).toMatchObject({ usageOnly: true, ls_message_view_exclude: true });
+    }
+  });
+
   it('shows the approved tool call after the run is resumed, without counting the suspended call again', async () => {
     const { agent, llmRuns } = setup({ requireApproval: true });
     const suspended = await agent.stream(QUESTION);

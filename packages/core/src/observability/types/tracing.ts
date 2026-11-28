@@ -335,6 +335,11 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning' | 'title_generation';
   /** Token usage statistics */
   usage?: UsageStats;
+  /**
+   * True on a span that stands in for a hidden model call. The span has the
+   * usage of that call and no input or output.
+   */
+  usageOnly?: boolean;
   /** Whether one or more model steps omitted a primary token count */
   usageIncomplete?: boolean;
   /** Estimated cost context, when provided directly by an SDK or provider */
@@ -421,6 +426,11 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
   provider?: string;
   /** Index of the parent step in the generation (0, 1, 2, ...) */
   stepIndex?: number;
+  /**
+   * True on a span that stands in for a hidden model call. The span has the
+   * usage of that call and no input or output.
+   */
+  usageOnly?: boolean;
   /** Token usage statistics */
   usage?: UsageStats;
   /** Reason this inference finished (stop, tool-calls, length, etc.) */

@@ -344,6 +344,23 @@ describe('Transformer Functions', () => {
       expect(result.input.systemMessages[0]?.role).toBe('system');
     });
 
+    it('should read the conversation from the agent model call, not from a usage-only span before it', () => {
+      const trace = TransformerTestScenarios.simpleAgentConversation().buildTrace();
+      trace.spans.push({
+        traceId: trace.traceId,
+        spanId: 'usage-1',
+        parentSpanId: 'agent-1',
+        name: "llm: 'moderation-model'",
+        spanType: 'model_generation',
+        startedAt: '2025-01-01T00:00:30Z',
+        attributes: { usageOnly: true, usage: { inputTokens: 100, outputTokens: 7 } },
+      } as any);
+
+      const result = transformTraceToScorerInputAndOutput(trace);
+
+      expect(result.input.systemMessages[0]?.content).toBe('You are a friendly assistant');
+    });
+
     it('should extract conversation memory correctly', () => {
       const trace = TransformerTestScenarios.conversationWithMemory().buildTrace();
       const result = transformTraceToScorerInputAndOutput(trace);
