@@ -223,25 +223,27 @@ describe('createCodeMode limits — maxConcurrentCalls', () => {
   it('queues a very large backlog without quadratic slowdown', async () => {
     let active = 0;
     let peak = 0;
-    // Records the order calls actually start, to confirm FIFO is preserved.
+    // Records the sequence number of each call the moment it starts, so the
+    // assertion below checks the whole start order rather than only its ends.
     const started: number[] = [];
     const spy = createTool({
       id: 'ping',
       description: 'ping',
-      inputSchema: z.object({}),
+      inputSchema: z.object({ seq: z.number() }),
       outputSchema: z.object({ ok: z.boolean() }),
-      execute: async () => {
+      execute: async ({ seq }) => {
         active += 1;
         peak = Math.max(peak, active);
-        started.push(started.length);
+        started.push(seq);
         active -= 1;
         return { ok: true };
       },
     });
 
     const backlog = 200_000;
+    const submitted = Array.from({ length: backlog }, (_, seq) => seq);
     const transport = scripted(async opts => {
-      await Promise.all(Array.from({ length: backlog }, () => opts.dispatch('ping', {})));
+      await Promise.all(submitted.map(seq => opts.dispatch('ping', { seq })));
       return { success: true, logs: [] };
     });
 
@@ -251,9 +253,12 @@ describe('createCodeMode limits — maxConcurrentCalls', () => {
     const durationMs = Date.now() - startedAt;
     expect(result.success).toBe(true);
     expect(peak).toBeLessThanOrEqual(2);
+    // Identical values in identical positions: a reordering anywhere in the
+    // queue fails this, not just a swapped first and last call. Compared by
+    // index so a failure reports one position instead of a 200k-element diff.
     expect(started).toHaveLength(backlog);
-    expect(started[0]).toBe(0);
-    expect(started[backlog - 1]).toBe(backlog - 1);
+    const outOfOrder = started.findIndex((seq, index) => seq !== submitted[index]);
+    expect(outOfOrder === -1 ? 'in order' : `out of order at position ${outOfOrder}`).toBe('in order');
     // Guards against per-call work that grows with the queue (e.g. one abort
     // listener per waiter): quadratic dequeue takes minutes at this size.
     expect(durationMs).toBeLessThan(8_000);
