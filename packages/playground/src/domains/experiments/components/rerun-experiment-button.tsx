@@ -57,6 +57,7 @@ export function RerunExperimentButton({ experiment }: RerunExperimentButtonProps
           initialDatasetVersion={experiment.datasetVersion ?? undefined}
           initialTargetType={initialTargetType}
           initialTargetId={experiment.targetId}
+          initialAgentVersion={experiment.agentVersion ?? undefined}
           initialScorerIds={scorerIds}
           initialName={experiment.name ?? undefined}
           initialDescription={experiment.description ?? undefined}

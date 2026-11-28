@@ -8,6 +8,8 @@ export interface ExperimentTriggerInitialValues {
   initialScorerIds?: string[];
   initialTargetType?: TargetType;
   initialTargetId?: string;
+  /** The agent version a rerun pinned, by id. Absent runs on the agent's latest version. */
+  initialAgentVersion?: string;
   initialName?: string;
   initialDescription?: string;
 }

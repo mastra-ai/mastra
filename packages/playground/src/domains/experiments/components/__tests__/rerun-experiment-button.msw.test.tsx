@@ -4,8 +4,15 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RerunExperimentButton } from '../rerun-experiment-button';
 import { experiments } from './fixtures/experiments';
+import {
+  agentIdWithVersions,
+  agentVersionsResponse,
+  emptyAgentVersionsResponse,
+  publishedAgentVersionId,
+} from '@/domains/datasets/components/__tests__/fixtures/agent-versions';
 import { emptyDatasetItems } from '@/domains/datasets/components/__tests__/fixtures/dataset-items';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { modelProviders } from '@/domains/datasets/components/__tests__/fixtures/model-providers';
 import {
   agent,
   noProcessors,
@@ -49,7 +56,11 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId`, () => HttpResponse.json(dataset)),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/items`, () => HttpResponse.json(emptyDatasetItems)),
     http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/versions`, () => HttpResponse.json(datasetVersionsResponse)),
+    http.get(`${TEST_BASE_URL}/api/stored/agents/:agentId/versions`, ({ params }) =>
+      HttpResponse.json(params.agentId === agentIdWithVersions ? agentVersionsResponse : emptyAgentVersionsResponse),
+    ),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ 'agent-1': agent('agent-1', 'Agent One') })),
+    http.get(`${TEST_BASE_URL}/api/agents/providers`, () => HttpResponse.json(modelProviders)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
@@ -113,6 +124,23 @@ describe('RerunExperimentButton', () => {
       scorerIds: ['answer-relevancy'],
     });
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/experiments/exp-42'));
+  });
+
+  it('carries the agent version the original run was pinned to into the new run', async () => {
+    renderButton({ ...original, agentVersion: publishedAgentVersionId });
+
+    fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
+    await screen.findByRole('dialog', { name: /new experiment/i });
+
+    const versionField = await screen.findByRole<HTMLInputElement>('combobox', { name: /^Agent version/ });
+    await waitFor(() => expect(versionField.value).toBe('v1'));
+    // A pinned version does not change a code-defined agent's model, so the picker keeps showing the agent's own.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Model' }).textContent).toContain('gpt-4o-mini'));
+    fireEvent.click(runButton());
+
+    await waitFor(() => expect(triggerCalls).toHaveLength(1));
+    expect(triggerCalls[0].body.agentVersion).toBe(publishedAgentVersionId);
+    expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
   });
 
   it('falls back to the scorers that actually produced scores when none are pinned on the experiment', async () => {

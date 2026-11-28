@@ -50,17 +50,33 @@
     "Qwen3.5-397B-A17B"
   ],
   "reasoning": {
-    "GLM-5.1": [
+    "GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "Kimi-K2.5": [
       {
         "type": "toggle"
       }
     ],
-    "Qwen3.5-122B-A10B": [
+    "DeepSeek-V4-Flash": [
       {
         "type": "toggle"
       }
     ],
-    "GLM-5.2": [
+    "DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4.1-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "DeepSeek-V4-Flash-0731": [
       {
         "type": "toggle"
       }
@@ -70,12 +86,7 @@
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4-Pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Kimi-K2.5": [
+    "Qwen3.5-397B-A17B": [
       {
         "type": "toggle"
       }
@@ -86,12 +97,23 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "DeepSeek-V4.1-Flash": [
+    "Kimi-K3": [
       {
         "type": "toggle"
       }
     ],
-    "DeepSeek-V4-Flash": [
+    "Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "Qwen3.5-122B-A10B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "GLM-5.1": [
       {
         "type": "toggle"
       }
@@ -101,39 +123,17 @@
         "type": "toggle"
       }
     ],
+    "DeepSeek-V4-Pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "GLM-5.2": [
+      {
+        "type": "toggle"
+      }
+    ],
     "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "Kimi-K3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4.1-Flash-1017": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4-Flash-0731": [
       {
         "type": "toggle"
       }
