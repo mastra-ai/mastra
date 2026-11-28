@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { serializeError } from '../../events/codec/error';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
@@ -11,7 +12,12 @@ import type { MessageList } from '../message-list';
 import { whenRunStepsSettle } from '../run-lease-fence';
 import { abortAckTopic, subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
-import { AGENT_CONTROL_TOPIC, AGENT_STREAM_TOPIC } from './constants';
+import {
+  AGENT_CONTROL_TOPIC,
+  AGENT_STREAM_REPLAY_INCOMPLETE,
+  AGENT_STREAM_TOPIC,
+  MAX_PENDING_STREAM_EVENTS,
+} from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
 import { diffResponseMessages } from './response-messages';
 import type { ResponseMessagesCursor, ResponseMessagesDiff } from './response-messages';
@@ -23,7 +29,9 @@ import { toStreamFinish, toStreamStepFinish, toStreamStepStart } from './wire';
  * Publishes a run's chunks on its stream topic as the loop produces them, so
  * readers other than the caller (`Agent.observe()`, a reconnecting client) can
  * follow the run. Publishing never blocks or fails the run: events are queued
- * in order and publish errors are logged.
+ * in order and publish errors are logged. If the bus stops keeping up, the
+ * queue is capped and the replay ends with an `AGENT_STREAM_REPLAY_INCOMPLETE`
+ * error where it was cut short.
  */
 export interface AgentStreamPublisher {
   readonly runId: string;
@@ -337,7 +345,36 @@ function createOwnerHandle(
 
   // The record goes first, so a reader that sees any event can authorize.
   publications.initialize(writeRecord('running')());
-  const enqueue = publications.enqueue;
+  let pending = 0;
+  let replayIncomplete = false;
+  const enqueue: PublicationQueue['enqueue'] = (task, propagateError) => {
+    pending++;
+    const queued = publications.enqueue(task, propagateError);
+    void queued.then(
+      () => pending--,
+      () => pending--,
+    );
+    return queued;
+  };
+  /**
+   * Queue one of the run's events for its replay. Once too many are waiting on
+   * the bus, the rest of the run is left out and its replay ends with an
+   * {@link AGENT_STREAM_REPLAY_INCOMPLETE} error, so readers know it is cut short
+   * rather than taking it for the whole run. The run's record and terminal
+   * events are still queued.
+   */
+  const enqueueEvent = (task: () => Promise<void>) => {
+    if (replayIncomplete) return;
+    if (pending >= MAX_PENDING_STREAM_EVENTS) {
+      replayIncomplete = true;
+      logger?.warn?.(
+        `[AgentStream:${runId}] ${pending} stream events are waiting to be published; leaving the rest of the run out of its replay`,
+      );
+      void enqueue(() => emitErrorEvent(pubsub, runId, replayIncompleteError(runId)));
+      return;
+    }
+    void enqueue(task);
+  };
   let finished = false;
   /** Tool calls of the step in progress, which the run's messages need to tell its content apart. */
   let stepToolCallIds: string[] = [];
@@ -499,7 +536,7 @@ function createOwnerHandle(
           return;
         case 'step-start': {
           const data = toStreamStepStart(chunk.payload);
-          void enqueue(() => emitStepStartEvent(pubsub, runId, data));
+          enqueueEvent(() => emitStepStartEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call':
@@ -516,7 +553,7 @@ function createOwnerHandle(
           stepToolCallIds = [];
           const responseMessages = diffStepResponseMessages(chunk.payload?.messages?.nonUser);
           const published = withPayload(chunk, toStreamStepFinish(chunk.payload, content, responseMessages));
-          void enqueue(async () => {
+          enqueueEvent(async () => {
             try {
               await emitChunkEvent(pubsub, runId, published);
             } catch (error) {
@@ -531,13 +568,13 @@ function createOwnerHandle(
         case 'workflow-step-output': {
           // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
           const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
-          void enqueue(() => emitChunkEvent(pubsub, runId, published));
+          enqueueEvent(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
         case 'finish': {
           finished = true;
           const data = toStreamFinish(chunk.payload);
-          void enqueue(() => emitFinishEvent(pubsub, runId, data));
+          enqueueEvent(() => emitFinishEvent(pubsub, runId, data));
           return;
         }
         case 'tool-call-approval':
@@ -552,11 +589,11 @@ function createOwnerHandle(
         case 'error': {
           lastError = chunk.payload.error;
           const serialized = withPayload(chunk, { ...chunk.payload, error: serializeIfError(chunk.payload.error) });
-          void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
+          enqueueEvent(() => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
       }
-      void enqueue(() => emitChunkEvent(pubsub, runId, chunk));
+      enqueueEvent(() => emitChunkEvent(pubsub, runId, chunk));
     },
     close() {
       return end(() => new Error('Agent stream ended without a finish event'));
@@ -583,6 +620,16 @@ function keepProducedAt(chunk: ChunkType<any>, copy: ChunkType<any>): ChunkType<
 
 function serializeIfError(error: unknown) {
   return error instanceof Error ? serializeError(error) : error;
+}
+
+function replayIncompleteError(runId: string): MastraError {
+  return new MastraError({
+    id: AGENT_STREAM_REPLAY_INCOMPLETE,
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.SYSTEM,
+    text: `Run "${runId}" kept streaming after its stream bus stopped keeping up; the rest of the run is not in its replay.`,
+    details: { runId, maxPendingEvents: MAX_PENDING_STREAM_EVENTS },
+  });
 }
 
 function toError(error: unknown): Error {

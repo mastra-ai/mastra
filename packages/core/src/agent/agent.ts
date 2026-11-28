@@ -349,7 +349,7 @@ import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idl
 import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
-import { AGENT_STREAM_TOPIC } from './streams/constants';
+import { AGENT_STREAM_TOPIC, RUN_RECORD_ADMISSION_TIMEOUT_MS } from './streams/constants';
 import { ExecutionEnginePolicy } from './streams/execution-policy';
 import type { ExecutionEngineDefaults } from './streams/execution-policy';
 import type { AgentStreamPublisher } from './streams/publisher';
@@ -1001,6 +1001,22 @@ function runIdAlreadyClaimedError({ agentName, runId }: { agentName: string; run
   });
 }
 
+function runRecordUnavailableError(
+  { agentName, runId }: { agentName: string; runId: string },
+  cause: unknown,
+): MastraError {
+  return new MastraError(
+    {
+      id: 'AGENT_RUN_RECORD_UNAVAILABLE',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent "${agentName}" cannot start run "${runId}" because its run record could not be read from the server cache.`,
+      details: { agentName, runId, timeoutMs: RUN_RECORD_ADMISSION_TIMEOUT_MS },
+    },
+    cause,
+  );
+}
+
 function alreadyClaimedResumeError({
   agentName,
   method,
@@ -1283,6 +1299,8 @@ export class Agent<
   #defaultStreamPubsub?: PubSub;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
+  /** Run ids between their admission check and their publisher, which `#publishedRuns` covers from then on. */
+  #admittingRuns = new Set<string>();
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -2215,44 +2233,78 @@ export class Agent<
    *
    * Reading the record and writing our own is not atomic, so two processes
    * starting the same id within one cache round-trip of each other can still
-   * overlap. The cache has no compare-and-set to close that.
+   * overlap. The cache has no compare-and-set to close that. Within this
+   * process the id is reserved from the check until its publisher exists, so
+   * no other run of the id can start, or start and finish, in between.
    *
-   * Returns the record it accepted, so the caller can tell a fresh id from a
-   * reused one.
+   * Only ids the caller supplied, and resumes, are checked against the record.
+   * An id this server generated can't already be held in the cache, and
+   * skipping the read lets the run start while the cache is unreachable. The
+   * read is bounded and fails closed: when the record can't be read in time,
+   * there is no way to tell whether another run owns the id.
+   *
+   * Returns the run's publisher, or undefined when streams are off.
    */
-  async #assertRunIdAvailable(
+  async #claimRunStream(
     runId: string,
-    resourceId: string | undefined,
-    { resuming }: { resuming: boolean },
-  ): Promise<AgentRunRecord | undefined> {
+    owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
+    { resuming, checkRecord }: { resuming: boolean; checkRecord: boolean },
+  ): Promise<AgentStreamPublisher | undefined> {
     if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
     // A resume may still find its own finishing publisher here: the suspension is
     // persisted before the publisher ends, so the entry outlives the handoff.
-    if (!resuming && this.#publishedRuns.has(runId)) {
+    if (this.#admittingRuns.has(runId) || (!resuming && this.#publishedRuns.has(runId))) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
+    this.#admittingRuns.add(runId);
+    try {
+      const record = checkRecord ? await this.#readRunRecordForAdmission(bus, runId) : undefined;
+      if (record?.resourceId && record.resourceId !== owner.resourceId) {
+        throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+      }
+      if (record?.status === 'running' && !resuming) {
+        throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+      }
+      // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
+      // starts the new run on top of the old frames: a reader replaying from the start would
+      // get the previous finish event and close before the new run says anything. Suspended
+      // runs keep their log, because that is the history the resume continues.
+      if (record?.status === 'finished') {
+        await bus.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
+      }
+      return this.#createStreamPublisher(bus, runId, owner);
+    } finally {
+      this.#admittingRuns.delete(runId);
+    }
+  }
 
-    const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
-    if (!record) return undefined;
-    if (record.resourceId && record.resourceId !== resourceId) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
+  async #readRunRecordForAdmission(bus: AgentStreamBus, runId: string): Promise<AgentRunRecord | undefined> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        readAgentRunRecord(bus.runRecordCache, this.id, runId),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`No response within ${RUN_RECORD_ADMISSION_TIMEOUT_MS}ms`)),
+            RUN_RECORD_ADMISSION_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (error) {
+      throw runRecordUnavailableError({ agentName: this.name, runId }, error);
+    } finally {
+      clearTimeout(timer);
     }
-    if (record.status === 'running' && !resuming) {
-      throw runIdAlreadyClaimedError({ agentName: this.name, runId });
-    }
-    return record;
   }
 
   #createStreamPublisher(
+    bus: AgentStreamBus,
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
-  ): AgentStreamPublisher | undefined {
-    if (!areAgentStreamsEnabled(this.#executionEnginePolicy.durable, !!this.#mastra)) return undefined;
-    const bus = this.__getStreamBus();
-    if (!bus) return undefined;
+  ): AgentStreamPublisher {
     const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
       runId,
@@ -9489,6 +9541,7 @@ export class Agent<
   async #prepareAndStartPlainWorkflow<OUTPUT>({
     methodType,
     resumeContext,
+    generatedRunId,
     _threadStreamPubSub,
     ...options
   }: InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub }) {
@@ -9542,6 +9595,7 @@ export class Agent<
             const delegated: unknown = (resolved as unknown as this).#prepareAndStartPlainWorkflow<OUTPUT>({
               methodType,
               resumeContext,
+              generatedRunId,
               _threadStreamPubSub,
               ...options,
               requestContext,
@@ -9713,17 +9767,43 @@ export class Agent<
         resourceId,
       }) ||
       globalThis.crypto.randomUUID();
-    const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
-    this.#suspendedRunOutputProcessors.delete(runId);
-    if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
-      options = { ...options, outputProcessors: keptOutputProcessors };
-    }
+
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
       toolsets: options.toolsets,
       clientTools: options.clientTools,
     });
+
+    const memory = await this.getMemory({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
+
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
+    // Claim the run once its setup has resolved, and before any of its state is taken.
+    // The claim must not run before the setup awaits: a run admitted early can hold that
+    // admission through a paused setup, let another run finish on the same id, and then
+    // take it over. A refused run must not open a span or consume the output processors a
+    // resume is holding either, or the retry it is told to make would start without them.
+    const streamPublisher = await this.#claimRunStream(
+      runId,
+      { resourceId, threadId: threadFromArgs?.id, abortSignal: options.abortSignal },
+      {
+        resuming: Boolean(resumeContext?.claim),
+        checkRecord: Boolean(resumeContext) || (!generatedRunId && !!options.runId),
+      },
+    );
+
+    const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
+    this.#suspendedRunOutputProcessors.delete(runId);
+    if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
+      options = { ...options, outputProcessors: keptOutputProcessors };
+    }
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -9774,16 +9854,6 @@ export class Agent<
       requestContext,
       mastra: this.#mastra,
       resumeFrom: persistedTracingContext,
-    });
-
-    const memory = await this.getMemory({ requestContext });
-    // Reuse early workspace (resolved earlier for browser context) to avoid
-    // duplicate factory resolution which could create different instances
-    const workspace = earlyWorkspace;
-
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.logger,
-      memory,
     });
 
     // Create a capabilities object with bound methods
@@ -9845,24 +9915,6 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
-
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
-      resuming: Boolean(resumeContext?.claim),
-    });
-
-    // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
-    // starts the new run on top of the old frames: a reader replaying from the start would
-    // get the previous finish event and close before the new run says anything. Suspended
-    // runs keep their log, because that is the history the resume continues.
-    if (priorRunRecord?.status === 'finished') {
-      await this.__getStreamBus()?.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
-    }
-
-    const streamPublisher = this.#createStreamPublisher(runId, {
-      resourceId,
-      threadId: threadFromArgs?.id,
-      abortSignal: options.abortSignal,
-    });
 
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
@@ -10586,6 +10638,7 @@ export class Agent<
     // Reserve the thread before execution so concurrent invocations and signals
     // cannot start a second run before registerRun below.
     const threadStreamPubSub = this.getPubSub();
+    const generatedRunId = mergedOptions.runId == null;
     mergedOptions.runId ??= resolveRunId(undefined, () =>
       this.#mastra?.generateId({
         idType: 'run',
@@ -10621,6 +10674,7 @@ export class Agent<
       methodType,
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      generatedRunId,
       _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub };
 
