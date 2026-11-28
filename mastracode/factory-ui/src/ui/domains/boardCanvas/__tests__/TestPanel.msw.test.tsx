@@ -2,12 +2,13 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
+import { RouterBoardSettingsHost } from '../../../pages/board/RouterBoardSettingsHost';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../e2e/ui/render';
 import type { IntakeTestResponse } from '../../../../api/types';
-import { TestPanel } from '../components/testPanel/TestPanel';
+import { TestPanel } from '@mastra/playground-ui/domains/factory';
 
 const PROJECT = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const URL = 'https://github.com/mastra-ai/mastra/issues/12';
@@ -60,7 +61,9 @@ function serveTest(response: IntakeTestResponse | { status: number; message: str
 function renderPanel(subject: string, onEditRule = vi.fn()) {
   renderWithProviders(
     <MemoryRouter>
-      <TestPanel factoryId="fp-1" boardId="work" subject={subject} onEditRule={onEditRule} onClose={vi.fn()} />
+      <RouterBoardSettingsHost factoryId="fp-1">
+        <TestPanel factoryId="fp-1" boardId="work" subject={subject} onEditRule={onEditRule} onClose={vi.fn()} />
+      </RouterBoardSettingsHost>
     </MemoryRouter>,
   );
   return onEditRule;

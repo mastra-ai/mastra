@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import {
+  MAX_INTAKE_ROUTES_PER_BOARD,
   arrivalKinds,
   currentRuleGroup,
   DEFAULT_ROUTE_EVENTS,
@@ -241,7 +242,7 @@ export type StoredBoardErrorCode =
   | 'invalid_intake_cursor';
 
 /** A board's most intake routes. */
-export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
+export { MAX_INTAKE_ROUTES_PER_BOARD };
 
 /**
  * How an arrival was decided; `rule_skipped` warns that a card-move rule matched but its target

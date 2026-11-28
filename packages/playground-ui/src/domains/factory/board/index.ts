@@ -54,3 +54,4 @@ export * from './board-phase-setup-card';
 export * from './board-phase-setup-hover-card';
 export * from './rule-row';
 export * from './use-phase-arrivals';
+export * from './ordered-boards';

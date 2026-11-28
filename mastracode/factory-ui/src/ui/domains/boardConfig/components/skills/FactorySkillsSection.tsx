@@ -17,13 +17,11 @@ import { Link } from 'react-router';
 
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../../api/types';
 import { useFactorySkillsQuery } from '../../../../../hooks/useFactorySkills';
-import { boardName, installedPhaseName } from '@mastra/playground-ui/domains/factory';
-import { orderedBoards } from '../../../factory/boardCatalog';
+import { boardName, installedPhaseName, orderedBoards, SkillBadges } from '@mastra/playground-ui/domains/factory';
 import { SettingsSubsection } from '../../../settings/components/SettingsSubsection';
 import { useSettingsLinkState } from '../../../settings/hooks/useSettingsOpen';
 import { newSkillPath, skillPath } from '../../../settings/settingsSections';
 import { boardConfigPath } from '../../boardConfigPaths';
-import { SkillBadges } from './SkillBadges';
 
 /** A board phase that runs a skill. */
 type SkillUse = { boardId: string; board: string; phaseKey: string; phase: string };

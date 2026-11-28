@@ -1,5 +1,5 @@
 import { sourceSuggestions } from '../ui/domains/settings/components/sourceSuggestions';
-import type { SourceOption } from '../ui/domains/settings/components/sourceSuggestions';
+import type { SourceOption } from '@mastra/playground-ui/domains/factory';
 import { useFactoryQuery } from './useFactories';
 import { useIntakeBindingsQuery } from './useIntakeConfig';
 import { useJiraProjectsQuery } from './useJiraData';

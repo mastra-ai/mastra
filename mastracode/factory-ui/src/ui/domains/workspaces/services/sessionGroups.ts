@@ -2,7 +2,7 @@ import { SESSION_ROW_GROUP_BYS, SESSION_ROW_STATUSES, sessionRowGroupKeys } from
 import type { DropdownMenuRadioOption } from '@mastra/playground-ui/components/DropdownMenu';
 
 import type { InstalledBoardInfo } from '../../../../api/types';
-import { orderedBoards } from '../../factory/boardCatalog';
+import { orderedBoards } from '@mastra/playground-ui/domains/factory';
 import { SESSION_STATUS_LABELS } from './sessionRows';
 import type { SessionListRow, SessionOwner } from './sessionRows';
 

@@ -6,7 +6,7 @@ import { Navigate } from 'react-router';
 
 import { LoadErrorState } from '../../../ui/LoadErrorState';
 import { useSidebarHeaderSlots } from '../../chat/components/useSidebarHeaderSlots';
-import { orderedBoards } from '../boardCatalog';
+import { orderedBoards } from '@mastra/playground-ui/domains/factory';
 import { rememberedBoardPath } from '../services/boardViews';
 import { BoardLoadingSkeleton } from './BoardLoadingSkeleton';
 

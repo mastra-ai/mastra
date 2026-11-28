@@ -1,6 +1,22 @@
 import { fromWireWorkItem, toWireCreateInput } from '@internal/factory-contract';
 import type {
   BoardCatalogResponse,
+  CreateBoardBody,
+  IntakeRouteInput,
+  IntakeRoutePatch,
+  IntakeRouteReorderBody,
+  IntakeRerouteResponse,
+  IntakeRerouteApplyResponse,
+  IntakeOrderResponse,
+  IntakeOrderBody,
+  IntakeNotRoutedResponse,
+  IntakeSkippedResponse,
+  IntakeRouteAgainResponse,
+  IntakeDryRunBody,
+  IntakeDryRunResponse,
+  IntakeTestBody,
+  IntakeTestResponse,
+  IntakeRouteResponse,
   IntakeRouteListResponse,
   ReplaceBoardBody,
   StoredBoardResponse,
@@ -35,6 +51,23 @@ import { BaseResource } from './base';
 
 export type {
   BoardCatalogResponse,
+  CreateBoardBody,
+  IntakeRouteInput,
+  IntakeRoutePatch,
+  IntakeRouteReorderBody,
+  IntakeRerouteResponse,
+  IntakeRerouteApplyResponse,
+  IntakeOrderResponse,
+  IntakeOrderBody,
+  IntakeNotRoutedResponse,
+  IntakeSkippedResponse,
+  IntakeRouteAgainResponse,
+  IntakeDryRunBody,
+  IntakeDryRunResponse,
+  IntakeTestBody,
+  IntakeTestResponse,
+  IntakeRouteResponse,
+  IntakeDecisionInfo,
   InstalledBoardInfo,
   InstalledPhaseInfo,
   IntakeRouteInfo,
@@ -334,5 +367,96 @@ export class Factory extends BaseResource {
   /** The project's intake routes in the order they are tried, and whether the caller may change them. */
   intakeRoutes({ signal }: Read = {}): Promise<IntakeRouteListResponse> {
     return this.request(`${this.project}/intake-routes`, { signal });
+  }
+
+  /** Adds a board to the project. */
+  createBoard(body: CreateBoardBody): Promise<StoredBoardResponse> {
+    return this.request(`${this.project}/boards`, { method: 'POST', body });
+  }
+
+  /** Resets a built-in or app board to its code definition. */
+  resetBoard(boardKey: string, expectedRevision: number): Promise<StoredBoardResponse> {
+    return this.request(`${this.project}/boards/${encodeURIComponent(boardKey)}/reset`, {
+      method: 'POST',
+      body: { expectedRevision },
+    });
+  }
+
+  /** Deletes a board; refuses with `revision_mismatch` when someone saved it first. */
+  async deleteBoard(boardKey: string, expectedRevision: number): Promise<void> {
+    await this.request(`${this.project}/boards/${encodeURIComponent(boardKey)}?expectedRevision=${expectedRevision}`, {
+      method: 'DELETE',
+    });
+  }
+
+  createIntakeRoute(body: IntakeRouteInput): Promise<IntakeRouteResponse> {
+    return this.request(`${this.project}/intake-routes`, { method: 'POST', body });
+  }
+
+  updateIntakeRoute(routeId: string, body: IntakeRoutePatch): Promise<IntakeRouteResponse> {
+    return this.request(`${this.project}/intake-routes/${encodeURIComponent(routeId)}`, { method: 'PATCH', body });
+  }
+
+  async deleteIntakeRoute(routeId: string, expectedRevision: number): Promise<void> {
+    await this.request(
+      `${this.project}/intake-routes/${encodeURIComponent(routeId)}?expectedRevision=${expectedRevision}`,
+      { method: 'DELETE' },
+    );
+  }
+
+  /** Puts a board's rules (or, without `boardKey`, the whole project's) in a new order. */
+  reorderIntakeRoutes(body: IntakeRouteReorderBody): Promise<IntakeRouteListResponse> {
+    return this.request(`${this.project}/intake-routes/reorder`, { method: 'POST', body });
+  }
+
+  /** Untouched cards the current rules would now file on a different board. */
+  reroutePreview({ signal }: Read = {}): Promise<IntakeRerouteResponse> {
+    return this.request(`${this.project}/intake-routes/reroute`, { signal });
+  }
+
+  applyReroute(): Promise<IntakeRerouteApplyResponse> {
+    return this.request(`${this.project}/intake-routes/reroute`, { method: 'POST' });
+  }
+
+  /** The order intake asks the project's boards, and which evaluator files new items. */
+  intakeOrder({ signal }: Read = {}): Promise<IntakeOrderResponse> {
+    return this.request(`${this.project}/intake-order`, { signal });
+  }
+
+  setIntakeOrder(body: IntakeOrderBody): Promise<IntakeOrderResponse> {
+    return this.request(`${this.project}/intake-order`, { method: 'PUT', body });
+  }
+
+  /** Items no board took, newest first; `cursor` takes the previous page's `nextCursor`. */
+  notRouted(
+    options: { limit?: number; cursor?: string } = {},
+    { signal }: Read = {},
+  ): Promise<IntakeNotRoutedResponse> {
+    const query = new URLSearchParams();
+    if (options.limit) query.set('limit', String(options.limit));
+    if (options.cursor) query.set('cursor', options.cursor);
+    return this.request(`${this.project}/intake/not-routed${query.size > 0 ? `?${query}` : ''}`, { signal });
+  }
+
+  /** Runs a Not routed item through today's rules again. */
+  routeAgain(decisionId: string): Promise<IntakeRouteAgainResponse> {
+    return this.request(`${this.project}/intake/not-routed/${encodeURIComponent(decisionId)}/route-again`, {
+      method: 'POST',
+    });
+  }
+
+  /** Items a rule matched but whose board or phase could not take them. */
+  skipped({ signal }: Read = {}): Promise<IntakeSkippedResponse> {
+    return this.request(`${this.project}/intake/skipped`, { signal });
+  }
+
+  /** What the saved (or the sent, unsaved) rules and order would do with the project's recent items. */
+  intakeDryRun(body: IntakeDryRunBody, { signal }: Read = {}): Promise<IntakeDryRunResponse> {
+    return this.request(`${this.project}/intake/dry-run`, { method: 'POST', body, signal });
+  }
+
+  /** Where one item, by URL or id, would land under the saved (or the sent) rules. */
+  intakeTest(body: IntakeTestBody, { signal }: Read = {}): Promise<IntakeTestResponse> {
+    return this.request(`${this.project}/intake/test`, { method: 'POST', body, signal });
   }
 }
