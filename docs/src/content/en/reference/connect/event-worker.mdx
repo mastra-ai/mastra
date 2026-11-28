@@ -1,0 +1,141 @@
+---
+title: 'Reference: ConnectEventWorker | Connect'
+description: 'API reference for ConnectEventWorker in @mastra/connect: handle provider webhook events on a project’s connections, with a handler per provider or per event type.'
+packages:
+  - '@mastra/connect'
+  - '@mastra/core'
+---
+
+# ConnectEventWorker
+
+A [worker](/docs/deployment/workers) that handles provider events on a project's connections, such as a GitHub pull request opening or a Linear issue being created. Pass it handlers keyed by provider, then pass the worker to `Mastra({ workers: [...] })`. It subscribes with [`ConnectEvents`](/reference/connect/events) when Mastra starts its workers.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { ConnectEventWorker } from '@mastra/connect'
+import { reviewer } from './agents/reviewer'
+import { triageIssue } from './workflows/triage-issue'
+
+const connectEvents = new ConnectEventWorker({
+  github: {
+    'pull_request.opened': async ({ event, mastra }) => {
+      const agent = mastra.getAgent('reviewer')
+      await agent.generate(`Review ${event.payload.pull_request.html_url}`)
+    },
+  },
+  linear: {
+    'Issue.create': async ({ event, mastra }) => {
+      const run = await mastra.getWorkflow('triageIssue').createRun({
+        runId: `linear:${event.sourceEventId ?? event.id}`,
+        resourceId: event.resourceId,
+      })
+      if (run.workflowRunStatus === 'pending') {
+        await run.startAsync({ inputData: { issueId: event.payload.data.id } })
+      }
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  agents: { reviewer },
+  workflows: { triageIssue },
+  workers: [connectEvents],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'handlers',
+    type: 'Record<string, ConnectEventHandler | Record<string, ConnectEventHandler>>',
+    description:
+      'Handlers keyed by provider, such as `github` or `linear`. Give a provider a function to handle all of its events, or an object with a function per event type. The worker receives only the providers and event types you give handlers for.',
+  },
+  {
+    name: 'options',
+    type: 'ConnectEventWorkerOptions',
+    description:
+      'Every [`ConnectEvents`](/reference/connect/events#constructor-parameters) option except `events` and `signal`, such as `projectId`, `cursorStore` and `includeUnverified`, plus `timeoutMs` for the `connect` client handlers get and `retry` for failing handlers. `reconnectDelayMs` and `maxReconnectDelayMs` also set the backoff between subscriptions.',
+    isOptional: true,
+  },
+  {
+    name: 'options.retry',
+    type: '{ attempts?: number; delayMs?: number }',
+    description:
+      'How a failing handler is retried. `attempts` is how many times a handler is called for one event before the event is logged and skipped, 3 by default. `delayMs` is the delay before the first retry, doubling for each one after, 1000 by default.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Handlers
+
+A handler gets one object:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'event',
+    type: 'ConnectEvent',
+    description: 'The event, with a typed payload when Connect has types for it.',
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra the worker runs on, to start workflows or call agents.',
+  },
+  {
+    name: 'logger',
+    type: 'IMastraLogger',
+    description: "Mastra's logger.",
+  },
+  {
+    name: 'connect',
+    type: 'ConnectClient',
+    description:
+      "A `ConnectClient` for the project, built from the worker's options. When the event's connection belongs to an end user, it's scoped to the event's `resourceId`, so its calls act as that user.",
+  },
+]}
+/>
+
+Events are chosen the way [Choosing events](/reference/connect/events#choosing-events) describes. A function for a provider with [typed payloads](/reference/connect/events#typed-payloads) receives only the event types Connect has types for, so checking `event.eventType` narrows `event.payload`. A handler for one event type gets that event type's payload. An event type the provider doesn't send is a compile error. With `includeUnverified`, check `event.unverified` first: unverified payloads aren't typed.
+
+A provider without typed payloads gets every event type, with an `unknown` payload.
+
+## Properties
+
+### `isRunning`
+
+`true` while the worker is subscribed to the project's events.
+
+## Methods
+
+### `start()`
+
+Subscribes to the project's events. Mastra calls it when it starts its workers. Without handlers, the worker doesn't subscribe. When the subscription can't start, for example without platform credentials, the worker logs the error and Mastra starts its other workers.
+
+When the subscription ends, for example because the events service refuses the token, `onGap` throws, or `cursorStore.load` throws or returns an invalid cursor, the worker logs the error and subscribes again, backing off from `reconnectDelayMs` up to `maxReconnectDelayMs`, until it's stopped. It resumes after the last event it handled. When the events service rejects the cursor and there is no time to fall back to, it starts again at the newest event, and the events since that cursor are missed. See [`ConnectEvents` errors](/reference/connect/events#errors).
+
+### `stop(options?)`
+
+Ends the subscription and waits for the events being handled, up to `options.drainTimeout` milliseconds. Mastra calls it when it stops its workers.
+
+## Delivery
+
+Events from different connections are handled concurrently, and one connection's events one at a time, in the order they arrived. A slow handler only holds up its own connection, until 100 events are waiting to be handled. Then the worker waits for one to finish before reading more. A handler that throws is logged, and later events are still handled.
+
+Delivery is at least once: the cursor moves past an event once it and every event before it have been handled, so a handler can see an event again after a restart. A handler that throws is retried with backoff, as `retry` sets, then logged and skipped. The connection's later events wait for it. When the worker stops while a retry waits, the event stays unhandled, so the cursor doesn't move past it. A `cursorStore.save` that throws is logged, and the next save tries again. Make handlers safe to repeat, for example by starting a workflow with a run id built from `event.sourceEventId ?? event.id` and skipping a run that already started, as the usage example does.
+
+The worker keeps its cursor in memory, so subscribing again within one process resumes without a `cursorStore`. A restarted process without one starts at the newest event, so events that arrive while it's down aren't handled.
+
+Every process that runs the worker receives every event, so with several processes each event is handled once per process. Give each process its own `cursorStore`, or run the worker in one process with [`MASTRA_WORKERS`](/docs/deployment/workers#select-workers).
+
+## Related
+
+- [ConnectEvents](/reference/connect/events)
+- [ConnectEventSignals](/reference/connect/event-signals)
+- [Workers](/docs/deployment/workers)
