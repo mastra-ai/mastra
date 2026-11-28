@@ -2,11 +2,28 @@ import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { constants, monitorEventLoopDelay, PerformanceObserver } from 'node:perf_hooks';
 import type { PerformanceEntry } from 'node:perf_hooks';
-import { getHeapStatistics } from 'node:v8';
+import { getHeapSpaceStatistics, getHeapStatistics } from 'node:v8';
 
 import type { MetricsCollector } from '../metrics.js';
 
 const LOOP_RESOLUTION_MS = 20;
+
+// V8 heap spaces worth charting: together they explain most of heapTotal. Fixed list so the
+// `space` label can't grow with runtime data, and names are normalized to drop the v8 `_space`
+// suffix (`old`, `new`, `code`, `large_object`, `trusted`, `shared`). Unknown spaces are
+// summed into `other` so the metric always totals to heapTotal.
+const HEAP_SPACES: Record<string, string> = {
+  old_space: 'old',
+  new_space: 'new',
+  code_space: 'code',
+  large_object_space: 'large_object',
+  code_large_object_space: 'code_large_object',
+  new_large_object_space: 'new_large_object',
+  trusted_space: 'trusted',
+  trusted_large_object_space: 'trusted_large_object',
+  shared_space: 'shared',
+  shared_large_object_space: 'shared_large_object',
+};
 
 function readNumbers(path: string): string[] | undefined {
   try {
@@ -75,12 +92,30 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
       lastUtilization = performance.eventLoopUtilization();
       sink.emit('mastra_factory_event_loop_utilization', utilization.utilization);
 
+      // RSS minus heap_total minus external is a rough "native overhead" (allocator fragmentation,
+      // thread stacks, native modules); watching heap_total alongside heap_used shows how much the
+      // v8 heap is committed but unused after peaks, which is the first hypothesis for RSS that
+      // doesn't fall after a burst.
       const memory = process.memoryUsage();
       sink.emit('mastra_factory_process_memory_bytes', memory.rss, { kind: 'rss' });
+      sink.emit('mastra_factory_process_memory_bytes', memory.heapTotal, { kind: 'heap_total' });
       sink.emit('mastra_factory_process_memory_bytes', memory.heapUsed, { kind: 'heap_used' });
+      sink.emit('mastra_factory_process_memory_bytes', memory.external, { kind: 'external' });
+      sink.emit('mastra_factory_process_memory_bytes', memory.arrayBuffers, { kind: 'array_buffers' });
       const heapLimit = getHeapStatistics().heap_size_limit;
       sink.emit('mastra_factory_process_memory_bytes', heapLimit, { kind: 'heap_limit' });
       sink.emit('mastra_factory_process_heap_utilization', memory.heapUsed / heapLimit);
+
+      // Per-space heap sizes: cheap (~microseconds) and the only way to tell e.g. large-object
+      // retention from code-cache growth. Unknown spaces are folded into `other` so the sum of
+      // `space` values equals heap_total.
+      let other = 0;
+      for (const space of getHeapSpaceStatistics()) {
+        const label = HEAP_SPACES[space.space_name];
+        if (label) sink.emit('mastra_factory_process_heap_space_bytes', space.space_size, { space: label });
+        else other += space.space_size;
+      }
+      sink.emit('mastra_factory_process_heap_space_bytes', other, { space: 'other' });
 
       // CPU used by every thread of the process (main thread, GC helpers, the libuv pool, workers)
       // since the last sample, in cores: 1.4 means 1.4 cores' worth, like 140% in top. It can go
