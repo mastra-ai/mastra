@@ -2,8 +2,8 @@ import { recordMicrophoneToFile } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 
-import { useApiConfig } from '../../../../api/config';
-import type { LiveSessionResponse, TranscribeResponse } from '../../../../api/types';
+import { useFactoryWeb } from '@mastra/react/hooks/factory';
+import type { LiveSessionResponse } from '../../../../api/types';
 import { liveDictationSupported, startLiveDictation } from '../services/liveDictation';
 import type { LiveDictation, LiveDictationSession } from '../services/liveDictation';
 
@@ -61,14 +61,13 @@ export function useVoiceDictation({
   onTranscript: (transcript: string, replacing: string) => void;
   onError: (message: string) => void;
 }): VoiceDictation {
-  const { client } = useApiConfig();
+  const factoryWeb = useFactoryWeb();
   const [phase, setPhase] = useState<RecordingPhase>('idle');
   const captureRef = useRef<Capture>(undefined);
   const mountedRef = useRef(true);
-  const query = factoryId ? `?factoryId=${encodeURIComponent(factoryId)}` : '';
 
   const transcribe = useMutation({
-    mutationFn: (clip: Blob) => client.post<TranscribeResponse>(`/web/voice/transcribe${query}`, clip),
+    mutationFn: (clip: Blob) => factoryWeb.transcribe(clip, factoryId),
     onSuccess: ({ text }) => {
       if (text) onTranscript(text, '');
       else onError(NO_SPEECH);
@@ -153,7 +152,7 @@ export function useVoiceDictation({
     setPhase('requesting');
     let session: LiveSessionResponse;
     try {
-      session = await client.post<LiveSessionResponse>(`/web/voice/live-session${query}`);
+      session = await factoryWeb.liveVoiceSession(factoryId);
     } catch (error) {
       fail(error instanceof Error ? serverErrorMessage(error) : MIC_FAILED);
       return;

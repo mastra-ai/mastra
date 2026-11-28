@@ -1,7 +1,7 @@
 import { hashKey, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import { queryKeys } from '../../../api/keys';
+import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { toolFromInvocationPart } from '../chat/components/transcript-parts';
 import type { TimelineEntry } from '../chat/services/transcript';
 
@@ -59,12 +59,15 @@ export function useRefreshWorkspaceFilesOnToolCalls(
     seen.current = { workspacePath, ids: new Set(ids) };
     if (!workspacePath || previous?.workspacePath !== workspacePath) return;
     if (!ids.some(id => !previous.ids.has(id))) return;
-    const fileIndex = hashKey(queryKeys.workspaceFileIndex(workspacePath));
+    const fileIndex = hashKey(factoryWebKeys.workspaceFileIndex(workspacePath));
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.workspaceTreeScope(workspacePath),
+      queryKey: factoryWebKeys.workspaceTreeScope(workspacePath),
       predicate: query => query.queryHash !== fileIndex,
     });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileIndex(workspacePath), refetchType: 'none' });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
+    void queryClient.invalidateQueries({
+      queryKey: factoryWebKeys.workspaceFileIndex(workspacePath),
+      refetchType: 'none',
+    });
+    void queryClient.invalidateQueries({ queryKey: factoryWebKeys.workspaceFileScope(workspacePath) });
   }, [queryClient, transcript, workspacePath]);
 }

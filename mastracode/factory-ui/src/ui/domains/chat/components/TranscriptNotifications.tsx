@@ -21,8 +21,6 @@ import { CircleDotIcon } from '@mastra/playground-ui/icons/CircleDotIcon';
 import type { ReactNode } from 'react';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
 import { useSessionActivityQuery } from '@mastra/react/hooks/factory';
 import { threadPath } from '../../workspaces/services/factoryPaths';
 

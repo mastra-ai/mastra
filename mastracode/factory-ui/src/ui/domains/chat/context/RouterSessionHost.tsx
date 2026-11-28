@@ -1,10 +1,11 @@
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { forwardRef, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useMatch, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import {
@@ -25,6 +26,7 @@ import type { FactoryUserSession } from '@internal/factory-contract';
 
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { newUserSessionPath, threadPath } from '../../workspaces/services/factoryPaths';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { SessionHostContext } from './SessionHostContext';
 import type { SessionHost, SessionHostData, SessionLinkProps, SessionRouteKind } from './SessionHostContext';
 
@@ -39,8 +41,8 @@ export function useFactorySessionData(): SessionHostData {
       useViewer: useFactoryAuth,
       useUserSession: useUserSessionQuery,
       useSessionList: useWorkspacesQuery,
-      createUserSession: ({ projectId, projectRepositoryId, ...options }, toError) =>
-        queryClient.query({
+      createUserSession: ({ projectId, projectRepositoryId, ...options }, toError) => {
+        const done = queryClient.query({
           queryKey: queryKeys.userSession(options.sessionId),
           queryFn: async (): Promise<FactoryUserSession> => {
             let session: FactoryUserSession;
@@ -52,7 +54,20 @@ export function useFactorySessionData(): SessionHostData {
             addCachedSession(queryClient, projectId, session);
             return session;
           },
-        }),
+        });
+        // A new session has no history, so the thread opens on an empty transcript
+        // instead of waiting on a history read the session cannot answer yet.
+        queryClient.setQueryData<MastraDBMessage[]>(
+          queryKeys.agentControllerThreadMessages(
+            AGENT_CONTROLLER_ID,
+            options.sessionId,
+            options.sessionId,
+            INITIAL_THREAD_MESSAGE_LIMIT,
+          ),
+          [],
+        );
+        return done;
+      },
       answerParkedApproval: (sessionId, decision, toolCallId) =>
         answerParkedApproval(baseUrl, sessionId, decision, toolCallId),
       onSessionTitleChanged: (projectId, sessionId, title) =>

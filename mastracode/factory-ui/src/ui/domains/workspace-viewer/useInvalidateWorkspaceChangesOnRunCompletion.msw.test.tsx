@@ -1,7 +1,7 @@
 import { waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../api/keys';
+import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { renderHookWithProviders } from '../../../../e2e/ui/render';
 import { useInvalidateWorkspaceChangesOnRunCompletion } from './useInvalidateWorkspaceChangesOnRunCompletion';
 
@@ -13,9 +13,9 @@ describe('useInvalidateWorkspaceChangesOnRunCompletion', () => {
       ({ busy }) => useInvalidateWorkspaceChangesOnRunCompletion(WORKSPACE, busy),
       { initialProps: { busy: false } },
     );
-    const changesKey = queryKeys.workspaceChanges(WORKSPACE);
-    const treeKey = queryKeys.workspaceTree(WORKSPACE, 'src');
-    const fileKey = queryKeys.workspaceFile(WORKSPACE, 'src/agent.ts');
+    const changesKey = factoryWebKeys.workspaceChanges(WORKSPACE);
+    const treeKey = factoryWebKeys.workspaceTree(WORKSPACE, 'src');
+    const fileKey = factoryWebKeys.workspaceFile(WORKSPACE, 'src/agent.ts');
     client.setQueryData(changesKey, { workspacePath: WORKSPACE, available: true, changes: [] });
     client.setQueryData(treeKey, { workspacePath: WORKSPACE, path: 'src', available: true, entries: [] });
     client.setQueryData(fileKey, { workspacePath: WORKSPACE, path: 'src/agent.ts' });

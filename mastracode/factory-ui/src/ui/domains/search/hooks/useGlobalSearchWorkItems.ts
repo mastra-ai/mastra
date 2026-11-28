@@ -2,10 +2,7 @@ import { searchQuery } from '@internal/factory-contract';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
 
-import { useApiConfig } from '../../../../api/config';
-import { queryKeys } from '../../../../api/keys';
-import { useSessionCardsQuery } from '@mastra/react/hooks/factory';
-import { listWorkItems } from '../../factory/services/workItems';
+import { factoryKeys, useFactory, useSessionCardsQuery } from '@mastra/react/hooks/factory';
 import type { BoardSnapshot, WorkItem } from '@internal/factory-contract';
 
 const NO_CARDS: WorkItem[] = [];
@@ -19,13 +16,11 @@ function selectUnstarted(board: BoardSnapshot) {
 
 /** The server's best unstarted cards for one search text, without the board. */
 function useUnstartedSearch(factoryId: string | undefined, search: string) {
-  const { baseUrl } = useApiConfig();
+  const factory = useFactory(factoryId);
   return useQuery({
     // Under the board key: whatever refreshes the board's cards refreshes these.
-    queryKey: queryKeys.unstartedWorkItems(factoryId, search),
-    queryFn: factoryId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryId, signal, { started: 'false', q: search })
-      : skipToken,
+    queryKey: [...factoryKeys.workItems(factoryId), 'unstarted', search],
+    queryFn: factory ? ({ signal }) => factory.listWorkItems({ started: 'false', q: search }, { signal }) : skipToken,
     select: selectUnstarted,
     // Results stay up between searches instead of emptying while the next ones load.
     placeholderData: keepPreviousData,

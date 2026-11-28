@@ -1,13 +1,9 @@
-import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { useQueryClient } from '@tanstack/react-query';
 import { useSessionHost } from '../context/SessionHostContext';
 
-import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { DraftSessionCreateError } from '../services/sessionErrors';
 import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { PendingImage } from '../context/ComposerImagesContext';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { stashHandoffFiles } from '../services/handoffFiles';
 import { startPromptHandoff } from './useHandoffPrompt';
 
@@ -22,7 +18,6 @@ export function useCreateUserSessionFromDraft() {
   const { factorySessionState } = useChatSessionContext();
   const { activeModelId, selection } = useChatModels();
   const { factoryProjectId: factoryId, draftSessionId, navigate, links, data } = useSessionHost();
-  const queryClient = useQueryClient();
 
   return ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
     const projectRepositoryId = factorySessionState?.projectRepositoryId;
@@ -55,17 +50,6 @@ export function useCreateUserSessionFromDraft() {
         },
       )
       .catch(() => undefined);
-    // A new session has no history, so the thread opens on an empty transcript
-    // instead of waiting on a history read the session cannot answer yet.
-    queryClient.setQueryData<MastraDBMessage[]>(
-      queryKeys.agentControllerThreadMessages(
-        AGENT_CONTROLLER_ID,
-        draftSessionId,
-        draftSessionId,
-        INITIAL_THREAD_MESSAGE_LIMIT,
-      ),
-      [],
-    );
     stashHandoffFiles(draftSessionId, files);
     navigate(links.userThread(draftSessionId), {
       replace: true,

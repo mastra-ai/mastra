@@ -3,7 +3,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../api/keys';
+import { factoryWebKeys } from '@mastra/react/hooks/factory';
 import { renderHookWithProviders } from '../../../../e2e/ui/render';
 import type { TimelineEntry } from '../chat/services/transcript';
 import { useRefreshWorkspaceFilesOnToolCalls } from './useRefreshWorkspaceFilesOnToolCalls';
@@ -36,11 +36,11 @@ function toolMessage(id: string, toolName: string, state: 'call' | 'result'): Ti
 }
 
 function seed(client: QueryClient) {
-  const shown = [queryKeys.workspaceTree(WORKSPACE, 'src'), queryKeys.workspaceFile(WORKSPACE, 'src/a.ts')];
+  const shown = [factoryWebKeys.workspaceTree(WORKSPACE, 'src'), factoryWebKeys.workspaceFile(WORKSPACE, 'src/a.ts')];
   const leftForLater = [
-    queryKeys.workspaceChanges(WORKSPACE),
-    queryKeys.workspacePatches(WORKSPACE, 'branch'),
-    queryKeys.workspacePatches(WORKSPACE, 'uncommitted'),
+    factoryWebKeys.workspaceChanges(WORKSPACE),
+    factoryWebKeys.workspacePatches(WORKSPACE, 'branch'),
+    factoryWebKeys.workspacePatches(WORKSPACE, 'uncommitted'),
   ];
   for (const key of [...shown, ...leftForLater]) client.setQueryData(key, {});
   const stale = (keys: readonly QueryKey[]) => keys.map(key => client.getQueryState(key)?.isInvalidated);
@@ -68,7 +68,7 @@ describe('useRefreshWorkspaceFilesOnToolCalls', () => {
   });
 
   it('marks the file index stale without reading it again, even while Go to file shows it', async () => {
-    const fileIndex = queryKeys.workspaceFileIndex(WORKSPACE);
+    const fileIndex = factoryWebKeys.workspaceFileIndex(WORKSPACE);
     const { client, rerender } = renderHookWithProviders(
       ({ entries }) => {
         useRefreshWorkspaceFilesOnToolCalls(WORKSPACE, entries);
