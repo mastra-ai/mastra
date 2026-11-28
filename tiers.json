@@ -14493,8 +14493,8 @@
     },
     "packages/core/src/loop/shared/steps/execute-tool-core.test.ts": {
       "tier": "in",
-      "since": "2026-11-27",
-      "last_failure": "2026-11-27",
+      "since": "2026-11-28",
+      "last_failure": "2026-11-28",
       "reason": "versioning-fail",
       "pr_failures": {
         "133235611609": {
@@ -16889,8 +16889,8 @@
     },
     "packages/core/src/mastra/recover-all-durable-agents.test.ts": {
       "tier": "in",
-      "since": "2026-11-27",
-      "last_failure": "2026-11-27",
+      "since": "2026-11-28",
+      "last_failure": "2026-11-28",
       "reason": "versioning-fail",
       "pr_failures": {
         "138652181110": {
@@ -43043,8 +43043,8 @@
     },
     "packages/core/src/knowledge/importers/__tests__/runner.test.ts": {
       "tier": "in",
-      "since": "2026-11-27",
-      "last_failure": "2026-11-27",
+      "since": "2026-11-28",
+      "last_failure": "2026-11-28",
       "reason": "versioning-fail",
       "pr_failures": {
         "139632886767": {
