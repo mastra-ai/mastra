@@ -1191,7 +1191,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     forEachIndex,
     resourceId: eventResourceId,
     eventId,
-  }: ProcessorArgs & { initialState?: Record<string, any> }) {
+    restartToken,
+  }: ProcessorArgs & { initialState?: Record<string, any>; restartToken?: string }) {
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     let initialState = (arguments[0] as any).initialState ?? state ?? {};
     const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
@@ -1327,7 +1328,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // it as it is, also where it writes the run whole. A nested run that has not started yet is still
     // restartable.
     if (guardsSteps && restart && eventId && header && !['running', 'waiting', 'pending'].includes(header.status)) {
-      return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow });
+      return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow, restartToken });
     }
     if (takesOver && restart) {
       const claim = await this.#takeOverRestartTargets({
@@ -1389,7 +1390,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           appliedTriggerEventId: eventId,
           expectedStatus: ['running', 'waiting'],
         });
-        if (!updated) return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow });
+        if (!updated) {
+          return this.#declineRestart({ workflowId, runId, eventId, requestContext, parentWorkflow, restartToken });
+        }
       }
     }
 
@@ -2802,7 +2805,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Drops a restart of a run that is no longer active, writing nothing to the run. Its caller waits
    * for the run's finish, which already went out before the restart applied, so it is sent the
-   * stored outcome as a finish: the ended run's result, or its suspension. A nested run's restart
+   * stored outcome as a finish: the ended run's result, or its suspension. The finish names the
+   * restart's `restartToken`, so other callers waiting on the run ignore it. A nested run's restart
    * has no caller of its own.
    */
   async #declineRestart({
@@ -2811,7 +2815,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     eventId,
     requestContext,
     parentWorkflow,
-  }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'eventId' | 'requestContext' | 'parentWorkflow'>) {
+    restartToken,
+  }: Pick<ProcessorArgs, 'workflowId' | 'runId' | 'eventId' | 'requestContext' | 'parentWorkflow'> & {
+    restartToken?: string;
+  }) {
     const snapshot = await this.#runStorage(workflowId, runId).loadFull();
     this.mastra.getLogger()?.warn('Not restarting a workflow run: it is no longer active', {
       workflowId,
@@ -2840,6 +2847,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         requestContext,
         // The run called its lifecycle callbacks when it finished; its caller must not call them again.
         storedOutcome: true,
+        storedOutcomeFor: restartToken,
       },
     });
   }
@@ -3961,7 +3969,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             const suspended = (snapshot.context as Record<string, any>)[suspendedId];
             const meta = suspended.suspendPayload?.__workflow_meta ?? {};
             const existingPath: string[] = meta.path ?? [];
-            const nestedLabels: Record<string, { foreachIndex?: number }> = meta.resumeLabels ?? {};
+            // The nested run stores the labels of every suspended branch; a step's record holds only its own.
+            const nestedLabels: Record<string, { foreachIndex?: number }> =
+              snapshot.resumeLabels && Object.keys(snapshot.resumeLabels).length > 0
+                ? snapshot.resumeLabels
+                : (meta.resumeLabels ?? {});
             const resumeLabels = Object.fromEntries(
               Object.entries(nestedLabels).map(([label, { foreachIndex }]) => [
                 label,
@@ -4474,8 +4486,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           completionGuard: { eventId: args.eventId! },
         });
       }
-      // The retry's claim expects this attempt's stamp. A resumed step keeps its suspended record
-      // with that stamp, so the retry still reads its suspend data from it.
+      // The retry's claim expects this attempt's stamp. For a resumed step the retry gets the
+      // suspended record in memory, with that stamp: the stored record of the failed attempt has no
+      // suspend fields, and the retry reads its suspend data from the record it is handed.
       if (guardStart) {
         stepResults[leafId] = isResumedEntry
           ? { ...stepResults[leafId]!, metadata: { ...stepResults[leafId]?.metadata, startedBy: args.eventId } }
