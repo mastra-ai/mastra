@@ -99,9 +99,7 @@ describe('knowledgeAgentScopes() minting', () => {
       calls: [{ toolName: 'knowledge_read', input: {} }],
     });
     const held = heldAddresses(await agent.generate('who am I', { maxSteps: 2, ...memoryRun }));
-    expect(held).toEqual(
-      [...allIdentities, 'org:org_2x9', 'resource:slack%3AU123', 'thread:thread-1'].sort(),
-    );
+    expect(held).toEqual([...allIdentities, 'org:org_2x9', 'resource:slack%3AU123', 'thread:thread-1'].sort());
   });
 
   it('mints nothing from an unflagged agent declaration', async () => {
@@ -164,8 +162,11 @@ describe('knowledgeAgentScopes() minting', () => {
     const [written] = toolOutputs(await agent.generate('write', { maxSteps: 2, ...memoryRun }));
     expect(written!.error).toBeUndefined();
     const store = await knowledge.getStorage();
-    const page = await store.getPage({ id: written!.result.page.id, read: await knowledge.readScopeFor(['kb:docs']) });
-    expect(page?.createdBy).toBe('agent:a1b2');
+    const page = await store.getPage({
+      id: written!.result.page.id,
+      read: await knowledge.readScopeFor(['agent:persona:role:support']),
+    });
+    expect(page?.createdBy.author).toBe('agent:a1b2');
   });
 
   it('reads the persona from function-form metadata for the run request context', async () => {
@@ -199,12 +200,19 @@ describe('knowledgeAgentScopes() minting', () => {
     const [written] = toolOutputs(await write.generate('write', { maxSteps: 2, ...memoryRun }));
     expect(written!.error).toBeUndefined();
 
-    const reads = async (id: string, role?: string, calls: Call[] = [{ toolName: 'knowledge_read', input: { page: written!.result.page.id } }]) =>
+    const reads = async (
+      id: string,
+      role?: string,
+      calls: Call[] = [{ toolName: 'knowledge_read', input: { page: written!.result.page.id } }],
+    ) =>
       toolOutputs(
-        await agentWith(knowledge, { id, ...(role ? { metadata: { persona: { role } } } : {}), calls }).generate('read', {
-          maxSteps: 2,
-          ...memoryRun,
-        }),
+        await agentWith(knowledge, { id, ...(role ? { metadata: { persona: { role } } } : {}), calls }).generate(
+          'read',
+          {
+            maxSteps: 2,
+            ...memoryRun,
+          },
+        ),
       )[0]!;
     expect((await reads('s1', 'support')).error).toBeUndefined();
     expect((await reads('s2', 'support')).error).toBeUndefined();
@@ -292,16 +300,16 @@ describe('flagged declarations', () => {
   });
 
   it('refuses a param outside the run identity set', () => {
-    expect(() =>
-      compileKnowledgeScopes({ 'agent:$agentId:desk:$deskId': { mint: 'run-identity' } }),
-    ).toThrow(/\$deskId/);
+    expect(() => compileKnowledgeScopes({ 'agent:$agentId:desk:$deskId': { mint: 'run-identity' } })).toThrow(
+      /\$deskId/,
+    );
   });
 
   it('refuses a flagged declaration that is not of type agent, or names no param', () => {
     expect(() => compileKnowledgeScopes({ 'org:$orgId': { mint: 'run-identity' } })).toThrow(KnowledgeDeclarationError);
-    expect(() =>
-      compileKnowledgeScopes({ 'agent:$agentId': {}, 'agent:fixed': { mint: 'run-identity' } }),
-    ).toThrow(KnowledgeDeclarationError);
+    expect(() => compileKnowledgeScopes({ 'agent:$agentId': {}, 'agent:fixed': { mint: 'run-identity' } })).toThrow(
+      KnowledgeDeclarationError,
+    );
   });
 
   it('compiles the preset with no overlap, and an agent with id "persona" takes no role or team address', () => {

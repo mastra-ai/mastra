@@ -2519,6 +2519,7 @@ export class Agent<
   #getKnowledgeProcessors(
     configuredProcessors: InputProcessorOrWorkflow[],
     hasMemory: boolean,
+    requestContext: RequestContext | undefined,
   ): InputProcessorOrWorkflow[] {
     const knowledge = this.getKnowledge();
     if (!knowledge) return [];
@@ -2543,8 +2544,20 @@ export class Agent<
       }
       processors.push(
         new PinnedStateProcessor({
-          principalsKey: context => knowledge.__principalsKey(context),
-          readPins: context => knowledge.__deliveredPins(context),
+          principalsKey: async context => {
+            const metadata = await this.getMetadata({ requestContext });
+            return knowledge.__principalsKey({
+              ...context,
+              agent: { ...context.agent, agentId: this.id, persona: metadata?.persona },
+            });
+          },
+          readPins: async context => {
+            const metadata = await this.getMetadata({ requestContext });
+            return knowledge.__deliveredPins({
+              ...context,
+              agent: { ...context.agent, agentId: this.id, persona: metadata?.persona },
+            });
+          },
           ...knowledge.__toolGroups,
         }),
       );
@@ -3107,7 +3120,7 @@ export class Agent<
     const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
 
     // Knowledge usage instructions, and pins when there is a Memory thread to carry their state signal
-    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory));
+    const knowledgeProcessors = this.#getKnowledgeProcessors(configuredProcessors, Boolean(memory), requestContext);
 
     // Get skills processors if skills are configured (with deduplication)
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
@@ -5283,7 +5296,27 @@ export class Agent<
         backgroundConfig: (tool as any).background,
         agentBackgroundConfig: this.#backgroundTasks,
       };
-      converted[toolName] = makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+      const execute = tool.execute;
+      const agentTool = execute
+        ? {
+            ...tool,
+            execute: async (input: Parameters<typeof execute>[0], context: Parameters<typeof execute>[1]) => {
+              const metadata = await this.getMetadata({ requestContext });
+              const runContext = {
+                ...context,
+                agent: context?.agent ? { ...context.agent, agentId: this.id, persona: metadata?.persona } : undefined,
+              };
+              return execute(input, runContext);
+            },
+          }
+        : tool;
+      converted[toolName] = makeCoreTool(
+        agentTool,
+        options,
+        undefined,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+      );
     }
     return converted;
   }

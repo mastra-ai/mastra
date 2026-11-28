@@ -647,6 +647,7 @@ export type {
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export type { PinEntry as KnowledgePinnedEntry } from './pinned';
+export { knowledgeAgentScopes } from './agent-scopes';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export { decodeKnowledgeScopeId, encodeKnowledgeScopeId } from './scope-address';
 export type {

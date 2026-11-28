@@ -283,11 +283,15 @@ async function visibleNote(run: KnowledgeRun, id: string): Promise<{ note: Knowl
   return { note, page };
 }
 
-/** Pin authority over an audience entry: the run holds it, or rules give it editor+ there. */
+/** Shared persona audiences need editor authority even when the run holds them. */
 async function requireAudienceAuthority(run: KnowledgeRun, audience: string[]): Promise<void> {
   for (const address of audience) {
-    if (run.principals.includes(address)) continue;
-    if (!run.runtime.compiled.match(address)) {
+    const match = run.runtime.compiled.match(address);
+    const sharedPersona =
+      match?.compiled.declaration.mint === 'run-identity' &&
+      match.compiled.pattern.params.some(param => param === 'role' || param === 'teamId');
+    if (run.principals.includes(address) && !sharedPersona) continue;
+    if (!match) {
       throw new Error(`Pin audience "${address}" does not match a declared scope type.`);
     }
     const [scope] = await run.storage.getScopesByAddress([address]);

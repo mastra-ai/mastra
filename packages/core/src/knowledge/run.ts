@@ -7,6 +7,7 @@ import type {
 } from '../storage/domains/knowledge';
 import { knowledgeScopeReadable, parseKnowledgePageRef } from '../storage/domains/knowledge';
 import { knowledgeRoleOn } from './access';
+import { mintKnowledgeAgentScopes } from './agent-scopes';
 import {
   KnowledgeDeclarationError,
   knowledgeRoleAtLeast,
@@ -19,7 +20,7 @@ import type { KnowledgeScopeRuntime } from './scope-runtime';
 
 /** What tools receive as their second argument. */
 export type KnowledgeRunContext = {
-  agent?: { threadId?: string; resourceId?: string; agentId?: string };
+  agent?: { threadId?: string; resourceId?: string; agentId?: string; persona?: unknown };
   requestContext?: { get(key: string): unknown };
 };
 
@@ -245,5 +246,7 @@ export function knowledgeRunPrincipals(
       );
     }
   }
-  return [...new Set([...knowledgeRunScopes(runtime.compiled, raw), ...memory])];
+  const scopes = knowledgeRunScopes(runtime.compiled, raw);
+  const minted = mintKnowledgeAgentScopes(runtime.compiled, scopes, context?.agent);
+  return [...new Set([...scopes, ...memory, ...minted])];
 }
