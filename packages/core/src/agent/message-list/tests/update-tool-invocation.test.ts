@@ -491,6 +491,116 @@ describe('MessageList.updateToolInvocation', () => {
     expect((parts[2] as any).type).toBe('text');
   });
 
+  it('should update the newest matching occurrence when a toolCallId is reused (#31609)', () => {
+    const messageList = new MessageList();
+
+    // Two finished calls share an id; only the newer one describes the incoming result.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'lookup',
+          args: { q: 'a' },
+          result: { answer: 'result-a' },
+        },
+      },
+      { type: 'step-start' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'lookup',
+          args: { q: 'b' },
+          result: { answer: 'result-b' },
+        },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'call_0',
+        toolName: 'lookup',
+        args: { q: 'b' },
+        result: { answer: 'result-b-final' },
+      },
+    });
+
+    expect(updated).toBe(true);
+
+    const parts = msg.content.parts as any[];
+    // The earlier call keeps its own result...
+    expect(parts[0].toolInvocation.state).toBe('result');
+    expect(parts[0].toolInvocation.result).toEqual({ answer: 'result-a' });
+    // ...and the result lands on the occurrence that describes the same call.
+    expect(parts[2].toolInvocation.result).toEqual({ answer: 'result-b-final' });
+  });
+
+  it('should fold a background result into the waiting copy, not into a finished call with the same remaining args (#31609)', () => {
+    const messageList = new MessageList();
+
+    // The model called the tool in the foreground, then dispatched the same tool in the
+    // background on a later step, where the gateway reused `call_0`. The stored copy of
+    // the background dispatch keeps the model's `_background` key; the result that closes
+    // it arrives with that key stripped.
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison' },
+          result: { name: 'comparison', amount: 42 },
+        },
+      },
+      { type: 'step-start' },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison', _background: { disposition: 'deferred' } },
+          result: 'Background task started. Task ID: task-B.',
+        },
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-B', status: 'running' } } },
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call_0',
+          toolName: 'fetchRecord',
+          args: { name: 'comparison' },
+          result: { name: 'comparison', amount: 42 },
+        },
+      },
+      { backgroundTasks: { call_0: { taskId: 'task-B' } } },
+    );
+
+    expect(updated).toBe(true);
+
+    const parts = msg.content.parts as any[];
+    // The finished foreground call keeps its own result...
+    expect(parts[0].toolInvocation.state).toBe('result');
+    expect(parts[0].toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(parts[0].toolInvocation.args).toEqual({ name: 'comparison' });
+    // ...and the dispatch still waiting for its outcome receives it, with the stored args intact.
+    expect(parts[2].toolInvocation.state).toBe('result');
+    expect(parts[2].toolInvocation.result).toEqual({ name: 'comparison', amount: 42 });
+    expect(parts[2].toolInvocation.args).toEqual({ name: 'comparison', _background: { disposition: 'deferred' } });
+  });
+
   it('should skip user-role messages when searching', () => {
     const messageList = new MessageList();
 
@@ -530,6 +640,42 @@ describe('MessageList.updateToolInvocation', () => {
     });
 
     expect(result).toBe(false);
+  });
+
+  it('reconciles a provider result delivered under a different id (#31609)', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'model-call',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        providerExecuted: true,
+      } as any,
+    ]);
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'provider-result',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    } as any);
+
+    expect(updated).toBe(true);
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation.state).toBe('result');
+    expect(part.toolInvocation.result).toEqual({ data: 'search' });
+    // The stored call is reconciled onto the result's id so replay stays consistent.
+    expect(part.toolInvocation.toolCallId).toBe('provider-result');
   });
 
   it('should preserve providerMetadata from the input part', () => {

@@ -195,6 +195,52 @@ describe('live tool state only moves a stored call forward', () => {
     expect(parts[1]?.toolInvocation.result).toBe('completed');
     expect(parts[1]?.providerMetadata?.mastra?.backgroundTask).toMatchObject({ status: 'completed' });
   });
+
+  it('keeps a distinct later live occurrence of a stored id (#31609)', () => {
+    const stored = withToolState('assistant', 1, { state: 'result', result: { applied: true } });
+    const live: MastraDBMessage = {
+      ...withToolState('assistant', 2, { state: 'result', result: { applied: true } }),
+      content: {
+        format: 2,
+        parts: [
+          // An echo of the stored call...
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'color',
+              toolName: 'changeColor',
+              args: { color: 'green' },
+              state: 'result',
+              result: { applied: true },
+            },
+          },
+          { type: 'step-start' },
+          // ...and a later call the provider numbered with the same id.
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'color',
+              toolName: 'changeColor',
+              args: { color: 'red' },
+              state: 'call',
+            },
+          },
+        ],
+      },
+    };
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'response');
+    list.add(stored, 'memory');
+
+    const parts = list.get.all
+      .db()[0]!
+      .content.parts.filter(part => part.type === 'tool-invocation')
+      .map(part => part.toolInvocation);
+    expect(parts).toHaveLength(2);
+    expect(parts[0]).toMatchObject({ state: 'result', args: { color: 'green' }, result: { applied: true } });
+    expect(parts[1]).toMatchObject({ state: 'call', args: { color: 'red' } });
+  });
 });
 
 function withText(message: MastraDBMessage, text: string, extra: Partial<MastraDBMessage['content']> = {}) {

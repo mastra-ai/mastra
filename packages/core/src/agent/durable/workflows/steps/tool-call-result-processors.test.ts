@@ -73,7 +73,7 @@ function makeInitData() {
 }
 
 /** Message list holding the pending 'call' invocation, like llm-execution records it. */
-function seedMessageList() {
+function seedMessageList(storedArgs: unknown = TOOL_ARGS) {
   const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
   const assistantMessage: MastraDBMessage = {
     id: 'msg-1',
@@ -83,7 +83,7 @@ function seedMessageList() {
       parts: [
         {
           type: 'tool-invocation',
-          toolInvocation: { state: 'call', toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
+          toolInvocation: { state: 'call', toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: storedArgs },
         },
       ],
     },
@@ -108,11 +108,12 @@ function setupRegistry(processor: Record<string, unknown>, messageList: MessageL
 function runToolCallStep(
   mastra: Record<string, unknown> = { getLogger: () => noopLogger },
   requestContextEntries?: Record<string, unknown>,
+  inputArgs: unknown = TOOL_ARGS,
 ) {
   const step = createDurableToolCallStep();
   return (step as any).execute({
     getState: async () => ({}),
-    inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
+    inputData: { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: inputArgs },
     mastra,
     suspend: vi.fn(),
     resumeData: undefined,
@@ -343,6 +344,36 @@ describe('durable tool-call: processToolResult hook (Option B)', () => {
     expect(output.result).toEqual(REDACTED_RESULT);
 
     // The emitted tool-result chunk carries the processed value, not the raw one.
+    const toolResultChunks = emittedChunksOfType('tool-result');
+    expect(toolResultChunks).toHaveLength(1);
+    expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);
+  });
+
+  it('reads back a processor rewrite when the stored call keeps internal metadata (#31609)', async () => {
+    // A durable tool executes with internal-only keys (e.g. `_background`)
+    // stripped, while the stored call keeps them. Read-back must still find the
+    // occurrence the processor rewrote instead of returning the raw result.
+    const storedArgs = { ...TOOL_ARGS, _background: true };
+    const messageList = seedMessageList(storedArgs);
+    setupRegistry(
+      {
+        id: 'redactor',
+        name: 'redactor',
+        processToolResult: async ({ messageList: ml, toolCallId, toolName, args }: any) => {
+          ml.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId, toolName, args, result: REDACTED_RESULT },
+          });
+        },
+      },
+      messageList,
+    );
+
+    const output = await runToolCallStep(undefined, undefined, storedArgs);
+
+    expect(output.error).toBeUndefined();
+    expect(output.result).toEqual(REDACTED_RESULT);
+
     const toolResultChunks = emittedChunksOfType('tool-result');
     expect(toolResultChunks).toHaveLength(1);
     expect(toolResultChunks[0].payload.result).toEqual(REDACTED_RESULT);

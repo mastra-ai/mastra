@@ -136,7 +136,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       // Sync any processor mutation back into the chunk so streaming clients see
       // the post-processor value, not the raw tool return.
-      const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
+      const postProcessorResult = readToolResultFromMessageList(
+        rest.messageList,
+        chunk.payload.toolCallId,
+        chunk.payload.args,
+      );
       if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
         (chunk.payload as { result: unknown }).result = postProcessorResult;
       }
@@ -254,6 +258,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         toolCall: {
           toolName: string;
           toolCallId: string;
+          /** The call's arguments, used to tell a reused id's occurrences apart (#31609). */
+          args?: unknown;
           providerExecuted?: boolean;
           aborted?: boolean;
           validationError?: ModelFacingValidationError;
@@ -293,6 +299,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           tool: mappingTool,
           toolName: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
+          toolArgs: toolCall.args,
           resultBeforeProcessors,
           resultSnapshotBeforeProcessors,
           providerMetadata,

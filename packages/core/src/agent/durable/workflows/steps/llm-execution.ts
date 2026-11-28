@@ -22,7 +22,11 @@ import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-backg
 import { trackOpenReasoning, watchInterruptibleStream } from '../../../../loop/shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import { persistUnavailableAttachments } from '../../../../loop/shared/persist-unavailable-attachments';
-import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
+import {
+  hasPendingProviderToolInvocation,
+  hasPendingToolInvocation,
+  readToolResultFromMessageList,
+} from '../../../../loop/shared/read-tool-result';
 import { recordTerminalErrorMessage } from '../../../../loop/shared/record-terminal-error-message';
 import { snapshotSignalOutcome } from '../../../../loop/shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-chunk-types';
@@ -2043,6 +2047,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
 
                   if (effectiveOutputProcessors.length > 0) {
+                    // Whether this result resolves a call the list already holds. The
+                    // read-back below syncs a processor's write into that occurrence, so
+                    // it needs the occurrence to exist: a same-response result has none
+                    // yet, and a reused toolCallId must not be read back from an earlier
+                    // step's finished call.
+                    const resolvesStoredCall = hasPendingToolInvocation(messageList, resultPayload.toolCallId);
                     try {
                       await getToolResultRunner().runProcessToolResult({
                         steps: expandDurableSteps(previousSteps),
@@ -2064,9 +2074,15 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       // Sync any processor mutation (via messageList.updateToolInvocation)
                       // back into the chunk so the emitted client chunk and the
                       // collected chunk both carry the post-processor value.
-                      const postProcessorResult = readToolResultFromMessageList(messageList, resultPayload.toolCallId);
-                      if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
-                        resultPayload.result = postProcessorResult;
+                      if (resolvesStoredCall) {
+                        const postProcessorResult = readToolResultFromMessageList(
+                          messageList,
+                          resultPayload.toolCallId,
+                          resultPayload.args,
+                        );
+                        if (postProcessorResult !== undefined && postProcessorResult !== resultPayload.result) {
+                          resultPayload.result = postProcessorResult;
+                        }
                       }
                     } catch (error) {
                       ownership?.throwIfLost();
@@ -2104,20 +2120,35 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   // (possibly post-processor-mutated) value. Args/result stay
                   // raw — display-layer transforms live only in the transform
                   // metadata, applied to the transcript at drain time.
-                  messageList.updateToolInvocation({
-                    type: 'tool-invocation',
-                    toolInvocation: {
-                      toolCallId: resultPayload.toolCallId,
-                      toolName: resultPayload.toolName,
-                      args: resultPayload.args,
-                      ...getToolResultInvocationState(resultPayload),
-                    },
-                    providerMetadata: withToolPayloadTransformProviderMetadata(
-                      resultPayload.providerMetadata,
-                      (deferredEnrichedChunk as { metadata?: Record<string, unknown> } | undefined)?.metadata,
-                    ),
-                    providerExecuted: resultProviderExecuted,
-                  });
+                  //
+                  // Only a deferred result has a call waiting here: the call arrived in an
+                  // earlier step and was committed as state:'call'. A same-stream result has
+                  // no part yet, and a reused toolCallId must not patch the earlier step's
+                  // finished call (#31609). Both are left to buildMessagesFromChunks.
+                  //
+                  // Some providers return a deferred result under a DIFFERENT toolCallId than
+                  // the call; the name-based fallback in `updateToolInvocation` reconciles
+                  // those, so the gate must also admit a still-pending provider-executed call
+                  // with the same tool name.
+                  if (
+                    hasPendingToolInvocation(messageList, resultPayload.toolCallId) ||
+                    hasPendingProviderToolInvocation(messageList, resultPayload.toolName)
+                  ) {
+                    messageList.updateToolInvocation({
+                      type: 'tool-invocation',
+                      toolInvocation: {
+                        toolCallId: resultPayload.toolCallId,
+                        toolName: resultPayload.toolName,
+                        args: resultPayload.args,
+                        ...getToolResultInvocationState(resultPayload),
+                      },
+                      providerMetadata: withToolPayloadTransformProviderMetadata(
+                        resultPayload.providerMetadata,
+                        (deferredEnrichedChunk as { metadata?: Record<string, unknown> } | undefined)?.metadata,
+                      ),
+                      providerExecuted: resultProviderExecuted,
+                    });
+                  }
                 }
 
                 // Enrich tool-related chunks with the in-process payload transform

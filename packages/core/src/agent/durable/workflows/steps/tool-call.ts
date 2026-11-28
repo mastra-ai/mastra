@@ -1567,6 +1567,12 @@ export function createDurableToolCallStep() {
       const llmBgOverrides =
         typeof args === 'object' && args !== null && '_background' in args ? (args as any)._background : undefined;
 
+      // The arguments as the model produced them, which are the arguments the stored
+      // invocation holds. Read-backs must use these, not `cleanedArgs`: it drops
+      // `_background` and stamps thread/resource ids onto `agent-*` calls, so matching a
+      // stored occurrence by arguments would miss the call being resolved (#31609).
+      const storedArgs = args;
+
       // Strip _background from args before execution (same as non-durable path)
       const cleanedArgs = { ...args };
       const isAgentTool = toolName?.startsWith('agent-');
@@ -2684,7 +2690,7 @@ export function createDurableToolCallStep() {
             ownership?.throwIfLost();
             // Sync any processor mutation back so the emitted chunk and the
             // serialized step output both carry the post-processor value.
-            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId);
+            const postProcessorResult = readToolResultFromMessageList(messageList, toolCallId, storedArgs);
             if (postProcessorResult !== undefined && postProcessorResult !== result) {
               result = postProcessorResult;
             }
@@ -2750,6 +2756,7 @@ export function createDurableToolCallStep() {
                 tool: mappingTool,
                 toolName,
                 toolCallId,
+                toolArgs: storedArgs,
                 resultBeforeProcessors,
                 resultSnapshotBeforeProcessors,
                 providerMetadata,

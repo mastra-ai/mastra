@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { MessageList } from '../../../agent/message-list';
 import { markAgentWorkflowTool } from '../../../tools/toolchecks';
-import { commitToolResult, computeModelOutputProviderMetadata } from './tool-result-commit-core';
+import {
+  commitToolResult,
+  computeModelOutputProviderMetadata,
+  latestProcessedModelOutput,
+} from './tool-result-commit-core';
 
 function makeMessageList() {
   const messageList = new MessageList();
@@ -28,6 +32,67 @@ function makeMessageList() {
   messageList.add(message, 'response');
   return messageList;
 }
+
+// A reused `toolCallId` can leave several occurrences of one id behind (#31609).
+// Read-back lands on the newest occurrence that matches the caller's arguments,
+// which may still be pending: an older sibling's `modelOutput` belongs to a
+// different call and must not be handed to the call being resolved.
+describe('latestProcessedModelOutput occurrence selection', () => {
+  function addOccurrence(
+    messageList: MessageList,
+    occurrence: { state: 'call' | 'result'; args: unknown; modelOutput?: unknown },
+    messageId: string,
+  ) {
+    const message: MastraDBMessage = {
+      id: messageId,
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: occurrence.state,
+              toolCallId: 'call-1',
+              toolName: 'test-tool',
+              args: occurrence.args,
+              ...(occurrence.state === 'result' ? { result: { ok: true } } : {}),
+            },
+            ...(occurrence.modelOutput === undefined
+              ? {}
+              : { providerMetadata: { mastra: { modelOutput: occurrence.modelOutput } } }),
+          },
+        ],
+      },
+    };
+    messageList.add(message, 'response');
+  }
+
+  it('keeps the fallback when a newer occurrence of the same id and arguments is pending', () => {
+    const messageList = new MessageList();
+    addOccurrence(messageList, { state: 'result', args: { q: 'a' }, modelOutput: 'earlier-mapping' }, 'message-1');
+    addOccurrence(messageList, { state: 'call', args: { q: 'a' } }, 'message-2');
+
+    expect(latestProcessedModelOutput(messageList, 'call-1', 'pre-hook-mapping', { q: 'a' })).toBe('pre-hook-mapping');
+  });
+
+  it('reads the newest committed occurrence when arguments are identical', () => {
+    const messageList = new MessageList();
+    addOccurrence(messageList, { state: 'result', args: { q: 'a' }, modelOutput: 'earlier-mapping' }, 'message-1');
+    addOccurrence(messageList, { state: 'result', args: { q: 'a' }, modelOutput: 'later-mapping' }, 'message-2');
+
+    expect(latestProcessedModelOutput(messageList, 'call-1', 'pre-hook-mapping', { q: 'a' })).toBe('later-mapping');
+  });
+
+  it('reads past a newer pending occurrence that holds different arguments', () => {
+    const messageList = new MessageList();
+    addOccurrence(messageList, { state: 'result', args: { q: 'a' }, modelOutput: 'earlier-mapping' }, 'message-1');
+    addOccurrence(messageList, { state: 'call', args: { q: 'b' } }, 'message-2');
+
+    expect(latestProcessedModelOutput(messageList, 'call-1', 'pre-hook-mapping', { q: 'a' })).toBe('earlier-mapping');
+  });
+});
 
 describe('commitToolResult', () => {
   it.each([0, '', false])('preserves a falsy structured result on an error outcome: %j', result => {

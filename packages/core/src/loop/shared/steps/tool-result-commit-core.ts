@@ -7,6 +7,7 @@ import { isAgentWorkflowTool } from '../../../tools/toolchecks';
 import { isValidationError } from '../../../tools/validation';
 import type { ModelFacingValidationError } from '../../../tools/validation';
 import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
+import { toolResultArgsMatch } from '../read-tool-result';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
 interface MappingSpan {
@@ -155,9 +156,14 @@ export function snapshotToolResult(result: unknown): string | undefined {
  * processor committed in `providerMetadata.mastra.modelOutput` (undefined when it
  * cleared it), otherwise `fallback`, the output mapped before the hook.
  */
-export function latestProcessedModelOutput(messageList: MessageList, toolCallId: string, fallback: unknown): unknown {
+export function latestProcessedModelOutput(
+  messageList: MessageList,
+  toolCallId: string,
+  fallback: unknown,
+  args?: unknown,
+): unknown {
   const mastra = (
-    findCommittedToolInvocationPart(messageList, toolCallId)?.providerMetadata as
+    findCommittedToolInvocationPart(messageList, toolCallId, args)?.providerMetadata as
       | { mastra?: Record<string, unknown> }
       | undefined
   )?.mastra;
@@ -189,6 +195,9 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   tool: { toModelOutput?: (output: unknown) => unknown } | undefined;
   toolName: string;
   toolCallId: string;
+  /** Arguments the caller holds for the call. Tells a reused id's occurrences apart
+   * (#31609) when reading back the part a processor committed. */
+  toolArgs?: unknown;
   /** The result the processors were given. */
   resultBeforeProcessors: unknown;
   /** `snapshotToolResult(resultBeforeProcessors)`, taken before the processors ran. */
@@ -202,7 +211,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   validationError?: ModelFacingValidationError;
   parentSpan?: ToolMappingParentSpan;
 }): Promise<Record<string, unknown> | undefined> {
-  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
+  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId, deps.toolArgs);
 
   const processorMastra = (part?.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
   const { mastra: previousMastra, ...otherNamespaces } = deps.providerMetadata ?? {};
@@ -243,19 +252,31 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   });
 }
 
-function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string) {
+function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string, args?: unknown) {
   const messages = messageList.get.all.db();
+  // Newest occurrence first, in call order. A reused id may have several occurrences
+  // (#31609), and only the newest one describing the call being resolved can hold its
+  // committed output — a caller that only holds a sanitized subset of the arguments still
+  // matches ({@link toolResultArgsMatch}).
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i];
     if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
+    const parts = msg.content.parts;
+    for (let j = parts.length - 1; j >= 0; j--) {
+      const part = parts[j];
       if (
-        part?.type === 'tool-invocation' &&
-        part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation.state === 'result'
+        part?.type !== 'tool-invocation' ||
+        part.toolInvocation?.toolCallId !== toolCallId ||
+        !toolResultArgsMatch(args, part.toolInvocation.args)
       ) {
-        return part as typeof part & { toolInvocation: { result?: unknown } };
+        continue;
       }
+      // The newest occurrence is still pending, so nothing has been committed for the call
+      // being resolved. An older occurrence with the same id and arguments belongs to a
+      // different call: reading it would hand this call's sibling output — say an earlier
+      // occurrence's `modelOutput` — to a processor that has not committed anything yet.
+      if (part.toolInvocation.state !== 'result') return undefined;
+      return part as typeof part & { toolInvocation: { result?: unknown } };
     }
   }
   return undefined;
