@@ -418,7 +418,7 @@ Rename the active stored thread.
 await session.thread.rename({ title: 'Fix login failure' })
 ```
 
-### `session.thread.clone({ sourceThreadId?, title?, resourceId?, requestContext? })`
+### `session.thread.clone({ sourceThreadId?, title?, resourceId?, metadata?, options?, requestContext? })`
 
 Clone an owned thread and its messages, then bind the session to the clone. Pass `requestContext` when memory is a function that reads the signed-in user.
 
@@ -426,6 +426,34 @@ Clone an owned thread and its messages, then bind the session to the clone. Pass
 const clone = await session.thread.clone({
   sourceThreadId: 'thread-7',
   title: 'Alternative approach',
+})
+```
+
+Pass `metadata` to set the clone's metadata. Pass `options` to choose which messages to copy: it takes the same `messageFilter`, `messageLimit` and `contextWindowOnly` as `memory.cloneThread()`. The clone keeps the source thread's observational and working memory. Without `options`, the clone copies every message. Pass `options: { contextWindowOnly: true }` to copy only the messages after `lastObservedAt`, the ones still in the context window. A filter that keeps no messages clones the memory without the conversation.
+
+```typescript
+const clone = await session.thread.clone({
+  sourceThreadId: 'thread-7',
+  metadata: { clonedFrom: 'thread-7' },
+  options: { messageFilter: { startDate: new Date() } },
+})
+```
+
+Returns: `Promise<AgentControllerThread>`
+
+### `session.thread.cloneToCurrentResource({ threadId, expectedResourceId, expectedProjectPath, metadata?, options?, requestContext? })`
+
+Clone a thread from another resource into the session's resource, then bind the session to the clone. The clone keeps the source thread's title. The call throws `Thread not found` when the source thread is missing, doesn't belong to `expectedResourceId`, has a `projectPath` metadata value other than `expectedProjectPath`, or already belongs to the session's resource.
+
+Pass `metadata` to use it for the clone in place of the source thread's metadata. Pass `options` to choose which messages to copy, with the same `messageFilter`, `messageLimit` and `contextWindowOnly` as `session.thread.clone()`.
+
+```typescript
+const clone = await session.thread.cloneToCurrentResource({
+  threadId: 'thread-7',
+  expectedResourceId: 'old-resource',
+  expectedProjectPath: '/projects/app',
+  metadata: { projectPath: '/projects/app-copy' },
+  options: { contextWindowOnly: true },
 })
 ```
 

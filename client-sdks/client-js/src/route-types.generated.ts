@@ -9545,6 +9545,7 @@ export type PostMemoryThreadsThreadIdClone_Body = {
   options?:
     | {
         messageLimit?: number | undefined;
+        contextWindowOnly?: boolean | undefined;
         messageFilter?:
           | {
               startDate?: Date | undefined;

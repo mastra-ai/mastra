@@ -32,7 +32,7 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { StorageListMessagesOutput } from '../storage/types';
+import type { StorageCloneThreadInput, StorageListMessagesOutput } from '../storage/types';
 import type { SubmitPlanResumeData } from '../tools/builtin/submit-plan';
 import { safeStringify } from '../utils';
 import { Workspace } from '../workspace';
@@ -401,6 +401,8 @@ export interface ThreadDataStore {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    /** Which of the source thread's messages to copy; all of them when left out. */
+    options?: StorageCloneThreadInput['options'];
     /** The caller's context, so a dynamic memory resolves for the caller's user. */
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread>;
@@ -791,6 +793,10 @@ export class SessionThread {
     threadId: string;
     expectedResourceId: string;
     expectedProjectPath: string;
+    /** Metadata for the clone in place of the source thread's. */
+    metadata?: Record<string, unknown>;
+    /** Which of the source thread's messages to copy; all of them when left out. */
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     return this.#runLifecycle(() => this.#cloneToCurrentResource(options));
@@ -800,11 +806,15 @@ export class SessionThread {
     threadId,
     expectedResourceId,
     expectedProjectPath,
+    metadata,
+    options,
     requestContext,
   }: {
     threadId: string;
     expectedResourceId: string;
     expectedProjectPath: string;
+    metadata?: Record<string, unknown>;
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     if (!this.#store?.hasStorage()) {
@@ -823,7 +833,8 @@ export class SessionThread {
       sourceThreadId: thread.id,
       resourceId: this.#getResourceId(),
       title: thread.title,
-      metadata: thread.metadata,
+      metadata: metadata ?? thread.metadata,
+      options,
       requestContext,
     });
   }
@@ -1183,6 +1194,10 @@ export class SessionThread {
       sourceThreadId?: string;
       title?: string;
       resourceId?: string;
+      /** Metadata for the clone. */
+      metadata?: Record<string, unknown>;
+      /** Which of the source thread's messages to copy; all of them when left out. */
+      options?: StorageCloneThreadInput['options'];
       requestContext?: RequestContext;
     } = {},
   ): Promise<AgentControllerThread> {
@@ -1193,11 +1208,15 @@ export class SessionThread {
     sourceThreadId,
     title,
     resourceId,
+    metadata,
+    options,
     requestContext,
   }: {
     sourceThreadId?: string;
     title?: string;
     resourceId?: string;
+    metadata?: Record<string, unknown>;
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const sourceId = sourceThreadId ?? this.#threadId;
@@ -1212,6 +1231,8 @@ export class SessionThread {
       sourceThreadId: sourceId,
       resourceId: resourceId ?? this.#owner.identity.getResourceId(),
       title,
+      metadata,
+      options,
       requestContext,
     });
   }
@@ -1221,12 +1242,14 @@ export class SessionThread {
     resourceId,
     title,
     metadata,
+    options,
     requestContext,
   }: {
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const session = this.#owner;
@@ -1241,6 +1264,7 @@ export class SessionThread {
       resourceId,
       title,
       metadata: { ...metadata, ownerId, createdBy: ownerId },
+      ...(options ? { options } : {}),
       requestContext,
     });
 

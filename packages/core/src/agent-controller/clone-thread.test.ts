@@ -279,6 +279,215 @@ describe('AgentController cloneThread', () => {
     expect(cloned.title).toBe('Storage clone');
   });
 
+  describe('carrying memory without the old messages', () => {
+    const old = new Date('2026-01-01T00:00:00.000Z');
+    const message = (id: string, threadId: string, resourceId: string) => ({
+      id,
+      threadId,
+      resourceId,
+      role: 'user' as const,
+      createdAt: old,
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: id }] },
+    });
+    const setup = async () => {
+      const storage = new InMemoryStore();
+      const controller = new AgentController({
+        workspace: createMockWorkspace(),
+        id: 'test-controller',
+        resourceId: 'controller-resource',
+        storage,
+        modes: [
+          {
+            id: 'default',
+            name: 'Default',
+            default: true,
+            agent: new Agent({
+              name: 'test-agent',
+              instructions: 'You are a test agent.',
+              model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      const memoryStore = (await storage.getStore('memory'))!;
+      const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+      return { memoryStore, session };
+    };
+
+    it('clone copies only the messages the filter keeps and stamps the given metadata', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: {
+          id: 'src',
+          resourceId: 'controller-resource',
+          createdAt: old,
+          updatedAt: old,
+          metadata: { projectPath: '/old/home' },
+        },
+      });
+      await memoryStore.saveMessages({
+        messages: [message('m1', 'src', 'controller-resource'), message('m2', 'src', 'controller-resource')],
+      });
+
+      const cloned = await session.thread.clone({
+        sourceThreadId: 'src',
+        title: 'New member',
+        metadata: { projectPath: '/new/home' },
+        options: { messageFilter: { startDate: new Date('2026-02-01T00:00:00.000Z') } },
+      });
+
+      expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toEqual([]);
+      expect(cloned.metadata).toMatchObject({ projectPath: '/new/home', ownerId: 'test-owner' });
+      expect(session.thread.getId()).toBe(cloned.id);
+      // The source keeps its messages.
+      expect((await memoryStore.listMessages({ threadId: 'src' })).messages).toHaveLength(2);
+    });
+
+    it('clone copies only the messages a partial filter keeps, in order', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      const later = (id: string, at: string) => ({
+        ...message(id, 'src', 'controller-resource'),
+        createdAt: new Date(at),
+      });
+      await memoryStore.saveMessages({
+        messages: [
+          later('m1', '2026-01-01T00:00:00.000Z'),
+          later('m2', '2026-02-01T00:00:00.000Z'),
+          later('m3', '2026-03-01T00:00:00.000Z'),
+        ],
+      });
+
+      const cloned = await session.thread.clone({
+        sourceThreadId: 'src',
+        options: { messageFilter: { startDate: new Date('2026-01-15T00:00:00.000Z') } },
+      });
+
+      const copied = (await memoryStore.listMessages({ threadId: cloned.id })).messages;
+      expect(copied.map(m => (m.content.parts[0] as { text: string }).text)).toEqual(['m2', 'm3']);
+      expect(copied.every(m => m.threadId === cloned.id)).toBe(true);
+    });
+
+    it.each([
+      ['an empty filter', { messageFilter: {} }],
+      ['a limit', { messageLimit: 1 }],
+    ])('clone refuses contextWindowOnly with %s before anything is copied', async (_, selection) => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      await memoryStore.saveMessages({ messages: [message('m1', 'src', 'controller-resource')] });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+      const threadIds = async () =>
+        (await memoryStore.listThreads({ filter: { resourceId: 'controller-resource' } })).threads
+          .map(t => t.id)
+          .sort();
+      const before = await threadIds();
+
+      await expect(
+        session.thread.clone({ sourceThreadId: 'src', options: { contextWindowOnly: true, ...selection } }),
+      ).rejects.toThrow(/contextWindowOnly/);
+
+      expect(copy).not.toHaveBeenCalled();
+      expect(await threadIds()).toEqual(before);
+    });
+
+    it('cloneToCurrentResource refuses contextWindowOnly with a filter before anything is copied', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: {
+          id: 'other',
+          resourceId: 'other-resource',
+          createdAt: old,
+          updatedAt: old,
+          metadata: { projectPath: '/old/home' },
+        },
+      });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+
+      await expect(
+        session.thread.cloneToCurrentResource({
+          threadId: 'other',
+          expectedResourceId: 'other-resource',
+          expectedProjectPath: '/old/home',
+          options: { contextWindowOnly: true, messageFilter: { startDate: old } },
+        }),
+      ).rejects.toThrow(/contextWindowOnly/);
+
+      expect(copy).not.toHaveBeenCalled();
+    });
+
+    it('clone through raw storage keeps contextWindowOnly out of the storage call', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: { id: 'src', resourceId: 'controller-resource', createdAt: old, updatedAt: old },
+      });
+      await memoryStore.saveMessages({
+        messages: [message('m1', 'src', 'controller-resource'), message('m2', 'src', 'controller-resource')],
+      });
+      const copy = vi.spyOn(memoryStore, 'cloneThread');
+
+      const cloned = await session.thread.clone({ sourceThreadId: 'src', options: { contextWindowOnly: true } });
+
+      expect(copy.mock.calls[0]![0].options).toEqual({});
+      expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toHaveLength(2);
+    });
+
+    it('cloneToCurrentResource uses the given metadata instead of the source thread’s and filters messages', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: {
+          id: 'other',
+          resourceId: 'other-resource',
+          title: 'Old member',
+          createdAt: old,
+          updatedAt: old,
+          metadata: { projectPath: '/old/home', sandboxAllowedPaths: ['/old/home/worktrees'] },
+        },
+      });
+      await memoryStore.saveMessages({ messages: [message('o1', 'other', 'other-resource')] });
+
+      const cloned = await session.thread.cloneToCurrentResource({
+        threadId: 'other',
+        expectedResourceId: 'other-resource',
+        expectedProjectPath: '/old/home',
+        metadata: { projectPath: '/new/home' },
+        options: { messageFilter: { startDate: new Date('2026-02-01T00:00:00.000Z') } },
+      });
+
+      expect(cloned.resourceId).toBe('controller-resource');
+      expect(cloned.metadata?.projectPath).toBe('/new/home');
+      expect(cloned.metadata?.sandboxAllowedPaths).toBeUndefined();
+      expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toEqual([]);
+    });
+
+    it('cloneToCurrentResource still copies the source metadata and every message when given neither', async () => {
+      const { memoryStore, session } = await setup();
+      await memoryStore.saveThread({
+        thread: {
+          id: 'other',
+          resourceId: 'other-resource',
+          createdAt: old,
+          updatedAt: old,
+          metadata: { projectPath: '/old/home' },
+        },
+      });
+      await memoryStore.saveMessages({ messages: [message('o1', 'other', 'other-resource')] });
+
+      const cloned = await session.thread.cloneToCurrentResource({
+        threadId: 'other',
+        expectedResourceId: 'other-resource',
+        expectedProjectPath: '/old/home',
+      });
+
+      expect(cloned.metadata?.projectPath).toBe('/old/home');
+      expect((await memoryStore.listMessages({ threadId: cloned.id })).messages).toHaveLength(1);
+    });
+  });
+
   it('throws when dynamic memory factory returns empty value', async () => {
     const controller = new AgentController({
       workspace: createMockWorkspace(),

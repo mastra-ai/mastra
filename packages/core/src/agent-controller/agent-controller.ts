@@ -25,7 +25,12 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
 import { InMemoryMemory } from '../storage/domains/memory/inmemory';
-import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import type {
+  ObservationalMemoryRecord,
+  StorageCloneThreadInput,
+  StorageListMessagesInput,
+  StorageListMessagesOutput,
+} from '../storage/types';
 import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
@@ -1255,8 +1260,8 @@ export class AgentController<TState = {}> {
       hasStorage: () => !!this.#resolveStorage(),
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId, requestContext }) => this.deleteThreadRow({ session, threadId, requestContext }),
-      cloneThread: ({ sourceThreadId, resourceId, title, metadata, requestContext }) =>
-        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, requestContext }),
+      cloneThread: ({ sourceThreadId, resourceId, title, metadata, options, requestContext }) =>
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata, options, requestContext }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -1316,6 +1321,7 @@ export class AgentController<TState = {}> {
     resourceId,
     title,
     metadata,
+    options,
     requestContext,
   }: {
     session: Session<TState>;
@@ -1323,9 +1329,19 @@ export class AgentController<TState = {}> {
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    options?: StorageCloneThreadInput['options'];
     requestContext?: RequestContext;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
+    const { contextWindowOnly, ...storageOptions } = options ?? {};
+    if (
+      contextWindowOnly &&
+      (storageOptions.messageFilter !== undefined || storageOptions.messageLimit !== undefined)
+    ) {
+      throw new Error(
+        'contextWindowOnly copies only the messages in the context window and cannot be combined with messageFilter or messageLimit',
+      );
+    }
     const callerMemory = this.config.memory ? await this.resolveMemory(session, requestContext) : undefined;
     const memory = callerMemory ? callerMemory : storage ? await storage.getStore('memory') : undefined;
     if (!memory) {
@@ -1334,7 +1350,16 @@ export class AgentController<TState = {}> {
       );
     }
 
-    const result = await memory.cloneThread({ sourceThreadId, resourceId, title, metadata });
+    // Memory reads contextWindowOnly itself; raw storage has no observations, so it copies every
+    // message and never sees the option.
+    const cloneOptions = callerMemory ? options : options && storageOptions;
+    const result = await memory.cloneThread({
+      sourceThreadId,
+      resourceId,
+      title,
+      metadata,
+      ...(cloneOptions ? { options: cloneOptions } : {}),
+    });
     const cloned: AgentControllerThread = {
       id: result.thread.id,
       resourceId: result.thread.resourceId,
