@@ -752,6 +752,62 @@ describe('getAttributes - one span per model call', () => {
     ).toEqual([{ role: 'assistant', parts: [{ type: 'text', content: 'Kept.' }], finish_reason: 'stop' }]);
   });
 
+  it('skips a tool call part whose input never arrived', () => {
+    const outputMessages = (sent: unknown) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'stop' }),
+          output: {
+            text: 'Checking.',
+            toolCalls: [],
+            responseMessages: sent,
+          },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    // gen_ai requires `arguments` on a tool_call part. A call whose input never arrived cannot
+    // be expressed, so it is skipped and the message's other parts are kept.
+    expect(
+      outputMessages([
+        {
+          role: 'assistant',
+          content: [
+            { type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search' },
+            { type: 'text', text: 'Done.' },
+          ],
+        },
+      ]),
+    ).toEqual([{ role: 'assistant', parts: [{ type: 'text', content: 'Done.' }], finish_reason: 'stop' }]);
+  });
+
+  it('falls back to the output summary when a message holds only a tool call without input', () => {
+    const outputMessages = (sent: unknown) =>
+      JSON.parse(
+        getAttributes({
+          ...span(SpanType.MODEL_INFERENCE, { model: 'gpt-4o', finishReason: 'tool-calls' }),
+          output: {
+            text: '',
+            toolCalls: [{ toolCallId: 'ws_1', toolName: 'web_search', args: { query: 'Paris' } }],
+            responseMessages: sent,
+          },
+        } as AnyExportedSpan)['gen_ai.output.messages'] as string,
+      );
+
+    // Nothing expressible is left, so the summary — which still describes the call — is used
+    // instead of an output message that violates the schema.
+    expect(
+      outputMessages([
+        { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'ws_1', toolName: 'web_search' }] },
+      ]),
+    ).toEqual([
+      {
+        role: 'assistant',
+        parts: [{ type: 'tool_call', id: 'ws_1', name: 'web_search', arguments: JSON.stringify({ query: 'Paris' }) }],
+        finish_reason: 'tool_call',
+      },
+    ]);
+  });
+
   it('exports the generation span as a parent without model or usage so backends do not count it twice', () => {
     const attrs = getAttributes(
       span(SpanType.MODEL_GENERATION, { model: 'gpt-4o', provider: 'openai', finishReason: 'stop', usage }),

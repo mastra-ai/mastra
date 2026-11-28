@@ -2224,6 +2224,78 @@ describe('ModelSpanTracker', () => {
       }
     });
 
+    it('exports only the current call when every tool is provider-executed', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      // Step 1 called a provider-executed tool, step 2 delivered its result and the answer.
+      // No locally executed tool result separates the two calls, so nothing in the list marks
+      // the boundary — but the earlier call is still history, not this call's response. Its
+      // assistant message is rotated into the later list with the result merged in, so the
+      // boundary is the previous step's messages, which the list starts with.
+      const firstCall = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'srvtoolu_1',
+            toolName: 'web_search',
+            input: { query: 'AI news' },
+            providerExecuted: true,
+          },
+        ],
+      };
+      const firstCallWithResult = {
+        role: 'assistant',
+        content: [
+          ...(firstCall.content as unknown[]),
+          {
+            type: 'tool-result',
+            toolCallId: 'srvtoolu_1',
+            toolName: 'web_search',
+            output: { type: 'json', value: { answer: 'search results' } },
+          },
+        ],
+      };
+      const answer = { role: 'assistant', content: [{ type: 'text', text: 'done' }] };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'msg-1' } },
+        { type: 'text-delta', payload: { text: 'done' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: {
+              text: 'done',
+              usage: { totalTokens: 10 },
+              steps: [
+                { response: { messages: [firstCall] } },
+                { response: { messages: [firstCallWithResult, answer] } },
+              ],
+            },
+            stepResult: { reason: 'stop', warnings: [], isContinued: false },
+            metadata: {},
+          },
+        },
+      ];
+
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+
+      for (const span of [stepSpan!, inferenceSpan!]) {
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
+        expect(JSON.stringify(span.output)).not.toContain('search results');
+      }
+    });
+
     it('keeps every assistant message of one provider exchange', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

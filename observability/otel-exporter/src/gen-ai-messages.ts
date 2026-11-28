@@ -140,6 +140,19 @@ const toGenAIOutputMessage = (output: MastraModelOutput, finishReason?: string):
   return withFinishReason({ role: 'assistant', parts }, finishReason);
 };
 
+/**
+ * Serialize a part's value for a gen_ai field, or `undefined` when it cannot be read.
+ * `JSON.stringify` returns `undefined` for `undefined`/functions and throws on circular
+ * values; either way the part cannot be expressed.
+ */
+const serializeValue = (value: unknown): string | undefined => {
+  try {
+    return JSON.stringify(value) ?? undefined;
+  } catch {
+    return undefined;
+  }
+};
+
 const withFinishReason = (message: GenAIMessage, finishReason: string | undefined): GenAIMessage =>
   finishReason === undefined ? message : { ...message, finish_reason: finishReason };
 
@@ -156,21 +169,24 @@ const toGenAIMessagePart = (part: unknown): GenAIMessagePart | undefined => {
       return typeof p.text === 'string' ? { type: 'text', content: p.text } : undefined;
     case 'reasoning':
       return typeof p.text === 'string' ? { type: 'reasoning', content: p.text } : undefined;
-    case 'tool-call':
-      return typeof p.toolCallId === 'string' && typeof p.toolName === 'string'
-        ? { type: 'tool_call', id: p.toolCallId, name: p.toolName, arguments: JSON.stringify(p.input) }
-        : undefined;
+    case 'tool-call': {
+      if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') return undefined;
+      // A call whose arguments never arrived has no part gen_ai can express. Emitting it
+      // would put an `arguments: undefined` part on the span and keep the message from
+      // falling back to the summary, so it is skipped like any other unusable part.
+      const args = serializeValue(p.input);
+      return args === undefined
+        ? undefined
+        : { type: 'tool_call', id: p.toolCallId, name: p.toolName, arguments: args };
+    }
     case 'tool-result': {
       if (typeof p.toolCallId !== 'string' || typeof p.toolName !== 'string') return undefined;
       // A result with no readable value is skipped rather than failing the message.
       const output = p.output;
       if (typeof output !== 'object' || output === null || !('value' in output)) return undefined;
-      return {
-        type: 'tool_call_response',
-        id: p.toolCallId,
-        name: p.toolName,
-        response: JSON.stringify((output as { value: unknown }).value),
-      };
+      const response = serializeValue((output as { value: unknown }).value);
+      if (response === undefined) return undefined;
+      return { type: 'tool_call_response', id: p.toolCallId, name: p.toolName, response };
     }
     default:
       return undefined;

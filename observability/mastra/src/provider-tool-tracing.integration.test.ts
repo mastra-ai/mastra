@@ -108,6 +108,54 @@ function crossStepProviderToolModel() {
   });
 }
 
+/**
+ * Every tool is provider-executed, so nothing is fed back locally: step 1 emits the
+ * call, step 2 delivers the result and the answer. No tool message separates the two
+ * calls, so only the step history marks where the second call begins.
+ */
+function hostedToolOnlyModel() {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      const first = call++ === 0;
+      return {
+        stream: convertArrayToReadableStream(
+          first
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-1', modelId: 'mock-model', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_9',
+                  toolName: 'web_search',
+                  input: '{"query":"hosted"}',
+                  providerExecuted: true,
+                },
+                { type: 'finish', finishReason: 'tool-calls', usage: testUsage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-2', modelId: 'mock-model', timestamp: new Date(0) },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_9',
+                  toolName: 'web_search',
+                  result: { answer: 'hosted results' },
+                  providerExecuted: true,
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'done' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: testUsage },
+              ],
+        ),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      };
+    },
+  });
+}
+
 /** Provider tool-call whose result never arrives before the run finishes. */
 function abandonedProviderToolModel() {
   return new MockLanguageModelV2({
@@ -196,6 +244,21 @@ async function settle(testExporter: TestExporter, maxMs = 2000) {
   }
 }
 
+/**
+ * The content part types of a span's exported response messages, one entry per message.
+ * Reads the same `output.responseMessages` the OTel exporter consumes.
+ */
+function partTypes(span: { output?: unknown } | undefined): string[][] {
+  const messages = (span?.output as { responseMessages?: unknown[] } | undefined)?.responseMessages;
+  if (!Array.isArray(messages)) return [];
+  return messages.map(m => {
+    const { content } = m as { content?: unknown };
+    if (typeof content === 'string') return ['text'];
+    if (!Array.isArray(content)) return [];
+    return content.map(p => String((p as { type?: unknown }).type));
+  });
+}
+
 async function runToCompletion(agent: any, testExporter: TestExporter) {
   const res = await agent.stream('Search for AI news');
   for await (const _ of res.fullStream) {
@@ -232,6 +295,22 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     // the second (delivering) step does.
     expect(new Date(providerSpan.startTime!).getTime()).toBeLessThanOrEqual(new Date(resultStep!.startTime!).getTime());
     expect(providerSpan.output).toEqual({ answer: 'late results' });
+    expect(testExporter.getIncompleteSpans()).toHaveLength(0);
+  });
+
+  it('keeps each model call to its own messages when every tool is provider-executed', async () => {
+    const { agent, testExporter } = buildAgent(hostedToolOnlyModel());
+    await runToCompletion(agent, testExporter);
+
+    const stepSpans = testExporter.getSpansByType('model_step' as any);
+    expect(stepSpans).toHaveLength(2);
+
+    // The first call only emitted the tool call; the second delivered its result and the
+    // answer. No locally executed tool message separates them, so the step history is the
+    // only boundary — without it the second call replays the first call's output.
+    const [firstCall, secondCall] = stepSpans;
+    expect(partTypes(firstCall)).toEqual([['tool-call']]);
+    expect(partTypes(secondCall)).toEqual([['text']]);
     expect(testExporter.getIncompleteSpans()).toHaveLength(0);
   });
 
