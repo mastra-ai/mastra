@@ -8,6 +8,16 @@ export function getKey(tableName: TABLE_NAMES, keys: Record<string, any>): strin
   return `${tableName}:${keyParts.join(':')}`;
 }
 
+/**
+ * Escape the Redis glob metacharacters in a literal string so it can be used as
+ * the fixed part of a `SCAN MATCH` pattern. Run ids and workflow names are
+ * caller-supplied, so an unescaped `*`, `?` or `[...]` in one of them would
+ * widen the match to other keys.
+ */
+export function escapeRedisGlob(value: string): string {
+  return value.replace(/[\\*?[\]]/g, char => `\\${char}`);
+}
+
 export function processRecord(tableName: TABLE_NAMES, record: Record<string, any>) {
   let key: string;
 

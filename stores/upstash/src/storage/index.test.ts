@@ -689,4 +689,139 @@ describe('WorkflowsUpstash.persistWorkflowSnapshot', () => {
     expect(await client.get(snapshotKey(workflowName, runId, secondResource))).toBeNull();
     expect((await workflowsDomain.listWorkflowRuns({ workflowName })).total).toBe(0);
   });
+
+  it('finds and migrates a run split across a resource-less canonical copy and a legacy copy', async () => {
+    const client = createTestClient();
+    const workflowsDomain = new WorkflowsUpstash({ client });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+    const resourceId = `resource-${randomUUID()}`;
+    const canonicalKey = snapshotKey(workflowName, runId);
+    const legacyKey = snapshotKey(workflowName, runId, resourceId);
+    const createdAt = new Date('2024-08-01T00:00:00.000Z');
+
+    // The pre-fix split: an update wrote the canonical key without knowing the
+    // resourceId, while the original legacy copy still carries it.
+    await seedWorkflowRecord(client, {
+      key: canonicalKey,
+      workflowName,
+      runId,
+      status: 'success',
+      createdAt,
+      updatedAt: new Date('2024-08-03T00:00:00.000Z'),
+    });
+    await seedWorkflowRecord(client, {
+      key: legacyKey,
+      workflowName,
+      runId,
+      resourceId,
+      status: 'running',
+      createdAt,
+      updatedAt: new Date('2024-08-02T00:00:00.000Z'),
+    });
+
+    // A resource-scoped listing must still see the run (resourceId adopted from
+    // the legacy sibling), collapsed to a single entry.
+    const byResource = await workflowsDomain.listWorkflowRuns({ workflowName, resourceId });
+    expect(byResource.total).toBe(1);
+    expect(byResource.runs).toHaveLength(1);
+    expect(byResource.runs[0]!.resourceId).toBe(resourceId);
+
+    // An update must fold the legacy copy into the canonical one, adopting the
+    // resourceId and dropping the legacy key.
+    await workflowsDomain.updateWorkflowResults({
+      workflowName,
+      runId,
+      stepId: 'step-1',
+      result: { status: 'success' } as any,
+      requestContext: { key: 'value' },
+    });
+
+    const canonical = (await client.get(canonicalKey)) as any;
+    expect(canonical).not.toBeNull();
+    expect(canonical.resourceId).toBe(resourceId);
+    expect(await client.get(legacyKey)).toBeNull();
+
+    const afterUpdate = await workflowsDomain.listWorkflowRuns({ workflowName, resourceId });
+    expect(afterUpdate.total).toBe(1);
+    expect((afterUpdate.runs[0]!.snapshot as WorkflowRunState).status).toBe('success');
+  });
+
+  it('does not delete other runs when the runId contains a glob character', async () => {
+    const client = createTestClient();
+    const workflowsDomain = new WorkflowsUpstash({ client });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const victimRunId = `run-${randomUUID()}`;
+    const victimResource = `resource-${randomUUID()}`;
+    const createdAt = new Date('2024-09-01T00:00:00.000Z');
+
+    await seedWorkflowRecord(client, {
+      key: snapshotKey(workflowName, victimRunId, victimResource),
+      workflowName,
+      runId: victimRunId,
+      resourceId: victimResource,
+      status: 'running',
+      createdAt,
+      updatedAt: createdAt,
+    });
+
+    // Every glob metacharacter must be matched literally, so deleting these runs
+    // (which do not exist) leaves the victim untouched.
+    for (const runId of ['*', '?', '[a]', 'run-*-?', `${victimRunId.slice(0, 6)}*`]) {
+      await workflowsDomain.deleteWorkflowRunById({ runId, workflowName });
+    }
+
+    expect(await client.get(snapshotKey(workflowName, victimRunId, victimResource))).not.toBeNull();
+    expect((await workflowsDomain.listWorkflowRuns({ workflowName })).total).toBe(1);
+
+    // Deleting the victim by its own runId still removes every copy.
+    await workflowsDomain.deleteWorkflowRunById({ runId: victimRunId, workflowName });
+    expect(await client.get(snapshotKey(workflowName, victimRunId, victimResource))).toBeNull();
+  });
+
+  it('does not delete a run whose id has the deleted runId as a strict prefix', async () => {
+    const client = createTestClient();
+    const workflowsDomain = new WorkflowsUpstash({ client });
+    await workflowsDomain.init();
+
+    const workflowName = `workflow-${randomUUID()}`;
+    const createdAt = new Date('2024-09-01T00:00:00.000Z');
+
+    // Each victim's id extends a shorter run id, so only an exact (not prefix)
+    // match may delete it.
+    const victimRunId = `run-${randomUUID()}`;
+    const victimResource = `resource-${randomUUID()}`;
+    const backslashRunId = `${victimRunId.slice(0, 10)}\\x`;
+    const backslashResource = `resource-${randomUUID()}`;
+
+    for (const [runId, resourceId] of [
+      [victimRunId, victimResource],
+      [backslashRunId, backslashResource],
+    ] as const) {
+      await seedWorkflowRecord(client, {
+        key: snapshotKey(workflowName, runId, resourceId),
+        workflowName,
+        runId,
+        resourceId,
+        status: 'running',
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+
+    // Deleting a run whose id is a strict prefix of each victim, including one
+    // ending in a backslash, must leave both victims untouched: the deleted key
+    // has to end at a key boundary, not part-way through another run's id.
+    await workflowsDomain.deleteWorkflowRunById({ runId: victimRunId.slice(0, -1), workflowName });
+    await workflowsDomain.deleteWorkflowRunById({ runId: backslashRunId.slice(0, -1), workflowName });
+    await workflowsDomain.deleteWorkflowRunById({ runId: victimRunId.slice(0, 10), workflowName });
+
+    expect((await workflowsDomain.listWorkflowRuns({ workflowName })).total).toBe(2);
+    expect(await client.get(snapshotKey(workflowName, victimRunId, victimResource))).not.toBeNull();
+    expect(await client.get(snapshotKey(workflowName, backslashRunId, backslashResource))).not.toBeNull();
+  });
 });
