@@ -124,6 +124,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   agentVersionId,
   resolvedScopes,
   returnScorerData,
+  autoResumeSuspendedTools,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
@@ -762,6 +763,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // whose resume adopts the supplied scopes instead of rejecting them.
                 __resolvedScopes: resolvedScopes ?? [],
                 ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+                // The run's own setting, so a resume that leaves it out keeps it, in any process. (#30190)
+                ...(autoResumeSuspendedTools !== undefined
+                  ? { __autoResumeSuspendedTools: autoResumeSuspendedTools }
+                  : {}),
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
                 // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                 // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -825,6 +830,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // whose resume adopts the supplied scopes instead of rejecting them.
               __resolvedScopes: resolvedScopes ?? [],
               ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+              // The run's own setting, so a resume that leaves it out keeps it, in any process. (#30190)
+              ...(autoResumeSuspendedTools !== undefined
+                ? { __autoResumeSuspendedTools: autoResumeSuspendedTools }
+                : {}),
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
               resumeLabel: options?.resumeLabel,
@@ -942,6 +951,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // whose resume adopts the supplied scopes instead of rejecting them.
                 __resolvedScopes: resolvedScopes ?? [],
                 ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+                // The run's own setting, so a resume that leaves it out keeps it, in any process. (#30190)
+                ...(autoResumeSuspendedTools !== undefined
+                  ? { __autoResumeSuspendedTools: autoResumeSuspendedTools }
+                  : {}),
               },
               {
                 resumeLabel: inputData.toolCallId,

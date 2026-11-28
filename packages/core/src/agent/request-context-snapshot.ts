@@ -23,6 +23,12 @@ export const MASTRA_DURABLE_EXECUTIONS_KEY = 'mastra__durableExecutions';
 export const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
 
 /**
+ * Reserved request-context key carrying `Record<runId, boolean>`: the `autoResumeSuspendedTools` a resumed execution
+ * runs with, so a step that suspends persists it on whichever worker runs the step. (#30190)
+ */
+export const MASTRA_DURABLE_AUTO_RESUME_KEY = 'mastra__durableAutoResume';
+
+/**
  * JSON-safe snapshot of `requestContext.entries()`, for a run that continues
  * somewhere the live context can't follow: a durable step, or a claimed
  * thread owner in another process. Best-effort: entries that fail a JSON
@@ -59,6 +65,7 @@ export function snapshotRequestContextEntries(
     if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
     // A segment's spans belong to the execution that carried them, not to the run's input.
     if (key === MASTRA_DURABLE_SEGMENTS_KEY) continue;
+    if (key === MASTRA_DURABLE_AUTO_RESUME_KEY) continue;
     // The channel render context holds live platform adapters, the chat-SDK
     // thread and bound driver callbacks (`wrapStream`, `post`, ...). It is
     // per-run state, not run input: JSON has no way to carry those methods, so a

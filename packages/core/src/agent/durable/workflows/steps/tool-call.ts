@@ -101,7 +101,13 @@ import {
   globalRunRegistry,
   markRunActive,
 } from '../../run-registry';
-import { claimSegmentEnd, liveSegmentSpan, segmentOwnsStep, segmentSpanData } from '../../segment-spans';
+import {
+  claimSegmentEnd,
+  liveSegmentSpan,
+  segmentAutoResume,
+  segmentOwnsStep,
+  segmentSpanData,
+} from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -440,6 +446,21 @@ async function processChunkThroughOutputProcessors(
     // this pipeline, so end the spans opened for this chunk here.
     endSpansAfterProcessing: true,
   });
+}
+
+/**
+ * The run's `autoResumeSuspendedTools` for its current segment, persisted with each suspension: a resume can override
+ * the value the run started with, and a later resume in another process that leaves the option out reads the latest
+ * one back from the snapshot. The resume carries its value on the segment's request context, which reaches a step on
+ * any worker; this process's registry entry stands in when user code cleared it. (#30190)
+ */
+function runAutoResumeSuspendPayload(
+  carried: boolean | undefined,
+  registryEntry: Pick<RunRegistryEntry, 'autoResumeSuspendedTools'> | undefined,
+  startOptions: Pick<SerializableDurableOptions, 'autoResumeSuspendedTools'> | undefined,
+): { __autoResumeSuspendedTools?: boolean } {
+  const value = carried ?? registryEntry?.autoResumeSuspendedTools ?? startOptions?.autoResumeSuspendedTools;
+  return value === undefined ? {} : { __autoResumeSuspendedTools: value };
 }
 
 /**
@@ -1446,6 +1467,11 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             args,
+            ...runAutoResumeSuspendPayload(
+              segmentAutoResume(requestContext, runId),
+              getRunRegistryEntry(runId, mastra as Mastra | undefined),
+              agentOptions,
+            ),
           },
           {
             resumeLabel: toolCallId,
@@ -1869,6 +1895,11 @@ export function createDurableToolCallStep() {
               // partitioned per tool call (resumeLabel = toolCallId), so the
               // resume leg can recover it even if message metadata is stale.
               ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+              ...runAutoResumeSuspendPayload(
+                segmentAutoResume(requestContext, runId),
+                getRunRegistryEntry(runId, mastra as Mastra | undefined),
+                agentOptions,
+              ),
             },
             { resumeLabel: toolCallId },
           );
@@ -1936,6 +1967,11 @@ export function createDurableToolCallStep() {
             // resume leg continues the delegate's suspended run instead of
             // restarting it (#20496; mirrors the approval branch above).
             ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+            ...runAutoResumeSuspendPayload(
+              segmentAutoResume(requestContext, runId),
+              getRunRegistryEntry(runId, mastra as Mastra | undefined),
+              agentOptions,
+            ),
           },
           { resumeLabel: toolCallId },
         );

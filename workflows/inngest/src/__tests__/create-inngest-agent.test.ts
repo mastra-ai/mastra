@@ -1003,11 +1003,11 @@ describe('InngestAgent parity surface', () => {
   }
 
   it.each([
-    { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
-    { closeOnSuspend: true, registrationOptions: undefined },
+    { closeOnSuspend: false, continuation: 'across-suspension' },
+    { closeOnSuspend: true, continuation: undefined },
   ])(
     'registers stream() with continuation options when closeOnSuspend=$closeOnSuspend',
-    async ({ closeOnSuspend, registrationOptions }) => {
+    async ({ closeOnSuspend, continuation }) => {
       const durableAgent = makeIsolatedAgent(`thread-registration-${closeOnSuspend}`);
       const sendSpy = stubInngestSend();
       const registerSpy = vi.spyOn(agentThreadStreamRuntime, 'registerRun').mockResolvedValue(undefined);
@@ -1019,7 +1019,7 @@ describe('InngestAgent parity surface', () => {
           result.output,
           expect.objectContaining({ closeOnSuspend }),
           durableAgent.agent.getPubSub(),
-          registrationOptions,
+          expect.objectContaining({ continuation, stepOwner: expect.any(Function) }),
         );
       } finally {
         result.cleanup();
@@ -1367,11 +1367,11 @@ describe('InngestAgent parity surface', () => {
   });
 
   it.each([
-    { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
-    { closeOnSuspend: true, registrationOptions: undefined },
+    { closeOnSuspend: false, continuation: 'across-suspension' },
+    { closeOnSuspend: true, continuation: undefined },
   ])(
     'registers a replacement thread run when resume() cannot continue and closeOnSuspend=$closeOnSuspend',
-    async ({ closeOnSuspend, registrationOptions }) => {
+    async ({ closeOnSuspend, continuation }) => {
       const durableAgent = makeIsolatedAgent(`resume-thread-replacement-${closeOnSuspend}`);
       setSuspendedSnapshot(durableAgent);
       const sendSpy = stubInngestSend();
@@ -1398,7 +1398,7 @@ describe('InngestAgent parity surface', () => {
             memory: { thread: 'thread-1', resource: 'user-1' },
           }),
           durableAgent.agent.getPubSub(),
-          registrationOptions,
+          expect.objectContaining({ continuation, stepOwner: expect.any(Function) }),
         );
       } finally {
         result.cleanup();
