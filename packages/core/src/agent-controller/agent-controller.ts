@@ -542,6 +542,7 @@ export class AgentController<TState = {}> {
    * @param resourceId - Memory resource to bind this session to. Defaults to the controller `resourceId` or `id`.
    * @param createInitialThread - Create a thread when no existing thread matches. Defaults to true.
    * @param resumeOnly - Only return a live session or recover one from a stored thread; never start a new conversation.
+   * @param resumeLatestThread - Bind the most recent matching thread when no `threadId` is given. Defaults to true.
    */
   async createSession({
     resourceId,
@@ -551,6 +552,7 @@ export class AgentController<TState = {}> {
     threadId,
     createInitialThread = true,
     resumeOnly = false,
+    resumeLatestThread = true,
     workspace,
     browser,
     requestContext,
@@ -578,6 +580,12 @@ export class AgentController<TState = {}> {
      * caller never asked for.
      */
     resumeOnly?: boolean;
+    /**
+     * Bind the most recent thread in this session's scope when no `threadId` is given. Set false to start
+     * a new conversation instead: a new thread, or none until first use when `createInitialThread` is false.
+     * Applies only when the session is created; a live session keeps its current thread.
+     */
+    resumeLatestThread?: boolean;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -684,6 +692,7 @@ export class AgentController<TState = {}> {
         threadId,
         createInitialThread: resumeOnly ? false : createInitialThread,
         resumeOnly,
+        resumeLatestThread,
         workspace,
         browser,
         requestContext,
@@ -717,6 +726,7 @@ export class AgentController<TState = {}> {
       threadId?: string;
       createInitialThread?: boolean;
       resumeOnly?: boolean;
+      resumeLatestThread?: boolean;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -827,6 +837,8 @@ export class AgentController<TState = {}> {
       } else {
         await session.thread.create({ id: overrides.threadId, requestContext });
       }
+    } else if (overrides?.resumeLatestThread === false && !overrides.resumeOnly) {
+      if (overrides.createInitialThread !== false) await session.thread.create({ requestContext });
     } else {
       // Same scope `thread.create()` stamps, matched strictly: a thread outside
       // this session's scope — including one carrying no scope at all — belongs

@@ -5,6 +5,7 @@ import {
   parseResumeThreadId,
   shouldRejectResumeWithoutTTY,
   shouldRunHeadless,
+  takeNewThreadFlag,
 } from './resume-command.js';
 
 describe('resume command', () => {
@@ -14,6 +15,29 @@ describe('resume command', () => {
 
   it('rejects an incomplete command', () => {
     expect(() => parseResumeThreadId(['resume'])).toThrow('Usage: mastracode resume <thread-id>');
+  });
+
+  it('takes --new out of argv', () => {
+    expect(takeNewThreadFlag(['node', 'mastracode', '--new'])).toEqual({
+      argv: ['node', 'mastracode'],
+      startNewThread: true,
+    });
+    expect(takeNewThreadFlag(['node', 'mastracode', '--prompt', '--new'])).toEqual({
+      argv: ['node', 'mastracode', '--prompt', '--new'],
+      startNewThread: false,
+    });
+    expect(takeNewThreadFlag(['node', 'mastracode', '--title', '--new', '--prompt', 'hello'])).toEqual({
+      argv: ['node', 'mastracode', '--title', '--new', '--prompt', 'hello'],
+      startNewThread: false,
+    });
+    expect(takeNewThreadFlag(['node', 'mastracode', '--', '--new'])).toEqual({
+      argv: ['node', 'mastracode', '--', '--new'],
+      startNewThread: false,
+    });
+    expect(takeNewThreadFlag(['node', 'mastracode', 'resume', 'thread-123'])).toEqual({
+      argv: ['node', 'mastracode', 'resume', 'thread-123'],
+      startNewThread: false,
+    });
   });
 
   it('keeps resume commands out of headless mode', () => {

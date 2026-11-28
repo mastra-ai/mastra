@@ -46,6 +46,7 @@ import {
   parseResumeThreadId,
   shouldRejectResumeWithoutTTY,
   shouldRunHeadless,
+  takeNewThreadFlag,
 } from './resume-command.js';
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -100,7 +101,12 @@ process.on('unhandledRejection', reason => {
 
 type StartupMessage = ReturnType<typeof initialMessageOptions>;
 
-async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: string, startupPackId?: string) {
+async function tuiMain(
+  startupMessage: StartupMessage = {},
+  resumeThreadId?: string,
+  startupPackId?: string,
+  startNewThread = false,
+) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -116,7 +122,11 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
   if (settings.factory && settings.factory.active !== false && !isTruthyEnv('MASTRACODE_LOCAL')) {
-    const ignored = [resumeThreadId && 'thread resume', startupPackId && 'model pack'].filter(Boolean);
+    const ignored = [
+      resumeThreadId && 'thread resume',
+      startupPackId && 'model pack',
+      startNewThread && 'new thread',
+    ].filter(Boolean);
     if (ignored.length > 0) console.info(`⚠ Factory mode ignores the requested ${ignored.join(' and ')}.`);
     try {
       return await bootFactory(settings.factory, themeMode, startupMessage);
@@ -128,7 +138,7 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
       );
     }
   }
-  return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId);
+  return bootLocal(settings, themeMode, startupMessage, resumeThreadId, startupPackId, startNewThread);
 }
 
 /**
@@ -188,6 +198,7 @@ async function bootLocal(
   startupMessage: StartupMessage,
   resumeThreadId?: string,
   startupPackId?: string,
+  startNewThread = false,
 ) {
   let browserPromise: ReturnType<typeof createBrowserFromSettings> | undefined;
   const loadBrowser = (chatModelId: string | undefined) => {
@@ -206,6 +217,7 @@ async function bootLocal(
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
     ...launcherConfig,
+    ...(startNewThread ? { createInitialThread: false, resumeLatestThread: false } : {}),
   });
   controller = result.controller;
   mcpManager = result.mcpManager;
@@ -262,6 +274,7 @@ async function bootLocal(
     initialModelOverride: Boolean(initialState?.currentModelId),
     ...(startupPackId ? { initialPackId: startupPackId } : {}),
     ...(resumeThreadId ? { resumeThreadId } : {}),
+    ...(startNewThread ? { startNewThread } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
@@ -583,7 +596,8 @@ async function main() {
     process.exit(1);
   }
   if (initialPrompt.flag) process.argv = initialPrompt.argv;
-  const tuiArgv = initialPrompt.flag ? initialPrompt.argv : packFlag.argv;
+  const newThreadFlag = takeNewThreadFlag(initialPrompt.flag ? initialPrompt.argv : packFlag.argv);
+  const tuiArgv = newThreadFlag.argv;
   // The flag only means something to the interactive TUI. Paths that can't run
   // it reject the flag instead of dropping the prompt; an env var prompt is
   // just ignored there.
@@ -591,6 +605,14 @@ async function main() {
     if (!initialPrompt.flag) return;
     process.stderr.write(`${initialPrompt.flag} starts the interactive TUI; ${reason}\n`);
     process.exit(1);
+  };
+
+  // Headless, ACP and the no-TTY fallback read process.argv, so check the flag there.
+  const rejectNewThreadFlag = (reason: string): boolean => {
+    if (!takeNewThreadFlag(process.argv).startNewThread) return false;
+    process.stderr.write(`--new starts the interactive TUI; ${reason}\n`);
+    process.exitCode = 1;
+    return true;
   };
 
   let resumeThreadId: string | undefined;
@@ -601,15 +623,25 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  if (resumeThreadId && newThreadFlag.startNewThread) {
+    process.stderr.write('mastracode resume cannot be combined with --new.\n');
+    process.exitCode = 1;
+    return;
+  }
 
   const headless = hasHeadlessFlag(process.argv);
   if (shouldRunHeadless(process.argv, resumeThreadId, headless)) {
-    if (headless) rejectInitialPromptFlag('use --prompt for headless runs');
+    if (headless) {
+      rejectInitialPromptFlag('use --prompt for headless runs');
+      if (rejectNewThreadFlag('headless runs already start a new thread unless --continue or --thread is passed'))
+        return;
+    }
     return runMCCli(undefined, { coAuthor: TUI_CO_AUTHOR });
   }
 
   if (process.argv.includes('--acp')) {
     rejectInitialPromptFlag('it cannot be combined with --acp');
+    if (rejectNewThreadFlag('it cannot be combined with --acp')) return;
     const { acpMain } = await import('@mastra/code-sdk/acp/index');
     return acpMain({
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
@@ -656,6 +688,7 @@ async function main() {
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
       rejectInitialPromptFlag('no TTY is available, so use --prompt for headless runs');
+      if (rejectNewThreadFlag('no TTY is available')) return;
       process.stderr.write('No TTY available — falling back to headless mode.\n');
       return runMCCli(pipedInput, { coAuthor: TUI_CO_AUTHOR });
     }
@@ -667,7 +700,12 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId, startupPackId);
+  return tuiMain(
+    initialMessageOptions(initialPrompt, pipedInput),
+    resumeThreadId,
+    startupPackId,
+    newThreadFlag.startNewThread,
+  );
 }
 
 export interface RunTuiOptions {
@@ -675,7 +713,8 @@ export interface RunTuiOptions {
    * Extra options for the local session's `createMastraCode()` call, such as `knowledge` and
    * `scopes`. They are applied last, so a key given here replaces the value Mastra Code would
    * otherwise pass for it (including `initialState`, `subagents`, `memory` and the
-   * `MASTRACODE_DISABLE_*` toggles). Only the interactive local TUI uses them: Factory mode
+   * `MASTRACODE_DISABLE_*` toggles), except that `--new` always sets `createInitialThread` and
+   * `resumeLatestThread` to `false`. Only the interactive local TUI uses them: Factory mode
    * (settings connect the TUI to a Factory), headless runs and `--acp` create their sessions
    * without them.
    */

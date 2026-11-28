@@ -1,3 +1,6 @@
+import { parseArgs } from 'node:util';
+import { buildParseArgsOptions } from '@mastra/code-sdk/headless/flags';
+
 export function parseResumeThreadId(args: string[]): string | undefined {
   if (args[0] !== 'resume') return undefined;
 
@@ -6,6 +9,24 @@ export function parseResumeThreadId(args: string[]): string | undefined {
     throw new Error('Usage: mastracode resume <thread-id>');
   }
   return threadId;
+}
+
+/**
+ * Removes the `--new` option from argv and reports whether it was passed. Parsed with the headless
+ * option table, so an option value such as `--prompt --new` and arguments after `--` stay.
+ */
+export function takeNewThreadFlag(argv: string[]): { argv: string[]; startNewThread: boolean } {
+  const { tokens } = parseArgs({
+    args: argv.slice(2),
+    options: { ...buildParseArgsOptions(), new: { type: 'boolean' } },
+    strict: false,
+    allowPositionals: true,
+    tokens: true,
+  });
+  const flagIndexes = new Set(
+    tokens.filter(token => token.kind === 'option' && token.name === 'new').map(token => token.index + 2),
+  );
+  return { argv: argv.filter((_, index) => !flagIndexes.has(index)), startNewThread: flagIndexes.size > 0 };
 }
 
 export function shouldRunHeadless(

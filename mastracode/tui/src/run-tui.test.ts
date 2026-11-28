@@ -77,6 +77,50 @@ describe('runTui', () => {
     );
   });
 
+  it('starts the session without the latest thread for --new', async () => {
+    process.argv = ['node', 'mastracode', '--new'];
+
+    const config = await bootConfig();
+
+    expect(config.resumeLatestThread).toBe(false);
+  });
+
+  it('keeps --new last over a launcher’s thread options', async () => {
+    process.argv = ['node', 'mastracode', '--new'];
+
+    const config = await bootConfig({ createMastraCode: { createInitialThread: true, resumeLatestThread: true } });
+
+    expect(config).toMatchObject({ createInitialThread: false, resumeLatestThread: false });
+  });
+
+  it('rejects --new where it would be ignored', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      createMastraCode.mockReset();
+      process.argv = ['node', 'mastracode', 'resume', 'thread-123', '--new'];
+      await runTui();
+      expect(process.exitCode).toBe(1);
+      expect(stderr).toHaveBeenCalledWith('mastracode resume cannot be combined with --new.\n');
+      process.exitCode = undefined;
+
+      process.argv = ['node', 'mastracode', '--new', '--continue', '--prompt', 'hello'];
+      await runTui();
+      expect(process.exitCode).toBe(1);
+      expect(stderr).toHaveBeenCalledWith(
+        '--new starts the interactive TUI; headless runs already start a new thread unless --continue or --thread is passed\n',
+      );
+      process.exitCode = undefined;
+
+      process.argv = ['node', 'mastracode', '--continue', '--prompt', '--pack=foo', '--new'];
+      await runTui();
+      expect(process.exitCode).toBe(1);
+      expect(createMastraCode).not.toHaveBeenCalled();
+    } finally {
+      process.exitCode = undefined;
+      stderr.mockRestore();
+    }
+  });
+
   it('does not carry a previous launcher’s options into a call without options', async () => {
     await bootConfig({ createMastraCode: { scopes: ['org:mastra'] } });
 
