@@ -1,5 +1,8 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { Agent } from '../../agent';
 import { setRunAgentScopes } from '../../agent/scopes';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { compileKnowledgeScopes, knowledgeMemoryScopes } from '../declarations';
@@ -59,6 +62,42 @@ describe('knowledgePersonaScopes', () => {
     expect(await pinsFor('pat', { role: 'support' })).toEqual(['agent:persona:role:support']);
     expect(await pinsFor('kim', { role: 'sales', teamId: 'billing' })).toEqual(['agent:persona:team:billing']);
     expect(await pinsFor('lee', {})).toEqual([]);
+  });
+
+  it('still delivers the agent pin when the metadata function throws, with no persona', async () => {
+    const knowledge = new Knowledge({
+      storage: new InMemoryStore(),
+      pinnedContext: true,
+      scopes: { ...knowledgeMemoryScopes(), ...knowledgePersonaScopes() },
+    });
+    await knowledge.upsertPage({ scope: 'agent:sam', path: 'persona', name: 'Persona', body: 'Sam is calm.' });
+    let prompt: unknown;
+    const agent = new Agent({
+      id: 'sam',
+      name: 'sam',
+      instructions: 'x',
+      model: new MockLanguageModelV2({
+        doGenerate: async args => {
+          prompt ??= args.prompt;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            content: [{ type: 'text' as const, text: 'Hi.' }],
+            warnings: [],
+          };
+        },
+      }),
+      memory: new MockMemory(),
+      knowledge,
+      scopes: ['org:acme'],
+      metadata: () => {
+        throw new Error('metadata unavailable');
+      },
+    });
+    const result = await agent.generate('Hi', { memory: { thread: 'thread-1', resource: 'user-1' } });
+    expect(result.text).toBe('Hi.');
+    expect(JSON.stringify(prompt)).toContain('Sam is calm.');
   });
 
   it('lets a host-passed :edit form write its role rules while a plain role holder only reads', async () => {

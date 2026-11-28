@@ -2542,22 +2542,27 @@ export class Agent<
         }
         return processors;
       }
+      // A throwing metadata function must not cost the turn its pins: fall back to no persona,
+      // which still mints agent:<id>. Store failures in the pin read still propagate.
+      const pinPersona = async () => {
+        try {
+          return (await this.getMetadata({ requestContext }))?.persona;
+        } catch {
+          return undefined;
+        }
+      };
       processors.push(
         new PinnedStateProcessor({
-          principalsKey: async context => {
-            const metadata = await this.getMetadata({ requestContext });
-            return knowledge.__principalsKey({
+          principalsKey: async context =>
+            knowledge.__principalsKey({
               ...context,
-              agent: { ...context.agent, agentId: this.id, persona: metadata?.persona },
-            });
-          },
-          readPins: async context => {
-            const metadata = await this.getMetadata({ requestContext });
-            return knowledge.__deliveredPins({
+              agent: { ...context.agent, agentId: this.id, persona: await pinPersona() },
+            }),
+          readPins: async context =>
+            knowledge.__deliveredPins({
               ...context,
-              agent: { ...context.agent, agentId: this.id, persona: metadata?.persona },
-            });
-          },
+              agent: { ...context.agent, agentId: this.id, persona: await pinPersona() },
+            }),
           ...knowledge.__toolGroups,
         }),
       );
