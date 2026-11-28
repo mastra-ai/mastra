@@ -662,6 +662,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
       enableEsmShim,
       alias: resolvedAlias,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      transpilePackages: bundlerOptions.transpilePackages,
     };
 
     let analyzedBundleInfo;

@@ -138,6 +138,7 @@ async function getInputPlugins(
   virtualDependencies: Map<string, { name: string; virtual: string }>,
   {
     transpilePackages,
+    transpiledPackageRoots,
     workspaceMap,
     bundlerOptions,
     projectRoot,
@@ -147,6 +148,7 @@ async function getInputPlugins(
     alias,
   }: {
     transpilePackages: Set<string>;
+    transpiledPackageRoots: Map<string, string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
     projectRoot: string;
@@ -213,8 +215,10 @@ async function getInputPlugins(
             }
 
             const info = virtualDependencies.get(id)!;
-            // go from ./node_modules/.cache/index.js to ./pkg
-            const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
+            // go from ./node_modules/.cache/index.js to ./pkg. Listed non-workspace packages have no
+            // cache dir, so use the root they were resolved to.
+            const packageRootPath =
+              transpiledPackageRoots.get(id) ?? path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
             const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
             const pkgJson = JSON.parse(pkgJsonBuffer);
             if (!pkgJson) {
@@ -222,9 +226,11 @@ async function getInputPlugins(
             }
 
             const pkgName = pkgJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+            const subpath = id.replace(pkgName, '.');
+            let resolvedPath: string | undefined = resolve.exports(pkgJson, subpath)?.[0];
             if (!resolvedPath) {
-              resolvedPath = pkgJson!.main ?? 'index.js';
+              // Without an exports map only the bare package name maps to `main`
+              resolvedPath = subpath === '.' ? (pkgJson.main ?? 'index.js') : subpath;
             }
 
             const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
@@ -303,6 +309,7 @@ async function buildExternalDependencies(
   {
     externals,
     packagesToTranspile,
+    transpiledPackageRoots,
     workspaceMap,
     projectRoot,
     rootDir,
@@ -313,6 +320,7 @@ async function buildExternalDependencies(
   }: {
     externals: string[];
     packagesToTranspile: Set<string>;
+    transpiledPackageRoots: Map<string, string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
     rootDir: string;
@@ -336,6 +344,7 @@ async function buildExternalDependencies(
 
   const plugins = await getInputPlugins(virtualDependencies, {
     transpilePackages: packagesToTranspile,
+    transpiledPackageRoots,
     workspaceMap,
     bundlerOptions: {
       noBundling,
@@ -486,6 +495,20 @@ export async function bundleExternals(
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
 
+  // Non-workspace dependencies the user listed in `transpilePackages`. They are bundled even when
+  // every other non-workspace dependency stays external (`externals: true`, `mastra dev`), since Node
+  // can't load the TypeScript they ship from node_modules (#19380).
+  const transpiledPackageRoots = new Map<string, string>();
+  for (const [dep, metadata] of depsToOptimize.entries()) {
+    if (
+      !metadata.isWorkspace &&
+      metadata.rootPath &&
+      transpilePackages.some(pkg => isDependencyPartOfPackage(dep, pkg))
+    ) {
+      transpiledPackageRoots.set(dep, metadata.rootPath);
+    }
+  }
+
   /**
    * When externals: true, we need to extract non-workspace deps from depsToOptimize
    * and add them directly to usedExternals instead of bundling them.
@@ -493,7 +516,7 @@ export async function bundleExternals(
   const extractedExternals = new Map<string, string>();
   if (externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
-      if (!metadata.isWorkspace) {
+      if (!metadata.isWorkspace && !transpiledPackageRoots.has(dep)) {
         // Add to extracted externals - use rootPath or fallback to package name
         extractedExternals.set(dep, metadata.rootPath ?? dep);
         // Remove from depsToOptimize so it won't be bundled
@@ -515,6 +538,7 @@ export async function bundleExternals(
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
     externals: mergedExternals,
     packagesToTranspile,
+    transpiledPackageRoots,
     workspaceMap,
     projectRoot,
     rootDir: workspaceRoot || projectRoot,

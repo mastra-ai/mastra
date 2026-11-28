@@ -97,7 +97,7 @@ When your Mastra application imports from other workspace packages, Mastra handl
 - If the package is pre-compiled (e.g., built with `tsc` or `tsdown`), Mastra imports the compiled JavaScript
 - If the package contains uncompiled TypeScript, Mastra transpiles it during the build
 
-For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages):
+Workspace packages work without configuration. If you install uncompiled TypeScript from outside your workspace (for example, a `file:` dependency or a package published as source), add it to [`transpilePackages`](/reference/configuration#bundlertranspilepackages):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -150,9 +150,9 @@ If Mastra can't resolve a workspace package, ensure:
 - Your lockfile is up to date (`pnpm install`, `npm install`, etc.)
 - The package has a valid `main` or `exports` field in its `package.json`
 
-### TypeScript errors from workspace packages
+### TypeScript errors from installed packages
 
-If you see type errors from uncompiled workspace packages, either:
+If Node reports `ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` for a package outside your workspace, the package contains uncompiled TypeScript. Either:
 
 - Build the package first (recommended for faster Mastra builds)
 - Add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages) in your Mastra config

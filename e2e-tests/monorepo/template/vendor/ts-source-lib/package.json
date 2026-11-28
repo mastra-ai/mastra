@@ -1,0 +1,7 @@
+{
+  "name": "ts-source-lib",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts"
+}

@@ -37,6 +37,8 @@ export interface BundlerOptions {
   /** Preserve the default external-all behavior alongside explicitly listed packages. */
   externalsPreset?: boolean;
   dynamicPackages?: string[];
+  /** Non-workspace packages to transpile and bundle instead of leaving them external. */
+  transpilePackages?: string[];
 }
 
 export interface InternalBundlerOptions extends BundlerOptions {

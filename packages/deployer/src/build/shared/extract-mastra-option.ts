@@ -20,8 +20,9 @@ const TS_SOURCE = /\.tsx?$/;
 const NODE_MODULES = `${sep}node_modules${sep}`;
 
 /**
- * Packages outside node_modules, such as workspace packages, may ship raw TypeScript (e.g. `exports` pointing to
- * `src/index.ts`), which Node cannot load from the extracted config. Inline those so esbuild transpiles them. Bare
+ * Packages may ship raw TypeScript (e.g. `exports` pointing to `src/index.ts`): workspace packages, or installed
+ * packages listed in `bundler.transpilePackages`. Node cannot load those from the extracted config (it never strips
+ * types under node_modules), so inline them and let esbuild transpile them. Bare
  * imports made from inlined sources stay external but are pinned to the file they resolve to from that source: the
  * extracted config lives in `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated
  * installs). The app's own imports keep resolving by name.
@@ -32,7 +33,9 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
   // App files keep the entry's path, files resolved by node-resolve are real paths
   const appRoots = [appDir + sep, realpathSync(appDir) + sep];
   const isInlinedSource = (file: string) =>
-    isAbsolute(file) && !file.includes(NODE_MODULES) && !appRoots.some(root => file.startsWith(root));
+    isAbsolute(file) &&
+    (TS_SOURCE.test(file) || !file.includes(NODE_MODULES)) &&
+    !appRoots.some(root => file.startsWith(root));
 
   const resolver = nodeResolve({
     ...getNodeResolveOptions('node'),
@@ -58,7 +61,7 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
         return null;
       }
 
-      if (TS_SOURCE.test(resolved.id) && !resolved.id.includes(NODE_MODULES)) {
+      if (TS_SOURCE.test(resolved.id)) {
         return resolved.id;
       }
 
@@ -84,8 +87,8 @@ export function extractMastraOptionBundler(
     plugins: [
       tsConfigPaths(),
       typescriptSourcesResolver(entryFile),
-      // transpile typescript to something we understand
-      esbuild(),
+      // transpile typescript to something we understand, including sources inlined from node_modules
+      esbuild({ exclude: [] }),
       optimizeLodashImports({
         include: '**/*.{js,ts,mjs,cjs}',
         // v6 rewrites lodash.<method> imports to lodash/<method>, which breaks projects that don't install lodash.
