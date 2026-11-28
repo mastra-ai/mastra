@@ -1,9 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ModelPicker, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { MissingProviderKeyNotice, ModelNotice, ModelPicker, cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
-import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { usePlaygroundModelOptional } from '../context/playground-model-context';
@@ -104,44 +102,21 @@ export const ComposerModelWarning = () => {
 
   if (!modelWarning && !stale && !showProviderWarning) return null;
 
-  const envVar =
-    currentProvider && Array.isArray(currentProvider.envVar)
-      ? currentProvider.envVar.join(', ')
-      : currentProvider?.envVar;
-
   return (
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {(modelWarning || stale) && (
-        <div
-          className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground"
-          data-testid="composer-model-stale-warning"
-          role="alert"
-        >
-          <IconExclamationTriangle className="mt-0.5 size-icon-xs shrink-0" />
-          <Txt as="span" variant="caption" className="min-w-0 break-words">
-            {modelWarning || (
-              <>
-                <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">
-                  {provider}/{selectedModel}
-                </code>{' '}
-                is no longer allowed by admin policy. Pick a different model.
-              </>
-            )}
-          </Txt>
-        </div>
+        <ModelNotice data-testid="composer-model-stale-warning" role="alert">
+          {modelWarning || (
+            <>
+              <code>
+                {provider}/{selectedModel}
+              </code>{' '}
+              is no longer allowed by admin policy. Pick a different model.
+            </>
+          )}
+        </ModelNotice>
       )}
-      {showProviderWarning && (
-        <div className="flex max-w-full min-w-0 items-start gap-1 text-warning-foreground">
-          <IconExclamationTriangle className="mt-0.5 size-icon-xs shrink-0" />
-          <Txt as="span" variant="caption" className="min-w-0 break-words">
-            Set{' '}
-            <code className="rounded bg-warning-subtle px-1 py-0.5 break-all text-warning-subtle-foreground">
-              {envVar}
-            </code>{' '}
-            to use this provider
-          </Txt>
-        </div>
-      )}
+      {showProviderWarning && <MissingProviderKeyNotice envVar={currentProvider.envVar} />}
     </div>
   );
 };
