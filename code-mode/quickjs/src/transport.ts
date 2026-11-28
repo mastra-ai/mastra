@@ -288,7 +288,7 @@ export class QuickJsCodeModeTransport implements CodeModeTransport {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(
-          `The default TypeScript stripper could not be loaded (${message}). On a runtime without Node.js globals, such as Cloudflare Workers, it cannot load at all: pass a stripTypes function, or send a program that is already plain JavaScript.`,
+          `The default TypeScript stripper could not be loaded (${message}). A runtime without Node.js globals, such as Cloudflare Workers, cannot load it at all, so pass a stripTypes function: for a program that is already plain JavaScript, stripTypes: (code) => code is enough.`,
           { cause: error },
         );
       }

@@ -25,6 +25,10 @@ describe('QuickJsCodeModeTransport default stripper', () => {
     expect(message).toMatch(/did not expose a callable default export/);
     // … and the fix, which is the whole point of the message.
     expect(message).toMatch(/pass a stripTypes function/);
+    // Omitting `stripTypes` loads the default regardless of the program, so
+    // "send plain JavaScript" is not a fix; the message names the identity
+    // stripper instead.
+    expect(message).toMatch(/stripTypes: \(code\) => code/);
     expect((error as Error).cause).toBeInstanceOf(Error);
   });
 });
