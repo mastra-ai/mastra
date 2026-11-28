@@ -49,10 +49,13 @@ function holdableSteps() {
     string,
     { at: number; entered: ReturnType<typeof deferred>; released: ReturnType<typeof deferred> }
   >();
+  // Every hold's release, also of a hold a later `holdAt` of the same step replaced.
+  const releases: (() => void)[] = [];
   /** Holds `id`'s `at`-th execution (by default its next one) inside its body. */
   const holdAt = (id: string, at = (calls[id] ?? 0) + 1) => {
     const hold = { at, entered: deferred(), released: deferred() };
     holds.set(id, hold);
+    releases.push(hold.released.resolve);
     return { entered: hold.entered.promise, release: hold.released.resolve };
   };
   const step = (id: string) =>
@@ -71,7 +74,7 @@ function holdableSteps() {
         return { n: inputData.n + 1 };
       },
     });
-  const releaseAll = () => holds.forEach(hold => hold.released.resolve());
+  const releaseAll = () => releases.forEach(release => release());
   return { calls, restartedBy, step, holdAt, releaseAll };
 }
 
