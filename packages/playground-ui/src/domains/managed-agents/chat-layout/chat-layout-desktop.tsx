@@ -1,13 +1,13 @@
 import { ChatLayoutSide } from './chat-layout-side';
-import type { ChatLayoutProps } from './chat-layout-types';
+import type { ChatLayoutViewProps } from './chat-layout-types';
 
 export function ChatLayoutDesktop({
   threads,
-  threadsOpen = true,
+  threadsOpen,
   details,
   detailsOpen,
   children,
-}: Omit<ChatLayoutProps, 'onDetailsOpenChange' | 'onThreadsOpenChange'>) {
+}: Omit<ChatLayoutViewProps, 'onDetailsOpenChange' | 'onThreadsOpenChange'>) {
   return (
     <div data-slot="chat-layout" className="flex h-full min-h-0 p-2">
       {threads ? (

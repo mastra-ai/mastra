@@ -10,5 +10,7 @@ export interface ChatLayoutProps {
   children: ReactNode;
 }
 
+export type ChatLayoutViewProps = Omit<ChatLayoutProps, 'threadsOpen'> & { threadsOpen: boolean };
+
 /** The keys that toggle the side panels, for the toggles' tooltips. */
 export const CHAT_LAYOUT_SHORTCUTS = { threads: '{', details: ']' } as const;

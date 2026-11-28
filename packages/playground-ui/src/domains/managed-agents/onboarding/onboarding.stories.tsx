@@ -16,7 +16,6 @@ import slack from '../../../../.storybook/fixtures/integration-logos/slack.svg';
 import { AddToolsDialog, ToolRow } from '../tools';
 import type { CatalogTool } from '../tools';
 import { StepDeck } from './step-deck';
-import type { StepDeckStep } from './step-deck';
 import { ProviderLogo } from '@/domains/connect/provider-logo';
 import type { UserConnectProvider } from '@/domains/connect/types';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
@@ -176,50 +175,9 @@ function ToolsStep() {
   );
 }
 
-const STEPS: Array<StepDeckStep & { summary: string }> = [
-  {
-    id: 'basics',
-    title: 'Basics',
-    summary: 'Kit, GPT-5 mini',
-    content: (
-      <SettingsContainer>
-        <SettingsRow label="Name">
-          <Input defaultValue="Kit" />
-        </SettingsRow>
-        <SettingsRow label="Model">
-          <Input defaultValue="GPT-5 mini" />
-        </SettingsRow>
-      </SettingsContainer>
-    ),
-  },
-  {
-    id: 'instructions',
-    title: 'Instructions',
-    summary: 'Coding agent template',
-    content: <InstructionsStep />,
-  },
-  {
-    id: 'tools',
-    title: 'Tools',
-    summary: 'Optional',
-    content: <ToolsStep />,
-  },
-  {
-    id: 'review',
-    title: 'Review',
-    summary: 'Check and create',
-    content: (
-      <Txt variant="body-sm" tone="muted">
-        Kit uses GPT-5 mini, the Coding agent instructions, GitHub and web search. You can change any of this later from
-        Edit.
-      </Txt>
-    ),
-  },
-];
-
 function Onboarding() {
   const [current, setCurrent] = useState(0);
-  const last = current === STEPS.length - 1;
+  const last = current === 3;
   return (
     <div className="flex h-200 bg-sidebar p-2">
       <MainCard>
@@ -239,14 +197,14 @@ function Onboarding() {
           asidePlacement="start"
           aside={
             <Steps headingLevel={2}>
-              {STEPS.map((step, index) => (
-                <Steps.Step key={step.id} title={step.title} description={step.summary} done={index < current} />
-              ))}
+              <Steps.Step title="Basics" description="Kit, GPT-5 mini" done={current > 0} />
+              <Steps.Step title="Instructions" description="Coding agent template" done={current > 1} />
+              <Steps.Step title="Tools" description="Optional" done={current > 2} />
+              <Steps.Step title="Review" description="Check and create" done={current > 3} />
             </Steps>
           }
         >
           <StepDeck
-            steps={STEPS}
             current={current}
             label="New agent steps"
             actions={
@@ -254,12 +212,35 @@ function Onboarding() {
                 <Button variant="ghost" disabled={current === 0} onClick={() => setCurrent(Math.max(current - 1, 0))}>
                   Back
                 </Button>
-                <Button variant="primary" onClick={() => setCurrent(Math.min(current + 1, STEPS.length - 1))}>
+                <Button variant="primary" onClick={() => setCurrent(Math.min(current + 1, 3))}>
                   {last ? 'Create agent' : 'Continue'}
                 </Button>
               </>
             }
-          />
+          >
+            <StepDeck.Step key="basics" title="Basics">
+              <SettingsContainer>
+                <SettingsRow label="Name">
+                  <Input defaultValue="Kit" />
+                </SettingsRow>
+                <SettingsRow label="Model">
+                  <Input defaultValue="GPT-5 mini" />
+                </SettingsRow>
+              </SettingsContainer>
+            </StepDeck.Step>
+            <StepDeck.Step key="instructions" title="Instructions">
+              <InstructionsStep />
+            </StepDeck.Step>
+            <StepDeck.Step key="tools" title="Tools">
+              <ToolsStep />
+            </StepDeck.Step>
+            <StepDeck.Step key="review" title="Review">
+              <Txt variant="body-sm" tone="muted">
+                Kit uses GPT-5 mini, the Coding agent instructions, GitHub and web search. You can change any of this
+                later from Edit.
+              </Txt>
+            </StepDeck.Step>
+          </StepDeck>
         </PageLayout>
       </MainCard>
     </div>

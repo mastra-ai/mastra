@@ -15,6 +15,7 @@ import { MarkdownEditor } from '@/ds/components/MarkdownEditor';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { SaveBar } from '@/ds/components/SaveBar';
+import type { SaveBarTone } from '@/ds/components/SaveBar';
 import { Txt } from '@/ds/components/Txt';
 import { VersionTimeline } from '@/ds/components/VersionTimeline';
 import type { VersionState } from '@/ds/components/VersionTimeline';
@@ -172,12 +173,17 @@ function Crumbs({ doc }: { doc: Doc }) {
   );
 }
 
+const SAVE_TONE: Record<SaveState, SaveBarTone> = {
+  dirty: 'neutral',
+  draft: 'neutral',
+  published: 'success',
+  failed: 'error',
+};
+
 function EditorSaveBar({ state }: { state: SaveState }) {
+  const tone = SAVE_TONE[state];
   return (
-    <SaveBar
-      status={SAVE_STATUS[state]}
-      tone={state === 'failed' ? 'error' : state === 'published' ? 'success' : 'neutral'}
-    >
+    <SaveBar status={SAVE_STATUS[state]} tone={tone}>
       <Button variant="ghost" size="sm" icon={<IconFloppyDisk1 />} disabled={state !== 'dirty'}>
         Save
       </Button>

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatLayout } from './chat-layout';
 
@@ -29,7 +30,43 @@ function renderLayout(detailsOpen: boolean) {
   );
 }
 
+function DefaultThreadsLayout() {
+  const [threadsOpen, setThreadsOpen] = useState<boolean>();
+  return (
+    <ChatLayout
+      threads={<nav aria-label="Threads">Threads</nav>}
+      threadsOpen={threadsOpen}
+      onThreadsOpenChange={setThreadsOpen}
+      detailsOpen={false}
+      onDetailsOpenChange={() => undefined}
+    >
+      <p>Conversation</p>
+    </ChatLayout>
+  );
+}
+
 describe('ChatLayout', () => {
+  it('closes the default-open desktop threads with the keyboard and opens them again', () => {
+    render(<DefaultThreadsLayout />);
+    expect(screen.getByText('Threads').closest('[inert]')).toBeNull();
+
+    fireEvent.keyDown(window, { key: '{', shiftKey: true });
+    expect(screen.getByText('Threads').closest('[inert]')).not.toBeNull();
+
+    fireEvent.keyDown(window, { key: '{', shiftKey: true });
+    expect(screen.getByText('Threads').closest('[inert]')).toBeNull();
+  });
+
+  it('opens the default-closed mobile threads with the keyboard', () => {
+    mobile = true;
+    render(<DefaultThreadsLayout />);
+    expect(screen.queryByRole('navigation', { name: 'Threads' })).toBeNull();
+
+    fireEvent.keyDown(window, { key: '{', shiftKey: true });
+
+    expect(screen.getByRole('dialog').textContent).toContain('Threads');
+    expect(screen.getByRole('navigation', { name: 'Threads' })).toBeTruthy();
+  });
   it('shows threads, the chat and Details side by side when Details is open', () => {
     renderLayout(true);
 

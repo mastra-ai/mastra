@@ -6,10 +6,6 @@ export interface DetailsCardStatProps {
   value: ReactNode;
 }
 
-export function DetailsCardStats({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-3 gap-2">{children}</div>;
-}
-
 export function DetailsCardStat({ label, value }: DetailsCardStatProps) {
   return (
     <div className="flex flex-col">

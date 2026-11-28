@@ -26,6 +26,22 @@ describe('AddToolsDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('keeps picks while filtering, but starts fresh after closing and reopening', () => {
+    const props = { catalog: CATALOG, onOpenChange: vi.fn(), onAdd: vi.fn() };
+    const { rerender } = render(<AddToolsDialog {...props} open />);
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Slack' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search tools' }), { target: { value: 'Notion' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search tools' }), { target: { value: '' } });
+    expect(screen.getByRole('checkbox', { name: 'Slack' }).getAttribute('aria-checked')).toBe('true');
+
+    rerender(<AddToolsDialog {...props} open={false} />);
+    rerender(<AddToolsDialog {...props} open />);
+
+    expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search tools' }).value).toBe('');
+    expect(screen.getByRole('checkbox', { name: 'Slack' }).getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Add tool' })).toHaveProperty('disabled', true);
+  });
+
   it('marks the tools that already have a connected account', () => {
     render(<AddToolsDialog open onOpenChange={vi.fn()} catalog={CATALOG} onAdd={vi.fn()} />);
 
