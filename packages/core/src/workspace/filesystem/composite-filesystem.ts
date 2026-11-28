@@ -46,6 +46,16 @@ export interface CompositeFilesystemConfig<
 > {
   /** Map of mount paths to filesystem instances */
   mounts: TMounts;
+
+  /**
+   * Mount path that resolves relative paths which don't start with a mount path.
+   *
+   * Must match one of the configured mount paths. With `defaultMount: '/data'`,
+   * `readFile('note.txt')` reads `note.txt` from the `/data` mount. Paths that
+   * already start with a mount path, and absolute paths, keep their current
+   * meaning. When unset, relative paths that aren't under a mount stay unresolved.
+   */
+  defaultMount?: string;
 }
 
 interface ResolvedMount {
@@ -87,6 +97,7 @@ export class CompositeFilesystem<
   status: ProviderStatus = 'ready';
 
   private readonly _mounts: Map<string, WorkspaceFilesystem>;
+  private readonly _defaultMount?: string;
 
   constructor(config: CompositeFilesystemConfig<TMounts>) {
     this.id = `cfs-${Date.now().toString(36)}`;
@@ -113,6 +124,16 @@ export class CompositeFilesystem<
         }
       }
     }
+
+    if (config.defaultMount !== undefined) {
+      const normalizedDefaultMount = this.normalizePath(config.defaultMount);
+      if (!this._mounts.has(normalizedDefaultMount)) {
+        throw new Error(
+          `CompositeFilesystem defaultMount "${config.defaultMount}" does not match any configured mount`,
+        );
+      }
+      this._defaultMount = normalizedDefaultMount;
+    }
   }
 
   /**
@@ -128,6 +149,14 @@ export class CompositeFilesystem<
    */
   get mounts(): ReadonlyMountMap<TMounts> {
     return this._mounts as unknown as ReadonlyMountMap<TMounts>;
+  }
+
+  /**
+   * Mount path used to resolve relative paths that don't name a mount.
+   * Returns undefined when the option isn't configured.
+   */
+  get defaultMount(): string | undefined {
+    return this._defaultMount;
   }
 
   /**
@@ -200,7 +229,7 @@ export class CompositeFilesystem<
       }
     }
 
-    if (!best) return null;
+    if (!best) return this.resolveDefaultMount(path);
 
     let fsPath = normalized.slice(best.mountPath.length);
     // Strip the leading slash so the path is relative to the mounted filesystem's basePath
@@ -208,6 +237,28 @@ export class CompositeFilesystem<
     else if (fsPath.startsWith('/')) fsPath = fsPath.slice(1);
 
     return { fs: best.fs, fsPath, mountPath: best.mountPath };
+  }
+
+  /**
+   * Resolve a path that matched no mount against the configured default mount.
+   *
+   * Only relative paths that stay inside the default mount qualify: the virtual
+   * root ('', '.', '/'), absolute paths, and paths that climb above the mount
+   * root ('..') stay unresolved.
+   */
+  private resolveDefaultMount(path: string): ResolvedMount | null {
+    if (!this._defaultMount) return null;
+    if (path.startsWith('/')) return null;
+
+    let relative = posixPath.normalize(path);
+    if (relative.length > 1 && relative.endsWith('/')) relative = relative.slice(0, -1);
+    if (relative === '.' || relative === '') return null;
+    if (relative === '..' || relative.startsWith('../')) return null;
+
+    const fs = this._mounts.get(this._defaultMount);
+    if (!fs) return null;
+
+    return { fs, fsPath: relative, mountPath: this._defaultMount };
   }
 
   private getVirtualEntries(path: string): FileEntry[] | null {
