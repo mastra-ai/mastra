@@ -19,7 +19,7 @@ import {
 } from '../markers';
 import { getLastObservedMessageCursor, sortThreadsByOldestMessage } from '../message-utils';
 import type { ObservationGroup } from '../observation-groups';
-import { buildMessageRange } from '../observational-memory';
+import { buildMessageRange, isOMOwnedStateSignal } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
 import { getMaxThreshold } from '../thresholds';
@@ -118,7 +118,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         filter: startDate ? { dateRange: { start: startDate } } : undefined,
       });
 
-      const messages = result.messages.filter(msg => msg.role !== 'system');
+      const messages = result.messages.filter(msg => msg.role !== 'system' && !isOMOwnedStateSignal(msg));
       if (messages.length > 0) {
         this.messagesByThread.set(thread.id, messages);
       }

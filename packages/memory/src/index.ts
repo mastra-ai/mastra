@@ -136,6 +136,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
+  stateSignals?: ObservationalMemoryConfig['stateSignals'];
   onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
   autoModels?: ObservationalMemoryConfig['autoModels'];
@@ -2370,6 +2371,7 @@ ${workingMemory}`;
       memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
+      stateSignals: omConfig.stateSignals,
       activateAfterIdle: omConfig.activateAfterIdle,
       activateOnProviderChange: omConfig.activateOnProviderChange,
       shareTokenBudget: omConfig.shareTokenBudget,
@@ -4011,6 +4013,11 @@ Notes:
     const om = await this.createOMProcessor(configuredProcessors, context);
     if (om) {
       processors.push(om);
+      const engine = await this.omEngine;
+      if (engine?.stateSignals) {
+        const { ObservationalMemoryStateProcessor } = await import('./processors/observational-memory/state-processor');
+        processors.push(new ObservationalMemoryStateProcessor(engine));
+      }
     }
 
     const wm = await this.createWorkingMemoryStateProcessor(configuredProcessors, context);

@@ -118,6 +118,14 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
+    name: 'stateSignals',
+    type: 'boolean',
+    description:
+      'Deliver the current task, suggested response and custom extractor values to the agent as a state signal in the conversation instead of as sections at the end of the system prompt. The Observer saves these values each time it buffers, so as system-prompt sections they change the system prompt between observations. As a state signal they leave it unchanged, so a prompt cache keeps covering the instructions and the observation log. Needs a memory thread. A state signal is saved to the thread, so read-only calls keep the values as system-prompt sections and write nothing. `Memory.getContext()` also still returns them as sections.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
