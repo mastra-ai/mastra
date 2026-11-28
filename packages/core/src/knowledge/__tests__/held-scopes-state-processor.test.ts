@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -148,7 +148,7 @@ describe('HeldScopesStateProcessor', () => {
   it('clears the list with a snapshot that says so when no scope is held any more', async () => {
     const { args } = harness();
     const processorWithNone = new HeldScopesStateProcessor({
-      principalsKey: () => 'k',
+      principalsKey: async () => 'k',
       readHeldScopes: async () => [],
     });
     const base = {
@@ -170,6 +170,18 @@ describe('HeldScopesStateProcessor', () => {
       args({ lastSnapshot: asBase(snapshot), contextWindow: { hasSnapshot: false } }),
     );
     expect(again).toMatchObject({ mode: 'snapshot' });
+  });
+
+  it('sends nothing, without failing the turn, when the run has no Knowledge view', async () => {
+    const { knowledge, requestContext, args } = harness();
+    setRunAgentScopes(requestContext, ['vendor:x']);
+    const readHeldScopes = vi.fn(async () => []);
+    const processor = new HeldScopesStateProcessor({
+      principalsKey: context => knowledge.__principalsKey(context),
+      readHeldScopes,
+    });
+    await expect(processor.computeStateSignal(args())).resolves.toBeUndefined();
+    expect(readHeldScopes).not.toHaveBeenCalled();
   });
 
   it('fails the turn when the held scopes cannot be read, rather than sending none', async () => {

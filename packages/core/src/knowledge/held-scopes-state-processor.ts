@@ -106,8 +106,9 @@ function renderDelta(ops: HeldScopeDeltaOp[]): string {
 }
 
 export interface HeldScopesStateProcessorDeps {
-  /** A key identifying the run's principals. Throws when the run has no Knowledge view. */
-  principalsKey(context: KnowledgeRunContext): string;
+  /** The run's principals as a key, or `undefined` when it has no Knowledge view; rejects when the
+   * store's declarations cannot be read. */
+  principalsKey(context: KnowledgeRunContext): Promise<string | undefined>;
   /** The scopes the run holds, in principal order. */
   readHeldScopes(context: KnowledgeRunContext): Promise<HeldScopeEntry[]>;
 }
@@ -136,12 +137,9 @@ export class HeldScopesStateProcessor implements Processor<typeof HELD_SCOPES_ST
       requestContext: args.requestContext,
       agent: { resourceId: args.resourceId, threadId: args.threadId },
     };
-    // No principals means this run has no Knowledge view: there is nothing to show.
-    try {
-      this.deps.principalsKey(context);
-    } catch {
-      return;
-    }
+    // Loads the store's declarations first, so a scope only the store declares is listed on a cold
+    // instance. No principals means no Knowledge view: there is nothing to show.
+    if ((await this.deps.principalsKey(context)) === undefined) return;
     // A failed read throws: sending no scopes would tell the model it holds none.
     const current = await this.deps.readHeldScopes(context);
 

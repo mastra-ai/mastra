@@ -324,6 +324,44 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(prompt).toContain('- resource:user-1 (owner)');
   });
 
+  // A scope type only the store declares loads when the runtime first resolves; a cold instance must
+  // still list it on the first turn, before any tool call or write has warmed the runtime.
+  async function storeDeclaredAgent(getScopeDeclarations: () => Promise<unknown>) {
+    const storage = new InMemoryStore({ id: 'held-store-declared' });
+    const knowledge = new Knowledge({ storage, scopes: knowledgeMemoryScopes(), tools: true });
+    vi.spyOn((await storage.getStore('knowledge'))!, 'getScopeDeclarations').mockImplementation(
+      getScopeDeclarations as never,
+    );
+    const prompts: unknown[][] = [];
+    const agent = new Agent({
+      id: 'held-store-declared',
+      name: 'held-store-declared',
+      instructions: 'x',
+      model: scriptedModel([], prompts),
+      knowledge,
+      memory: new MockMemory(),
+      scopes: ['partner:acme'],
+    });
+    return { agent, prompts };
+  }
+
+  it('lists a scope only the store declares on a cold instance, from the first turn', async () => {
+    const { agent, prompts } = await storeDeclaredAgent(async () => ({
+      'partner:$orgId': { access: [{ principal: 'self', role: 'owner' }] },
+    }));
+    await agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } });
+    expect(JSON.stringify(prompts[0])).toContain('- partner:acme (owner)');
+  });
+
+  it('fails the turn when the store declarations cannot be read, rather than sending no list', async () => {
+    const { agent } = await storeDeclaredAgent(async () => {
+      throw new Error('store down');
+    });
+    await expect(
+      agent.generate('hello', { maxSteps: 1, memory: { thread: 'thread-9', resource: 'user-1' } }),
+    ).rejects.toThrow('store down');
+  });
+
   it('sends no held-scopes list when the knowledge option turns on no tools', async () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'held-none' }), scopes, tools: false });
     const prompts: unknown[][] = [];
