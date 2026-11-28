@@ -177,6 +177,15 @@ describe.each(engines)('%s engine: lifecycle callbacks for background runs', (en
     expect(executions.count).toBe(2);
   }, 15_000);
 
+  it('does not keep a startAsync() run in memory after it ends', async () => {
+    const { workflow } = await setup(`background-hooks-${engine}-released`, 'success');
+
+    const run = await workflow.createRun();
+    await run.startAsync({ inputData: { attempt: 1 } });
+    await waitForStatus(workflow, run.runId, 'success');
+    await vi.waitFor(async () => expect(await workflow.createRun({ runId: run.runId })).not.toBe(run));
+  }, 15_000);
+
   it('returns from startAsync() while the job is still running, then reports the finish', async () => {
     let releaseStep!: () => void;
     const stepGate = new Promise<void>(resolve => (releaseStep = resolve));
