@@ -1,5 +1,15 @@
 # @mastra/hono
 
+## 1.7.29-alpha.6
+
+### Patch Changes
+
+- Fixed custom routes holding large request bodies in memory. Requests that don't reach a custom route are no longer copied at all, and when one does, the adapter releases its copy as soon as the route starts handling the request instead of keeping it until garbage collection. ([#31191](https://github.com/mastra-ai/mastra/issues/31191)) ([#31806](https://github.com/mastra-ai/mastra/pull/31806))
+
+- Updated dependencies [[`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`a6dfa7b`](https://github.com/mastra-ai/mastra/commit/a6dfa7b8cde36c40fe54e34d01350c7eeae2d918), [`70daf9a`](https://github.com/mastra-ai/mastra/commit/70daf9acfb7e69ed3921eb7d8b0250cce318330f)]:
+  - @mastra/core@1.87.0-alpha.6
+  - @mastra/server@1.87.0-alpha.6
+
 ## 1.7.29-alpha.5
 
 ### Patch Changes

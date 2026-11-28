@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { DetailsCard } from '../details-card';
 import { DocumentEditor } from './index';
 import { Badge } from '@/ds/components/Badge';
 import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
@@ -12,6 +15,7 @@ import { MarkdownEditor } from '@/ds/components/MarkdownEditor';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { PageLayout } from '@/ds/components/PageLayout';
 import { SaveBar } from '@/ds/components/SaveBar';
+import type { SaveBarTone } from '@/ds/components/SaveBar';
 import { Txt } from '@/ds/components/Txt';
 import { VersionTimeline } from '@/ds/components/VersionTimeline';
 import type { VersionState } from '@/ds/components/VersionTimeline';
@@ -169,12 +173,17 @@ function Crumbs({ doc }: { doc: Doc }) {
   );
 }
 
+const SAVE_TONE: Record<SaveState, SaveBarTone> = {
+  dirty: 'neutral',
+  draft: 'neutral',
+  published: 'success',
+  failed: 'error',
+};
+
 function EditorSaveBar({ state }: { state: SaveState }) {
+  const tone = SAVE_TONE[state];
   return (
-    <SaveBar
-      status={SAVE_STATUS[state]}
-      tone={state === 'failed' ? 'error' : state === 'published' ? 'success' : 'neutral'}
-    >
+    <SaveBar status={SAVE_STATUS[state]} tone={tone}>
       <Button variant="ghost" size="sm" icon={<IconFloppyDisk1 />} disabled={state !== 'dirty'}>
         Save
       </Button>
@@ -246,20 +255,20 @@ function Timeline({ versions, unsaved, comparing }: { versions: Version[]; unsav
   );
 }
 
-function Details({ doc, mode }: { doc: Doc; mode: Mode }) {
+function Details({ doc, mode, onClose }: { doc: Doc; mode: Mode; onClose: () => void }) {
   return (
-    <DocumentEditor.Details onClose={() => undefined} isLoading={mode === 'loading'}>
+    <DetailsCard onClose={onClose} isLoading={mode === 'loading'}>
       {doc.facts.map(fact => (
-        <DocumentEditor.Section key={fact.label} label={fact.label}>
+        <DetailsCard.Section key={fact.label} label={fact.label}>
           {fact.items.map(item => (
-            <DocumentEditor.Fact key={item.name} label={item.name} value={item.value} />
+            <DetailsCard.Fact key={item.name} label={item.name} value={item.value} />
           ))}
-        </DocumentEditor.Section>
+        </DetailsCard.Section>
       ))}
-      <DocumentEditor.Section label="Versions">
+      <DetailsCard.Section label="Versions">
         <Timeline versions={doc.versions} unsaved={doc.save === 'dirty'} comparing={mode === 'compare'} />
-      </DocumentEditor.Section>
-    </DocumentEditor.Details>
+      </DetailsCard.Section>
+    </DetailsCard>
   );
 }
 
@@ -297,13 +306,19 @@ function Footer({ doc, mode, save }: { doc: Doc; mode: Mode; save?: SaveState })
 }
 
 function Editor({ doc, mode = 'ready', save }: { doc: Doc; mode?: Mode; save?: SaveState }) {
+  const [detailsOpen, setDetailsOpen] = useState(true);
   return (
     <Frame>
-      <DocumentEditor breadcrumbs={<Crumbs doc={doc} />} title={doc.current}>
+      <DocumentEditor
+        breadcrumbs={<Crumbs doc={doc} />}
+        title={doc.current}
+        details={<Details doc={doc} mode={mode} onClose={() => setDetailsOpen(false)} />}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
+      >
         <DocumentEditor.Main footer={<Footer doc={doc} mode={mode} save={save} />}>
           <Body doc={doc} mode={mode} />
         </DocumentEditor.Main>
-        <Details doc={doc} mode={mode} />
       </DocumentEditor>
       {mode === 'leaving' ? (
         <Dialog open>
@@ -334,7 +349,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'One frame for an agent’s instructions, a shared prompt and a skill: `PageLayout variant="page" body="fixed"` with breadcrumbs as the way back, a flat editor column with a save bar, and a Details card with what it uses and its version timeline. Composed from `DocumentEditor` in this domain with `MarkdownEditor`, `MarkdownRenderer`, `MarkdownDiff`, `SaveBar` and `VersionTimeline`.',
+          'One frame for an agent’s instructions, a shared prompt and a skill: `PageLayout variant="page" body="fixed"` with breadcrumbs as the way back, a flat editor column with a save bar, and a Details card with what it uses and its version timeline. Composed from `DocumentEditor` and `DetailsCard` in this domain with `MarkdownEditor`, `MarkdownRenderer`, `MarkdownDiff`, `SaveBar` and `VersionTimeline`.',
       },
     },
   },
@@ -370,6 +385,21 @@ export const CompareLines: Story = {
 export const Loading: Story = { render: () => <Editor doc={DOCS.prompt} mode="loading" /> };
 export const PublishFailed: Story = { render: () => <Editor doc={DOCS.prompt} save="failed" /> };
 export const ViewOnly: Story = { render: () => <Editor doc={DOCS.prompt} mode="viewer" /> };
+export const HideDetails: Story = {
+  render: () => <Editor doc={DOCS.prompt} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Hide details' }));
+    await waitFor(() =>
+      expect(canvasElement.querySelector('[data-slot="chat-layout-details"]')).toHaveAttribute('data-open', 'false'),
+    );
+    await userEvent.click(canvas.getByRole('button', { name: 'Show details' }));
+    await waitFor(() =>
+      expect(canvasElement.querySelector('[data-slot="chat-layout-details"]')).toHaveAttribute('data-open', 'true'),
+    );
+  },
+};
+
 export const LeaveWithUnsavedEdits: Story = {
   render: () => <Editor doc={DOCS.prompt} mode="leaving" save="dirty" />,
 };

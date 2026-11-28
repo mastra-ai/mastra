@@ -73,11 +73,13 @@ export function SaveBar({ status, tone = 'neutral', children, className }: SaveB
         )}
       >
         {Icon ? (
-          <Icon
+          <span
             key={tone}
             aria-hidden
-            className="size-icon-sm shrink-0 motion-safe:animate-[save-bar-icon-in_200ms_var(--ease-out-custom)_both]"
-          />
+            className="flex size-icon-sm shrink-0 motion-safe:animate-[save-bar-icon-in_200ms_var(--ease-out-custom)_both]"
+          >
+            <Icon className="size-full" />
+          </span>
         ) : null}
         <Txt as="span" variant="body-sm" className="min-w-0 truncate">
           {status}

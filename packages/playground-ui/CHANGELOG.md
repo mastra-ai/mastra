@@ -1,5 +1,50 @@
 # @mastra/playground-ui
 
+## 72.0.0-alpha.7
+
+### Minor Changes
+
+- Form pages can now show breadcrumbs instead of a back link, and put their side panel on the left. Use them for multi-step create flows such as onboarding, so the page keeps the same way back as the rest of the app and its step list sits before the form. ([#31702](https://github.com/mastra-ai/mastra/pull/31702))
+
+  ```tsx
+  <PageLayout
+    variant="form"
+    breadcrumbs={<Breadcrumb>{/* Agents / New agent */}</Breadcrumb>}
+    title="New agent"
+    aside={<Steps>{/* Basics, Instructions, Tools, Review */}</Steps>}
+    asidePlacement="start"
+  >
+    {sections}
+  </PageLayout>
+  ```
+
+  A form shows one way back: passing `breadcrumbs` together with `backHref` or `backLabel` is a type error. `asidePlacement` defaults to `end`, so existing forms look the same. A start-side aside hides on narrow screens, where a step list would push the fields down.
+
+- Added three parts for editing documents such as prompts and skills: ([#31704](https://github.com/mastra-ai/mastra/pull/31704))
+
+  - **`MarkdownDiff`** shows how a markdown document changed as rendered text, with removed words struck through and added words underlined. Headings, lists and code keep their formatting.
+  - **`SaveBar`** holds an editor's status and its Save and Publish actions. `tone="success"` and `tone="error"` color the status and add an icon; an error also shakes the bar once and is announced as an alert.
+  - **`VersionTimeline`** lists a document's versions with their state, author and actions such as Compare and Restore.
+
+  ```tsx
+  <SaveBar status="Couldn’t publish. Your draft is saved." tone="error">
+    <Button variant="primary">Try again</Button>
+  </SaveBar>
+
+  <MarkdownDiff before={published} after={draft} />
+  ```
+
+  `SettingsContainer` now turns into an inset inside any element marked `data-surface="card"`, the same way it does inside a dialog.
+
+### Patch Changes
+
+- Fixed code blocks in your own chat messages collapsing to the width of a short line of text above them. The message now widens to fit the code, up to its usual maximum width, and longer lines scroll inside the block. ([#31801](https://github.com/mastra-ai/mastra/pull/31801))
+
+- Updated dependencies [[`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`a6dfa7b`](https://github.com/mastra-ai/mastra/commit/a6dfa7b8cde36c40fe54e34d01350c7eeae2d918), [`70daf9a`](https://github.com/mastra-ai/mastra/commit/70daf9acfb7e69ed3921eb7d8b0250cce318330f)]:
+  - @mastra/core@1.87.0-alpha.6
+  - @mastra/client-js@1.63.0-alpha.6
+  - @mastra/react@1.17.0-alpha.6
+
 ## 72.0.0-alpha.6
 
 ### Minor Changes

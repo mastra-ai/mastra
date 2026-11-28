@@ -1,5 +1,16 @@
 # @mastra/quickjs
 
+## 0.2.0-alpha.0
+
+### Minor Changes
+
+- Added `stripTypes`, `maxInterruptTicks`, and `shouldInterrupt` options to `QuickJsCodeModeTransport`. Importing the package no longer loads the default TypeScript stripper, so it is safe on runtimes without Node.js globals such as Cloudflare Workers; pass `stripTypes` to supply your own, and a run that omits it reports why the default stripper could not be loaded instead of the raw `ReferenceError` from a dependency. `maxInterruptTicks` and `shouldInterrupt` stop CPU-heavy programs on hosts where the guest clock is frozen. Fixes #31312 ([#31811](https://github.com/mastra-ai/mastra/pull/31811))
+
+### Patch Changes
+
+- Updated dependencies [[`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`5802c25`](https://github.com/mastra-ai/mastra/commit/5802c259bfc26cd299618f8643bc3e7583c0a1f9), [`a6dfa7b`](https://github.com/mastra-ai/mastra/commit/a6dfa7b8cde36c40fe54e34d01350c7eeae2d918), [`70daf9a`](https://github.com/mastra-ai/mastra/commit/70daf9acfb7e69ed3921eb7d8b0250cce318330f)]:
+  - @mastra/core@1.87.0-alpha.6
+
 ## 0.1.6
 
 ### Patch Changes
