@@ -14,7 +14,8 @@ import { expect, inject, it } from 'vitest';
 it(
   'builds an npm workspace app with a packed workspace dependency',
   async () => {
-    const root = await mkdtemp(join(tmpdir(), 'mastra-npm-workspace-'));
+    // A space in the project path stays one argument to npm pack and install. (SEC-328)
+    const root = await mkdtemp(join(tmpdir(), 'mastra npm workspace-'));
     const app = join(root, 'apps', 'server');
     const workspacePackage = join(root, 'packages', 'foo');
     const registry = inject('registry');

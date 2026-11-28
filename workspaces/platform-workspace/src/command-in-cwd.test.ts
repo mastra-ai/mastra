@@ -1,9 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { commandInCwd } from './sandbox.js';
+import { commandInCwd, shellQuote } from './command-in-cwd.js';
 
 function run(script: string, from: string): { status: number; stdout: string; stderr: string } {
   try {
@@ -34,11 +34,22 @@ describe('commandInCwd', () => {
     rmSync(root, { recursive: true, force: true });
   });
 
+  it('leaves safe command arguments unquoted and quotes values that need it', () => {
+    expect(shellQuote('ok')).toBe('ok');
+    expect(shellQuote('-c')).toBe('-c');
+    expect(shellQuote("it's")).toBe(`'it'\\''s'`);
+  });
+
   it('leaves the command alone without a cwd or when cwd is the working directory', () => {
     expect(commandInCwd('pwd', undefined, workdir)).toBe('pwd');
     expect(commandInCwd('pwd', '', workdir)).toBe('pwd');
     expect(commandInCwd('pwd', `${workdir}/`, workdir)).toBe('pwd');
     expect(commandInCwd('pwd', '.', workdir)).toBe('pwd');
+  });
+
+  it('assigns a directory path from a quoted literal', () => {
+    const dir = join(workdir, 'repo');
+    expect(commandInCwd('echo ok', 'repo', workdir)).toContain(`_mastra_d1='${dir}'`);
   });
 
   it('resolves a relative cwd under the working directory', () => {
@@ -90,6 +101,16 @@ describe('commandInCwd', () => {
     const dir = join(workdir, "it's a dir");
     mkdirSync(dir);
     expect(run(commandInCwd('pwd', "it's a dir", workdir), workdir).stdout).toBe(dir);
+  });
+
+  it('uses a directory whose name is shell syntax as a path', () => {
+    // Technical: the directory is a quoted shell variable, so command substitution in the name does not run. (SEC-328)
+    const dir = join(workdir, '$(echo pwned)');
+    const marker = join(workdir, 'pwned');
+    mkdirSync(dir);
+    const result = run(commandInCwd('pwd; printf %s "$1"', '$(echo pwned)', workdir), workdir);
+    expect(result).toMatchObject({ status: 0, stdout: dir });
+    expect(existsSync(marker)).toBe(false);
   });
 
   it('runs multi-line commands in the target directory', () => {
