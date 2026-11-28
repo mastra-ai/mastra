@@ -1,8 +1,6 @@
 import { useIntakeRoutesQuery, useIntakeDryRunQuery, useSkippedRulesQuery } from '@mastra/react/hooks/factory';
-import { isOpenedLane } from '@mastra/playground-ui/domains/factory';
-import type { RuleEvent } from '@mastra/playground-ui/domains/factory';
-import { boardRulesOf, ruleLines } from '../../canvasModel';
-import type { RuleLine } from '../../canvasModel';
+import { isOpenedLane, boardRulesOf, ruleLines } from '@mastra/playground-ui/domains/factory';
+import type { RuleEvent, RuleLine } from '@mastra/playground-ui/domains/factory';
 
 /**
  * Each board's rules on the arrival triggers, with what they filed in the last 30 days, and those counts summed per

@@ -2,7 +2,7 @@ import { OrderRuleList as SharedOrderRuleList } from '@mastra/playground-ui/doma
 import type { ReactNode } from 'react';
 
 import type { InstalledBoardInfo } from '../../../../../api/types';
-import type { RuleLine } from '../../canvasModel';
+import type { RuleLine } from '@mastra/playground-ui/domains/factory';
 import { ARRIVAL_EVENTS, LaneIcon } from './laneIcon';
 import { OrderRuleRow } from './OrderRuleRow';
 

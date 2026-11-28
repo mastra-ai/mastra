@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { limitedProviders } from '@mastra/playground-ui/domains/factory';
-import { narrowSuggestions } from '../../boardCanvas/components/conditions/sourceOptions';
+import { limitedProviders, narrowSuggestions } from '@mastra/playground-ui/domains/factory';
 import { sourceSuggestions } from './sourceSuggestions';
 
 describe('sourceSuggestions', () => {

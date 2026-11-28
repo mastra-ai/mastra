@@ -1,6 +1,5 @@
-import type { CanvasFocus } from '../../canvasFocus';
-import { RulePanel } from '../rulePanel/RulePanel';
-import { TestPanel } from '../testPanel/TestPanel';
+import type { CanvasFocus } from '@mastra/playground-ui/domains/factory';
+import { RulePanel, TestPanel } from '@mastra/playground-ui/domains/factory';
 
 /** The side panel for what the routing page focuses: a rule, a new rule, or an item tested against the rules. */
 export function RoutingPanel({

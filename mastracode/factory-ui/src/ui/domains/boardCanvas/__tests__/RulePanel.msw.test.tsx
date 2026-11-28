@@ -11,9 +11,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { IntakeDryRunResponse, IntakeRouteInfo, IntakeTestResponse } from '../../../../api/types';
-import type { CanvasFocus } from '../canvasFocus';
+import type { CanvasFocus } from '@mastra/playground-ui/domains/factory';
 import { FACTORY_ID, PROJECT_URL, rule, ruleId, serveRules } from '../../boardRules/__tests__/fixtures/rulesServer';
-import { RulePanel } from '../components/rulePanel/RulePanel';
+import { RulePanel } from '@mastra/playground-ui/domains/factory';
 
 type RuleStats = IntakeDryRunResponse['boards'][number]['rules'][number];
 

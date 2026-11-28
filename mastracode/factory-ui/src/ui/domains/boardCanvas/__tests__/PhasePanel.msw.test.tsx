@@ -12,7 +12,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render
 import type { FactorySkillInfo, StoredPhaseInfo } from '../../../../api/types';
 import { newSkillPath, settingsSectionPath, skillPath } from '../../settings/settingsSections';
 import type { RuleField } from '@mastra/playground-ui/domains/factory';
-import { PhasePanel } from '../components/phasePanel/PhasePanel';
+import { PhasePanel } from '@mastra/playground-ui/domains/factory';
 
 const FACTORY_ID = 'fp-1';
 

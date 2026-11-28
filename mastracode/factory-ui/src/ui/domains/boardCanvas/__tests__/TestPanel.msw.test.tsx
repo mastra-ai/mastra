@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../e2e/ui/render';
 import type { IntakeTestResponse } from '../../../../api/types';
-import { TestPanel } from '../components/testPanel/TestPanel';
+import { TestPanel } from '@mastra/playground-ui/domains/factory';
 
 const PROJECT = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const URL = 'https://github.com/mastra-ai/mastra/issues/12';

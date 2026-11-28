@@ -4,8 +4,8 @@ import { useBeforeUnload, useBlocker, useNavigate, useSearchParams } from 'react
 
 import { useFactorySkillsQuery } from '../../../hooks/useFactorySkills';
 import { useSourceSuggestions } from '../../../hooks/useSourceSuggestions';
-import { BoardSettingsHostContext } from '../../domains/boardCanvas/boardSettingsHost';
-import type { BoardSettingsHost, BoardSettingsLeaveGuard } from '../../domains/boardCanvas/boardSettingsHost';
+import { BoardSettingsHostContext } from '@mastra/playground-ui/domains/factory';
+import type { BoardSettingsHost, BoardSettingsLeaveGuard } from '@mastra/playground-ui/domains/factory';
 import {
   boardConfigPath,
   boardIntakePath,

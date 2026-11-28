@@ -15,8 +15,10 @@ import {
   TestInput,
   UnsavedPill,
   phaseName,
+  readCanvasFocus,
+  BoardSettingsTabs,
 } from '@mastra/playground-ui/domains/factory';
-import type { BoardStats } from '@mastra/playground-ui/domains/factory';
+import type { BoardStats, CanvasFocus } from '@mastra/playground-ui/domains/factory';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -24,10 +26,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import type { IntakeDryRunResponse } from '../../../../../api/types';
 import { HrefLink } from '../../../../ui/HrefLink';
 import { boardConfigPath, boardIntakePath, INTAKE_ORDER_ANCHOR } from '../../../boardConfig/boardConfigPaths';
-import { readCanvasFocus } from '../../canvasFocus';
-import type { CanvasFocus } from '../../canvasFocus';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
-import { BoardSettingsTabs } from '../BoardSettingsTabs';
 import { NotRoutedCard } from './NotRoutedCard';
 import { OrderRuleList } from './OrderRuleList';
 import { RerouteNotice } from './RerouteNotice';

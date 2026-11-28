@@ -1,14 +1,18 @@
 import { useBoardQuery } from '@mastra/react/hooks/factory';
-import { BoardHeaderSkeleton, CanvasFrame, PhaseFlowSkeleton } from '@mastra/playground-ui/domains/factory';
+import {
+  BoardHeaderSkeleton,
+  CanvasFrame,
+  PhaseFlowSkeleton,
+  BoardCanvas,
+  BoardSettingsTabs,
+  BoardDraftProvider,
+} from '@mastra/playground-ui/domains/factory';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { ReactNode } from 'react';
 
 import { FactoryRequestError } from '@mastra/client-js';
-import { BoardCanvas } from '../domains/boardCanvas/components/BoardCanvas';
-import { BoardSettingsTabs } from '../domains/boardCanvas/components/BoardSettingsTabs';
 import { RouterBoardSettingsHost } from './board/RouterBoardSettingsHost';
-import { BoardDraftProvider } from '../domains/boardConfig/BoardDraftProvider';
 import { useBoardConfigRoute } from '../domains/boardConfig/hooks/useBoardConfigRoute';
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadErrorState } from '../ui/LoadErrorState';

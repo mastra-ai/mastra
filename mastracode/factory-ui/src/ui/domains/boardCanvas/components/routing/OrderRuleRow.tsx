@@ -3,11 +3,11 @@ import {
   OrderRuleRow as SharedOrderRuleRow,
   phaseName,
   boardPhaseIconKind,
+  ruleNotes,
 } from '@mastra/playground-ui/domains/factory';
 
 import type { InstalledBoardInfo } from '../../../../../api/types';
-import { ruleNotes } from '../../canvasModel';
-import type { RuleLine } from '../../canvasModel';
+import type { RuleLine } from '@mastra/playground-ui/domains/factory';
 import { LaneIcon } from './laneIcon';
 
 /** One rule in an order card: its trigger, name, the phase it files into and what it filed; opens the rule. */

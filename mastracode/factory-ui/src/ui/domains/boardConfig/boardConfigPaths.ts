@@ -1,6 +1,6 @@
 import { boardPath } from '../factory/boardCatalog';
-import { focusSearch } from '../boardCanvas/canvasFocus';
-import type { CanvasFocus } from '../boardCanvas/canvasFocus';
+import { focusSearch } from '@mastra/playground-ui/domains/factory';
+import type { CanvasFocus } from '@mastra/playground-ui/domains/factory';
 
 export interface BoardConfigLocation {
   factoryId: string;
