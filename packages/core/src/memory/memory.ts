@@ -23,6 +23,7 @@ import { assertEmbeddingDimension } from '../processors/memory/embedding-dimensi
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
+  MemoryStorage,
   StorageListMessagesInput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
@@ -72,6 +73,18 @@ function extractModelIdString(model: unknown): string | undefined {
     return (model as { id: string }).id;
   }
   return undefined;
+}
+
+/**
+ * The store an `observational-memory` processor runs on, read from its engine.
+ * Core cannot import the processor class from `@mastra/memory`, so this reads the shape structurally.
+ */
+function getObservationalMemoryProcessorStore(processor: unknown): MemoryStorage | undefined {
+  const engine = (processor as { engine?: { getStorage?: () => unknown } }).engine;
+  const store = typeof engine?.getStorage === 'function' ? engine.getStorage() : undefined;
+  return store && typeof store === 'object' && 'supportsObservationalMemory' in store
+    ? (store as MemoryStorage)
+    : undefined;
 }
 
 export type MemoryProcessorOpts = {
@@ -845,6 +858,46 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Whether observational memory takes over loading and saving message history.
+   * Observational memory is requested by config or by a configured `observational-memory`
+   * processor. It can only run on a memory store that supports it; on any other store this
+   * throws, because message history alone is not an equivalent substitute and silently
+   * dropping or degrading memory is worse than failing loudly.
+   *
+   * Config-enabled observational memory runs on this Memory's store. An explicitly configured
+   * processor runs on the store of its own engine, which can differ from this Memory's store.
+   */
+  protected observationalMemoryHandlesHistory(
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[],
+    config: MemoryConfigInternal,
+    memoryStore: MemoryStorage | undefined,
+  ): boolean {
+    const storesInUse: (MemoryStorage | undefined)[] = configuredProcessors
+      .filter(p => !isProcessorWorkflow(p) && p.id === 'observational-memory')
+      .map(p => getObservationalMemoryProcessorStore(p) ?? memoryStore);
+    if (isObservationalMemoryEnabled(config.observationalMemory)) storesInUse.push(memoryStore);
+    if (storesInUse.length === 0) return false;
+
+    const unsupportedStore = storesInUse.find(store => store && !store.supportsObservationalMemory);
+    if (!unsupportedStore) return true;
+
+    const storeName =
+      unsupportedStore === memoryStore
+        ? (this.storage.name ?? unsupportedStore.constructor.name)
+        : unsupportedStore.constructor.name;
+    throw new MastraError({
+      id: 'MASTRA_MEMORY_OBSERVATIONAL_MEMORY_UNSUPPORTED_STORE',
+      domain: ErrorDomain.MASTRA_MEMORY,
+      category: 'USER',
+      text:
+        `Observational memory is enabled, but the memory store ${storeName} does not support it. ` +
+        'Use a storage adapter that supports observational memory, or set observationalMemory: false in your Memory options ' +
+        'and remove any observational-memory processor from the agent inputProcessors and outputProcessors.',
+      details: { store: storeName },
+    });
+  }
+
+  /**
    * Get input processors for this memory instance
    * This allows Memory to be used as a ProcessorProvider in Agent's inputProcessors array.
    * @param configuredProcessors - Processors already configured by the user (for deduplication)
@@ -867,10 +920,12 @@ https://mastra.ai/en/docs/memory/overview`,
     // Check if user already manually added MessageHistory
     const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-    // Check if ObservationalMemory is present (via processor or config) - it handles its own message loading and saving
-    const hasObservationalMemory =
-      configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-      isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+    // Check if ObservationalMemory handles its own message loading and saving
+    const hasObservationalMemory = this.observationalMemoryHandlesHistory(
+      configuredProcessors,
+      effectiveConfig,
+      memoryStore,
+    );
 
     // MemoryInputFilter trims the request down to the part that stored history does
     // not already cover. That is only correct when a loader is about to pull stored
@@ -1031,12 +1086,7 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
-    if (
-      lastMessages.enabled &&
-      lastMessages.maxTokens !== undefined &&
-      !isObservationalMemoryEnabled(effectiveConfig.observationalMemory) &&
-      !configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory')
-    ) {
+    if (lastMessages.enabled && lastMessages.maxTokens !== undefined && !hasObservationalMemory) {
       const maxTokens = lastMessages.maxTokens;
       const atMaxRemoveTokens = lastMessages.atMaxRemoveTokens!;
       const limiter = new TokenLimiterProcessor({
@@ -1175,6 +1225,13 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
+    // Checked even when message history is disabled, so an unsupported store fails before the model runs.
+    const hasObservationalMemory = this.observationalMemoryHandlesHistory(
+      configuredProcessors,
+      effectiveConfig,
+      memoryStore,
+    );
+
     const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     if (lastMessages.enabled) {
       if (!memoryStore)
@@ -1187,11 +1244,6 @@ https://mastra.ai/en/docs/memory/overview`,
 
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
-
-      // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
-      const hasObservationalMemory =
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
       // Skip MessageHistory output processor if ObservationalMemory handles message saving
       if (!hasMessageHistory && !hasObservationalMemory) {
