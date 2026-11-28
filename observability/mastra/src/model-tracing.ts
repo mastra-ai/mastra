@@ -396,21 +396,16 @@ function extractStepInput(payload?: StepStartPayload): StepInputPreview {
  * step of a full inference (`output.steps.at(-1).response.messages`).
  *
  * The list is cumulative — a step appends its messages to the previous step's, so
- * the front is history/input to the current call. Two boundaries cut it, both
- * content independent:
+ * the front is history/input to the current call. One boundary cuts it: the last
+ * message that carries content and is not the model's own response (a locally
+ * executed tool result is fed back in, so it closes the previous call). Empty
+ * placeholders carry nothing and do not cut.
  *
- * - When the payload carries the step history (`output.steps`), the previous step's
- *   length is the boundary: everything the previous call had already produced is
- *   dropped. The history only ever grows, so the count is exact; matching the messages
- *   themselves is not usable, because a step can hold a part with no comparable identity
- *   (a file or source), and a message that only grew — the provider merged a result into
- *   the assistant message it already sent — would then look new and replay the earlier
- *   call's output. A grew message is not replayed whole: only the parts it gained since
- *   the previous step are carried over, so a provider result delivered a step late reaches
- *   this call's spans without its earlier output coming with it.
- * - Otherwise (a single step result) the last message that carries content and is not
- *   the model's own response (a locally executed tool result) is the cut; empty
- *   placeholders carry nothing and do not cut.
+ * That boundary is the whole of the rule, and what it keeps is what the provider actually
+ * produced for this call. When a call runs a tool the provider executes itself, the call and its
+ * result are one message — the result is merged into the assistant message that carried the call —
+ * so the pair stays together, and a call that ran only provider tools has no boundary at all and
+ * keeps everything it produced, as it should.
  *
  * Only the model's own messages are kept: locally executed tool results are dropped,
  * because their payloads are what output processors redact, so exporting them would
@@ -426,96 +421,14 @@ function currentStepResponseMessages(output?: {
   const messages = extractCurrentStepResponseMessages(output);
   if (!messages) return undefined;
 
-  const previous = previousStepResponseMessages(output);
-  // A step only ever appends, so a longer previous list cannot happen; fall back to the
-  // tool boundary rather than slicing at a count the list does not reach.
-  const carried = previous && previous.length <= messages.length ? carriedParts(previous, messages) : [];
-  const from = previous && previous.length <= messages.length ? previous.length : lastToolBoundary(messages);
-
-  const current = [...carried, ...messages.slice(from).filter(isResponseMessage)];
+  const current = messages.slice(lastToolBoundary(messages)).filter(isResponseMessage);
   return current.length > 0 ? current : undefined;
 }
 
 /**
- * The parts a step's messages gained since the previous step. A provider result delivered after
- * the call that asked for it is merged into the assistant message that already carried the call,
- * so the message grows in place: it hides the earlier call's output (which must not be replayed)
- * and the just-delivered result (which must be exported) in one message. Carrying only the gained
- * parts keeps the result while leaving the earlier output out.
- */
-function carriedParts(previous: unknown[], messages: unknown[]): unknown[] {
-  const carried: unknown[] = [];
-  for (let i = 0; i < previous.length && i < messages.length; i += 1) {
-    const gained = gainedParts(messages[i], previous[i]);
-    if (gained.length > 0) carried.push({ ...(messages[i] as object), content: gained });
-  }
-  return carried;
-}
-
-/** The content parts `current` holds that `previous` does not, matched by identity. */
-function gainedParts(current: unknown, previous: unknown): unknown[] {
-  if (
-    !isResponseMessage(current) ||
-    (previous as { role?: unknown } | null)?.role !== (current as { role?: unknown }).role
-  ) {
-    return [];
-  }
-  const currentContent = (current as { content?: unknown }).content;
-  const previousContent = (previous as { content?: unknown }).content;
-  if (!Array.isArray(currentContent) || !Array.isArray(previousContent)) return [];
-  if (currentContent.length <= previousContent.length) return [];
-
-  const remaining = previousContent.map(partIdentity);
-  const gained: unknown[] = [];
-  for (const part of currentContent) {
-    const identity = partIdentity(part);
-    const seen = identity === undefined ? -1 : remaining.indexOf(identity);
-    if (seen >= 0) {
-      remaining.splice(seen, 1);
-    } else {
-      gained.push(part);
-    }
-  }
-  return gained;
-}
-
-/** An identity for a content part, so an unchanged part can be matched in a later copy of its message. */
-function partIdentity(part: unknown): string | undefined {
-  if (typeof part !== 'object' || part === null) return undefined;
-  const { type } = part as { type?: unknown };
-  if (typeof type !== 'string') return undefined;
-  const { toolCallId, text } = part as { toolCallId?: unknown; text?: unknown };
-  if (typeof toolCallId === 'string') return `${type}:${toolCallId}`;
-  if (typeof text === 'string') return `${type}:${text}`;
-  // No identifier to match on: a part is unchanged only if it is structurally identical.
-  try {
-    return `${type}:${stableStringify(part)}`;
-  } catch {
-    return undefined;
-  }
-}
-
-/** JSON with object keys ordered, so structurally equal parts stringify the same. */
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_key, val: unknown) => {
-    if (typeof val !== 'object' || val === null || Array.isArray(val)) return val;
-    const entries = Object.entries(val as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-    return Object.fromEntries(entries);
-  });
-}
-
-/** The messages the previous step had produced, when the payload carries the step history. */
-function previousStepResponseMessages(output?: {
-  steps?: ReadonlyArray<{ response?: { messages?: unknown } }>;
-}): unknown[] | undefined {
-  const previous = output?.steps?.at(-2)?.response?.messages;
-  return Array.isArray(previous) && previous.length > 0 ? previous : undefined;
-}
-
-/**
- * Where the run's own messages end when the payload carries no step history: after the last
- * message that is not the model's response (a locally executed tool result is fed back in, so
- * it closes the previous call). Empty placeholders carry nothing and do not cut.
+ * Where the run's own messages begin: after the last message that is not the model's response
+ * (a locally executed tool result is fed back in, so it closes the previous call). Empty
+ * placeholders carry nothing and do not cut.
  */
 function lastToolBoundary(messages: unknown[]): number {
   for (let i = messages.length - 1; i >= 0; i -= 1) {

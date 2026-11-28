@@ -936,9 +936,9 @@ describe('convertMastraMessagesToGenAIMessages', () => {
   });
 
   it('converts the expressible siblings of a message with an unusable tool result', () => {
-    // A `toModelOutput` callback can return `null`, a primitive, an array, or a plain object
-    // with no `value`. None of those can become a gen_ai part, but that must not cost the
-    // message the parts that can: the unusable part is skipped and its siblings convert.
+    // Span output is recorded through JSON, so a stored message always carries `createdAt`
+    // provider options, and the unusable result decides only its own part: the siblings
+    // convert instead of the payload being dropped.
     const unusableOutputs: Record<string, unknown> = {
       'null output': null,
       'primitive output': 'text',
@@ -951,8 +951,14 @@ describe('convertMastraMessagesToGenAIMessages', () => {
         {
           role: 'assistant',
           content: [
-            { type: 'text', text: 'valid sibling text' },
-            { type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output },
+            { type: 'text', text: 'valid sibling text', providerOptions: { mastra: { createdAt: 1 } } },
+            {
+              type: 'tool-result',
+              toolCallId: 't1',
+              toolName: 'lookup',
+              output,
+              providerOptions: { mastra: { createdAt: 1 } },
+            },
           ],
         },
       ];
@@ -962,14 +968,40 @@ describe('convertMastraMessagesToGenAIMessages', () => {
     }
   });
 
-  it('leaves a message with no expressible part as it was recorded', () => {
-    // With an unusable tool result as the only content there is nothing to convert, so the
-    // input paths keep the recorded message instead of exporting a message with no parts.
-    const unusableOnly = [
-      { role: 'assistant', content: [{ type: 'tool-result', toolCallId: 't1', toolName: 'lookup', output: null }] },
+  it('converts a turn with no parts between messages that have them', () => {
+    // A turn can be recorded with no content at all. It is a valid message, not an
+    // unrecognizable one, so it must neither take its siblings down with it (bare array) nor
+    // come back in the recorded shape next to converted ones (wrapped).
+    const messages = [
+      { role: 'system', content: 'be brief' },
+      { role: 'user', content: [] },
+      { role: 'user', content: 'hi' },
     ];
-    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(unusableOnly))).toBe(JSON.stringify(unusableOnly));
-    expect(convert({ messages: unusableOnly })).toEqual(unusableOnly);
+    const MastraMessages = JSON.parse(JSON.stringify(messages));
+    // The recorder writes the payload as JSON, so this is the in-memory shape of a recorded
+    // turn: JSON preserves the empty array as `content`, which is what makes the turn valid.
+    expect(convert(MastraMessages)).toEqual([
+      { role: 'system', parts: [{ type: 'text', content: 'be brief' }] },
+      { role: 'user', parts: [] },
+      { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+    ]);
+    // The wrapped path keeps the payload's own envelope: each message is converted, and the
+    // empty turn comes back as a message with no parts like the bare path.
+    expect(convert({ messages: MastraMessages })).toEqual([
+      { role: 'system', parts: [{ type: 'text', content: 'be brief' }] },
+      { role: 'user', parts: [] },
+      { role: 'user', parts: [{ type: 'text', content: 'hi' }] },
+    ]);
+  });
+
+  it('leaves a message with no expressible part as it was recorded', () => {
+    // A message is judged by what it was recorded as, and span output is recorded through
+    // JSON: `content` that did not survive that round trip is not a recognizable message, so
+    // the input paths keep the recorded payload instead of exporting a message with no parts.
+    // (A turn genuinely recorded with no parts is a different case and converts — see below.)
+    const unreadable = [{ role: 'assistant', content: [null] }];
+    expect(convertMastraMessagesToGenAIMessages(JSON.stringify(unreadable))).toBe(JSON.stringify(unreadable));
+    expect(convert({ messages: unreadable })).toEqual(unreadable);
   });
 
   it('keeps converting a tool result whose value is readable', () => {

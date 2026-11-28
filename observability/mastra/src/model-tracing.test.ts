@@ -2175,8 +2175,11 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
+      // The last step carries both messages: the first call's output and this call's, which
+      // the run appended. No tool result separates them, so the first call is this call's own
+      // history and stays; the run's messages are exported as they were produced.
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([currentStepMessages[1]]);
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual(currentStepMessages);
       }
     });
 
@@ -2228,7 +2231,7 @@ describe('ModelSpanTracker', () => {
       }
     });
 
-    it('exports only the current call when every tool is provider-executed', async () => {
+    it('keeps a provider call and the result it delivered together', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -2239,9 +2242,8 @@ describe('ModelSpanTracker', () => {
 
       // Step 1 called a provider-executed tool, step 2 delivered its result and the answer.
       // No locally executed tool result separates the two calls, so nothing in the list marks
-      // the boundary — but the earlier call is still history, not this call's response. Its
-      // assistant message is rotated into the later list with the result merged in, so the
-      // boundary is the previous step's messages, which the list starts with.
+      // a boundary: the provider keeps the call and the result it delivered in one message,
+      // and the run appends the answer to it. Both are this call's response.
       const firstCall = {
         role: 'assistant',
         content: [
@@ -2294,28 +2296,15 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
-      // The provider delivered srvtoolu_1's result after the call was made, merged into the
-      // message that already carried the call. That message grew by one part: the delivering
-      // call keeps the result, and does not replay the earlier call's own output with it.
-      const deliveredResult = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'srvtoolu_1',
-            toolName: 'web_search',
-            output: { type: 'json', value: { answer: 'search results' } },
-          },
-        ],
-      };
-
+      // The provider delivered srvtoolu_1's result merged into the message that already carried
+      // the call, so that message holds the call and its result together. The run appended the
+      // answer after it. Neither is a replay: both are what this call produced.
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
-        expect(JSON.stringify(span.output)).not.toContain('AI news');
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([firstCallWithResult, answer]);
       }
     });
 
-    it('does not replay an earlier call whose message carries an unkeyable part', async () => {
+    it('keeps a provider call whose message holds a part it cannot key', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -2324,9 +2313,9 @@ describe('ModelSpanTracker', () => {
 
       const tracker = new ModelSpanTracker(modelSpan);
 
-      // A file part has no comparable identity, so the earlier call's message cannot be
-      // recognised by its parts. The step history still marks where the second call begins:
-      // the first call's file, reasoning and call must not reach this one.
+      // A file part has no comparable identity. It does not need one: the provider keeps the
+      // call and the result it delivered in one message, and the run appends the answer to that
+      // same list, so the second call's response is both messages as they were produced.
       const earlierCall = {
         role: 'assistant',
         content: [
@@ -2375,29 +2364,12 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
-      // The earlier call's file and reasoning are not replayed, but the provider result it
-      // gained after the call was made only exists now: it is this call's information and is
-      // exported, while the earlier output that came with it stays out.
-      const deliveredResult = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'srvtoolu_9',
-            toolName: 'web_search',
-            output: { type: 'json', value: { answer: 'search results' } },
-          },
-        ],
-      };
-
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
-        expect(JSON.stringify(span.output)).not.toContain('Read the file first.');
-        expect(JSON.stringify(span.output)).not.toContain('base64file');
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([earlierCallWithResult, answer]);
       }
     });
 
-    it('exports a provider result delivered a step late', async () => {
+    it('closes a provider call once the run feeds a local result back', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -2407,8 +2379,9 @@ describe('ModelSpanTracker', () => {
       const tracker = new ModelSpanTracker(modelSpan);
 
       // Step 1 asked a provider-executed tool and a locally executed one; step 2 delivered the
-      // provider result, merged into the message that already carried the call. The result only
-      // exists from step 2 on, so it is step 2's information; the call that asked for it is not.
+      // provider result, merged into the message that already carried the call. The locally
+      // executed call was fed back as a tool result, which closes the earlier call — so the
+      // merged message sits before that boundary and this call's response is the answer alone.
       const callStep = {
         role: 'assistant',
         content: [
@@ -2468,20 +2441,8 @@ describe('ModelSpanTracker', () => {
       const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
       const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
 
-      const deliveredResult = {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'srvtoolu_2',
-            toolName: 'web_search',
-            output: { type: 'json', value: { answer: 'late results' } },
-          },
-        ],
-      };
-
       for (const span of [stepSpan!, inferenceSpan!]) {
-        expect((span.output as Record<string, unknown>).responseMessages).toEqual([deliveredResult, answer]);
+        expect((span.output as Record<string, unknown>).responseMessages).toEqual([answer]);
         expect(JSON.stringify(span.output)).not.toContain('deferred');
         expect(JSON.stringify(span.output)).not.toContain('Paris');
       }

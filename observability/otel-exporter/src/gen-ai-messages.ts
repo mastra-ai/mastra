@@ -77,14 +77,27 @@ const isMastraMessagePart = (p: unknown): p is MastraMessagePart => {
   );
 };
 
+/**
+ * A message is convertible when its role and *recorded* content are recognizable. Content is
+ * recognized as the parts array it is recorded as — including an empty one, which is how a turn
+ * with nothing to say is recorded — or as the string it serializes to, since the span IO is read
+ * back through JSON. A result without a readable value is not itself a reason to disown the
+ * message: the caller skips that part, not the payload, and a turn genuinely recorded with no
+ * parts converts to one with none.
+ */
 const isMastraMessage = (m: unknown): m is MastraMessage => {
   return (
     typeof m === 'object' &&
     m != null &&
     'role' in m &&
     'content' in m &&
-    (typeof m.content === 'string' || (Array.isArray(m.content) && m.content.every(isMastraMessagePart)))
+    isRecordedContent((m as { content: unknown }).content)
   );
+};
+
+const isRecordedContent = (content: unknown): boolean => {
+  if (typeof content === 'string') return true;
+  return Array.isArray(content) && content.every(isMastraMessagePart);
 };
 
 /**
@@ -106,11 +119,13 @@ const isMastraMessage = (m: unknown): m is MastraMessage => {
  * If parsing fails at any step, the original inputOutputString is returned unmodified.
  */
 const toGenAIMessage = (m: MastraMessage, finishReason?: string): GenAIMessage | undefined => {
-  const parts: GenAIMessagePart[] = Array.isArray(m.content)
-    ? m.content.map(toGenAIMessagePart).filter((p): p is GenAIMessagePart => p !== undefined)
-    : [{ type: 'text', content: m.content }];
-  // A message whose every part is one gen_ai cannot express has nothing to convert. Callers
-  // keep the recorded message instead of exporting one with no parts.
+  if (!Array.isArray(m.content))
+    return withFinishReason({ role: m.role, parts: [{ type: 'text', content: m.content }] }, finishReason);
+  // A turn recorded with no parts is a turn with nothing to say; it converts to a message with
+  // none. A turn whose parts merely became inexpressible has no such record to go on, so callers
+  // keep it as it was written instead of exporting a message that drops them.
+  if (m.content.length === 0) return withFinishReason({ role: m.role, parts: [] }, finishReason);
+  const parts = m.content.map(toGenAIMessagePart).filter((p): p is GenAIMessagePart => p !== undefined);
   if (parts.length === 0) return undefined;
   return withFinishReason({ role: m.role, parts }, finishReason);
 };
