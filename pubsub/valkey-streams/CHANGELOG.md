@@ -1,5 +1,14 @@
 # @mastra/redis-streams
 
+## 0.6.5-alpha.1
+
+### Patch Changes
+
+- Fixed a teardown race where unsubscribing the last subscriber to a topic could log `NOGROUP` from a still-blocked `XREADGROUP`. Readers are now interrupted with `CLIENT UNBLOCK` and allowed to drain before their connection closes or their consumer group is dropped, and `clearTopic()` waits for in-flight teardowns on the topic before deleting the stream. ([#31821](https://github.com/mastra-ai/mastra/pull/31821))
+
+- Updated dependencies [[`384327e`](https://github.com/mastra-ai/mastra/commit/384327ef510713716a5a4d55421a9bd74943336f), [`73b6375`](https://github.com/mastra-ai/mastra/commit/73b6375020f0101aa8d34de03bbb92f693892105), [`7390633`](https://github.com/mastra-ai/mastra/commit/7390633cdbc9069672715259ca3830faab54df89)]:
+  - @mastra/core@1.87.0-alpha.8
+
 ## 0.6.5-alpha.0
 
 ### Patch Changes
